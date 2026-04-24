@@ -1,4 +1,5 @@
 import {
+  Ban,
   Download,
   Eye,
   FileImage,
@@ -13,7 +14,10 @@ import {
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { AlphaMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import type { FixJob } from "./lib/fixWorkerClient";
+import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -27,6 +31,16 @@ export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
+  const [targetWidth, setTargetWidth] = useState(64);
+  const [targetHeight, setTargetHeight] = useState(64);
+  const [maxColors, setMaxColors] = useState(16);
+  const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
+  const [gridScale, setGridScale] = useState(8);
+  const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
+  const [alpha, setAlpha] = useState<AlphaMode>("preserve");
+  const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
+  const [isFixing, setIsFixing] = useState(false);
+  const activeJobRef = useRef<FixJob | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
 
@@ -50,6 +64,9 @@ export function App() {
             return [asset, ...withoutDuplicate];
           });
           setSelectedAssetId(asset.id);
+          setFixResult(null);
+          setTargetWidth(Math.max(1, Math.round(asset.image.width / 8)));
+          setTargetHeight(Math.max(1, Math.round(asset.image.height / 8)));
           appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
         } catch (error) {
           appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
@@ -58,6 +75,67 @@ export function App() {
     },
     [appendLog]
   );
+
+  const buildFixOptions = useCallback((): FixOptions => {
+    const options: FixOptions = {
+      mode: "single",
+      maxColors,
+      grid: {
+        detect: gridDetect,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale,
+      alpha,
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    };
+
+    if (gridDetect === "manual") {
+      options.targetWidth = targetWidth;
+      options.targetHeight = targetHeight;
+      options.grid.scale = gridScale;
+    }
+
+    return options;
+  }, [alpha, downscale, gridDetect, gridScale, maxColors, targetHeight, targetWidth]);
+
+  const runFix = useCallback(() => {
+    if (!selectedAsset || isFixing) {
+      return;
+    }
+
+    const options = buildFixOptions();
+    const job = startFixJob(selectedAsset.image, options);
+    activeJobRef.current = job;
+    setIsFixing(true);
+    appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
+
+    void job.promise
+      .then((result) => {
+        setFixResult(result);
+        setViewMode("after");
+        appendLog(
+          `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
+        );
+      })
+      .catch((error) => {
+        appendLog(error instanceof Error ? error.message : "Fix failed");
+      })
+      .finally(() => {
+        if (activeJobRef.current?.requestId === job.requestId) {
+          activeJobRef.current = null;
+        }
+        setIsFixing(false);
+      });
+  }, [appendLog, buildFixOptions, isFixing, selectedAsset]);
+
+  const cancelFix = useCallback(() => {
+    activeJobRef.current?.cancel();
+  }, []);
 
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
@@ -116,9 +194,13 @@ export function App() {
             <Upload size={16} />
             Import
           </button>
-          <button type="button" disabled={!selectedAsset}>
+          <button type="button" disabled={!selectedAsset || isFixing} onClick={runFix}>
             <WandSparkles size={16} />
-            Fix
+            {isFixing ? "Fixing" : "Fix"}
+          </button>
+          <button type="button" disabled={!isFixing} onClick={cancelFix} aria-label="Cancel active fix job">
+            <Ban size={16} />
+            Cancel
           </button>
           <button type="button" onClick={() => setViewMode(viewMode === "after" ? "before" : "after")}>
             <Eye size={16} />
@@ -208,7 +290,7 @@ export function App() {
         </div>
         <ViewportCanvas
           sourceImage={selectedAsset?.image ?? null}
-          fixedImage={null}
+          fixedImage={fixResult?.image ?? null}
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
@@ -220,17 +302,45 @@ export function App() {
         <details className="control-group" open>
           <summary>Fix Settings</summary>
           <Field label="Mode" value="Single sprite" />
-          <NumberField label="Target W" value={selectedAsset ? String(Math.max(1, Math.round(selectedAsset.image.width / 8))) : "64"} />
-          <NumberField label="Target H" value={selectedAsset ? String(Math.max(1, Math.round(selectedAsset.image.height / 8))) : "64"} />
-          <NumberField label="Max colors" value="16" />
-          <Field label="Downscale" value="Dominant" />
+          <NumberField label="Target W" value={targetWidth} min={1} onChange={setTargetWidth} />
+          <NumberField label="Target H" value={targetHeight} min={1} onChange={setTargetHeight} />
+          <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
+          <SelectField
+            label="Downscale"
+            value={downscale}
+            options={[
+              ["dominant", "Dominant"],
+              ["median", "Median"],
+              ["adaptive", "Adaptive"],
+              ["averageThenPalette", "Average + palette"]
+            ]}
+            onChange={(value) => setDownscale(value as DownscaleMethod)}
+          />
+          <SelectField
+            label="Alpha"
+            value={alpha}
+            options={[
+              ["preserve", "Preserve"],
+              ["binary", "Binary"],
+              ["backgroundFloodFill", "Flood fill"]
+            ]}
+            onChange={(value) => setAlpha(value as AlphaMode)}
+          />
         </details>
         <details className="control-group" open>
           <summary>Grid</summary>
-          <Field label="Detect" value="Auto" />
-          <NumberField label="Scale" value="8" />
-          <NumberField label="Phase X" value="0" />
-          <NumberField label="Phase Y" value="0" />
+          <SelectField
+            label="Detect"
+            value={gridDetect}
+            options={[
+              ["auto", "Auto candidate"],
+              ["manual", "Manual target"]
+            ]}
+            onChange={(value) => setGridDetect(value as "auto" | "manual")}
+          />
+          <NumberField label="Scale" value={gridScale} min={1} onChange={setGridScale} />
+          <ReadonlyField label="Phase X" value="0" />
+          <ReadonlyField label="Phase Y" value="0" />
           <label className="toggle-row">
             <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
             Show grid overlay
@@ -250,8 +360,8 @@ export function App() {
         <details className="control-group" open>
           <summary>Export</summary>
           <Field label="Target" value="Generic JSON" />
-          <NumberField label="Spacing" value="0" />
-          <NumberField label="Extrude" value="1" />
+          <ReadonlyField label="Spacing" value="0" />
+          <ReadonlyField label="Extrude" value="1" />
         </details>
       </aside>
 
@@ -296,12 +406,16 @@ export function App() {
                 <dd>{selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"}</dd>
               </div>
               <div>
-                <dt>Palette</dt>
-                <dd>--</dd>
+                <dt>Output</dt>
+                <dd>{fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : "--"}</dd>
               </div>
               <div>
-                <dt>Confidence</dt>
-                <dd>--</dd>
+                <dt>Palette</dt>
+                <dd>{fixResult ? fixResult.palette.length : "--"}</dd>
+              </div>
+              <div>
+                <dt>Grid</dt>
+                <dd>{fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"}</dd>
               </div>
             </dl>
           </section>
@@ -331,11 +445,63 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NumberField({ label, value }: { label: string; value: string }) {
+function SelectField({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<[string, string]>;
+  onChange: (value: string) => void;
+}) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <input type="number" value={value} onChange={() => undefined} />
+      <select value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+        {options.map(([optionValue, labelText]) => (
+          <option key={optionValue} value={optionValue}>
+            {labelText}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function NumberField({
+  label,
+  value,
+  min,
+  max,
+  onChange
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="field-row">
+      <span>{label}</span>
+      <input
+        type="number"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(Number(event.currentTarget.value))}
+      />
+    </label>
+  );
+}
+
+function ReadonlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <label className="field-row">
+      <span>{label}</span>
+      <input type="number" value={value} readOnly />
     </label>
   );
 }
