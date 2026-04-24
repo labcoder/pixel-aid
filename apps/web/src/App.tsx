@@ -1,5 +1,6 @@
 import {
   Ban,
+  CircleHelp,
   Download,
   Eye,
   FileImage,
@@ -18,6 +19,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
+import { DocsPage } from "./components/DocsPage";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { assetBaseName, downloadBlob, jsonBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -30,6 +32,7 @@ const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Wait
 
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [route, setRoute] = useState(window.location.pathname);
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [logs, setLogs] = useState(defaultLogLines);
@@ -52,6 +55,22 @@ export function App() {
   const activeJobRef = useRef<FixJob | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(window.location.pathname);
+    window.addEventListener("popstate", syncRoute);
+    return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
+  const openDocs = useCallback((sectionId: string) => {
+    window.history.pushState(null, "", `/docs#${sectionId}`);
+    setRoute("/docs");
+  }, []);
+
+  const openEditor = useCallback(() => {
+    window.history.pushState(null, "", "/");
+    setRoute("/");
+  }, []);
 
   const appendLog = useCallback((line: string) => {
     setLogs((current) => [line, ...current].slice(0, 8));
@@ -245,6 +264,10 @@ export function App() {
     void importFiles(event.dataTransfer.files);
   };
 
+  if (route === "/docs") {
+    return <DocsPage onBack={openEditor} />;
+  }
+
   return (
     <main
       className={`editor-shell${isDropActive ? " is-drop-active" : ""}`}
@@ -311,7 +334,7 @@ export function App() {
       <aside className="left-panel panel" aria-label="Project assets">
         <PanelHeader icon={<Layers size={16} />} title="Project" />
         <section className="panel-section">
-          <h2>Assets</h2>
+          <SectionTitle title="Assets" docsId="assets" tooltip="Imported source files, dimensions, thumbnails, and removal controls." onDocs={openDocs} />
           <ul className="asset-list">
             {assets.length === 0 ? (
               <li className="muted-row">
@@ -395,6 +418,7 @@ export function App() {
         <div className="viewport-strip">
           <div>
             <strong>Before / After</strong>
+            <HelpButton docsId="viewport" tooltip="Canvas preview, pan, zoom, split comparison, and rulers." onDocs={openDocs} />
             <span>{viewMode} view</span>
           </div>
           <div className="view-controls" aria-label="Viewport mode controls">
@@ -429,7 +453,7 @@ export function App() {
       <aside className="right-panel panel" aria-label="Inspector">
         <PanelHeader icon={<SlidersHorizontal size={16} />} title="Inspector" />
         <details className="control-group" open>
-          <summary>Fix Settings</summary>
+          <SectionSummary title="Fix Settings" docsId="fix-settings" tooltip="Mode, target size, palette limit, downscale method, and alpha handling." onDocs={openDocs} />
           <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
             <WandSparkles size={15} />
             Auto Suggest
@@ -484,7 +508,7 @@ export function App() {
           />
         </details>
         <details className="control-group" open>
-          <summary>Grid</summary>
+          <SectionSummary title="Grid" docsId="grid" tooltip="Pseudo-pixel grid detection and manual output sizing." onDocs={openDocs} />
           <p className="control-hint">
             Auto grid chooses output from the detected pseudo-pixel blocks. Manual target uses Target W/H and Scale.
           </p>
@@ -517,7 +541,7 @@ export function App() {
           </label>
         </details>
         <details className="control-group" open>
-          <summary>Export</summary>
+          <SectionSummary title="Export" docsId="export" tooltip="Fixed PNG and manifest bundle for engine workflows." onDocs={openDocs} />
           <Field label="Target" value="Generic JSON" />
           <ReadonlyField label="PNG" value={fixResult ? "ready" : "pending"} text />
           <ReadonlyField label="Manifest" value={fixResult ? "ready" : "pending"} text />
@@ -592,6 +616,73 @@ function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
       {icon}
       <h2>{title}</h2>
     </div>
+  );
+}
+
+function SectionTitle({
+  title,
+  docsId,
+  tooltip,
+  onDocs
+}: {
+  title: string;
+  docsId: string;
+  tooltip: string;
+  onDocs: (sectionId: string) => void;
+}) {
+  return (
+    <div className="section-title">
+      <h2>{title}</h2>
+      <HelpButton docsId={docsId} tooltip={tooltip} onDocs={onDocs} />
+    </div>
+  );
+}
+
+function SectionSummary({
+  title,
+  docsId,
+  tooltip,
+  onDocs
+}: {
+  title: string;
+  docsId: string;
+  tooltip: string;
+  onDocs: (sectionId: string) => void;
+}) {
+  return (
+    <summary>
+      <span>{title}</span>
+      <HelpButton docsId={docsId} tooltip={tooltip} onDocs={onDocs} />
+    </summary>
+  );
+}
+
+function HelpButton({
+  docsId,
+  tooltip,
+  onDocs
+}: {
+  docsId: string;
+  tooltip: string;
+  onDocs: (sectionId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="help-button"
+      aria-label={`Read docs for ${docsId}`}
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onDocs(docsId);
+      }}
+    >
+      <CircleHelp size={13} />
+      <span className="tooltip-panel">
+        {tooltip}
+        <strong> Read docs</strong>
+      </span>
+    </button>
   );
 }
 
