@@ -1,6 +1,9 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
-import { useEffect, useRef } from "react";
+import type { PointerEvent, WheelEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { chooseRulerTickStep, clampZoom, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
+import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
 
@@ -10,10 +13,25 @@ export type ViewportCanvasProps = {
   viewMode: ViewMode;
   zoom: number;
   showGrid: boolean;
+  onZoomChange: (zoom: number) => void;
 };
 
-export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGrid }: ViewportCanvasProps) {
+export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGrid, onZoomChange }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const panRef = useRef<Point>({ x: 0, y: 0 });
+  const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
+  const [renderKey, setRenderKey] = useState(0);
+
+  const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
+
+  const resetPan = useCallback(() => {
+    panRef.current = { x: 0, y: 0 };
+    invalidate();
+  }, [invalidate]);
+
+  useEffect(() => {
+    resetPan();
+  }, [sourceImage, resetPan]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -45,18 +63,85 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
         return;
       }
 
-      drawImageView(ctx, rect.width, rect.height, sourceCanvas, fixedCanvas, viewMode, zoom, showGrid);
+      drawImageView(ctx, rect.width, rect.height, sourceCanvas, fixedCanvas, viewMode, zoom, showGrid, panRef.current);
     };
 
     draw();
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fixedImage, showGrid, sourceImage, viewMode, zoom]);
+  }, [fixedImage, renderKey, showGrid, sourceImage, viewMode, zoom]);
+
+  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0 || !sourceImage) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragRef.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      pan: panRef.current
+    };
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    panRef.current = {
+      x: drag.pan.x + event.clientX - drag.x,
+      y: drag.pan.y + event.clientY - drag.y
+    };
+    invalidate();
+  };
+
+  const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+    }
+  };
+
+  const onWheel = (event: WheelEvent<HTMLCanvasElement>) => {
+    if (!sourceImage) {
+      return;
+    }
+
+    event.preventDefault();
+    const canvas = event.currentTarget;
+    const rect = canvas.getBoundingClientRect();
+    const nextZoom = clampZoom(zoom + (event.deltaY < 0 ? 1 : -1));
+    if (nextZoom === zoom) {
+      return;
+    }
+
+    panRef.current = zoomAtPoint({
+      viewport: { width: rect.width, height: rect.height },
+      image: { width: sourceImage.width, height: sourceImage.height },
+      pan: panRef.current,
+      pointer: { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      zoom,
+      nextZoom
+    });
+    onZoomChange(nextZoom);
+    invalidate();
+  };
 
   return (
     <div className="viewport-canvas-wrap">
-      <canvas ref={canvasRef} aria-label="Pixel-perfect viewport canvas" />
+      <canvas
+        ref={canvasRef}
+        aria-label="Pixel-perfect viewport canvas"
+        onDoubleClick={resetPan}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onWheel={onWheel}
+      />
       {!sourceImage ? (
         <div className="viewport-empty-state">
           <Grid2X2 size={18} />
@@ -99,14 +184,16 @@ function drawImageView(
   fixedCanvas: HTMLCanvasElement | null,
   viewMode: ViewMode,
   zoom: number,
-  showGrid: boolean
+  showGrid: boolean,
+  pan: Point
 ): void {
   const afterCanvas = fixedCanvas ?? sourceCanvas;
   const activeCanvas = viewMode === "after" ? afterCanvas : sourceCanvas;
-  const drawWidth = activeCanvas.width * zoom;
-  const drawHeight = activeCanvas.height * zoom;
-  const x = Math.floor((width - drawWidth) / 2);
-  const y = Math.floor((height - drawHeight) / 2);
+  const rect = getImageDrawRect({ width, height }, { width: activeCanvas.width, height: activeCanvas.height }, zoom, pan);
+  const drawWidth = rect.width;
+  const drawHeight = rect.height;
+  const x = rect.x;
+  const y = rect.y;
 
   ctx.imageSmoothingEnabled = false;
   if (viewMode === "split" && fixedCanvas) {
@@ -125,6 +212,7 @@ function drawImageView(
   if (showGrid && zoom >= 4) {
     drawPixelGrid(ctx, x, y, activeCanvas.width, activeCanvas.height, zoom);
   }
+  drawRulers(ctx, x, y, activeCanvas.width, activeCanvas.height, zoom);
 }
 
 function drawClipped(
@@ -198,4 +286,55 @@ function drawViewportGrid(ctx: CanvasRenderingContext2D, width: number, height: 
 
   ctx.strokeStyle = "#f4d35e";
   ctx.strokeRect(startX + 0.5, startY + 0.5, gridWidth - 1, gridHeight - 1);
+}
+
+function drawRulers(
+  ctx: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  imageWidth: number,
+  imageHeight: number,
+  zoom: number
+): void {
+  const tickStep = chooseRulerTickStep(zoom);
+  const rulerHeight = 22;
+  const rulerWidth = 28;
+  const drawWidth = imageWidth * zoom;
+  const drawHeight = imageHeight * zoom;
+
+  ctx.save();
+  ctx.fillStyle = "#101414d9";
+  ctx.fillRect(startX, startY - rulerHeight, drawWidth, rulerHeight);
+  ctx.fillRect(startX - rulerWidth, startY, rulerWidth, drawHeight);
+  ctx.strokeStyle = "#f1c75b";
+  ctx.fillStyle = "#f1c75b";
+  ctx.font = "10px Consolas, monospace";
+  ctx.textBaseline = "top";
+
+  for (let px = 0; px <= imageWidth; px += tickStep) {
+    const x = startX + px * zoom + 0.5;
+    const major = px % 10 === 0;
+    ctx.beginPath();
+    ctx.moveTo(x, startY - (major ? 16 : 9));
+    ctx.lineTo(x, startY);
+    ctx.stroke();
+    if (major) {
+      ctx.fillText(String(px), x + 3, startY - 18);
+    }
+  }
+
+  ctx.textAlign = "right";
+  for (let py = 0; py <= imageHeight; py += tickStep) {
+    const y = startY + py * zoom + 0.5;
+    const major = py % 10 === 0;
+    ctx.beginPath();
+    ctx.moveTo(startX - (major ? 18 : 10), y);
+    ctx.lineTo(startX, y);
+    ctx.stroke();
+    if (major) {
+      ctx.fillText(String(py), startX - 4, y + 3);
+    }
+  }
+
+  ctx.restore();
 }

@@ -395,6 +395,7 @@ export function App() {
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
+          onZoomChange={setZoom}
         />
       </section>
 
