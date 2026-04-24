@@ -54,6 +54,16 @@ button:hover {
   border-color: var(--cyan);
 }
 
+button:disabled {
+  color: #69736f;
+  border-color: #2a2f2f;
+  background: #191c1c;
+}
+
+.file-input {
+  display: none;
+}
+
 .editor-shell {
   height: 100vh;
   display: grid;
@@ -63,6 +73,15 @@ button:hover {
     "bottom bottom bottom" 198px /
     260px minmax(420px, 1fr) 300px;
   overflow: hidden;
+}
+
+.editor-shell.is-drop-active .viewport-canvas-wrap::after {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: 2px dashed var(--amber);
+  background: #f1c75b18;
+  pointer-events: none;
 }
 
 .top-toolbar {
@@ -169,7 +188,16 @@ button:hover {
   padding: 0;
 }
 
-.asset-list li,
+.asset-list li {
+  margin: 0;
+}
+
+.asset-list li + li {
+  margin-top: 0.45rem;
+}
+
+.asset-list .muted-row,
+.asset-list button,
 .preset-row {
   width: 100%;
   display: flex;
@@ -182,6 +210,29 @@ button:hover {
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+.asset-list button {
+  min-height: 38px;
+}
+
+.asset-list button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-list button small {
+  margin-left: auto;
+  color: var(--amber);
+  font-size: 0.72rem;
+}
+
+.asset-list button.active-asset {
+  color: var(--text);
+  border-color: var(--cyan);
+  background: #19302e;
 }
 
 .swatch-row {
@@ -222,6 +273,25 @@ button:hover {
 .viewport-readouts {
   display: flex;
   gap: 0.5rem;
+}
+
+.view-controls {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.view-controls button {
+  min-height: 28px;
+  padding: 0 0.5rem;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.view-controls button.active {
+  color: #101112;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  font-weight: 800;
 }
 
 .viewport-readouts span {
@@ -286,6 +356,24 @@ button:hover {
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 0 0.5rem;
+}
+
+.field-row input[type="range"] {
+  padding: 0;
+  accent-color: var(--cyan);
+}
+
+.toggle-row {
+  min-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
+  color: var(--muted);
+}
+
+.toggle-row input {
+  accent-color: var(--cyan);
 }
 
 .bottom-panel {

@@ -11,19 +11,98 @@ import {
   Upload,
   WandSparkles
 } from "lucide-react";
-import type { ReactNode } from "react";
-import { ViewportCanvas } from "./components/ViewportCanvas";
+import type { DragEvent, ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 
-const importedAssets = ["No asset selected"];
-const logLines = [
-  "Workspace initialized",
-  "Worker pipeline ready",
-  "Waiting for image import"
-];
+const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
 export function App() {
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
+  const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
+  const [logs, setLogs] = useState(defaultLogLines);
+  const [isDropActive, setIsDropActive] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [showGrid, setShowGrid] = useState(true);
+  const [zoom, setZoom] = useState(8);
+
+  const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+
+  const appendLog = useCallback((line: string) => {
+    setLogs((current) => [line, ...current].slice(0, 8));
+  }, []);
+
+  const importFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
+      if (imageFiles.length === 0) {
+        appendLog("No image files found in import");
+        return;
+      }
+
+      for (const file of imageFiles) {
+        try {
+          const asset = await decodeImageFile(file);
+          setAssets((current) => {
+            const withoutDuplicate = current.filter((item) => item.id !== asset.id);
+            return [asset, ...withoutDuplicate];
+          });
+          setSelectedAssetId(asset.id);
+          appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
+        } catch (error) {
+          appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
+        }
+      }
+    },
+    [appendLog]
+  );
+
+  useEffect(() => {
+    const onPaste = (event: ClipboardEvent) => {
+      if (event.clipboardData?.files.length) {
+        void importFiles(event.clipboardData.files);
+      }
+    };
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [importFiles]);
+
+  const onDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    setIsDropActive(false);
+    void importFiles(event.dataTransfer.files);
+  };
+
   return (
-    <main className="editor-shell" aria-label="PixelAid editor">
+    <main
+      className={`editor-shell${isDropActive ? " is-drop-active" : ""}`}
+      aria-label="PixelAid editor"
+      onDragEnter={() => setIsDropActive(true)}
+      onDragOver={(event) => event.preventDefault()}
+      onDragLeave={(event) => {
+        if (event.currentTarget === event.target) {
+          setIsDropActive(false);
+        }
+      }}
+      onDrop={onDrop}
+    >
+      <input
+        ref={fileInputRef}
+        className="file-input"
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={(event) => {
+          if (event.currentTarget.files) {
+            void importFiles(event.currentTarget.files);
+          }
+          event.currentTarget.value = "";
+        }}
+      />
+
       <header className="top-toolbar">
         <div className="brand-lockup">
           <span className="brand-mark">PA</span>
@@ -33,19 +112,19 @@ export function App() {
           </div>
         </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button">
+          <button type="button" onClick={() => fileInputRef.current?.click()}>
             <Upload size={16} />
             Import
           </button>
-          <button type="button">
+          <button type="button" disabled={!selectedAsset}>
             <WandSparkles size={16} />
             Fix
           </button>
-          <button type="button">
+          <button type="button" onClick={() => setViewMode(viewMode === "after" ? "before" : "after")}>
             <Eye size={16} />
             Preview
           </button>
-          <button type="button">
+          <button type="button" disabled={!selectedAsset}>
             <Download size={16} />
             Export
           </button>
@@ -61,12 +140,28 @@ export function App() {
         <section className="panel-section">
           <h2>Imported Assets</h2>
           <ul className="asset-list">
-            {importedAssets.map((asset) => (
-              <li key={asset}>
+            {assets.length === 0 ? (
+              <li className="muted-row">
                 <FileImage size={15} />
-                <span>{asset}</span>
+                <span>No asset selected</span>
               </li>
-            ))}
+            ) : (
+              assets.map((asset) => (
+                <li key={asset.id}>
+                  <button
+                    type="button"
+                    className={asset.id === selectedAsset?.id ? "active-asset" : ""}
+                    onClick={() => setSelectedAssetId(asset.id)}
+                  >
+                    <FileImage size={15} />
+                    <span>{asset.name}</span>
+                    <small>
+                      {asset.image.width}x{asset.image.height}
+                    </small>
+                  </button>
+                </li>
+              ))
+            )}
           </ul>
         </section>
         <section className="panel-section">
@@ -90,15 +185,34 @@ export function App() {
         <div className="viewport-strip">
           <div>
             <strong>Before / After</strong>
-            <span>split view</span>
+            <span>{viewMode} view</span>
+          </div>
+          <div className="view-controls" aria-label="Viewport mode controls">
+            <button type="button" className={viewMode === "before" ? "active" : ""} onClick={() => setViewMode("before")}>
+              Before
+            </button>
+            <button type="button" className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>
+              Split
+            </button>
+            <button type="button" className={viewMode === "after" ? "active" : ""} onClick={() => setViewMode("after")}>
+              After
+            </button>
           </div>
           <div className="viewport-readouts">
-            <span>Native: --</span>
-            <span>Zoom: 800%</span>
-            <span>Grid: --</span>
+            <span>
+              Native: {selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"}
+            </span>
+            <span>Zoom: {zoom * 100}%</span>
+            <span>Grid: {showGrid ? "on" : "off"}</span>
           </div>
         </div>
-        <ViewportCanvas />
+        <ViewportCanvas
+          sourceImage={selectedAsset?.image ?? null}
+          fixedImage={null}
+          viewMode={viewMode}
+          zoom={zoom}
+          showGrid={showGrid}
+        />
       </section>
 
       <aside className="right-panel panel" aria-label="Inspector">
@@ -106,8 +220,8 @@ export function App() {
         <details className="control-group" open>
           <summary>Fix Settings</summary>
           <Field label="Mode" value="Single sprite" />
-          <NumberField label="Target W" value="64" />
-          <NumberField label="Target H" value="64" />
+          <NumberField label="Target W" value={selectedAsset ? String(Math.max(1, Math.round(selectedAsset.image.width / 8))) : "64"} />
+          <NumberField label="Target H" value={selectedAsset ? String(Math.max(1, Math.round(selectedAsset.image.height / 8))) : "64"} />
           <NumberField label="Max colors" value="16" />
           <Field label="Downscale" value="Dominant" />
         </details>
@@ -117,6 +231,21 @@ export function App() {
           <NumberField label="Scale" value="8" />
           <NumberField label="Phase X" value="0" />
           <NumberField label="Phase Y" value="0" />
+          <label className="toggle-row">
+            <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
+            Show grid overlay
+          </label>
+          <label className="field-row">
+            <span>Zoom</span>
+            <input
+              type="range"
+              min="1"
+              max="16"
+              step="1"
+              value={zoom}
+              onChange={(event) => setZoom(Number(event.currentTarget.value))}
+            />
+          </label>
         </details>
         <details className="control-group" open>
           <summary>Export</summary>
@@ -154,7 +283,7 @@ export function App() {
           <section>
             <h2>Console</h2>
             <ol className="log-list">
-              {logLines.map((line) => (
+              {logs.map((line) => (
                 <li key={line}>{line}</li>
               ))}
             </ol>
@@ -163,8 +292,8 @@ export function App() {
             <h2>Metrics</h2>
             <dl className="metric-grid">
               <div>
-                <dt>Duration</dt>
-                <dd>--</dd>
+                <dt>Source</dt>
+                <dd>{selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"}</dd>
               </div>
               <div>
                 <dt>Palette</dt>
@@ -195,7 +324,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <select defaultValue={value}>
+      <select value={value} onChange={() => undefined}>
         <option>{value}</option>
       </select>
     </label>
@@ -206,7 +335,7 @@ function NumberField({ label, value }: { label: string; value: string }) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <input type="number" defaultValue={value} />
+      <input type="number" value={value} onChange={() => undefined} />
     </label>
   );
 }
