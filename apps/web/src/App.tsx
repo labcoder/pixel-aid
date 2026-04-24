@@ -29,11 +29,13 @@ import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { extractVisiblePalette } from "./lib/palettePreview";
+import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const presetsRef = useRef<HTMLDivElement | null>(null);
   const [route, setRoute] = useState(window.location.pathname);
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -196,6 +198,36 @@ export function App() {
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
   }, [appendLog, selectedAsset]);
 
+  const applyPreset = useCallback(
+    (preset: EditorPreset) => {
+      const next = applyEditorPreset(
+        {
+          mode,
+          targetWidth,
+          targetHeight,
+          maxColors,
+          gridDetect,
+          gridScale,
+          downscale,
+          alpha
+        },
+        preset
+      );
+
+      setMode(next.mode);
+      setTargetWidth(next.targetWidth);
+      setTargetHeight(next.targetHeight);
+      setMaxColors(next.maxColors);
+      setGridDetect(next.gridDetect);
+      setGridScale(next.gridScale);
+      setDownscale(next.downscale);
+      setAlpha(next.alpha);
+      setSuggestionReason(`${preset.label}: ${preset.description}`);
+      appendLog(`Applied preset: ${preset.label}`);
+    },
+    [alpha, appendLog, downscale, gridDetect, gridScale, maxColors, mode, targetHeight, targetWidth]
+  );
+
   const selectAsset = useCallback(
     (assetId: string) => {
       if (assetId !== selectedAsset?.id) {
@@ -338,7 +370,13 @@ export function App() {
             <Download size={16} />
             Export
           </button>
-          <button type="button">
+          <button
+            type="button"
+            onClick={() => {
+              presetsRef.current?.scrollIntoView({ block: "nearest" });
+              presetsRef.current?.querySelector("button")?.focus();
+            }}
+          >
             <SlidersHorizontal size={16} />
             Presets
           </button>
@@ -416,12 +454,19 @@ export function App() {
           <PaletteSwatches label="Source" colors={sourcePalette} emptyText="Import an asset" />
           <PaletteSwatches label="Output" colors={outputPalette.slice(0, 8)} emptyText="Run Fix" />
         </section>
-        <section className="panel-section">
+        <section className="panel-section" ref={presetsRef}>
           <h2>Presets</h2>
-          <button type="button" className="preset-row">
-            <Sparkles size={15} />
-            64px sprite, 16 colors
-          </button>
+          <div className="preset-list">
+            {editorPresets.map((preset) => (
+              <button key={preset.id} type="button" className="preset-row" onClick={() => applyPreset(preset)}>
+                <Sparkles size={15} />
+                <span>
+                  <strong>{preset.label}</strong>
+                  <small>{preset.description}</small>
+                </span>
+              </button>
+            ))}
+          </div>
         </section>
       </aside>
 
