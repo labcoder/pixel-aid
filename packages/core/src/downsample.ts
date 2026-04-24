@@ -1,0 +1,160 @@
+import type { AlphaMode, DownscaleMethod, RGBAImage } from "@pixelaid/shared";
+import { clampByte, packQuantizedRgb, unpackRgb } from "./color";
+import { createImage } from "./image";
+
+export type DownsampleOptions = {
+  outputWidth: number;
+  outputHeight: number;
+  scaleX: number;
+  scaleY: number;
+  phaseX: number;
+  phaseY: number;
+  method: DownscaleMethod;
+  alpha: AlphaMode;
+  adaptiveCoverage?: number;
+};
+
+type DominantResult = {
+  color: number;
+  coverage: number;
+  alpha: number;
+};
+
+export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions): RGBAImage {
+  const output = createImage(options.outputWidth, options.outputHeight);
+
+  for (let y = 0; y < options.outputHeight; y += 1) {
+    for (let x = 0; x < options.outputWidth; x += 1) {
+      const block = getBlockBounds(image, x, y, options);
+      const pixel =
+        options.method === "median"
+          ? medianBlock(image, block)
+          : options.method === "adaptive"
+            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6)
+            : options.method === "averageThenPalette"
+              ? averageBlock(image, block)
+              : dominantBlock(image, block).pixel;
+
+      const offset = (y * output.width + x) * 4;
+      output.data[offset] = pixel[0];
+      output.data[offset + 1] = pixel[1];
+      output.data[offset + 2] = pixel[2];
+      output.data[offset + 3] = options.alpha === "binary" ? (pixel[3] >= 128 ? 255 : 0) : pixel[3];
+    }
+  }
+
+  return output;
+}
+
+type BlockBounds = {
+  startX: number;
+  endX: number;
+  startY: number;
+  endY: number;
+};
+
+function getBlockBounds(image: RGBAImage, x: number, y: number, options: DownsampleOptions): BlockBounds {
+  const startX = Math.max(0, Math.min(image.width - 1, Math.floor(options.phaseX + x * options.scaleX)));
+  const startY = Math.max(0, Math.min(image.height - 1, Math.floor(options.phaseY + y * options.scaleY)));
+  const endX = Math.max(startX + 1, Math.min(image.width, Math.floor(options.phaseX + (x + 1) * options.scaleX)));
+  const endY = Math.max(startY + 1, Math.min(image.height, Math.floor(options.phaseY + (y + 1) * options.scaleY)));
+
+  return { startX, endX, startY, endY };
+}
+
+function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, number, number, number]; dominant: DominantResult } {
+  const counts = new Map<number, number>();
+  let total = 0;
+  let alphaTotal = 0;
+  let bestColor = 0;
+  let bestCount = 0;
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      alphaTotal += alpha;
+      total += 1;
+      if (alpha < 16) {
+        continue;
+      }
+
+      const color = packQuantizedRgb(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
+      const count = (counts.get(color) ?? 0) + 1;
+      counts.set(color, count);
+      if (count > bestCount) {
+        bestColor = color;
+        bestCount = count;
+      }
+    }
+  }
+
+  const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
+  return {
+    pixel: unpackRgb(bestColor, alpha),
+    dominant: {
+      color: bestColor,
+      coverage: total > 0 ? bestCount / total : 0,
+      alpha
+    }
+  };
+}
+
+function medianBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  const r: number[] = [];
+  const g: number[] = [];
+  const b: number[] = [];
+  const a: number[] = [];
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      r.push(image.data[offset]!);
+      g.push(image.data[offset + 1]!);
+      b.push(image.data[offset + 2]!);
+      a.push(image.data[offset + 3]!);
+    }
+  }
+
+  return [median(r), median(g), median(b), median(a)];
+}
+
+function adaptiveBlock(image: RGBAImage, block: BlockBounds, coverage: number): [number, number, number, number] {
+  const dominant = dominantBlock(image, block);
+  if (dominant.dominant.coverage >= coverage) {
+    return dominant.pixel;
+  }
+
+  return medianBlock(image, block);
+}
+
+function averageBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let total = 0;
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      r += image.data[offset]!;
+      g += image.data[offset + 1]!;
+      b += image.data[offset + 2]!;
+      a += image.data[offset + 3]!;
+      total += 1;
+    }
+  }
+
+  return [clampByte(r / total), clampByte(g / total), clampByte(b / total), clampByte(a / total)];
+}
+
+function median(values: number[]): number {
+  values.sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  if (values.length % 2 === 1) {
+    return values[middle]!;
+  }
+
+  return clampByte((values[middle - 1]! + values[middle]!) / 2);
+}
