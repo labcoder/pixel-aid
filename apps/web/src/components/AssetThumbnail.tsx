@@ -1,5 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { useEffect, useRef } from "react";
+import { getContainedDrawRect } from "../lib/previewGeometry";
 
 export function AssetThumbnail({ image, label }: { image: RGBAImage; label: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -35,12 +36,8 @@ export function AssetThumbnail({ image, label }: { image: RGBAImage; label: stri
     sourceContext.imageSmoothingEnabled = false;
     sourceContext.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
 
-    const scale = Math.max(1, Math.floor(Math.min(rect.width / image.width, rect.height / image.height)));
-    const drawWidth = image.width * scale;
-    const drawHeight = image.height * scale;
-    const x = Math.floor((rect.width - drawWidth) / 2);
-    const y = Math.floor((rect.height - drawHeight) / 2);
-    context.drawImage(source, x, y, drawWidth, drawHeight);
+    const drawRect = getContainedDrawRect({ width: rect.width, height: rect.height }, image);
+    context.drawImage(source, drawRect.x, drawRect.y, drawRect.width, drawRect.height);
   }, [image]);
 
   return <canvas ref={canvasRef} className="asset-thumb" aria-label={`${label} thumbnail`} />;

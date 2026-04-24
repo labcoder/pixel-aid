@@ -316,15 +316,40 @@ button:disabled {
 
 .swatch-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 0.7rem;
+  margin-top: 0.35rem;
 }
 
 .swatch-row span {
   height: 26px;
   border: 1px solid #ffffff44;
   border-radius: 4px;
+}
+
+.palette-preview + .palette-preview {
+  margin-top: 0.75rem;
+}
+
+.mini-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.55rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+}
+
+.mini-label small {
+  color: var(--amber);
+  text-transform: none;
+}
+
+.swatch-row .empty-swatch {
+  grid-column: 1 / -1;
+  background: repeating-linear-gradient(45deg, #171b1b, #171b1b 6px, #242929 6px, #242929 12px);
 }
 
 .viewport-panel {

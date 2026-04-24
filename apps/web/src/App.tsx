@@ -15,7 +15,7 @@ import {
   WandSparkles
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
@@ -28,6 +28,7 @@ import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
+import { extractVisiblePalette } from "./lib/palettePreview";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
@@ -56,6 +57,11 @@ export function App() {
   const activeJobRef = useRef<FixJob | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+  const sourcePalette = useMemo(
+    () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
+    [selectedAsset]
+  );
+  const outputPalette = fixResult?.palette ?? [];
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -407,11 +413,8 @@ export function App() {
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
-          <div className="swatch-row" aria-label="Default palette preview">
-            {["#111111", "#f4d35e", "#2ec4b6", "#e71d36", "#f7fff7"].map((color) => (
-              <span key={color} style={{ backgroundColor: color }} />
-            ))}
-          </div>
+          <PaletteSwatches label="Source" colors={sourcePalette} emptyText="Import an asset" />
+          <PaletteSwatches label="Output" colors={outputPalette.slice(0, 8)} emptyText="Run Fix" />
         </section>
         <section className="panel-section">
           <h2>Presets</h2>
@@ -614,6 +617,24 @@ export function App() {
         </div>
       </footer>
     </main>
+  );
+}
+
+function PaletteSwatches({ label, colors, emptyText }: { label: string; colors: string[]; emptyText: string }) {
+  return (
+    <div className="palette-preview">
+      <div className="mini-label">
+        <span>{label}</span>
+        <small>{colors.length > 0 ? `${colors.length} shown` : emptyText}</small>
+      </div>
+      <div className="swatch-row" aria-label={`${label} palette preview`}>
+        {colors.length > 0 ? (
+          colors.map((color) => <span key={`${label}-${color}`} title={color} style={{ backgroundColor: color }} />)
+        ) : (
+          <span className="empty-swatch" />
+        )}
+      </div>
+    </div>
   );
 }
 
