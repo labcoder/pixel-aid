@@ -63,6 +63,17 @@ export function chooseRulerTickStep(zoom: number): number {
   return 20;
 }
 
+export function getComparisonSize(before: Size, after: Size | null): Size {
+  if (!after) {
+    return before;
+  }
+
+  return {
+    width: Math.max(before.width, after.width),
+    height: Math.max(before.height, after.height)
+  };
+}
+
 export function clampZoom(value: number): number {
   return Math.max(1, Math.min(32, Math.round(value)));
 }

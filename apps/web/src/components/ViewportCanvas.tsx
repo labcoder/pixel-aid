@@ -2,7 +2,7 @@ import type { RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent, WheelEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chooseRulerTickStep, clampZoom, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
+import { chooseRulerTickStep, clampZoom, getComparisonSize, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -20,6 +20,8 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
+  const splitDragRef = useRef<{ pointerId: number } | null>(null);
+  const splitRatioRef = useRef(0.5);
   const [renderKey, setRenderKey] = useState(0);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
@@ -63,7 +65,18 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
         return;
       }
 
-      drawImageView(ctx, rect.width, rect.height, sourceCanvas, fixedCanvas, viewMode, zoom, showGrid, panRef.current);
+      drawImageView(
+        ctx,
+        rect.width,
+        rect.height,
+        sourceCanvas,
+        fixedCanvas,
+        viewMode,
+        zoom,
+        showGrid,
+        panRef.current,
+        splitRatioRef.current
+      );
     };
 
     draw();
@@ -77,6 +90,17 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
       return;
     }
 
+    if (viewMode === "split" && fixedImage) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const splitX = rect.width * splitRatioRef.current;
+      if (Math.abs(x - splitX) <= 12) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        splitDragRef.current = { pointerId: event.pointerId };
+        return;
+      }
+    }
+
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
       pointerId: event.pointerId,
@@ -87,6 +111,14 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
   };
 
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const splitDrag = splitDragRef.current;
+    if (splitDrag?.pointerId === event.pointerId) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      splitRatioRef.current = Math.max(0.05, Math.min(0.95, (event.clientX - rect.left) / rect.width));
+      invalidate();
+      return;
+    }
+
     const drag = dragRef.current;
     if (!drag || drag.pointerId !== event.pointerId) {
       return;
@@ -100,6 +132,9 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
   };
 
   const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (splitDragRef.current?.pointerId === event.pointerId) {
+      splitDragRef.current = null;
+    }
     if (dragRef.current?.pointerId === event.pointerId) {
       dragRef.current = null;
     }
@@ -185,11 +220,19 @@ function drawImageView(
   viewMode: ViewMode,
   zoom: number,
   showGrid: boolean,
-  pan: Point
+  pan: Point,
+  splitRatio: number
 ): void {
   const afterCanvas = fixedCanvas ?? sourceCanvas;
   const activeCanvas = viewMode === "after" ? afterCanvas : sourceCanvas;
-  const rect = getImageDrawRect({ width, height }, { width: activeCanvas.width, height: activeCanvas.height }, zoom, pan);
+  const comparisonSize =
+    viewMode === "split" && fixedCanvas
+      ? getComparisonSize(
+          { width: sourceCanvas.width, height: sourceCanvas.height },
+          { width: fixedCanvas.width, height: fixedCanvas.height }
+        )
+      : { width: activeCanvas.width, height: activeCanvas.height };
+  const rect = getImageDrawRect({ width, height }, comparisonSize, zoom, pan);
   const drawWidth = rect.width;
   const drawHeight = rect.height;
   const x = rect.x;
@@ -197,22 +240,31 @@ function drawImageView(
 
   ctx.imageSmoothingEnabled = false;
   if (viewMode === "split" && fixedCanvas) {
-    const splitX = Math.floor(width / 2);
+    const splitX = Math.floor(width * splitRatio);
     drawClipped(ctx, sourceCanvas, x, y, drawWidth, drawHeight, 0, splitX);
-    drawClipped(ctx, fixedCanvas, x, y, fixedCanvas.width * zoom, fixedCanvas.height * zoom, splitX, width - splitX);
+    drawClipped(ctx, fixedCanvas, x, y, drawWidth, drawHeight, splitX, width - splitX);
+    ctx.fillStyle = "#101112";
+    ctx.fillRect(splitX - 3, 0, 6, height);
     ctx.strokeStyle = "#f1c75b";
     ctx.beginPath();
     ctx.moveTo(splitX + 0.5, 0);
     ctx.lineTo(splitX + 0.5, height);
     ctx.stroke();
+    ctx.fillStyle = "#f1c75b";
+    ctx.fillRect(splitX - 10, Math.max(8, y - 28), 20, 18);
+    ctx.fillStyle = "#101112";
+    ctx.font = "10px Consolas, monospace";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("S", splitX, Math.max(17, y - 19));
   } else {
     ctx.drawImage(activeCanvas, x, y, drawWidth, drawHeight);
   }
 
   if (showGrid && zoom >= 4) {
-    drawPixelGrid(ctx, x, y, activeCanvas.width, activeCanvas.height, zoom);
+    drawPixelGrid(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
   }
-  drawRulers(ctx, x, y, activeCanvas.width, activeCanvas.height, zoom);
+  drawRulers(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
 }
 
 function drawClipped(

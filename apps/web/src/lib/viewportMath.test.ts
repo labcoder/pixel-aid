@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { chooseRulerTickStep, getImageDrawRect, zoomAtPoint } from "./viewportMath";
+import { chooseRulerTickStep, getComparisonSize, getImageDrawRect, zoomAtPoint } from "./viewportMath";
 
 describe("viewport math", () => {
   test("centers the image with pan offset applied", () => {
@@ -28,5 +28,12 @@ describe("viewport math", () => {
     expect(chooseRulerTickStep(2)).toBe(20);
     expect(chooseRulerTickStep(8)).toBe(10);
     expect(chooseRulerTickStep(16)).toBe(5);
+  });
+
+  test("uses a shared footprint for split comparisons", () => {
+    expect(getComparisonSize({ width: 64, height: 32 }, { width: 16, height: 16 })).toEqual({
+      width: 64,
+      height: 32
+    });
   });
 });
