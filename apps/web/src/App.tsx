@@ -15,12 +15,13 @@ import {
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AlphaMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { assetBaseName, downloadBlob, jsonBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
+import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
@@ -36,6 +37,7 @@ export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
+  const [mode, setMode] = useState<AssetMode>("single");
   const [targetWidth, setTargetWidth] = useState(64);
   const [targetHeight, setTargetHeight] = useState(64);
   const [maxColors, setMaxColors] = useState(16);
@@ -43,6 +45,7 @@ export function App() {
   const [gridScale, setGridScale] = useState(8);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
+  const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
@@ -71,8 +74,15 @@ export function App() {
           });
           setSelectedAssetId(asset.id);
           setFixResult(null);
-          setTargetWidth(Math.max(1, Math.round(asset.image.width / 8)));
-          setTargetHeight(Math.max(1, Math.round(asset.image.height / 8)));
+          const suggestion = suggestFixSettings(asset.image);
+          setMode(suggestion.mode);
+          setTargetWidth(suggestion.targetWidth);
+          setTargetHeight(suggestion.targetHeight);
+          setGridScale(suggestion.gridScale);
+          setGridDetect(suggestion.gridDetect);
+          setDownscale(suggestion.downscale);
+          setMaxColors(suggestion.maxColors);
+          setSuggestionReason(suggestion.reason);
           appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
         } catch (error) {
           appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
@@ -84,7 +94,7 @@ export function App() {
 
   const buildFixOptions = useCallback((): FixOptions => {
     const options: FixOptions = {
-      mode: "single",
+      mode,
       maxColors,
       grid: {
         detect: gridDetect,
@@ -107,7 +117,7 @@ export function App() {
     }
 
     return options;
-  }, [alpha, downscale, gridDetect, gridScale, maxColors, targetHeight, targetWidth]);
+  }, [alpha, downscale, gridDetect, gridScale, maxColors, mode, targetHeight, targetWidth]);
 
   const runFix = useCallback(() => {
     if (!selectedAsset || isFixing) {
@@ -142,6 +152,23 @@ export function App() {
   const cancelFix = useCallback(() => {
     activeJobRef.current?.cancel();
   }, []);
+
+  const autoSuggest = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    const suggestion = suggestFixSettings(selectedAsset.image);
+    setMode(suggestion.mode);
+    setTargetWidth(suggestion.targetWidth);
+    setTargetHeight(suggestion.targetHeight);
+    setMaxColors(suggestion.maxColors);
+    setGridDetect(suggestion.gridDetect);
+    setGridScale(suggestion.gridScale);
+    setDownscale(suggestion.downscale);
+    setSuggestionReason(`${suggestion.reason} Confidence ${Math.round(suggestion.confidence * 100)}%.`);
+    appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+  }, [appendLog, selectedAsset]);
 
   const selectAsset = useCallback(
     (assetId: string) => {
@@ -403,9 +430,36 @@ export function App() {
         <PanelHeader icon={<SlidersHorizontal size={16} />} title="Inspector" />
         <details className="control-group" open>
           <summary>Fix Settings</summary>
-          <Field label="Mode" value="Single sprite" />
-          <NumberField label="Target W" value={targetWidth} min={1} onChange={setTargetWidth} />
-          <NumberField label="Target H" value={targetHeight} min={1} onChange={setTargetHeight} />
+          <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
+            <WandSparkles size={15} />
+            Auto Suggest
+          </button>
+          <p className="control-hint">{suggestionReason}</p>
+          <SelectField
+            label="Mode"
+            value={mode}
+            options={[
+              ["single", "Single sprite"],
+              ["spriteSheet", "Sprite sheet"],
+              ["characterSheet", "Character sheet"],
+              ["tileSheet", "Tile sheet"]
+            ]}
+            onChange={(value) => setMode(value as AssetMode)}
+          />
+          <NumberField
+            label="Target W"
+            value={targetWidth}
+            min={1}
+            disabled={gridDetect === "auto"}
+            onChange={setTargetWidth}
+          />
+          <NumberField
+            label="Target H"
+            value={targetHeight}
+            min={1}
+            disabled={gridDetect === "auto"}
+            onChange={setTargetHeight}
+          />
           <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
           <SelectField
             label="Downscale"
@@ -431,6 +485,9 @@ export function App() {
         </details>
         <details className="control-group" open>
           <summary>Grid</summary>
+          <p className="control-hint">
+            Auto grid chooses output from the detected pseudo-pixel blocks. Manual target uses Target W/H and Scale.
+          </p>
           <SelectField
             label="Detect"
             value={gridDetect}
@@ -511,7 +568,7 @@ export function App() {
               </div>
               <div>
                 <dt>Output</dt>
-                <dd>{fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : "--"}</dd>
+                <dd>{fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`}</dd>
               </div>
               <div>
                 <dt>Palette</dt>
@@ -579,12 +636,14 @@ function NumberField({
   value,
   min,
   max,
+  disabled,
   onChange
 }: {
   label: string;
   value: number;
   min?: number;
   max?: number;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }) {
   return (
@@ -595,6 +654,7 @@ function NumberField({
         min={min}
         max={max}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
     </label>

@@ -415,6 +415,21 @@ button:disabled {
   cursor: default;
 }
 
+.wide-tool-button {
+  width: 100%;
+  margin-top: 0.7rem;
+  color: #101112;
+  background: var(--amber);
+  border-color: var(--amber);
+  font-weight: 800;
+}
+
+.control-hint {
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
