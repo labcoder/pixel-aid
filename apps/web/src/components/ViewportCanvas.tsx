@@ -1,6 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
-import type { PointerEvent, WheelEvent } from "react";
+import type { PointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { chooseRulerTickStep, clampZoom, getComparisonSize, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
 import type { Point } from "../lib/viewportMath";
@@ -140,30 +140,43 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
     }
   };
 
-  const onWheel = (event: WheelEvent<HTMLCanvasElement>) => {
-    if (!sourceImage) {
+  const onWheel = useCallback(
+    (event: WheelEvent) => {
+      const canvas = canvasRef.current;
+      if (!sourceImage || !canvas) {
+        return;
+      }
+
+      event.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const nextZoom = clampZoom(zoom + (event.deltaY < 0 ? 1 : -1));
+      if (nextZoom === zoom) {
+        return;
+      }
+
+      panRef.current = zoomAtPoint({
+        viewport: { width: rect.width, height: rect.height },
+        image: { width: sourceImage.width, height: sourceImage.height },
+        pan: panRef.current,
+        pointer: { x: event.clientX - rect.left, y: event.clientY - rect.top },
+        zoom,
+        nextZoom
+      });
+      onZoomChange(nextZoom);
+      invalidate();
+    },
+    [invalidate, onZoomChange, sourceImage, zoom]
+  );
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
       return;
     }
 
-    event.preventDefault();
-    const canvas = event.currentTarget;
-    const rect = canvas.getBoundingClientRect();
-    const nextZoom = clampZoom(zoom + (event.deltaY < 0 ? 1 : -1));
-    if (nextZoom === zoom) {
-      return;
-    }
-
-    panRef.current = zoomAtPoint({
-      viewport: { width: rect.width, height: rect.height },
-      image: { width: sourceImage.width, height: sourceImage.height },
-      pan: panRef.current,
-      pointer: { x: event.clientX - rect.left, y: event.clientY - rect.top },
-      zoom,
-      nextZoom
-    });
-    onZoomChange(nextZoom);
-    invalidate();
-  };
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    return () => canvas.removeEventListener("wheel", onWheel);
+  }, [onWheel]);
 
   return (
     <div className="viewport-canvas-wrap">
@@ -175,7 +188,6 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        onWheel={onWheel}
       />
       {!sourceImage ? (
         <div className="viewport-empty-state">
