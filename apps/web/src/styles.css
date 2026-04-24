@@ -1,0 +1,29 @@
+:root {
+  color: #d8dee9;
+  background: #10131a;
+  font-family:
+    "Segoe UI",
+    system-ui,
+    sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.app {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.app h1,
+.app p {
+  margin: 0;
+}
