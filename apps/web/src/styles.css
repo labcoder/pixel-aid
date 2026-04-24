@@ -634,16 +634,24 @@ button:disabled {
 
 .timeline-rail {
   height: 54px;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
   gap: 8px;
   margin-top: 0.7rem;
+  overflow: hidden;
 }
 
 .timeline-rail span {
+  min-width: 34px;
+  flex: 1 1 34px;
   background: linear-gradient(180deg, #2d3434, #161a19);
   border: 1px solid var(--line);
   border-radius: 5px;
+}
+
+.empty-panel-message {
+  margin: 0.7rem 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .log-list {
@@ -656,11 +664,24 @@ button:disabled {
   margin-top: 0.35rem;
 }
 
+.metric-sections {
+  display: grid;
+  gap: 8px;
+  margin-top: 0.65rem;
+}
+
+.metric-group h3 {
+  margin: 0 0 0.35rem;
+  color: var(--cyan);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 8px;
-  margin: 0.7rem 0 0;
+  margin: 0;
 }
 
 .metric-grid div {

@@ -31,6 +31,12 @@ export const docsSections: DocsSection[] = [
     markdown: extractMarkdownSection(editorMarkdown, "Grid")
   },
   {
+    id: "frame-cell",
+    title: "Frame / Cell",
+    tooltip: "Sheet frame dimensions, rows, columns, margin, and spacing.",
+    markdown: extractMarkdownSection(editorMarkdown, "Frame / Cell")
+  },
+  {
     id: "viewport",
     title: "Viewport",
     tooltip: "Canvas preview, pan, zoom, grid overlay, split comparison, and rulers.",

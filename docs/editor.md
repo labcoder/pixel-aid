@@ -27,6 +27,10 @@ Auto candidate detects likely pseudo-pixel block size, phase, and native output 
 
 Manual target uses Target W, Target H, Scale X, Scale Y, Phase X, and Phase Y. Scale is the number of source pixels that collapse into one output pixel. Phase shifts the sampling grid when the source blocks do not start exactly at the top-left corner.
 
+# Frame / Cell
+
+Sprite sheet, character sheet, and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
+
 # Viewport
 
 The viewport renders images through Canvas2D with smoothing disabled.

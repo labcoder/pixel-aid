@@ -1,4 +1,4 @@
-import type { RGBAImage } from "@pixelaid/shared";
+import type { Rect as FrameRect, RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,10 +13,11 @@ export type ViewportCanvasProps = {
   viewMode: ViewMode;
   zoom: number;
   showGrid: boolean;
+  frameRects?: FrameRect[];
   onZoomChange: (zoom: number) => void;
 };
 
-export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGrid, onZoomChange }: ViewportCanvasProps) {
+export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGrid, frameRects = [], onZoomChange }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
@@ -74,6 +75,7 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
         viewMode,
         zoom,
         showGrid,
+        frameRects,
         panRef.current,
         splitRatioRef.current
       );
@@ -83,7 +85,7 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fixedImage, renderKey, showGrid, sourceImage, viewMode, zoom]);
+  }, [fixedImage, frameRects, renderKey, showGrid, sourceImage, viewMode, zoom]);
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 || !sourceImage) {
@@ -232,6 +234,7 @@ function drawImageView(
   viewMode: ViewMode,
   zoom: number,
   showGrid: boolean,
+  frameRects: FrameRect[],
   pan: Point,
   splitRatio: number
 ): void {
@@ -276,7 +279,23 @@ function drawImageView(
   if (showGrid && zoom >= 4) {
     drawPixelGrid(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
   }
+  drawFrameBounds(ctx, x, y, frameRects, zoom);
   drawRulers(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
+}
+
+function drawFrameBounds(ctx: CanvasRenderingContext2D, startX: number, startY: number, frameRects: FrameRect[], zoom: number): void {
+  if (frameRects.length <= 1) {
+    return;
+  }
+
+  ctx.save();
+  ctx.strokeStyle = "#f1c75bcc";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  for (const frame of frameRects) {
+    ctx.strokeRect(startX + frame.x * zoom + 0.5, startY + frame.y * zoom + 0.5, frame.w * zoom - 1, frame.h * zoom - 1);
+  }
+  ctx.restore();
 }
 
 function drawClipped(

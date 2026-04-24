@@ -17,6 +17,7 @@ import {
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import { sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
@@ -29,8 +30,9 @@ import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
-import { extractVisiblePalette } from "./lib/palettePreview";
+import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
+import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
@@ -53,6 +55,12 @@ export function App() {
   const [gridScaleX, setGridScaleX] = useState(8);
   const [gridScaleY, setGridScaleY] = useState(8);
   const [aspectLocked, setAspectLocked] = useState(true);
+  const [frameWidth, setFrameWidth] = useState(32);
+  const [frameHeight, setFrameHeight] = useState(32);
+  const [sheetRows, setSheetRows] = useState(1);
+  const [sheetColumns, setSheetColumns] = useState(1);
+  const [sheetMargin, setSheetMargin] = useState(0);
+  const [sheetSpacing, setSheetSpacing] = useState(0);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
@@ -66,7 +74,23 @@ export function App() {
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
     [selectedAsset]
   );
+  const sourceColorCount = useMemo(() => (selectedAsset ? countVisibleColors(selectedAsset.image) : 0), [selectedAsset]);
   const outputPalette = fixResult?.palette ?? [];
+  const sheetMode = isSheetLikeMode(mode);
+  const sheetOptions = useMemo(
+    () => ({
+      frameWidth,
+      frameHeight,
+      rows: sheetRows,
+      columns: sheetColumns,
+      margin: sheetMargin,
+      spacing: sheetSpacing,
+      extrude: 1
+    }),
+    [frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+  );
+  const sheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
+  const timelineState = getTimelineState(mode, sheetFrames.length);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -109,6 +133,10 @@ export function App() {
           setMode(suggestion.mode);
           setTargetWidth(suggestion.targetWidth);
           setTargetHeight(suggestion.targetHeight);
+          setFrameWidth(suggestion.targetWidth);
+          setFrameHeight(suggestion.targetHeight);
+          setSheetRows(1);
+          setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
           setGridScaleX(suggestion.gridScaleX);
           setGridScaleY(suggestion.gridScaleY);
           setGridDetect(suggestion.gridDetect);
@@ -143,11 +171,12 @@ export function App() {
         removeOrphans: false,
         jaggyCleanup: false,
         preserveSinglePixelDetails: true
-      }
+      },
+      ...(sheetMode ? { sheet: sheetOptions } : {})
     };
 
     return options;
-  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]);
+  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, sheetMode, sheetOptions, targetHeight, targetWidth]);
 
   const runFix = useCallback(() => {
     if (!selectedAsset || isFixing) {
@@ -192,6 +221,10 @@ export function App() {
     setMode(suggestion.mode);
     setTargetWidth(suggestion.targetWidth);
     setTargetHeight(suggestion.targetHeight);
+    setFrameWidth(suggestion.targetWidth);
+    setFrameHeight(suggestion.targetHeight);
+    setSheetRows(1);
+    setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
     setMaxColors(suggestion.maxColors);
     setGridDetect(suggestion.gridDetect);
     setGridScaleX(suggestion.gridScaleX);
@@ -530,6 +563,7 @@ export function App() {
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
+          frameRects={sheetFrames.map((frame) => frame.rect)}
           onZoomChange={setZoom}
         />
       </section>
@@ -578,6 +612,20 @@ export function App() {
           <p className="field-note">
             Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
           </p>
+          {sheetMode ? (
+            <>
+              <div className="subsection-label">Frame / Cell</div>
+              <NumberField label="Frame W" value={frameWidth} min={1} onChange={setFrameWidth} />
+              <NumberField label="Frame H" value={frameHeight} min={1} onChange={setFrameHeight} />
+              <NumberField label="Rows" value={sheetRows} min={1} onChange={setSheetRows} />
+              <NumberField label="Columns" value={sheetColumns} min={1} onChange={setSheetColumns} />
+              <NumberField label="Margin" value={sheetMargin} min={0} onChange={setSheetMargin} />
+              <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={setSheetSpacing} />
+              <p className="field-note">
+                Frame size describes each sprite tile inside the larger fixed sheet. Bounds are shown in the viewport.
+              </p>
+            </>
+          ) : null}
           <div className="subsection-label">Grid</div>
           <SelectField
             label="Detect"
@@ -676,12 +724,15 @@ export function App() {
         <div className="bottom-content">
           <section>
             <h2>Sprite Player</h2>
-            <div className="timeline-rail">
-              <span />
-              <span />
-              <span />
-              <span />
-            </div>
+            {timelineState.enabled ? (
+              <div className="timeline-rail">
+                {sheetFrames.map((frame) => (
+                  <span key={frame.name} title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`} />
+                ))}
+              </div>
+            ) : (
+              <p className="empty-panel-message">{timelineState.message}</p>
+            )}
           </section>
           <section>
             <h2>Console</h2>
@@ -693,24 +744,26 @@ export function App() {
           </section>
           <section>
             <h2>Metrics</h2>
-            <dl className="metric-grid">
-              <div>
-                <dt>Source</dt>
-                <dd>{selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"}</dd>
-              </div>
-              <div>
-                <dt>Output</dt>
-                <dd>{fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`}</dd>
-              </div>
-              <div>
-                <dt>Palette</dt>
-                <dd>{fixResult ? fixResult.palette.length : "--"}</dd>
-              </div>
-              <div>
-                <dt>Grid</dt>
-                <dd>{fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"}</dd>
-              </div>
-            </dl>
+            <div className="metric-sections">
+              <MetricGroup
+                title="Source"
+                metrics={[
+                  ["Size", selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"],
+                  ["Colors", selectedAsset ? String(sourceColorCount) : "--"],
+                  ["Mode", mode],
+                  ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
+                ]}
+              />
+              <MetricGroup
+                title="Output"
+                metrics={[
+                  ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
+                  ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
+                  ["Downscale", downscale],
+                  ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
+                ]}
+              />
+            </div>
           </section>
         </div>
       </footer>
@@ -732,6 +785,22 @@ function PaletteSwatches({ label, colors, emptyText }: { label: string; colors: 
           <span className="empty-swatch" />
         )}
       </div>
+    </div>
+  );
+}
+
+function MetricGroup({ title, metrics }: { title: string; metrics: Array<[string, string]> }) {
+  return (
+    <div className="metric-group">
+      <h3>{title}</h3>
+      <dl className="metric-grid">
+        {metrics.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </div>
+        ))}
+      </dl>
     </div>
   );
 }
