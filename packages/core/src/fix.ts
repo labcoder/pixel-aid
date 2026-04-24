@@ -39,7 +39,31 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
 
 function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
   if (options.grid.detect === "auto") {
-    const [candidate] = detectGridCandidates(image);
+    const candidates = detectGridCandidates(image);
+    const [candidate] = candidates;
+    if (options.targetWidth && options.targetHeight) {
+      const scaleX = options.grid.scaleX ?? options.grid.scale ?? image.width / options.targetWidth;
+      const scaleY = options.grid.scaleY ?? options.grid.scale ?? image.height / options.targetHeight;
+      const closest = candidates.reduce(
+        (best, item) => {
+          const distance = Math.abs(item.outputWidth - options.targetWidth!) + Math.abs(item.outputHeight - options.targetHeight!);
+          return distance < best.distance ? { candidate: item, distance } : best;
+        },
+        { candidate: candidate!, distance: Number.POSITIVE_INFINITY }
+      ).candidate;
+
+      return {
+        outputWidth: options.targetWidth,
+        outputHeight: options.targetHeight,
+        scaleX,
+        scaleY,
+        phaseX: options.grid.phaseX ?? closest.phaseX,
+        phaseY: options.grid.phaseY ?? closest.phaseY,
+        confidence: closest.confidence,
+        reason: `Target-guided auto grid from ${options.targetWidth}x${options.targetHeight}`
+      };
+    }
+
     return candidate!;
   }
 

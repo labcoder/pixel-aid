@@ -19,7 +19,8 @@ describe("editor presets", () => {
         targetHeight: 32,
         maxColors: 16,
         gridDetect: "auto",
-        gridScale: 8,
+        gridScaleX: 8,
+        gridScaleY: 8,
         downscale: "dominant",
         alpha: "preserve"
       },

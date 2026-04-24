@@ -7,7 +7,8 @@ export type FixSettingSuggestion = {
   targetHeight: number;
   maxColors: number;
   gridDetect: "auto" | "manual";
-  gridScale: number;
+  gridScaleX: number;
+  gridScaleY: number;
   downscale: DownscaleMethod;
   reason: string;
   confidence: number;
@@ -26,7 +27,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     targetHeight: outputHeight,
     maxColors: mode === "tileSheet" ? 16 : 24,
     gridDetect: "auto",
-    gridScale: Math.max(1, Math.round(candidate?.scaleX ?? image.width / outputWidth)),
+    gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
+    gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
     downscale: sourceRatio > 2 ? "adaptive" : "dominant",
     reason: suggestionReason(mode, sourceRatio),
     confidence: candidate?.confidence ?? 0.25

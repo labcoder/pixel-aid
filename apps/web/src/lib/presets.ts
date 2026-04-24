@@ -6,7 +6,8 @@ export type EditorSettingsState = {
   targetHeight: number;
   maxColors: number;
   gridDetect: "auto" | "manual";
-  gridScale: number;
+  gridScaleX: number;
+  gridScaleY: number;
   downscale: DownscaleMethod;
   alpha: AlphaMode;
 };
@@ -64,7 +65,8 @@ export const editorPresets: EditorPreset[] = [
       gridDetect: "manual",
       targetWidth: 128,
       targetHeight: 64,
-      gridScale: 4,
+      gridScaleX: 4,
+      gridScaleY: 4,
       maxColors: 32,
       downscale: "dominant",
       alpha: "preserve"

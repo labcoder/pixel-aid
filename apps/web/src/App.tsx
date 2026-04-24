@@ -24,6 +24,7 @@ import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
+import { deriveGridScale, resizeWithAspectLock } from "./lib/fixControls";
 import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -49,7 +50,9 @@ export function App() {
   const [targetHeight, setTargetHeight] = useState(64);
   const [maxColors, setMaxColors] = useState(16);
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
-  const [gridScale, setGridScale] = useState(8);
+  const [gridScaleX, setGridScaleX] = useState(8);
+  const [gridScaleY, setGridScaleY] = useState(8);
+  const [aspectLocked, setAspectLocked] = useState(true);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
@@ -106,7 +109,8 @@ export function App() {
           setMode(suggestion.mode);
           setTargetWidth(suggestion.targetWidth);
           setTargetHeight(suggestion.targetHeight);
-          setGridScale(suggestion.gridScale);
+          setGridScaleX(suggestion.gridScaleX);
+          setGridScaleY(suggestion.gridScaleY);
           setGridDetect(suggestion.gridDetect);
           setDownscale(suggestion.downscale);
           setMaxColors(suggestion.maxColors);
@@ -123,9 +127,13 @@ export function App() {
   const buildFixOptions = useCallback((): FixOptions => {
     const options: FixOptions = {
       mode,
+      targetWidth,
+      targetHeight,
       maxColors,
       grid: {
         detect: gridDetect,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
         phaseX: 0,
         phaseY: 0
       },
@@ -138,14 +146,8 @@ export function App() {
       }
     };
 
-    if (gridDetect === "manual") {
-      options.targetWidth = targetWidth;
-      options.targetHeight = targetHeight;
-      options.grid.scale = gridScale;
-    }
-
     return options;
-  }, [alpha, downscale, gridDetect, gridScale, maxColors, mode, targetHeight, targetWidth]);
+  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]);
 
   const runFix = useCallback(() => {
     if (!selectedAsset || isFixing) {
@@ -192,7 +194,8 @@ export function App() {
     setTargetHeight(suggestion.targetHeight);
     setMaxColors(suggestion.maxColors);
     setGridDetect(suggestion.gridDetect);
-    setGridScale(suggestion.gridScale);
+    setGridScaleX(suggestion.gridScaleX);
+    setGridScaleY(suggestion.gridScaleY);
     setDownscale(suggestion.downscale);
     setSuggestionReason(`${suggestion.reason} Confidence ${Math.round(suggestion.confidence * 100)}%.`);
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
@@ -207,7 +210,8 @@ export function App() {
           targetHeight,
           maxColors,
           gridDetect,
-          gridScale,
+          gridScaleX,
+          gridScaleY,
           downscale,
           alpha
         },
@@ -219,13 +223,37 @@ export function App() {
       setTargetHeight(next.targetHeight);
       setMaxColors(next.maxColors);
       setGridDetect(next.gridDetect);
-      setGridScale(next.gridScale);
+      setGridScaleX(next.gridScaleX);
+      setGridScaleY(next.gridScaleY);
       setDownscale(next.downscale);
       setAlpha(next.alpha);
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, downscale, gridDetect, gridScale, maxColors, mode, targetHeight, targetWidth]
+    [alpha, appendLog, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
+  );
+
+  const updateTargetSize = useCallback(
+    (changed: "width" | "height", value: number) => {
+      const next = resizeWithAspectLock({
+        sourceWidth: selectedAsset?.image.width ?? targetWidth,
+        sourceHeight: selectedAsset?.image.height ?? targetHeight,
+        targetWidth,
+        targetHeight,
+        changed,
+        value,
+        locked: aspectLocked
+      });
+
+      setTargetWidth(next.targetWidth);
+      setTargetHeight(next.targetHeight);
+      if (selectedAsset) {
+        const scale = deriveGridScale(selectedAsset.image, { width: next.targetWidth, height: next.targetHeight });
+        setGridScaleX(scale.scaleX);
+        setGridScaleY(scale.scaleY);
+      }
+    },
+    [aspectLocked, selectedAsset, targetHeight, targetWidth]
   );
 
   const selectAsset = useCallback(
@@ -508,13 +536,14 @@ export function App() {
 
       <aside className="right-panel panel" aria-label="Inspector">
         <PanelHeader icon={<SlidersHorizontal size={16} />} title="Inspector" />
-        <details className="control-group" open>
-          <SectionSummary title="Fix Settings" docsId="fix-settings" tooltip="Mode, target size, palette limit, downscale method, and alpha handling." onDocs={openDocs} />
+        <details className="control-group fix-setup" open>
+          <SectionSummary title="Fix Setup" docsId="fix-settings" tooltip="Mode, target size, grid detection, palette, and cleanup controls." onDocs={openDocs} />
           <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
             <WandSparkles size={15} />
             Auto Suggest
           </button>
           <p className="control-hint">{suggestionReason}</p>
+          <div className="subsection-label">Asset</div>
           <SelectField
             label="Mode"
             value={mode}
@@ -530,16 +559,57 @@ export function App() {
             label="Target W"
             value={targetWidth}
             min={1}
-            disabled={gridDetect === "auto"}
-            onChange={setTargetWidth}
+            onChange={(value) => updateTargetSize("width", value)}
           />
           <NumberField
             label="Target H"
             value={targetHeight}
             min={1}
-            disabled={gridDetect === "auto"}
-            onChange={setTargetHeight}
+            onChange={(value) => updateTargetSize("height", value)}
           />
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={aspectLocked}
+              onChange={(event) => setAspectLocked(event.currentTarget.checked)}
+            />
+            Lock aspect ratio
+          </label>
+          <p className="field-note">
+            Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
+          </p>
+          <div className="subsection-label">Grid</div>
+          <SelectField
+            label="Detect"
+            value={gridDetect}
+            options={[
+              ["auto", "Auto candidate"],
+              ["manual", "Manual target"]
+            ]}
+            onChange={(value) => setGridDetect(value as "auto" | "manual")}
+          />
+          <NumberField
+            label="Scale X"
+            value={Number(gridScaleX.toFixed(3))}
+            min={0.01}
+            step={0.01}
+            disabled={gridDetect === "auto"}
+            onChange={setGridScaleX}
+          />
+          <NumberField
+            label="Scale Y"
+            value={Number(gridScaleY.toFixed(3))}
+            min={0.01}
+            step={0.01}
+            disabled={gridDetect === "auto"}
+            onChange={setGridScaleY}
+          />
+          <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
+          <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
+          <p className="field-note">
+            Scale is source pixels per output pixel. Phase shifts where the sampling grid starts.
+          </p>
+          <div className="subsection-label">Cleanup</div>
           <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
           <SelectField
             label="Downscale"
@@ -562,24 +632,7 @@ export function App() {
             ]}
             onChange={(value) => setAlpha(value as AlphaMode)}
           />
-        </details>
-        <details className="control-group" open>
-          <SectionSummary title="Grid" docsId="grid" tooltip="Pseudo-pixel grid detection and manual output sizing." onDocs={openDocs} />
-          <p className="control-hint">
-            Auto grid chooses output from the detected pseudo-pixel blocks. Manual target uses Target W/H and Scale.
-          </p>
-          <SelectField
-            label="Detect"
-            value={gridDetect}
-            options={[
-              ["auto", "Auto candidate"],
-              ["manual", "Manual target"]
-            ]}
-            onChange={(value) => setGridDetect(value as "auto" | "manual")}
-          />
-          <NumberField label="Scale" value={gridScale} min={1} onChange={setGridScale} />
-          <ReadonlyField label="Phase X" value="0" />
-          <ReadonlyField label="Phase Y" value="0" />
+          <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
             <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
             Show grid overlay
@@ -800,6 +853,7 @@ function NumberField({
   value,
   min,
   max,
+  step,
   disabled,
   onChange
 }: {
@@ -807,6 +861,7 @@ function NumberField({
   value: number;
   min?: number;
   max?: number;
+  step?: number;
   disabled?: boolean;
   onChange: (value: number) => void;
 }) {
@@ -817,6 +872,7 @@ function NumberField({
         type="number"
         min={min}
         max={max}
+        step={step}
         value={value}
         disabled={disabled}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
@@ -825,11 +881,11 @@ function NumberField({
   );
 }
 
-function ReadonlyField({ label, value, text = false }: { label: string; value: string; text?: boolean }) {
+function ReadonlyField({ label, value, text = false, disabled = false }: { label: string; value: string; text?: boolean; disabled?: boolean }) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <input type={text ? "text" : "number"} value={value} readOnly />
+      <input type={text ? "text" : "number"} value={value} readOnly disabled={disabled} />
     </label>
   );
 }

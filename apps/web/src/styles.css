@@ -528,6 +528,22 @@ button:disabled {
   font-size: 0.76rem;
 }
 
+.subsection-label {
+  margin-top: 0.9rem;
+  padding-top: 0.75rem;
+  color: var(--cyan);
+  border-top: 1px solid #2a3030;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.field-note {
+  margin: 0.45rem 0 0;
+  color: #78837e;
+  font-size: 0.72rem;
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
@@ -547,6 +563,13 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 0 0.5rem;
+}
+
+.field-row input:disabled,
+.field-row select:disabled {
+  color: #6d7773;
+  background: #171a1a;
+  border-color: #272d2d;
 }
 
 .field-row input[type="range"] {

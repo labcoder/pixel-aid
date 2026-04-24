@@ -31,6 +31,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.gridDetect).toBe("auto");
     expect(suggestion.targetWidth).toBeGreaterThan(0);
     expect(suggestion.targetHeight).toBeGreaterThan(0);
-    expect(suggestion.gridScale).toBeGreaterThan(0);
+    expect(suggestion.gridScaleX).toBeGreaterThan(0);
+    expect(suggestion.gridScaleY).toBeGreaterThan(0);
   });
 });

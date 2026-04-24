@@ -217,4 +217,23 @@ describe("fix pipeline", () => {
     expect(result.metrics.paletteCount).toBe(4);
     expect(result.settings).toEqual(defaultOptions);
   });
+
+  test("honors target dimensions as an auto-grid hint", () => {
+    const result = fixImage(blockySource(), {
+      ...defaultOptions,
+      targetWidth: 4,
+      targetHeight: 4,
+      grid: {
+        detect: "auto",
+        scaleX: 1,
+        scaleY: 1,
+        phaseX: 0,
+        phaseY: 0
+      }
+    });
+
+    expect(result.image.width).toBe(4);
+    expect(result.image.height).toBe(4);
+    expect(result.grid.reason).toContain("Target-guided");
+  });
 });
