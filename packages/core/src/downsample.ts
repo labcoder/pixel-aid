@@ -20,6 +20,13 @@ type DominantResult = {
   alpha: number;
 };
 
+type ColorCluster = {
+  count: number;
+  r: number;
+  g: number;
+  b: number;
+};
+
 export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions): RGBAImage {
   const output = createImage(options.outputWidth, options.outputHeight);
 
@@ -63,11 +70,11 @@ function getBlockBounds(image: RGBAImage, x: number, y: number, options: Downsam
 }
 
 function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, number, number, number]; dominant: DominantResult } {
-  const counts = new Map<number, number>();
+  const clusters = new Map<number, ColorCluster>();
   let total = 0;
   let alphaTotal = 0;
   let bestColor = 0;
-  let bestCount = 0;
+  let bestCluster: ColorCluster | null = null;
 
   for (let y = block.startY; y < block.endY; y += 1) {
     for (let x = block.startX; x < block.endX; x += 1) {
@@ -80,21 +87,36 @@ function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, 
       }
 
       const color = packQuantizedRgb(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
-      const count = (counts.get(color) ?? 0) + 1;
-      counts.set(color, count);
-      if (count > bestCount) {
+      const existing = clusters.get(color);
+      const cluster = existing ?? { count: 0, r: 0, g: 0, b: 0 };
+      cluster.count += 1;
+      cluster.r += image.data[offset]!;
+      cluster.g += image.data[offset + 1]!;
+      cluster.b += image.data[offset + 2]!;
+      if (!existing) {
+        clusters.set(color, cluster);
+      }
+      if (!bestCluster || cluster.count > bestCluster.count) {
         bestColor = color;
-        bestCount = count;
+        bestCluster = cluster;
       }
     }
   }
 
   const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
+  const pixel = bestCluster
+    ? ([
+        clampByte(bestCluster.r / bestCluster.count),
+        clampByte(bestCluster.g / bestCluster.count),
+        clampByte(bestCluster.b / bestCluster.count),
+        alpha
+      ] as [number, number, number, number])
+    : unpackRgb(bestColor, alpha);
   return {
-    pixel: unpackRgb(bestColor, alpha),
+    pixel,
     dominant: {
       color: bestColor,
-      coverage: total > 0 ? bestCount / total : 0,
+      coverage: total > 0 && bestCluster ? bestCluster.count / total : 0,
       alpha
     }
   };

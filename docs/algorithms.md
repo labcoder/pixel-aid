@@ -24,7 +24,7 @@ Pixel loops use typed arrays and integer offsets.
 
 `downsampleBlocks` converts source blocks into true output pixels. Current strategies:
 
-- `dominant`: picks the most frequent quantized source color in the block.
+- `dominant`: clusters similar colors for noise tolerance, then returns the average representative color from the winning cluster instead of the coarse bucket color.
 - `median`: uses per-channel median values.
 - `adaptive`: uses dominant color when coverage is high, otherwise median.
 - `averageThenPalette`: averages the block before later palette remapping.
@@ -33,7 +33,7 @@ This is the main fake-pixel-to-real-pixel conversion path. It does not use bilin
 
 ## Palette
 
-`extractPalette` uses frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
+`extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
 
 ## Alpha Cleanup
 

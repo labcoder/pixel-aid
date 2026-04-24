@@ -12,6 +12,7 @@ export type FixSettingSuggestion = {
   downscale: DownscaleMethod;
   reason: string;
   confidence: number;
+  modeConfidence: number;
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
@@ -20,6 +21,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const outputHeight = candidate?.outputHeight ?? image.height;
   const sourceRatio = image.width / image.height;
   const mode = classifyMode(image.width, image.height, outputWidth, outputHeight);
+  const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height);
 
   return {
     mode,
@@ -31,7 +33,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
     downscale: sourceRatio > 2 ? "adaptive" : "dominant",
     reason: suggestionReason(mode, sourceRatio),
-    confidence: candidate?.confidence ?? 0.25
+    confidence: candidate?.confidence ?? 0.25,
+    modeConfidence
   };
 }
 
@@ -58,4 +61,23 @@ function suggestionReason(mode: AssetMode, sourceRatio: number): string {
     return "Source is square and evenly divisible, so it may be a tile sheet.";
   }
   return "Source proportions look like a single sprite or prop.";
+}
+
+function classifyModeConfidence(mode: AssetMode, sourceRatio: number, width: number, height: number): number {
+  if (mode === "spriteSheet") {
+    const extremity = Math.max(sourceRatio, 1 / sourceRatio);
+    return Math.max(0.72, Math.min(0.95, 0.68 + (extremity - 2) * 0.12));
+  }
+
+  if (mode === "tileSheet") {
+    return 0.72;
+  }
+
+  const balancedRatio = sourceRatio >= 0.55 && sourceRatio <= 1.65;
+  const substantialSource = width >= 64 && height >= 64;
+  if (balancedRatio && substantialSource) {
+    return 0.92;
+  }
+
+  return 0.78;
 }

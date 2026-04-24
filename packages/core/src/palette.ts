@@ -13,7 +13,7 @@ export function extractPalette(image: RGBAImage, maxColors: number): string[] {
     throw new Error("maxColors must be a positive integer");
   }
 
-  const counts = new Map<number, ColorCount>();
+  const exactCounts = new Map<number, ColorCount>();
   let order = 0;
 
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -22,20 +22,43 @@ export function extractPalette(image: RGBAImage, maxColors: number): string[] {
       continue;
     }
 
-    const color = packQuantizedRgb(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
-    const existing = counts.get(color);
+    const color = (image.data[offset]! << 16) | (image.data[offset + 1]! << 8) | image.data[offset + 2]!;
+    const existing = exactCounts.get(color);
     if (existing) {
       existing.count += 1;
     } else {
-      counts.set(color, { color, count: 1, firstSeen: order });
+      exactCounts.set(color, { color, count: 1, firstSeen: order });
       order += 1;
     }
   }
 
-  const ranked = [...counts.values()].sort((a, b) => b.count - a.count || a.firstSeen - b.firstSeen);
+  if (exactCounts.size <= maxColors) {
+    const exactPalette = rankCounts(exactCounts).map((entry) => rgbToHex(entry.color));
+    return exactPalette.length > 0 ? exactPalette : ["#000000"];
+  }
+
+  const counts = new Map<number, ColorCount>();
+  order = 0;
+  for (const entry of exactCounts.values()) {
+    const [r, g, b] = unpackRgb(entry.color);
+    const color = packQuantizedRgb(r, g, b);
+    const existing = counts.get(color);
+    if (existing) {
+      existing.count += entry.count;
+    } else {
+      counts.set(color, { color, count: entry.count, firstSeen: order });
+      order += 1;
+    }
+  }
+
+  const ranked = rankCounts(counts);
   const palette = ranked.slice(0, maxColors).map((entry) => rgbToHex(entry.color));
 
   return palette.length > 0 ? palette : ["#000000"];
+}
+
+function rankCounts(counts: Map<number, ColorCount>): ColorCount[] {
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.firstSeen - b.firstSeen);
 }
 
 export function remapToPalette(image: RGBAImage, palette: readonly string[]): RGBAImage {

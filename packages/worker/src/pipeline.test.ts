@@ -52,7 +52,7 @@ describe("worker fix pipeline", () => {
     expect(response.requestId).toBe("job-1");
     expect(response.result.image.width).toBe(1);
     expect(response.result.image.height).toBe(1);
-    expect(response.result.palette).toEqual(["#f80000"]);
+    expect(response.result.palette).toEqual(["#fb0100"]);
     expect(response.result.metrics.durationMs).toBe(14);
   });
 

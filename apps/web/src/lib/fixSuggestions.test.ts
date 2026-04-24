@@ -34,4 +34,11 @@ describe("fix setting suggestions", () => {
     expect(suggestion.gridScaleX).toBeGreaterThan(0);
     expect(suggestion.gridScaleY).toBeGreaterThan(0);
   });
+
+  test("reports high single-sprite mode confidence for portrait character art", () => {
+    const suggestion = suggestFixSettings(blankImage(706, 878));
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
+  });
 });

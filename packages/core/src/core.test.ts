@@ -98,6 +98,28 @@ describe("grid detection", () => {
 });
 
 describe("block downsampling", () => {
+  test("keeps representative dominant colors instead of returning quantized bucket colors", () => {
+    const source = imageFromPixels(2, [
+      rgba(10, 20, 30),
+      rgba(11, 21, 31),
+      rgba(12, 22, 32),
+      rgba(240, 240, 240)
+    ]);
+
+    const fixed = downsampleBlocks(source, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "dominant",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(fixed, 0, 0)).toEqual([11, 21, 31, 255]);
+  });
+
   test("collapses each source block to one dominant output pixel", () => {
     const fixed = downsampleBlocks(blockySource(), {
       outputWidth: 2,
@@ -110,10 +132,10 @@ describe("block downsampling", () => {
       alpha: "preserve"
     });
 
-    expect(readPixel(fixed, 0, 0)).toEqual([248, 0, 0, 255]);
-    expect(readPixel(fixed, 1, 0)).toEqual([0, 248, 0, 255]);
-    expect(readPixel(fixed, 0, 1)).toEqual([0, 0, 248, 255]);
-    expect(readPixel(fixed, 1, 1)).toEqual([248, 248, 0, 255]);
+    expect(readPixel(fixed, 0, 0)).toEqual([252, 1, 0, 255]);
+    expect(readPixel(fixed, 1, 0)).toEqual([1, 251, 2, 255]);
+    expect(readPixel(fixed, 0, 1)).toEqual([0, 1, 251, 255]);
+    expect(readPixel(fixed, 1, 1)).toEqual([253, 252, 1, 255]);
   });
 
   test("uses median channel values for noisy mixed blocks", () => {
@@ -140,6 +162,12 @@ describe("block downsampling", () => {
 });
 
 describe("palette reduction", () => {
+  test("keeps exact colors when the image is already within the color budget", () => {
+    const source = imageFromPixels(2, [rgba(10, 20, 30), rgba(0, 200, 240)]);
+
+    expect(extractPalette(source, 4)).toEqual(["#0a141e", "#00c8f0"]);
+  });
+
   test("extracts frequent colors and remaps to the nearest palette entry", () => {
     const palette = extractPalette(blockySource(), 3);
     const remapped = remapToPalette(blockySource(), palette);
@@ -212,7 +240,7 @@ describe("fix pipeline", () => {
 
     expect(result.image.width).toBe(2);
     expect(result.image.height).toBe(2);
-    expect(result.palette).toEqual(["#f80000", "#00f800", "#0000f8", "#f8f800"]);
+    expect(result.palette).toEqual(["#fc0100", "#01fb02", "#0001fb", "#fdfc01"]);
     expect(result.grid.confidence).toBe(1);
     expect(result.metrics.paletteCount).toBe(4);
     expect(result.settings).toEqual(defaultOptions);

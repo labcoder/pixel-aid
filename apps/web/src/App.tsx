@@ -142,7 +142,7 @@ export function App() {
           setGridDetect(suggestion.gridDetect);
           setDownscale(suggestion.downscale);
           setMaxColors(suggestion.maxColors);
-          setSuggestionReason(suggestion.reason);
+          setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
           appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
         } catch (error) {
           appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
@@ -230,7 +230,7 @@ export function App() {
     setGridScaleX(suggestion.gridScaleX);
     setGridScaleY(suggestion.gridScaleY);
     setDownscale(suggestion.downscale);
-    setSuggestionReason(`${suggestion.reason} Confidence ${Math.round(suggestion.confidence * 100)}%.`);
+    setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
   }, [appendLog, selectedAsset]);
 
@@ -803,6 +803,10 @@ function MetricGroup({ title, metrics }: { title: string; metrics: Array<[string
       </dl>
     </div>
   );
+}
+
+function formatSuggestionReason(reason: string, modeConfidence: number, gridConfidence: number): string {
+  return `${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.`;
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
