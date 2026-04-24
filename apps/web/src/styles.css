@@ -197,7 +197,7 @@ button:disabled {
 }
 
 .asset-list .muted-row,
-.asset-list button,
+.asset-list .asset-row,
 .preset-row {
   width: 100%;
   display: flex;
@@ -212,27 +212,98 @@ button:disabled {
   border-radius: 6px;
 }
 
-.asset-list button {
-  min-height: 38px;
+.asset-list .asset-row {
+  min-height: 52px;
+  padding: 0.4rem;
 }
 
-.asset-list button span {
+.asset-thumb {
+  width: 38px;
+  height: 38px;
+  display: block;
+  flex: 0 0 auto;
+  background: #101112;
+  border: 1px solid #485252;
+  border-radius: 4px;
+}
+
+.asset-meta {
+  min-width: 0;
+  display: grid;
+  gap: 0.08rem;
+}
+
+.asset-meta strong,
+.asset-meta small {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.asset-list button small {
-  margin-left: auto;
+.asset-meta strong {
+  color: var(--text);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.asset-meta small {
   color: var(--amber);
   font-size: 0.72rem;
 }
 
-.asset-list button.active-asset {
+.asset-list .asset-row.active-asset {
   color: var(--text);
   border-color: var(--cyan);
   background: #19302e;
+}
+
+.icon-button {
+  width: 26px;
+  height: 26px;
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+  border: 1px solid transparent;
+  border-radius: 5px;
+}
+
+.icon-button:hover {
+  border-color: var(--line);
+  background: #101112;
+}
+
+.icon-button.danger:hover {
+  color: var(--rose);
+  border-color: var(--rose);
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 138px;
+  padding: 4px;
+  background: #121515;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 12px 30px #00000066;
+}
+
+.context-menu button {
+  width: 100%;
+  justify-content: flex-start;
+  min-height: 30px;
+  padding: 0 0.55rem;
+  background: transparent;
+  border-color: transparent;
+}
+
+.context-menu button:hover {
+  color: var(--rose);
+  background: var(--surface-2);
+  border-color: var(--line);
 }
 
 .swatch-row {

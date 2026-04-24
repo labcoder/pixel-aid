@@ -9,6 +9,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Terminal,
+  Trash2,
   Upload,
   WandSparkles
 } from "lucide-react";
@@ -16,7 +17,9 @@ import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AlphaMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
+import { AssetThumbnail } from "./components/AssetThumbnail";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import { removeAssetAndSelectNext } from "./lib/assets";
 import { assetBaseName, downloadBlob, jsonBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -42,6 +45,7 @@ export function App() {
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
+  const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const activeJobRef = useRef<FixJob | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
@@ -139,6 +143,33 @@ export function App() {
     activeJobRef.current?.cancel();
   }, []);
 
+  const selectAsset = useCallback(
+    (assetId: string) => {
+      if (assetId !== selectedAsset?.id) {
+        setFixResult(null);
+      }
+      setSelectedAssetId(assetId);
+      setAssetMenu(null);
+    },
+    [selectedAsset?.id]
+  );
+
+  const removeAsset = useCallback(
+    (assetId: string) => {
+      setAssets((current) => {
+        const result = removeAssetAndSelectNext(current, assetId, selectedAsset?.id ?? null);
+        setSelectedAssetId(result.selectedAssetId);
+        return result.assets;
+      });
+      if (assetId === selectedAsset?.id) {
+        setFixResult(null);
+      }
+      setAssetMenu(null);
+      appendLog("Removed asset");
+    },
+    [appendLog, selectedAsset?.id]
+  );
+
   const exportFixedAsset = useCallback(() => {
     if (!selectedAsset || !fixResult) {
       return;
@@ -166,6 +197,7 @@ export function App() {
   }, [appendLog, fixResult, selectedAsset]);
 
   useEffect(() => {
+    const closeAssetMenu = () => setAssetMenu(null);
     const onPaste = (event: ClipboardEvent) => {
       if (event.clipboardData?.files.length) {
         void importFiles(event.clipboardData.files);
@@ -173,7 +205,11 @@ export function App() {
     };
 
     window.addEventListener("paste", onPaste);
-    return () => window.removeEventListener("paste", onPaste);
+    window.addEventListener("click", closeAssetMenu);
+    return () => {
+      window.removeEventListener("paste", onPaste);
+      window.removeEventListener("click", closeAssetMenu);
+    };
   }, [importFiles]);
 
   const onDrop = (event: DragEvent<HTMLElement>) => {
@@ -248,7 +284,7 @@ export function App() {
       <aside className="left-panel panel" aria-label="Project assets">
         <PanelHeader icon={<Layers size={16} />} title="Project" />
         <section className="panel-section">
-          <h2>Imported Assets</h2>
+          <h2>Assets</h2>
           <ul className="asset-list">
             {assets.length === 0 ? (
               <li className="muted-row">
@@ -260,19 +296,56 @@ export function App() {
                 <li key={asset.id}>
                   <button
                     type="button"
-                    className={asset.id === selectedAsset?.id ? "active-asset" : ""}
-                    onClick={() => setSelectedAssetId(asset.id)}
+                    className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}`}
+                    onClick={() => selectAsset(asset.id)}
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      setAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
+                    }}
                   >
-                    <FileImage size={15} />
-                    <span>{asset.name}</span>
-                    <small>
-                      {asset.image.width}x{asset.image.height}
-                    </small>
+                    <AssetThumbnail image={asset.image} label={asset.name} />
+                    <span className="asset-meta">
+                      <strong>{asset.name}</strong>
+                      <small>
+                        Source {asset.image.width}x{asset.image.height}
+                      </small>
+                    </span>
+                    <span
+                      className="icon-button danger"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`Remove ${asset.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeAsset(asset.id);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          removeAsset(asset.id);
+                        }
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </span>
                   </button>
                 </li>
               ))
             )}
           </ul>
+          {assetMenu ? (
+            <div
+              className="context-menu"
+              style={{ left: assetMenu.x, top: assetMenu.y }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button type="button" onClick={() => removeAsset(assetMenu.assetId)}>
+                <Trash2 size={14} />
+                Delete asset
+              </button>
+            </div>
+          ) : null}
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
