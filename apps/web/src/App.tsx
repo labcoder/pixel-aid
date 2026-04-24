@@ -15,7 +15,9 @@ import {
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AlphaMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import { assetBaseName, downloadBlob, jsonBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
@@ -137,6 +139,32 @@ export function App() {
     activeJobRef.current?.cancel();
   }, []);
 
+  const exportFixedAsset = useCallback(() => {
+    if (!selectedAsset || !fixResult) {
+      return;
+    }
+
+    const baseName = assetBaseName(selectedAsset.name);
+    const imageName = `${baseName}_fixed.png`;
+    const manifestName = `${baseName}_manifest.json`;
+    const manifest = createPixelAssetManifest({
+      result: fixResult,
+      imageName,
+      originalFilename: selectedAsset.name,
+      generatedAt: new Date().toISOString()
+    });
+
+    void rgbaImageToPngBlob(fixResult.image)
+      .then((png) => {
+        downloadBlob(png, imageName);
+        downloadBlob(jsonBlob(manifest), manifestName);
+        appendLog(`Exported ${imageName} and ${manifestName}`);
+      })
+      .catch((error) => {
+        appendLog(error instanceof Error ? error.message : "Export failed");
+      });
+  }, [appendLog, fixResult, selectedAsset]);
+
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       if (event.clipboardData?.files.length) {
@@ -206,7 +234,7 @@ export function App() {
             <Eye size={16} />
             Preview
           </button>
-          <button type="button" disabled={!selectedAsset}>
+          <button type="button" disabled={!fixResult} onClick={exportFixedAsset}>
             <Download size={16} />
             Export
           </button>
@@ -360,6 +388,8 @@ export function App() {
         <details className="control-group" open>
           <summary>Export</summary>
           <Field label="Target" value="Generic JSON" />
+          <ReadonlyField label="PNG" value={fixResult ? "ready" : "pending"} text />
+          <ReadonlyField label="Manifest" value={fixResult ? "ready" : "pending"} text />
           <ReadonlyField label="Spacing" value="0" />
           <ReadonlyField label="Extrude" value="1" />
         </details>
@@ -497,11 +527,11 @@ function NumberField({
   );
 }
 
-function ReadonlyField({ label, value }: { label: string; value: string }) {
+function ReadonlyField({ label, value, text = false }: { label: string; value: string; text?: boolean }) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <input type="number" value={value} readOnly />
+      <input type={text ? "text" : "number"} value={value} readOnly />
     </label>
   );
 }
