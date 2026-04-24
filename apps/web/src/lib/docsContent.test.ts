@@ -8,6 +8,13 @@ describe("docs content", () => {
     expect(getDocsSection("export")?.markdown).toContain("ZIP");
   });
 
+  test("includes the repository markdown docs", () => {
+    expect(getDocsSection("architecture")?.markdown).toContain("## Boundaries");
+    expect(getDocsSection("algorithms")?.markdown).toContain("## Grid Detection");
+    expect(getDocsSection("performance")?.markdown).toContain("Performance");
+    expect(getDocsSection("licensing")?.markdown).toContain("Dependency");
+  });
+
   test("keeps section ids unique", () => {
     const ids = docsSections.map((section) => section.id);
     expect(new Set(ids).size).toBe(ids.length);
