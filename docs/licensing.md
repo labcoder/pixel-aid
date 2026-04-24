@@ -35,6 +35,7 @@ Runtime:
 - `react` 19.2.5, MIT: UI rendering.
 - `react-dom` 19.2.5, MIT: browser React renderer.
 - `lucide-react` 1.11.0, ISC: compact editor icons.
+- `fflate` 0.8.2, MIT: browser ZIP bundle generation.
 
 Build/test/dev:
 
@@ -48,4 +49,4 @@ Build/test/dev:
 - `@types/react` 19.2.14, MIT: React type definitions.
 - `@types/react-dom` 19.2.3, MIT: React DOM type definitions.
 
-No image quantization, ZIP, Three.js, desktop, AI SDK, native, or WASM dependency has been added in this milestone.
+No image quantization, Three.js, desktop, AI SDK, native, or WASM dependency has been added in this milestone.

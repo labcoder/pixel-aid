@@ -21,10 +21,6 @@ export async function rgbaImageToPngBlob(image: RGBAImage): Promise<Blob> {
   return blob;
 }
 
-export function jsonBlob(value: unknown): Blob {
-  return new Blob([`${JSON.stringify(value, null, 2)}\n`], { type: "application/json" });
-}
-
 export function downloadBlob(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

@@ -2,7 +2,7 @@
 
 PixelAid is a Vite + React + TypeScript editor for turning AI-generated images that only look like pixel art into real, grid-aligned, palette-limited, engine-ready pixel assets.
 
-The first milestone is a functional foundation: import an image, preview it on a pixel-perfect canvas, run a worker-backed block downsample + palette reduction pipeline, and export a fixed PNG with a JSON manifest.
+The first milestone is a functional foundation: import an image, preview it on a pixel-perfect canvas, run a worker-backed block downsample + palette reduction pipeline, and export a ZIP bundle containing a fixed PNG with a JSON manifest.
 
 ## Commands
 
@@ -39,7 +39,7 @@ Implemented:
 - Canvas preview with `imageSmoothingEnabled = false`, checkerboard background, integer zoom, and optional pixel grid.
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Web Worker fix operation with transferable image buffers.
-- PNG and JSON manifest export.
+- ZIP bundle export containing PNG and JSON manifest files.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 Known limitations:
@@ -47,7 +47,7 @@ Known limitations:
 - Grid detection is intentionally simple and will need stronger runs-based and edge-energy scoring.
 - Palette reduction is frequency-based, not a full production quantizer.
 - Manual sheet slicing metadata exists, but the UI does not yet expose full sheet controls.
-- Export currently downloads PNG + generic JSON only; ZIP, Godot, Unity, Phaser, and TexturePacker adapters are future work.
+- Export currently downloads a ZIP containing PNG + generic JSON only; Godot, Unity, Phaser, and TexturePacker adapters are future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
 ## Next Steps
@@ -55,5 +55,5 @@ Known limitations:
 1. Add stronger grid detection with candidate previews and manual candidate selection.
 2. Expand palette controls with fixed palettes and palette locking.
 3. Add sheet slicing controls, frame list, pivots, and timeline playback.
-4. Add ZIP bundle export and engine-specific import helper docs/scripts.
+4. Add engine-specific import helper docs/scripts.
 5. Add benchmark fixtures for larger fake-pixel images and sprite sheets.

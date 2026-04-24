@@ -22,7 +22,8 @@ import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
-import { assetBaseName, downloadBlob, jsonBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
+import { createAssetBundleZip } from "./lib/exportBundle";
+import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -224,6 +225,7 @@ export function App() {
     const baseName = assetBaseName(selectedAsset.name);
     const imageName = `${baseName}_fixed.png`;
     const manifestName = `${baseName}_manifest.json`;
+    const bundleName = `${baseName}_pixelaid_bundle.zip`;
     const manifest = createPixelAssetManifest({
       result: fixResult,
       imageName,
@@ -232,10 +234,16 @@ export function App() {
     });
 
     void rgbaImageToPngBlob(fixResult.image)
-      .then((png) => {
-        downloadBlob(png, imageName);
-        downloadBlob(jsonBlob(manifest), manifestName);
-        appendLog(`Exported ${imageName} and ${manifestName}`);
+      .then(async (png) => {
+        const bundle = createAssetBundleZip({
+          pngFilename: imageName,
+          pngBytes: new Uint8Array(await png.arrayBuffer()),
+          manifestFilename: manifestName,
+          manifest
+        });
+        const bundleBuffer = bundle.buffer.slice(bundle.byteOffset, bundle.byteOffset + bundle.byteLength) as ArrayBuffer;
+        downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
+        appendLog(`Exported ${bundleName}`);
       })
       .catch((error) => {
         appendLog(error instanceof Error ? error.message : "Export failed");
@@ -543,8 +551,7 @@ export function App() {
         <details className="control-group" open>
           <SectionSummary title="Export" docsId="export" tooltip="Fixed PNG and manifest bundle for engine workflows." onDocs={openDocs} />
           <Field label="Target" value="Generic JSON" />
-          <ReadonlyField label="PNG" value={fixResult ? "ready" : "pending"} text />
-          <ReadonlyField label="Manifest" value={fixResult ? "ready" : "pending"} text />
+          <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
           <ReadonlyField label="Spacing" value="0" />
           <ReadonlyField label="Extrude" value="1" />
         </details>

@@ -7,6 +7,7 @@ This file tracks direct dependencies used by PixelAid. Transitive dependency rep
 | React | 19.2.5 | MIT | Runtime UI |
 | React DOM | 19.2.5 | MIT | Runtime browser rendering |
 | lucide-react | 1.11.0 | ISC | Runtime editor icons |
+| fflate | 0.8.2 | MIT | Runtime ZIP export |
 | Vite | 8.0.10 | MIT | Build/dev server |
 | @vitejs/plugin-react | 6.0.1 | MIT | Build React transform |
 | TypeScript | 6.0.3 | Apache-2.0 | Compiler |
