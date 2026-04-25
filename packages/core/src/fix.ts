@@ -4,6 +4,7 @@ import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
+import { applyHaloRemoval } from "./halo";
 import { applyOutlineCleanup } from "./outline";
 import { extractPalette, remapToPalette } from "./palette";
 
@@ -22,7 +23,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
   const outlinePadding = getAutoCroppedOutlinePadding(options, grid);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
-  const denoised = applyDenoise(paddedForOutline, { strength: options.cleanup.denoiseStrength ?? 0 });
+  const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
+  const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
   const outlineCleaned = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     alpha: options.cleanup.outlineAlpha,

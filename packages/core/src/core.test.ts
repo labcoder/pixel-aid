@@ -3,6 +3,7 @@ import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
   applyDenoise,
+  applyHaloRemoval,
   applyOutlineCleanup,
   createImage,
   detectSpriteBounds,
@@ -330,6 +331,40 @@ describe("denoise cleanup", () => {
     const denoised = applyDenoise(source, { strength: 100 });
 
     expect(readPixel(denoised, 1, 1)).toEqual([0, 0, 0, 0]);
+  });
+});
+
+describe("halo cleanup", () => {
+  test("remaps semi-transparent edge halos to neighboring subject color", () => {
+    const source = createImage(5, 5);
+    writePixel(source, 2, 2, 70, 140, 130, 255);
+    writePixel(source, 1, 2, 230, 240, 236, 96);
+
+    const cleaned = applyHaloRemoval(source, { enabled: true });
+
+    expect(readPixel(cleaned, 1, 2)).toEqual([70, 140, 130, 255]);
+    expect(readPixel(cleaned, 2, 2)).toEqual([70, 140, 130, 255]);
+  });
+
+  test("remaps background-colored opaque halos on a flat canvas", () => {
+    const source = createImage(5, 5, [255, 255, 255, 255]);
+    writePixel(source, 2, 2, 70, 140, 130, 255);
+    writePixel(source, 1, 2, 232, 242, 238, 255);
+
+    const cleaned = applyHaloRemoval(source, { enabled: true });
+
+    expect(readPixel(cleaned, 1, 2)).toEqual([70, 140, 130, 255]);
+    expect(readPixel(cleaned, 0, 2)).toEqual([255, 255, 255, 255]);
+  });
+
+  test("leaves image unchanged when disabled", () => {
+    const source = createImage(3, 3);
+    writePixel(source, 1, 1, 200, 220, 216, 96);
+
+    const cleaned = applyHaloRemoval(source, { enabled: false });
+
+    expect(Array.from(cleaned.data)).toEqual(Array.from(source.data));
+    expect(cleaned).not.toBe(source);
   });
 });
 

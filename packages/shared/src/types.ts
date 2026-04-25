@@ -60,6 +60,7 @@ export type FixOptions = {
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     denoiseStrength?: number;
+    removeHalos?: boolean;
     outlineMode?: OutlineMode;
     outlineSize?: number;
     outlineColor?: string;

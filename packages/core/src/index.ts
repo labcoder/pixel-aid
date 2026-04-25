@@ -17,6 +17,8 @@ export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
 export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
+export { applyHaloRemoval } from "./halo";
+export type { HaloRemovalOptions } from "./halo";
 export { downsampleBlocks } from "./downsample";
 export type { DownsampleOptions } from "./downsample";
 export { fixImage } from "./fix";
