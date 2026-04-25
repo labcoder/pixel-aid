@@ -149,6 +149,7 @@ export function App() {
           setGridDetect(suggestion.gridDetect);
           setCropToBounds(suggestion.mode === "single");
           setDownscale(suggestion.downscale);
+          setAlpha(suggestion.alpha);
           setMaxColors(suggestion.maxColors);
           setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
           appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
@@ -263,6 +264,7 @@ export function App() {
     setGridScaleY(suggestion.gridScaleY);
     setCropToBounds(suggestion.mode === "single");
     setDownscale(suggestion.downscale);
+    setAlpha(suggestion.alpha);
     setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
   }, [appendLog, selectedAsset]);
@@ -855,8 +857,8 @@ export function App() {
           <section>
             <h2>Console</h2>
             <ol className="log-list">
-              {logs.map((line) => (
-                <li key={line}>{line}</li>
+              {logs.map((line, index) => (
+                <li key={`${line}-${index}`}>{line}</li>
               ))}
             </ol>
           </section>

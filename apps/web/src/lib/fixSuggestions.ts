@@ -1,5 +1,5 @@
 import { detectGridCandidates } from "@pixelaid/core";
-import type { AssetMode, DownscaleMethod, GridCandidate, RGBAImage } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, RGBAImage } from "@pixelaid/shared";
 
 export type FixSettingSuggestion = {
   mode: AssetMode;
@@ -10,6 +10,7 @@ export type FixSettingSuggestion = {
   gridScaleX: number;
   gridScaleY: number;
   downscale: DownscaleMethod;
+  alpha: AlphaMode;
   reason: string;
   confidence: number;
   modeConfidence: number;
@@ -37,6 +38,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
     downscale: mode === "single" && Math.max(image.width, image.height) >= 512 ? "adaptive" : sourceRatio > 2 ? "adaptive" : "dominant",
+    alpha: suggestAlphaMode(image, mode),
     reason: suggestionReason(mode, sourceRatio),
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence
@@ -68,6 +70,38 @@ export function chooseSuggestionGrid(
   }
 
   return candidate;
+}
+
+function suggestAlphaMode(image: RGBAImage, mode: AssetMode): AlphaMode {
+  if (mode !== "single") {
+    return "preserve";
+  }
+
+  const sampleSize = Math.max(1, Math.min(12, image.width, image.height));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let count = 0;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      const topLeft = (y * image.width + x) * 4;
+      const topRight = (y * image.width + image.width - sampleSize + x) * 4;
+      const bottomLeft = ((image.height - sampleSize + y) * image.width + x) * 4;
+      const bottomRight = ((image.height - sampleSize + y) * image.width + image.width - sampleSize + x) * 4;
+
+      r += image.data[topLeft]! + image.data[topRight]! + image.data[bottomLeft]! + image.data[bottomRight]!;
+      g += image.data[topLeft + 1]! + image.data[topRight + 1]! + image.data[bottomLeft + 1]! + image.data[bottomRight + 1]!;
+      b += image.data[topLeft + 2]! + image.data[topRight + 2]! + image.data[bottomLeft + 2]! + image.data[bottomRight + 2]!;
+      a += image.data[topLeft + 3]! + image.data[topRight + 3]! + image.data[bottomLeft + 3]! + image.data[bottomRight + 3]!;
+      count += 4;
+    }
+  }
+
+  const brightness = (r + g + b) / (count * 3);
+  const alpha = a / count;
+  return alpha > 240 && brightness > 220 ? "backgroundFloodFill" : "preserve";
 }
 
 function createPlausibleSingleSpriteGrid(image: Pick<RGBAImage, "width" | "height">): GridCandidate {

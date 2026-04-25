@@ -10,6 +10,20 @@ function blankImage(width: number, height: number): RGBAImage {
   };
 }
 
+function singleSpriteOnBrightBackground(): RGBAImage {
+  const image = blankImage(160, 192);
+  for (let y = 68; y < 124; y += 1) {
+    for (let x = 56; x < 104; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      image.data[offset] = 40;
+      image.data[offset + 1] = 80;
+      image.data[offset + 2] = 80;
+      image.data[offset + 3] = 255;
+    }
+  }
+  return image;
+}
+
 describe("fix setting suggestions", () => {
   test("suggests sprite sheet mode for wide sources", () => {
     const suggestion = suggestFixSettings(blankImage(256, 64));
@@ -43,6 +57,13 @@ describe("fix setting suggestions", () => {
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
     expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
     expect(suggestion.targetHeight).toBeLessThanOrEqual(220);
+  });
+
+  test("suggests background flood-fill for single sprites on bright opaque backgrounds", () => {
+    const suggestion = suggestFixSettings(singleSpriteOnBrightBackground());
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
   });
 
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
