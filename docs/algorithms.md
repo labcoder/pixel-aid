@@ -18,7 +18,7 @@ Pixel loops use typed arrays and integer offsets.
 
 ## Grid Detection
 
-`detectGridCandidates` returns multiple grid interpretations with output size, scale, phase, confidence, reason, and optional `sourceRect` crop metadata.
+`detectGridCandidates` returns multiple grid interpretations with output size, scale, phase, confidence, reason, optional `sourceRect` crop metadata, and optional structured diagnostics.
 
 Current scoring combines:
 
@@ -31,7 +31,9 @@ Run evidence is moderated by edge agreement so divisor candidates such as 2px, 3
 
 When a meaningful background crop is found, candidates include a grid-aligned `sourceRect`. The fix pipeline uses that rect as the sampling origin while preserving the global phase metadata.
 
-The next detector upgrades should add stronger edge-period analysis, candidate preview thumbnails, and local drift correction for uneven AI-generated grids.
+Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a crop-used flag; source coverage; a low/medium/high label; and short notes. The editor uses these diagnostics to explain confidence without parsing prose.
+
+The next detector upgrades should add stronger edge-period analysis and local drift correction for uneven AI-generated grids.
 
 ## Block Downsampling
 

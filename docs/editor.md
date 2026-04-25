@@ -31,6 +31,12 @@ Target W and Target H define the native output size. They can be edited with num
 
 Auto candidate detects likely pseudo-pixel block size, phase, and native output dimensions. Target width and height can guide the candidate, while detected scale and phase fields are read-only unless manual mode is selected.
 
+Candidate cards show the top grid interpretations with a canvas crop preview, native output size, source block scale, confidence, and score rows. Edge means repeated boundary energy at that scale. Run means repeated same-color spans that look like source pixels. Size means whether the resulting native dimensions are plausible for game assets.
+
+The confidence badge is a summary, not a promise. High confidence means several signals agree; medium means the candidate is plausible but should be inspected; low means the tool found a possible interpretation but expects manual review. A crop badge means the detector found a foreground shape and aligned the candidate to that crop.
+
+Clicking a candidate applies its target size and scale back into the controls while keeping automatic detection active. This lets Fix use the same source crop metadata while still allowing manual override.
+
 Manual target uses Target W, Target H, Scale X, Scale Y, Phase X, and Phase Y. Scale is the number of source pixels that collapse into one output pixel. Phase shifts the sampling grid when the source blocks do not start exactly at the top-left corner.
 
 For single sprites on a bright or transparent background, auto candidate may also detect a source crop. The crop is aligned to the selected grid so the fixed output removes empty canvas while preserving the global phase metadata shown in the inspector.
