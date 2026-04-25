@@ -31,6 +31,8 @@ Manual target uses Target W, Target H, Scale X, Scale Y, Phase X, and Phase Y. S
 
 For single sprites on a bright or transparent background, auto candidate may also detect a source crop. The crop is aligned to the selected grid so the fixed output removes empty canvas while preserving the global phase metadata shown in the inspector.
 
+Crop to detected bounds keeps single-sprite output trimmed to the detected foreground. When it is enabled, Target W and Target H guide grid scale and candidate choice, but the final output dimensions may be smaller because empty background around the sprite is removed. Disable it when you intentionally want to preserve the imported canvas footprint.
+
 # Frame / Cell
 
 Sprite sheet, character sheet, and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
@@ -55,7 +57,7 @@ Cleanup controls run after block downsampling and alpha handling.
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.
 - Outline size controls how many native pixels are added around the sprite.
-- Outline color is used by add mode and is reserved in the generated palette so it is not immediately remapped away.
+- Outline color starts in automatic mode, which lets the cleanup pass reuse a detected edge color when possible. Editing the color switches to custom RGBA, and that RGB value is reserved in the generated palette so it is not immediately remapped away.
 - Outline alpha is stored separately from RGB so custom outlines can be fully opaque, semi-transparent, or transparent according to the game style.
 - With preserved alpha, outline cleanup can still draw over detected background pixels such as a white AI-image canvas.
 

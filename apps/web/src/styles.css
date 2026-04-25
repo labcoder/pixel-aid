@@ -629,7 +629,7 @@ button:disabled {
 .rgba-control {
   min-width: 0;
   display: grid;
-  grid-template-columns: 30px 34px minmax(0, 1fr);
+  grid-template-columns: 30px 34px minmax(0, 1fr) 54px;
   gap: 0.45rem;
   align-items: center;
 }
@@ -662,6 +662,22 @@ button:disabled {
 .field-row .rgba-hex {
   font-family: "Cascadia Mono", "Consolas", monospace;
   font-size: 0.76rem;
+}
+
+.rgba-mode {
+  min-height: 30px;
+  padding: 0 0.4rem;
+  color: var(--muted);
+  background: #151818;
+  border-radius: 5px;
+  font-size: 0.68rem;
+}
+
+.rgba-mode.active {
+  color: #101112;
+  background: var(--amber);
+  border-color: var(--amber);
+  font-weight: 800;
 }
 
 .rgba-alpha {

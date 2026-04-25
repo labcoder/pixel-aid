@@ -30,6 +30,7 @@ import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
+import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
@@ -54,6 +55,7 @@ export function App() {
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
   const [gridScaleX, setGridScaleX] = useState(8);
   const [gridScaleY, setGridScaleY] = useState(8);
+  const [cropToBounds, setCropToBounds] = useState(true);
   const [aspectLocked, setAspectLocked] = useState(true);
   const [frameWidth, setFrameWidth] = useState(32);
   const [frameHeight, setFrameHeight] = useState(32);
@@ -67,6 +69,7 @@ export function App() {
   const [outlineSize, setOutlineSize] = useState(1);
   const [outlineColor, setOutlineColor] = useState("#101112");
   const [outlineAlpha, setOutlineAlpha] = useState(255);
+  const [outlineColorEdited, setOutlineColorEdited] = useState(false);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -144,6 +147,7 @@ export function App() {
           setGridScaleX(suggestion.gridScaleX);
           setGridScaleY(suggestion.gridScaleY);
           setGridDetect(suggestion.gridDetect);
+          setCropToBounds(suggestion.mode === "single");
           setDownscale(suggestion.downscale);
           setMaxColors(suggestion.maxColors);
           setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
@@ -157,6 +161,7 @@ export function App() {
   );
 
   const buildFixOptions = useCallback((): FixOptions => {
+    const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
     const options: FixOptions = {
       mode,
       targetWidth,
@@ -166,6 +171,7 @@ export function App() {
         detect: gridDetect,
         scaleX: gridScaleX,
         scaleY: gridScaleY,
+        cropToBounds: mode === "single" && cropToBounds,
         phaseX: 0,
         phaseY: 0
       },
@@ -177,7 +183,8 @@ export function App() {
         preserveSinglePixelDetails: true,
         outlineMode,
         outlineSize,
-        ...(outlineMode === "add" ? { outlineColor, outlineAlpha } : {})
+        ...(outlineMode !== "none" ? { outlineAlpha } : {}),
+        ...(useCustomOutlineColor ? { outlineColor } : {})
       },
       ...(sheetMode ? { sheet: sheetOptions } : {})
     };
@@ -189,10 +196,12 @@ export function App() {
     gridDetect,
     gridScaleX,
     gridScaleY,
+    cropToBounds,
     maxColors,
     mode,
     outlineColor,
     outlineAlpha,
+    outlineColorEdited,
     outlineMode,
     outlineSize,
     sheetMode,
@@ -252,6 +261,7 @@ export function App() {
     setGridDetect(suggestion.gridDetect);
     setGridScaleX(suggestion.gridScaleX);
     setGridScaleY(suggestion.gridScaleY);
+    setCropToBounds(suggestion.mode === "single");
     setDownscale(suggestion.downscale);
     setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
@@ -281,6 +291,7 @@ export function App() {
       setGridDetect(next.gridDetect);
       setGridScaleX(next.gridScaleX);
       setGridScaleY(next.gridScaleY);
+      setCropToBounds(next.mode === "single");
       setDownscale(next.downscale);
       setAlpha(next.alpha);
       setSuggestionReason(`${preset.label}: ${preset.description}`);
@@ -720,8 +731,18 @@ export function App() {
           />
           <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
           <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={cropToBounds}
+              disabled={mode !== "single" || gridDetect !== "auto"}
+              onChange={(event) => setCropToBounds(event.currentTarget.checked)}
+            />
+            Crop to detected bounds
+          </label>
           <p className="field-note">
             Scale is source pixels per output pixel. Phase shifts where the sampling grid starts.
+            Crop trims single sprites to the detected foreground bounds while target size still guides the grid.
           </p>
           <div className="subsection-label">Cleanup</div>
           <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
@@ -768,9 +789,14 @@ export function App() {
             label="Color"
             value={outlineColor}
             alpha={outlineAlpha}
-            disabled={outlineMode !== "add"}
-            onColorChange={setOutlineColor}
+            disabled={!isOutlineColorEditable(outlineMode)}
+            isAuto={!outlineColorEdited}
+            onColorChange={(value) => {
+              setOutlineColor(value);
+              setOutlineColorEdited(true);
+            }}
             onAlphaChange={setOutlineAlpha}
+            onResetAuto={() => setOutlineColorEdited(false)}
           />
           <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
@@ -1128,15 +1154,19 @@ function ColorField({
   value,
   alpha,
   disabled,
+  isAuto,
   onColorChange,
-  onAlphaChange
+  onAlphaChange,
+  onResetAuto
 }: {
   label: string;
   value: string;
   alpha: number;
   disabled?: boolean;
+  isAuto: boolean;
   onColorChange: (value: string) => void;
   onAlphaChange: (value: number) => void;
+  onResetAuto: () => void;
 }) {
   const [draftHex, setDraftHex] = useState(value);
   const [r, g, b] = hexToRgb(value);
@@ -1181,6 +1211,9 @@ function ColorField({
           onChange={(event) => commitColor(event.currentTarget.value)}
           onBlur={() => setDraftHex(normalizeHexColor(draftHex) ?? value)}
         />
+        <button type="button" className={isAuto ? "rgba-mode active" : "rgba-mode"} disabled={disabled} onClick={onResetAuto}>
+          {isAuto ? "Auto" : "Custom"}
+        </button>
         <div className="rgba-alpha">
           <input
             type="range"
