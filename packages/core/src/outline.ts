@@ -5,6 +5,7 @@ import { cloneImage } from "./image";
 export type OutlineCleanupOptions = {
   color?: string;
   alphaThreshold?: number;
+  backgroundTolerance?: number;
 };
 
 const DARK_EDGE_LUMA = 96;
@@ -15,12 +16,16 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
   }
 
   const alphaThreshold = options.alphaThreshold ?? 8;
+  const backgroundTolerance = options.backgroundTolerance ?? 18;
+  const background = estimateCornerBackground(image);
   const outlineColor =
     options.color !== undefined
       ? parseHexColor(options.color)
       : mode === "repairExisting"
-        ? detectExistingOutlineColor(image, alphaThreshold)
-        : detectExistingOutlineColor(image, alphaThreshold) ?? detectDarkestVisibleColor(image, alphaThreshold) ?? 0;
+        ? detectExistingOutlineColor(image, alphaThreshold, background, backgroundTolerance)
+        : detectExistingOutlineColor(image, alphaThreshold, background, backgroundTolerance) ??
+          detectDarkestSubjectColor(image, alphaThreshold, background, backgroundTolerance) ??
+          0;
 
   if (outlineColor === null) {
     return cloneImage(image);
@@ -32,7 +37,10 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
       const offset = (y * image.width + x) * 4;
-      if (image.data[offset + 3]! > alphaThreshold || !hasVisibleNeighbor(image, x, y, alphaThreshold)) {
+      if (
+        !isOutsidePixel(image, x, y, alphaThreshold, background, backgroundTolerance) ||
+        !hasSubjectNeighbor(image, x, y, alphaThreshold, background, backgroundTolerance)
+      ) {
         continue;
       }
 
@@ -46,14 +54,29 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
   return output;
 }
 
-function detectExistingOutlineColor(image: RGBAImage, alphaThreshold: number): number | null {
+type BackgroundSample = {
+  r: number;
+  g: number;
+  b: number;
+  a: number;
+};
+
+function detectExistingOutlineColor(
+  image: RGBAImage,
+  alphaThreshold: number,
+  background: BackgroundSample,
+  backgroundTolerance: number
+): number | null {
   let bestColor: number | null = null;
   let bestLuma = Number.POSITIVE_INFINITY;
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
       const offset = (y * image.width + x) * 4;
-      if (image.data[offset + 3]! <= alphaThreshold || !hasTransparentNeighbor(image, x, y, alphaThreshold)) {
+      if (
+        isOutsidePixel(image, x, y, alphaThreshold, background, backgroundTolerance) ||
+        !hasOutsideNeighbor(image, x, y, alphaThreshold, background, backgroundTolerance)
+      ) {
         continue;
       }
 
@@ -68,32 +91,47 @@ function detectExistingOutlineColor(image: RGBAImage, alphaThreshold: number): n
   return bestColor;
 }
 
-function detectDarkestVisibleColor(image: RGBAImage, alphaThreshold: number): number | null {
+function detectDarkestSubjectColor(
+  image: RGBAImage,
+  alphaThreshold: number,
+  background: BackgroundSample,
+  backgroundTolerance: number
+): number | null {
   let bestColor: number | null = null;
   let bestLuma = Number.POSITIVE_INFINITY;
 
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    if (image.data[offset + 3]! <= alphaThreshold) {
-      continue;
-    }
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (isOutsidePixel(image, x, y, alphaThreshold, background, backgroundTolerance)) {
+        continue;
+      }
 
-    const luma = luminance(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
-    if (luma < bestLuma) {
-      bestLuma = luma;
-      bestColor = (image.data[offset]! << 16) | (image.data[offset + 1]! << 8) | image.data[offset + 2]!;
+      const offset = (y * image.width + x) * 4;
+      const luma = luminance(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
+      if (luma < bestLuma) {
+        bestLuma = luma;
+        bestColor = (image.data[offset]! << 16) | (image.data[offset + 1]! << 8) | image.data[offset + 2]!;
+      }
     }
   }
 
   return bestColor;
 }
 
-function hasVisibleNeighbor(image: RGBAImage, x: number, y: number, alphaThreshold: number): boolean {
+function hasSubjectNeighbor(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  background: BackgroundSample,
+  backgroundTolerance: number
+): boolean {
   for (let dy = -1; dy <= 1; dy += 1) {
     for (let dx = -1; dx <= 1; dx += 1) {
       if (dx === 0 && dy === 0) {
         continue;
       }
-      if (isVisible(image, x + dx, y + dy, alphaThreshold)) {
+      if (!isOutsidePixel(image, x + dx, y + dy, alphaThreshold, background, backgroundTolerance)) {
         return true;
       }
     }
@@ -102,13 +140,20 @@ function hasVisibleNeighbor(image: RGBAImage, x: number, y: number, alphaThresho
   return false;
 }
 
-function hasTransparentNeighbor(image: RGBAImage, x: number, y: number, alphaThreshold: number): boolean {
+function hasOutsideNeighbor(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  background: BackgroundSample,
+  backgroundTolerance: number
+): boolean {
   for (let dy = -1; dy <= 1; dy += 1) {
     for (let dx = -1; dx <= 1; dx += 1) {
       if (dx === 0 && dy === 0) {
         continue;
       }
-      if (isTransparent(image, x + dx, y + dy, alphaThreshold)) {
+      if (isOutsidePixel(image, x + dx, y + dy, alphaThreshold, background, backgroundTolerance)) {
         return true;
       }
     }
@@ -117,18 +162,62 @@ function hasTransparentNeighbor(image: RGBAImage, x: number, y: number, alphaThr
   return false;
 }
 
-function isVisible(image: RGBAImage, x: number, y: number, alphaThreshold: number): boolean {
-  if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
-    return false;
-  }
-  return image.data[(y * image.width + x) * 4 + 3]! > alphaThreshold;
-}
-
-function isTransparent(image: RGBAImage, x: number, y: number, alphaThreshold: number): boolean {
+function isOutsidePixel(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  background: BackgroundSample,
+  backgroundTolerance: number
+): boolean {
   if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
     return true;
   }
-  return image.data[(y * image.width + x) * 4 + 3]! <= alphaThreshold;
+
+  const offset = (y * image.width + x) * 4;
+  const alpha = image.data[offset + 3]!;
+  if (alpha <= alphaThreshold) {
+    return true;
+  }
+
+  return (
+    Math.abs(image.data[offset]! - background.r) +
+      Math.abs(image.data[offset + 1]! - background.g) +
+      Math.abs(image.data[offset + 2]! - background.b) +
+      Math.abs(alpha - background.a) <=
+    backgroundTolerance
+  );
+}
+
+function estimateCornerBackground(image: RGBAImage): BackgroundSample {
+  const sampleSize = Math.max(1, Math.min(8, Math.floor(Math.min(image.width, image.height) / 4)));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let count = 0;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      const topLeft = (y * image.width + x) * 4;
+      const topRight = (y * image.width + image.width - sampleSize + x) * 4;
+      const bottomLeft = ((image.height - sampleSize + y) * image.width + x) * 4;
+      const bottomRight = ((image.height - sampleSize + y) * image.width + image.width - sampleSize + x) * 4;
+
+      r += image.data[topLeft]! + image.data[topRight]! + image.data[bottomLeft]! + image.data[bottomRight]!;
+      g += image.data[topLeft + 1]! + image.data[topRight + 1]! + image.data[bottomLeft + 1]! + image.data[bottomRight + 1]!;
+      b += image.data[topLeft + 2]! + image.data[topRight + 2]! + image.data[bottomLeft + 2]! + image.data[bottomRight + 2]!;
+      a += image.data[topLeft + 3]! + image.data[topRight + 3]! + image.data[bottomLeft + 3]! + image.data[bottomRight + 3]!;
+      count += 4;
+    }
+  }
+
+  return {
+    r: r / count,
+    g: g / count,
+    b: b / count,
+    a: a / count
+  };
 }
 
 function luminance(r: number, g: number, b: number): number {

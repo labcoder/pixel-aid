@@ -271,6 +271,17 @@ describe("outline cleanup", () => {
 
     expect(readPixel(unchanged, 0, 0)).toEqual([0, 0, 0, 0]);
   });
+
+  test("adds an outline over opaque background pixels when alpha is preserved", () => {
+    const source = createImage(3, 3, [255, 255, 255, 255]);
+    writePixel(source, 1, 1, 120, 200, 180, 255);
+
+    const outlined = applyOutlineCleanup(source, "add", { color: "#010203" });
+
+    expect(readPixel(outlined, 1, 1)).toEqual([120, 200, 180, 255]);
+    expect(readPixel(outlined, 0, 0)).toEqual([1, 2, 3, 255]);
+    expect(readPixel(outlined, 2, 1)).toEqual([1, 2, 3, 255]);
+  });
 });
 
 describe("sheet slicing", () => {
