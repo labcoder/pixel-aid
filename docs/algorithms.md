@@ -56,6 +56,16 @@ Implemented modes:
 - `binary`: threshold alpha to 0 or 255.
 - `backgroundFloodFill`: flood-fill connected edge/corner background color to transparency.
 
+## Outline Cleanup
+
+`applyOutlineCleanup` is an optional post-alpha cleanup pass. It never resizes the image.
+
+- `none`: clone the image unchanged.
+- `repairExisting`: detect an existing dark edge color and fill transparent one-pixel gaps around visible pixels. If no dark edge exists, the image is left unchanged.
+- `add`: add a one-pixel outline around visible pixels. It reuses a detected dark edge color when possible, otherwise it uses the darkest visible color or a supplied outline color.
+
+The pass writes into a cloned output buffer while reading neighbor visibility from the source buffer, so newly added outline pixels do not cascade into thicker outlines during the same operation.
+
 ## Sheet Slicing
 
 `sliceSheetFrames` generates deterministic row-major frame rectangles from frame size, rows, columns, margin, spacing, and extrusion metadata.

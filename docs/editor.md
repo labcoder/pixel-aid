@@ -42,6 +42,16 @@ The viewport renders images through Canvas2D with smoothing disabled.
 - Double-click the viewport to recenter.
 - Rulers show native pixel positions and adapt their tick spacing as zoom changes.
 - Split view compares source and fixed output with a draggable divider.
+- When the fixed output is cropped, split view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. It is not stretched to the full imported canvas.
+
+# Cleanup
+
+Cleanup controls run after block downsampling and alpha handling.
+
+- Max colors limits the fixed output palette.
+- Downscale selects the block-to-pixel strategy.
+- Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
+- Outline can stay off, repair an existing dark outline, or add a one-pixel outline around visible pixels.
 
 # Timeline
 
