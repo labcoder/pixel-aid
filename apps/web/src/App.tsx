@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, OutlineMode, PixelFixResult } from "@pixelaid/shared";
 import { sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
@@ -63,6 +63,7 @@ export function App() {
   const [sheetSpacing, setSheetSpacing] = useState(0);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -170,13 +171,14 @@ export function App() {
       cleanup: {
         removeOrphans: false,
         jaggyCleanup: false,
-        preserveSinglePixelDetails: true
+        preserveSinglePixelDetails: true,
+        outlineMode
       },
       ...(sheetMode ? { sheet: sheetOptions } : {})
     };
 
     return options;
-  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, sheetMode, sheetOptions, targetHeight, targetWidth]);
+  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, outlineMode, sheetMode, sheetOptions, targetHeight, targetWidth]);
 
   const runFix = useCallback(() => {
     if (!selectedAsset || isFixing) {
@@ -681,6 +683,16 @@ export function App() {
             ]}
             onChange={(value) => setAlpha(value as AlphaMode)}
           />
+          <SelectField
+            label="Outline"
+            value={outlineMode}
+            options={[
+              ["none", "None"],
+              ["repairExisting", "Repair existing"],
+              ["add", "Add 1px"]
+            ]}
+            onChange={(value) => setOutlineMode(value as OutlineMode)}
+          />
           <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
             <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
@@ -761,6 +773,7 @@ export function App() {
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
+                  ["Outline", outlineMode],
                   ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
                 ]}
               />
