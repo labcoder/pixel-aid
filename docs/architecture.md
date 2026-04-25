@@ -19,7 +19,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 4. The app clones the selected image buffer and transfers it to a Web Worker.
 5. The worker runs `fixImage` from `packages/core`.
 6. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
-7. The core applies block downsampling, alpha cleanup, optional outline cleanup, and palette extraction/remapping.
+7. The core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
 8. The worker transfers the fixed output buffer back to the app.
 9. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
 10. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`, then bundles both files into a ZIP.

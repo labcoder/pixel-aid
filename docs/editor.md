@@ -2,6 +2,8 @@
 
 PixelAid's editor is organized around an asset browser, a canvas viewport, an inspector, and a bottom timeline/logs/metrics area.
 
+Inspector groups are collapsible and can be moved up or down. The default order puts Cleanup before Grid because palette, alpha, denoise, and outline choices usually explain why a grid result looks good or bad.
+
 # Assets
 
 Assets are imported source images. Each item keeps the original filename, source dimensions, and a thumbnail preview.
@@ -20,6 +22,8 @@ Mode describes the kind of source you are fixing.
 - Tile sheet: tiles or tilesets where frame dimensions and grid alignment matter.
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
+
+Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
 
@@ -41,6 +45,7 @@ Sprite sheet, character sheet, and tile sheet modes expose frame controls. Frame
 
 The viewport renders images through Canvas2D with smoothing disabled.
 
+- Switching between Before, After, and Split auto-fits the active source/output footprint so a large import and a small fixed sprite appear at a comparable working distance by default.
 - Mouse wheel zooms around the cursor.
 - Hold the left mouse button and drag to pan.
 - Double-click the viewport to recenter.
@@ -61,6 +66,7 @@ Cleanup controls run after block downsampling and alpha handling.
 - Outline color starts in automatic mode, which lets the cleanup pass reuse a detected edge color when possible. Editing the color switches to custom RGBA, and that RGB value is reserved in the generated palette so it is not immediately remapped away.
 - Outline alpha is stored separately from RGB so custom outlines can be fully opaque, semi-transparent, or transparent according to the game style.
 - With preserved alpha, outline cleanup can still draw over detected background pixels such as a white AI-image canvas.
+- When an auto-cropped single sprite has an active outline, the fix pipeline pads the fixed output by the outline size before drawing. This gives new outside pixels room to appear instead of being clipped by the crop.
 - Remove orphan pixels removes tiny disconnected exterior components before they can attract their own outline or survive as specks.
 - Close 1px gaps fills single-pixel subject holes before optional outline drawing so interior gaps do not turn into accidental outline marks.
 - Preserve tiny details keeps the orphan cleanup conservative. Disable it only when the source has obvious speckle noise.

@@ -58,9 +58,9 @@ Editor:
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
-- Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, pan, mouse-wheel zoom, rulers, grid overlay, and draggable split comparison.
+- Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, and draggable split comparison.
 - Crop-aware before/after alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
-- Inspector sections for mode, target size, aspect lock, presets, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
+- Collapsible and reorderable inspector sections for mode, target size, aspect lock, presets, cleanup, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
 - Source/output metrics and logs in the bottom panel.
 - In-app docs route backed by files in `docs/`, with section tooltips in the editor.
 
@@ -71,14 +71,15 @@ Processing:
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
 - Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.
-- Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha.
+- Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity, favoring dominant color when blocks are already crisp.
+- Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 ## Known Limitations
 
-- Single-sprite cleanup now includes conservative mask repair, but halo removal and broader real-image golden tests are still needed.
+- Single-sprite cleanup now includes conservative mask repair and outline padding, but halo removal and broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture, but still needs candidate previews, clearer confidence explanations, local drift correction, and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
 - Manual sheet slicing metadata exists, but the UI does not yet expose full rows/columns/frame/pivot controls.
@@ -87,7 +88,7 @@ Processing:
 
 ## Prioritized Roadmap
 
-1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/cleanup metadata in exported manifests.
+1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
 2. Grid detection UX: show candidate previews, explain confidence, expose source crop/output rects, and make manual override easier to reason about.
 3. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
 4. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.

@@ -28,10 +28,11 @@ The metrics panel shows:
 - Palette count.
 - Downscale method.
 - Denoise strength.
+- Outline mode and native outline size.
 - Grid confidence.
 - Worker operation duration.
 
-Grid candidates may also include a source crop rectangle. This is useful when a high-resolution single sprite sits on a bright background because the output dimensions and palette pass then reflect the sprite asset instead of the full image canvas.
+Grid candidates may also include a source crop rectangle. This is useful when a high-resolution single sprite sits on a bright background because the output dimensions and palette pass then reflect the sprite asset instead of the full image canvas. If an outline is active on an auto-cropped single sprite, the output can be padded by the outline size so the new edge pixels have room to render.
 
 ## Current Benchmark
 

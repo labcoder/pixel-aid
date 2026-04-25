@@ -44,6 +44,8 @@ The next detector upgrades should add stronger edge-period analysis, candidate p
 
 This is the main fake-pixel-to-real-pixel conversion path. It does not use bilinear, bicubic, or Lanczos resizing.
 
+The web Auto Suggest path samples the selected grid candidate and estimates block purity by measuring how often one coarse RGB bucket owns each sampled source block. High-purity sources default to `dominant` because crisp fake-pixel art usually cleans up better when the representative source block color wins. Mixed blocks can still suggest `adaptive` or `median`, and users can override the method at any time.
+
 ## Palette
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
@@ -79,6 +81,8 @@ For opaque AI-image backgrounds, `backgroundFloodFill` is the preferred cleanup 
 
 The pass treats transparent pixels and detected corner-background pixels as drawable outside space. This lets it work when alpha is preserved and the source still has an opaque white or flat-color background.
 
+When the full fix pipeline is using an auto-detected single-sprite crop and an outline mode is active, it pads the native output by the outline size before denoise and outline cleanup. The core outline pass still operates in-place on that padded image, but the final result has enough room for the new exterior pixels. The returned grid metadata expands its `sourceRect` footprint by the same native padding so split view can align the padded output back to the source without stretching.
+
 Outline size is applied as an 8-neighbor radius around subject pixels. The pass writes into a cloned output buffer while reading neighbor visibility from a binary subject mask, so newly added outline pixels do not cascade beyond the requested size during the same operation.
 
 When add mode uses an explicit outline color and alpha, the pass writes that RGBA value into eligible outside pixels. If the palette is auto-extracted, the fix pipeline reserves the explicit RGB color before frequency-based palette reduction and filters quantized duplicates so the exact outline color survives remapping.
@@ -97,10 +101,10 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 
 1. Detect foreground bounds from corner background samples.
 2. Align the crop to the detected pseudo-pixel grid.
-3. Downsample with `adaptive` so clean blocks keep their dominant color while mixed blocks fall back to median color.
+3. Downsample with the Auto Suggest method. High-purity blocks usually select `dominant`; mixed/noisy blocks can use `adaptive`.
 4. Use `backgroundFloodFill` for simple opaque backgrounds.
 5. Apply denoise when the cleanup strength is above zero.
-6. Apply optional outline cleanup.
+6. Apply optional outline cleanup, with crop padding when an added or repaired outline needs room outside the detected bounds.
 7. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
 8. Reserve explicit outline colors before palette remapping.
 
