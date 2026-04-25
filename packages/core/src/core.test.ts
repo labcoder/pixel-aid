@@ -113,6 +113,19 @@ describe("grid detection", () => {
     expect(candidate!.outputHeight).toBeLessThanOrEqual(220);
     expect(candidate!.scaleX).toBeGreaterThanOrEqual(4);
   });
+
+  test("ranks the single-sprite fixture by its six-pixel pseudo grid", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const [candidate] = detectGridCandidates(fixture.image, { maxScale: 16 });
+
+    expect(candidate).toMatchObject({
+      scaleX: fixture.expected.scale,
+      scaleY: fixture.expected.scale,
+      phaseX: fixture.expected.phaseX,
+      phaseY: fixture.expected.phaseY
+    });
+    expect(candidate!.confidence).toBeGreaterThan(0.82);
+  });
 });
 
 describe("block downsampling", () => {

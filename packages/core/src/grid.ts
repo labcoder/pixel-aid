@@ -1,4 +1,5 @@
-import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
+import type { GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
+import { detectSpriteBounds } from "./bounds";
 
 export type GridDetectionOptions = {
   maxScale?: number;
@@ -6,8 +7,11 @@ export type GridDetectionOptions = {
 
 export function detectGridCandidates(image: RGBAImage, options: GridDetectionOptions = {}): GridCandidate[] {
   const maxScale = Math.max(1, Math.min(options.maxScale ?? 32, image.width, image.height));
+  const bounds = detectSpriteBounds(image);
   const vertical = verticalEdgeEnergy(image);
   const horizontal = horizontalEdgeEnergy(image);
+  const runScores = runLengthScores(image, bounds, maxScale);
+  const maxRunScore = max(runScores);
   const totalVertical = sum(vertical);
   const totalHorizontal = sum(horizontal);
   const candidates: GridCandidate[] = [];
@@ -26,8 +30,14 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
     const divisibility = image.width % scale === 0 && image.height % scale === 0 ? 1 : 0.5;
     const edgeScore = (xScore + yScore) / 2;
     const sizeScore = plausibleOutputScore(image.width, image.height, outputWidth, outputHeight);
+    const runScore = maxRunScore > 0 ? Math.sqrt((runScores[scale]! / maxRunScore) * sizeScore) : 0;
     const scaleScore = image.width >= 256 || image.height >= 256 ? Math.min(1, scale / 8) : 1;
-    const confidence = Math.max(0, Math.min(1, edgeScore * 0.75 + divisibility * 0.05 + sizeScore * 0.15 + scaleScore * 0.05));
+    const edgeAgreement = Math.min(1, edgeScore / 0.65);
+    const hybridScore = edgeScore + (1 - edgeScore) * runScore * edgeAgreement;
+    const confidence = Math.max(
+      0,
+      Math.min(1, hybridScore * 0.78 + divisibility * 0.04 + sizeScore * 0.12 + scaleScore * 0.06)
+    );
 
     candidates.push({
       outputWidth,
@@ -37,7 +47,7 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
       phaseX: bestX.phase,
       phaseY: bestY.phase,
       confidence,
-      reason: `Periodic edge energy at ${scale}px source blocks`
+      reason: runScore > 0.5 ? `Hybrid edge/run score at ${scale}px source blocks` : `Periodic edge energy at ${scale}px source blocks`
     });
   }
 
@@ -73,6 +83,106 @@ function plausibleOutputScore(sourceWidth: number, sourceHeight: number, outputW
     return 0.45;
   }
   return 0.05;
+}
+
+function runLengthScores(image: RGBAImage, bounds: Rect, maxScale: number): Float64Array {
+  const scores = new Float64Array(maxScale + 1);
+  const backgroundKey = estimateBackgroundKey(image);
+  const rowStep = Math.max(1, Math.floor(bounds.h / 96));
+  const columnStep = Math.max(1, Math.floor(bounds.w / 96));
+  const xEnd = bounds.x + bounds.w;
+  const yEnd = bounds.y + bounds.h;
+
+  for (let y = bounds.y; y < yEnd; y += rowStep) {
+    let runKey = -1;
+    let runLength = 0;
+    for (let x = bounds.x; x < xEnd; x += 1) {
+      const key = quantizedPixelKey(image.data, (y * image.width + x) * 4);
+      if (key === runKey) {
+        runLength += 1;
+      } else {
+        addRunScore(scores, runKey, runLength, backgroundKey, maxScale);
+        runKey = key;
+        runLength = 1;
+      }
+    }
+    addRunScore(scores, runKey, runLength, backgroundKey, maxScale);
+  }
+
+  for (let x = bounds.x; x < xEnd; x += columnStep) {
+    let runKey = -1;
+    let runLength = 0;
+    for (let y = bounds.y; y < yEnd; y += 1) {
+      const key = quantizedPixelKey(image.data, (y * image.width + x) * 4);
+      if (key === runKey) {
+        runLength += 1;
+      } else {
+        addRunScore(scores, runKey, runLength, backgroundKey, maxScale);
+        runKey = key;
+        runLength = 1;
+      }
+    }
+    addRunScore(scores, runKey, runLength, backgroundKey, maxScale);
+  }
+
+  return scores;
+}
+
+function addRunScore(scores: Float64Array, key: number, length: number, backgroundKey: number, maxScale: number): void {
+  if (key < 0 || key === backgroundKey || length < 4 || length > maxScale * 8) {
+    return;
+  }
+
+  for (let scale = 2; scale <= maxScale; scale += 1) {
+    const ratio = length / scale;
+    if (ratio < 0.65 || ratio > 8) {
+      continue;
+    }
+
+    const nearestMultiple = Math.max(1, Math.round(ratio)) * scale;
+    const error = Math.abs(length - nearestMultiple);
+    const tolerance = Math.max(1, scale * 0.22);
+    if (error > tolerance) {
+      continue;
+    }
+
+    const fit = 1 - error / (tolerance + 1);
+    const repeatPenalty = 1 / Math.max(1, Math.round(ratio));
+    scores[scale] = scores[scale]! + fit * repeatPenalty * Math.min(4, Math.sqrt(length));
+  }
+}
+
+function estimateBackgroundKey(image: RGBAImage): number {
+  const sampleSize = Math.max(1, Math.min(8, image.width, image.height));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let count = 0;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      const topLeft = (y * image.width + x) * 4;
+      const topRight = (y * image.width + image.width - sampleSize + x) * 4;
+      const bottomLeft = ((image.height - sampleSize + y) * image.width + x) * 4;
+      const bottomRight = ((image.height - sampleSize + y) * image.width + image.width - sampleSize + x) * 4;
+      r += image.data[topLeft]! + image.data[topRight]! + image.data[bottomLeft]! + image.data[bottomRight]!;
+      g += image.data[topLeft + 1]! + image.data[topRight + 1]! + image.data[bottomLeft + 1]! + image.data[bottomRight + 1]!;
+      b += image.data[topLeft + 2]! + image.data[topRight + 2]! + image.data[bottomLeft + 2]! + image.data[bottomRight + 2]!;
+      a += image.data[topLeft + 3]! + image.data[topRight + 3]! + image.data[bottomLeft + 3]! + image.data[bottomRight + 3]!;
+      count += 4;
+    }
+  }
+
+  return quantizedChannelsKey(r / count, g / count, b / count, a / count);
+}
+
+function quantizedPixelKey(data: Uint8ClampedArray, offset: number): number {
+  return quantizedChannelsKey(data[offset]!, data[offset + 1]!, data[offset + 2]!, data[offset + 3]!);
+}
+
+function quantizedChannelsKey(r: number, g: number, b: number, a: number): number {
+  return ((r >> 5) << 9) | ((g >> 5) << 6) | ((b >> 5) << 3) | (a >> 5);
 }
 
 function verticalEdgeEnergy(image: RGBAImage): Float64Array {
@@ -133,4 +243,14 @@ function sum(values: Float64Array): number {
     total += values[i]!;
   }
   return total;
+}
+
+function max(values: Float64Array): number {
+  let best = 0;
+  for (let i = 0; i < values.length; i += 1) {
+    if (values[i]! > best) {
+      best = values[i]!;
+    }
+  }
+  return best;
 }
