@@ -294,6 +294,17 @@ describe("outline cleanup", () => {
     expect(readPixel(outlined, 2, 2)).toEqual([120, 200, 180, 255]);
     expect(readPixel(outlined, 0, 0)).toEqual([68, 51, 34, 255]);
   });
+
+  test("applies configured alpha when adding a custom outline", () => {
+    const source = createImage(3, 3, [255, 255, 255, 255]);
+    writePixel(source, 1, 1, 120, 200, 180, 255);
+    const outlineOptions = { color: "#443322", alpha: 128 };
+
+    const outlined = applyOutlineCleanup(source, "add", outlineOptions);
+
+    expect(readPixel(outlined, 0, 0)).toEqual([68, 51, 34, 128]);
+    expect(readPixel(outlined, 1, 1)).toEqual([120, 200, 180, 255]);
+  });
 });
 
 describe("sheet slicing", () => {
@@ -411,5 +422,37 @@ describe("fix pipeline", () => {
 
     expect(result.palette).toContain("#443322");
     expect(readPixel(result.image, 1, 1)).toEqual([68, 51, 34, 255]);
+  });
+
+  test("passes configured outline alpha through the full fix pipeline", () => {
+    const source = createImage(3, 3, [255, 255, 255, 255]);
+    writePixel(source, 1, 1, 120, 200, 180, 255);
+    const options = {
+      mode: "single",
+      targetWidth: 3,
+      targetHeight: 3,
+      maxColors: 2,
+      grid: {
+        detect: "manual",
+        scale: 1,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        outlineMode: "add",
+        outlineSize: 1,
+        outlineColor: "#443322",
+        outlineAlpha: 128
+      }
+    } as FixOptions;
+
+    const result = fixImage(source, options);
+
+    expect(readPixel(result.image, 0, 0)).toEqual([68, 51, 34, 128]);
   });
 });

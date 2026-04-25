@@ -48,6 +48,7 @@ export type FixOptions = {
     outlineMode?: OutlineMode;
     outlineSize?: number;
     outlineColor?: string;
+    outlineAlpha?: number;
   };
   sheet?: SheetSliceOptions;
 };

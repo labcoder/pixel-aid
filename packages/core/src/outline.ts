@@ -1,9 +1,10 @@
 import type { OutlineMode, RGBAImage } from "@pixelaid/shared";
-import { parseHexColor, unpackRgb } from "./color";
+import { clampByte, parseHexColor, unpackRgb } from "./color";
 import { cloneImage } from "./image";
 
 export type OutlineCleanupOptions = {
   color?: string | undefined;
+  alpha?: number | undefined;
   size?: number | undefined;
   alphaThreshold?: number;
   backgroundTolerance?: number;
@@ -18,6 +19,7 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
 
   const alphaThreshold = options.alphaThreshold ?? 8;
   const backgroundTolerance = options.backgroundTolerance ?? 18;
+  const outlineAlpha = clampByte(options.alpha ?? 255);
   const size = normalizeOutlineSize(options.size ?? 1);
   const background = estimateCornerBackground(image);
   const outlineColor =
@@ -49,7 +51,7 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
       output.data[offset] = r;
       output.data[offset + 1] = g;
       output.data[offset + 2] = b;
-      output.data[offset + 3] = 255;
+      output.data[offset + 3] = outlineAlpha;
     }
   }
 

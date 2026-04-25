@@ -1,6 +1,6 @@
 import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
-import { parseHexColor, rgbToHex } from "./color";
+import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
 import { applyOutlineCleanup } from "./outline";
@@ -21,6 +21,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
   const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
+    alpha: options.cleanup.outlineAlpha,
     size: options.cleanup.outlineSize
   });
   const reservedPalette = reservedOutlinePalette(options);
@@ -58,10 +59,19 @@ function extractPaletteWithReservedColors(image: RGBAImage, maxColors: number, r
   }
 
   const uniqueReserved = [...new Set(reservedColors)];
+  const reservedQuantized = new Set(uniqueReserved.map(quantizedHexColor));
   const remainingBudget = Math.max(0, maxColors - uniqueReserved.length);
   const extracted = remainingBudget > 0 ? extractPalette(image, remainingBudget) : [];
 
-  return [...uniqueReserved, ...extracted.filter((color) => !uniqueReserved.includes(color))].slice(0, Math.max(1, maxColors));
+  return [
+    ...uniqueReserved,
+    ...extracted.filter((color) => !uniqueReserved.includes(color) && !reservedQuantized.has(color))
+  ].slice(0, Math.max(1, maxColors));
+}
+
+function quantizedHexColor(hex: string): string {
+  const [r, g, b] = unpackRgb(parseHexColor(hex));
+  return rgbToHex(packQuantizedRgb(r, g, b));
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
