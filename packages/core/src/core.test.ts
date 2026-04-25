@@ -95,6 +95,15 @@ describe("grid detection", () => {
     });
     expect(candidate!.confidence).toBeGreaterThan(0.7);
   });
+
+  test("prefers plausible native sprite sizes for large low-signal sources", () => {
+    const source = createImage(706, 878);
+    const [candidate] = detectGridCandidates(source, { maxScale: 32 });
+
+    expect(candidate!.outputWidth).toBeLessThanOrEqual(176);
+    expect(candidate!.outputHeight).toBeLessThanOrEqual(220);
+    expect(candidate!.scaleX).toBeGreaterThanOrEqual(4);
+  });
 });
 
 describe("block downsampling", () => {

@@ -24,7 +24,10 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
     const xScore = totalVertical > 0 ? bestX.energy / totalVertical : 0;
     const yScore = totalHorizontal > 0 ? bestY.energy / totalHorizontal : 0;
     const divisibility = image.width % scale === 0 && image.height % scale === 0 ? 1 : 0.5;
-    const confidence = Math.max(0, Math.min(1, ((xScore + yScore) / 2) * 0.9 + divisibility * 0.1));
+    const edgeScore = (xScore + yScore) / 2;
+    const sizeScore = plausibleOutputScore(image.width, image.height, outputWidth, outputHeight);
+    const scaleScore = image.width >= 256 || image.height >= 256 ? Math.min(1, scale / 8) : 1;
+    const confidence = Math.max(0, Math.min(1, edgeScore * 0.75 + divisibility * 0.05 + sizeScore * 0.15 + scaleScore * 0.05));
 
     candidates.push({
       outputWidth,
@@ -54,6 +57,22 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   }
 
   return candidates.sort((a, b) => b.confidence - a.confidence || a.scaleX - b.scaleX).slice(0, 5);
+}
+
+function plausibleOutputScore(sourceWidth: number, sourceHeight: number, outputWidth: number, outputHeight: number): number {
+  if (sourceWidth < 256 && sourceHeight < 256) {
+    return 1;
+  }
+
+  const maxOutput = Math.max(outputWidth, outputHeight);
+  const minOutput = Math.min(outputWidth, outputHeight);
+  if (minOutput >= 16 && maxOutput <= 256) {
+    return 1;
+  }
+  if (maxOutput <= 384) {
+    return 0.45;
+  }
+  return 0.05;
 }
 
 function verticalEdgeEnergy(image: RGBAImage): Float64Array {
