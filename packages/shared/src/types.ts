@@ -46,6 +46,8 @@ export type FixOptions = {
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     outlineMode?: OutlineMode;
+    outlineSize?: number;
+    outlineColor?: string;
   };
   sheet?: SheetSliceOptions;
 };

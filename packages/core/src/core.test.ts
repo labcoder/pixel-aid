@@ -282,6 +282,18 @@ describe("outline cleanup", () => {
     expect(readPixel(outlined, 0, 0)).toEqual([1, 2, 3, 255]);
     expect(readPixel(outlined, 2, 1)).toEqual([1, 2, 3, 255]);
   });
+
+  test("supports larger outline sizes and custom colors", () => {
+    const source = createImage(5, 5, [255, 255, 255, 255]);
+    writePixel(source, 2, 2, 120, 200, 180, 255);
+
+    const outlined = applyOutlineCleanup(source, "add", { color: "#443322", size: 2 });
+
+    expect(readPixel(outlined, 0, 2)).toEqual([68, 51, 34, 255]);
+    expect(readPixel(outlined, 1, 1)).toEqual([68, 51, 34, 255]);
+    expect(readPixel(outlined, 2, 2)).toEqual([120, 200, 180, 255]);
+    expect(readPixel(outlined, 0, 0)).toEqual([68, 51, 34, 255]);
+  });
 });
 
 describe("sheet slicing", () => {

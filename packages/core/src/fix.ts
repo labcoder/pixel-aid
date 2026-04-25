@@ -18,7 +18,10 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     alpha: options.alpha
   });
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
-  const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none");
+  const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none", {
+    color: options.cleanup.outlineColor,
+    size: options.cleanup.outlineSize
+  });
   const palette = options.palette ?? extractPalette(outlineCleaned, options.maxColors);
   const remapped = remapToPalette(outlineCleaned, palette);
 

@@ -3,7 +3,8 @@ import { parseHexColor, unpackRgb } from "./color";
 import { cloneImage } from "./image";
 
 export type OutlineCleanupOptions = {
-  color?: string;
+  color?: string | undefined;
+  size?: number | undefined;
   alphaThreshold?: number;
   backgroundTolerance?: number;
 };
@@ -17,6 +18,7 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
 
   const alphaThreshold = options.alphaThreshold ?? 8;
   const backgroundTolerance = options.backgroundTolerance ?? 18;
+  const size = normalizeOutlineSize(options.size ?? 1);
   const background = estimateCornerBackground(image);
   const outlineColor =
     options.color !== undefined
@@ -39,7 +41,7 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
       const offset = (y * image.width + x) * 4;
       if (
         !isOutsidePixel(image, x, y, alphaThreshold, background, backgroundTolerance) ||
-        !hasSubjectNeighbor(image, x, y, alphaThreshold, background, backgroundTolerance)
+        !hasSubjectNeighbor(image, x, y, size, alphaThreshold, background, backgroundTolerance)
       ) {
         continue;
       }
@@ -122,12 +124,13 @@ function hasSubjectNeighbor(
   image: RGBAImage,
   x: number,
   y: number,
+  size: number,
   alphaThreshold: number,
   background: BackgroundSample,
   backgroundTolerance: number
 ): boolean {
-  for (let dy = -1; dy <= 1; dy += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
+  for (let dy = -size; dy <= size; dy += 1) {
+    for (let dx = -size; dx <= size; dx += 1) {
       if (dx === 0 && dy === 0) {
         continue;
       }
@@ -138,6 +141,14 @@ function hasSubjectNeighbor(
   }
 
   return false;
+}
+
+function normalizeOutlineSize(size: number): number {
+  if (!Number.isFinite(size)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.min(8, Math.round(size)));
 }
 
 function hasOutsideNeighbor(
