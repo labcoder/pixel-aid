@@ -20,8 +20,21 @@ export type GridCandidate = {
   phaseX: number;
   phaseY: number;
   sourceRect?: Rect;
+  diagnostics?: GridCandidateDiagnostics;
   confidence: number;
   reason: string;
+};
+
+export type GridCandidateDiagnostics = {
+  edgeScore: number;
+  runScore: number;
+  sizeScore: number;
+  scaleScore: number;
+  divisibilityScore: number;
+  cropUsed: boolean;
+  sourceCoverage: number;
+  confidenceLabel: "low" | "medium" | "high";
+  notes: string[];
 };
 
 export type FixOptions = {

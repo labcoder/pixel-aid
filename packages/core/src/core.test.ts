@@ -128,6 +128,21 @@ describe("grid detection", () => {
     });
     expect(candidate!.confidence).toBeGreaterThan(0.82);
   });
+
+  test("attaches structured confidence diagnostics to grid candidates", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const [candidate] = detectGridCandidates(fixture.image, { maxScale: 16 });
+
+    expect((candidate as any).diagnostics).toMatchObject({
+      confidenceLabel: "high",
+      cropUsed: true,
+      scaleScore: expect.any(Number),
+      edgeScore: expect.any(Number),
+      runScore: expect.any(Number),
+      sizeScore: expect.any(Number)
+    });
+    expect((candidate as any).diagnostics.notes).toContain("Foreground crop used");
+  });
 });
 
 describe("block downsampling", () => {

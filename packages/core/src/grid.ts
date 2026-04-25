@@ -48,6 +48,26 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
       scaleY: scale,
       phaseX: bestX.phase,
       phaseY: bestY.phase,
+      diagnostics: {
+        edgeScore: roundScore(edgeScore),
+        runScore: roundScore(runScore),
+        sizeScore: roundScore(sizeScore),
+        scaleScore: roundScore(scaleScore),
+        divisibilityScore: divisibility,
+        cropUsed: sourceRect !== undefined,
+        sourceCoverage: roundScore(((sourceRect?.w ?? image.width) * (sourceRect?.h ?? image.height)) / (image.width * image.height)),
+        confidenceLabel: confidenceLabel(confidence),
+        notes: confidenceNotes({
+          confidence,
+          cropUsed: sourceRect !== undefined,
+          edgeScore,
+          runScore,
+          sizeScore,
+          scale,
+          outputWidth,
+          outputHeight
+        })
+      },
       confidence,
       reason: runScore > 0.5 ? `Hybrid edge/run score at ${scale}px source blocks` : `Periodic edge energy at ${scale}px source blocks`
     };
@@ -65,14 +85,84 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
         scaleX: 1,
         scaleY: 1,
         phaseX: 0,
-        phaseY: 0,
-        confidence: 0.25,
-        reason: "Fallback native-size grid"
-      }
+      phaseY: 0,
+      diagnostics: {
+        edgeScore: 0,
+        runScore: 0,
+        sizeScore: 0,
+        scaleScore: 0,
+        divisibilityScore: 0,
+        cropUsed: false,
+        sourceCoverage: 1,
+        confidenceLabel: "low",
+        notes: ["Fallback candidate"]
+      },
+      confidence: 0.25,
+      reason: "Fallback native-size grid"
+    }
     ];
   }
 
   return candidates.sort((a, b) => b.confidence - a.confidence || a.scaleX - b.scaleX).slice(0, 5);
+}
+
+function roundScore(value: number): number {
+  return Math.max(0, Math.min(1, Math.round(value * 1000) / 1000));
+}
+
+function confidenceLabel(confidence: number): "low" | "medium" | "high" {
+  if (confidence >= 0.8) {
+    return "high";
+  }
+  if (confidence >= 0.55) {
+    return "medium";
+  }
+  return "low";
+}
+
+function confidenceNotes({
+  confidence,
+  cropUsed,
+  edgeScore,
+  runScore,
+  sizeScore,
+  scale,
+  outputWidth,
+  outputHeight
+}: {
+  confidence: number;
+  cropUsed: boolean;
+  edgeScore: number;
+  runScore: number;
+  sizeScore: number;
+  scale: number;
+  outputWidth: number;
+  outputHeight: number;
+}): string[] {
+  const notes: string[] = [];
+  if (confidence >= 0.8) {
+    notes.push("High-confidence grid");
+  } else if (confidence >= 0.55) {
+    notes.push("Medium-confidence grid");
+  } else {
+    notes.push("Low-confidence grid");
+  }
+  if (cropUsed) {
+    notes.push("Foreground crop used");
+  }
+  if (runScore >= 0.5) {
+    notes.push("Strong repeated color runs");
+  }
+  if (edgeScore >= 0.5) {
+    notes.push("Strong periodic edge energy");
+  }
+  if (sizeScore >= 0.9) {
+    notes.push("Plausible engine sprite size");
+  }
+  notes.push(`${scale}px source blocks`);
+  notes.push(`${outputWidth}x${outputHeight} native output`);
+
+  return notes;
 }
 
 function hasMeaningfulCrop(bounds: Rect, image: RGBAImage): boolean {
