@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
+  applyOutlineCleanup,
   createImage,
   detectSpriteBounds,
   detectGridCandidates,
@@ -237,6 +238,38 @@ describe("alpha cleanup", () => {
 
     expect(readPixel(cleaned, 0, 0)[3]).toBe(0);
     expect(readPixel(cleaned, 1, 1)).toEqual([200, 20, 20, 255]);
+  });
+});
+
+describe("outline cleanup", () => {
+  test("adds a one-pixel outline around visible pixels without resizing the image", () => {
+    const source = createImage(3, 3);
+    writePixel(source, 1, 1, 120, 200, 180, 255);
+
+    const outlined = applyOutlineCleanup(source, "add", { color: "#010203" });
+
+    expect(outlined.width).toBe(3);
+    expect(outlined.height).toBe(3);
+    expect(readPixel(outlined, 1, 1)).toEqual([120, 200, 180, 255]);
+    expect(readPixel(outlined, 0, 0)).toEqual([1, 2, 3, 255]);
+    expect(readPixel(outlined, 2, 1)).toEqual([1, 2, 3, 255]);
+  });
+
+  test("repair mode uses an existing dark edge color but does not invent outlines when none exist", () => {
+    const withEdge = createImage(5, 3);
+    writePixel(withEdge, 1, 1, 10, 11, 12, 255);
+    writePixel(withEdge, 2, 1, 120, 200, 180, 255);
+
+    const repaired = applyOutlineCleanup(withEdge, "repairExisting");
+
+    expect(readPixel(repaired, 3, 1)).toEqual([10, 11, 12, 255]);
+
+    const noEdge = createImage(3, 3);
+    writePixel(noEdge, 1, 1, 120, 200, 180, 255);
+
+    const unchanged = applyOutlineCleanup(noEdge, "repairExisting");
+
+    expect(readPixel(unchanged, 0, 0)).toEqual([0, 0, 0, 0]);
   });
 });
 

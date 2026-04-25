@@ -10,6 +10,8 @@ export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenP
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill";
 
+export type OutlineMode = "none" | "repairExisting" | "add";
+
 export type GridCandidate = {
   outputWidth: number;
   outputHeight: number;
@@ -43,6 +45,7 @@ export type FixOptions = {
     removeOrphans: boolean;
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
+    outlineMode?: OutlineMode;
   };
   sheet?: SheetSliceOptions;
 };

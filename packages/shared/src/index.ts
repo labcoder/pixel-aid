@@ -9,6 +9,7 @@ export type {
   FixMetrics,
   FixOptions,
   GridCandidate,
+  OutlineMode,
   Pivot,
   PixelAssetManifest,
   PixelFixResult,

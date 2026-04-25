@@ -2,6 +2,7 @@ import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage } from "@pixe
 import { applyAlphaMode } from "./alpha";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
+import { applyOutlineCleanup } from "./outline";
 import { extractPalette, remapToPalette } from "./palette";
 
 export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult {
@@ -17,8 +18,9 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     alpha: options.alpha
   });
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
-  const palette = options.palette ?? extractPalette(alphaCleaned, options.maxColors);
-  const remapped = remapToPalette(alphaCleaned, palette);
+  const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none");
+  const palette = options.palette ?? extractPalette(outlineCleaned, options.maxColors);
+  const remapped = remapToPalette(outlineCleaned, palette);
 
   return {
     image: remapped,
