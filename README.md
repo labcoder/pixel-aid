@@ -77,7 +77,7 @@ Processing:
 
 ## Known Limitations
 
-- Single-sprite cleanup is improving, but adaptive downsampling can still produce small exterior artifacts or outline gaps near noisy silhouettes.
+- Single-sprite cleanup now includes conservative mask repair, but halo removal and broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture, but still needs candidate previews, clearer confidence explanations, local drift correction, and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
 - Manual sheet slicing metadata exists, but the UI does not yet expose full rows/columns/frame/pivot controls.
@@ -86,7 +86,7 @@ Processing:
 
 ## Prioritized Roadmap
 
-1. Single-sprite cleanup quality: improve subject masking, halo removal, outline repair, gap closing, exterior orphan cleanup, crop metadata, and fixture-backed regression tests.
+1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, connected-component tuning, and crop/cleanup metadata in exported manifests.
 2. Grid detection UX: show candidate previews, explain confidence, expose source crop/output rects, and make manual override easier to reason about.
 3. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
 4. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.
@@ -98,4 +98,4 @@ Processing:
 
 ## Suggested Next Step
 
-The next best implementation step is item 1 from the roadmap: make single-sprite cleanup more robust by building a binary subject mask before outlining, closing tiny holes, removing isolated exterior artifacts, and proving the behavior with fixture tests.
+The next best implementation step is item 2 from the roadmap: add grid candidate previews and clearer confidence explanations so users can see why Auto Suggest chose a crop, scale, and output size.

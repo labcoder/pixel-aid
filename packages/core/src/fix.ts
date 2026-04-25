@@ -22,7 +22,10 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     alpha: options.cleanup.outlineAlpha,
-    size: options.cleanup.outlineSize
+    size: options.cleanup.outlineSize,
+    removeOrphans: options.cleanup.removeOrphans,
+    closeGaps: options.cleanup.jaggyCleanup,
+    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
   });
   const reservedPalette = reservedOutlinePalette(options);
   const palette = options.palette ?? extractPaletteWithReservedColors(outlineCleaned, options.maxColors, reservedPalette);

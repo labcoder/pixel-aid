@@ -12,6 +12,16 @@ export type ResizeRequest = {
 
 export const targetSizePresets = [16, 32, 48, 64, 128, 256, 512] as const;
 
+export const defaultCleanupSettings: {
+  removeOrphans: boolean;
+  jaggyCleanup: boolean;
+  preserveSinglePixelDetails: boolean;
+} = {
+  removeOrphans: true,
+  jaggyCleanup: true,
+  preserveSinglePixelDetails: true
+};
+
 export type TargetSizePresetRequest = Omit<ResizeRequest, "changed" | "value"> & {
   dimension: "width" | "height";
   preset: number;

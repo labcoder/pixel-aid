@@ -68,11 +68,17 @@ For opaque AI-image backgrounds, `backgroundFloodFill` is the preferred cleanup 
 
 The pass treats transparent pixels and detected corner-background pixels as drawable outside space. This lets it work when alpha is preserved and the source still has an opaque white or flat-color background.
 
-Outline size is applied as repeated 8-neighbor pixel dilation around subject pixels. The pass writes into a cloned output buffer while reading neighbor visibility from the source buffer, so newly added outline pixels do not cascade beyond the requested size during the same operation.
+Outline size is applied as an 8-neighbor radius around subject pixels. The pass writes into a cloned output buffer while reading neighbor visibility from a binary subject mask, so newly added outline pixels do not cascade beyond the requested size during the same operation.
 
 When add mode uses an explicit outline color and alpha, the pass writes that RGBA value into eligible outside pixels. If the palette is auto-extracted, the fix pipeline reserves the explicit RGB color before frequency-based palette reduction and filters quantized duplicates so the exact outline color survives remapping.
 
-Known edge cases remain around noisy adaptive downsampling near silhouettes. The next quality pass should build a binary subject mask before outlining, close tiny background holes in that mask, remove isolated one-pixel exterior artifacts, then composite the outline under the sprite. That would keep adaptive's better color choices while preventing outlines from following accidental edge noise.
+Mask cleanup options can run before optional outline drawing. They also work when outline mode is `none`:
+
+- `removeOrphans`: removes tiny disconnected visible components when a larger subject component is present. With single-pixel preservation enabled, this only removes one-pixel satellites.
+- `jaggyCleanup`: closes one-pixel subject holes and fills them from neighboring subject colors before drawing the outline.
+- `preserveSinglePixelDetails`: keeps orphan removal conservative for intentional tiny highlights or details.
+
+This keeps adaptive downsampling's better color choices while preventing outlines from following isolated edge noise or tracing one-pixel holes inside the sprite.
 
 ## Single-Sprite Cleanup Quality
 
@@ -83,14 +89,14 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 3. Downsample with `adaptive` so clean blocks keep their dominant color while mixed blocks fall back to median color.
 4. Use `backgroundFloodFill` for simple opaque backgrounds.
 5. Apply optional outline cleanup.
-6. Reserve explicit outline colors before palette remapping.
+6. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
+7. Reserve explicit outline colors before palette remapping.
 
-The next quality target is a mask-first cleanup stage:
+Remaining quality targets:
 
-- Build a binary subject mask after alpha/background cleanup.
-- Close one-pixel holes so outlines do not trace accidental interior gaps.
-- Remove isolated exterior pixels that adaptive downsampling can create around silhouettes.
-- Composite added outlines under the cleaned subject mask rather than treating every noisy visible pixel as part of the subject.
+- Add halo removal around semi-transparent or background-colored edges.
+- Tune connected-component thresholds against more real samples.
+- Add golden image comparisons for fixture output, not only structural assertions.
 - Record crop and cleanup metadata so the UI can explain why output dimensions changed.
 
 ## Sheet Slicing

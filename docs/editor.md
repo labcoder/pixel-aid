@@ -60,6 +60,9 @@ Cleanup controls run after block downsampling and alpha handling.
 - Outline color starts in automatic mode, which lets the cleanup pass reuse a detected edge color when possible. Editing the color switches to custom RGBA, and that RGB value is reserved in the generated palette so it is not immediately remapped away.
 - Outline alpha is stored separately from RGB so custom outlines can be fully opaque, semi-transparent, or transparent according to the game style.
 - With preserved alpha, outline cleanup can still draw over detected background pixels such as a white AI-image canvas.
+- Remove orphan pixels removes tiny disconnected exterior components before they can attract their own outline or survive as specks.
+- Close 1px gaps fills single-pixel subject holes before optional outline drawing so interior gaps do not turn into accidental outline marks.
+- Preserve tiny details keeps the orphan cleanup conservative. Disable it only when the source has obvious speckle noise.
 
 # Timeline
 

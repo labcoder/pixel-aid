@@ -25,7 +25,13 @@ import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
-import { applyTargetSizePreset, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./lib/fixControls";
+import {
+  applyTargetSizePreset,
+  defaultCleanupSettings,
+  deriveGridScale,
+  resizeWithAspectLock,
+  targetSizePresets
+} from "./lib/fixControls";
 import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -70,6 +76,9 @@ export function App() {
   const [outlineColor, setOutlineColor] = useState("#101112");
   const [outlineAlpha, setOutlineAlpha] = useState(255);
   const [outlineColorEdited, setOutlineColorEdited] = useState(false);
+  const [removeOrphans, setRemoveOrphans] = useState(defaultCleanupSettings.removeOrphans);
+  const [jaggyCleanup, setJaggyCleanup] = useState(defaultCleanupSettings.jaggyCleanup);
+  const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(defaultCleanupSettings.preserveSinglePixelDetails);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -179,9 +188,9 @@ export function App() {
       downscale,
       alpha,
       cleanup: {
-        removeOrphans: false,
-        jaggyCleanup: false,
-        preserveSinglePixelDetails: true,
+        removeOrphans,
+        jaggyCleanup,
+        preserveSinglePixelDetails,
         outlineMode,
         outlineSize,
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
@@ -198,6 +207,7 @@ export function App() {
     gridScaleX,
     gridScaleY,
     cropToBounds,
+    jaggyCleanup,
     maxColors,
     mode,
     outlineColor,
@@ -205,6 +215,8 @@ export function App() {
     outlineColorEdited,
     outlineMode,
     outlineSize,
+    preserveSinglePixelDetails,
+    removeOrphans,
     sheetMode,
     sheetOptions,
     targetHeight,
@@ -800,6 +812,33 @@ export function App() {
             onAlphaChange={setOutlineAlpha}
             onResetAuto={() => setOutlineColorEdited(false)}
           />
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={removeOrphans}
+              onChange={(event) => setRemoveOrphans(event.currentTarget.checked)}
+            />
+            Remove orphan pixels
+          </label>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={jaggyCleanup}
+              onChange={(event) => setJaggyCleanup(event.currentTarget.checked)}
+            />
+            Close 1px gaps
+          </label>
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={preserveSinglePixelDetails}
+              onChange={(event) => setPreserveSinglePixelDetails(event.currentTarget.checked)}
+            />
+            Preserve tiny details
+          </label>
+          <p className="field-note">
+            Mask cleanup runs before optional outline drawing so adaptive specks and tiny holes do not pull the edge away from the sprite.
+          </p>
           <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
             <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />

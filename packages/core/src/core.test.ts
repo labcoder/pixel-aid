@@ -305,6 +305,57 @@ describe("outline cleanup", () => {
     expect(readPixel(outlined, 0, 0)).toEqual([68, 51, 34, 128]);
     expect(readPixel(outlined, 1, 1)).toEqual([120, 200, 180, 255]);
   });
+
+  test("removes isolated exterior pixels before they can grow their own outline", () => {
+    const source = createImage(7, 5);
+    for (let y = 1; y <= 3; y += 1) {
+      for (let x = 1; x <= 3; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 5, 2, 120, 200, 180, 255);
+
+    const outlined = applyOutlineCleanup(source, "add", { color: "#010203", removeOrphans: true });
+
+    expect(readPixel(outlined, 0, 2)).toEqual([1, 2, 3, 255]);
+    expect(readPixel(outlined, 5, 2)[3]).toBe(0);
+    expect(readPixel(outlined, 6, 2)[3]).toBe(0);
+  });
+
+  test("closes one-pixel subject gaps before drawing added outlines", () => {
+    const source = createImage(5, 5);
+    for (let y = 1; y <= 3; y += 1) {
+      for (let x = 1; x <= 3; x += 1) {
+        if (x === 2 && y === 2) {
+          continue;
+        }
+        writePixel(source, x, y, 90, 150, 140, 255);
+      }
+    }
+
+    const outlined = applyOutlineCleanup(source, "add", { color: "#010203", closeGaps: true });
+
+    expect(readPixel(outlined, 2, 2)).toEqual([90, 150, 140, 255]);
+    expect(readPixel(outlined, 0, 2)).toEqual([1, 2, 3, 255]);
+  });
+
+  test("runs orphan and gap cleanup even when no outline is drawn", () => {
+    const source = createImage(7, 5);
+    for (let y = 1; y <= 3; y += 1) {
+      for (let x = 1; x <= 3; x += 1) {
+        if (x === 2 && y === 2) {
+          continue;
+        }
+        writePixel(source, x, y, 90, 150, 140, 255);
+      }
+    }
+    writePixel(source, 5, 2, 90, 150, 140, 255);
+
+    const cleaned = applyOutlineCleanup(source, "none", { removeOrphans: true, closeGaps: true });
+
+    expect(readPixel(cleaned, 2, 2)).toEqual([90, 150, 140, 255]);
+    expect(readPixel(cleaned, 5, 2)[3]).toBe(0);
+  });
 });
 
 describe("sheet slicing", () => {
@@ -480,5 +531,44 @@ describe("fix pipeline", () => {
     const result = fixImage(source, options);
 
     expect(readPixel(result.image, 0, 0)).toEqual([68, 51, 34, 128]);
+  });
+
+  test("passes orphan and gap cleanup into the outline stage", () => {
+    const source = createImage(7, 5);
+    for (let y = 1; y <= 3; y += 1) {
+      for (let x = 1; x <= 3; x += 1) {
+        if (x === 2 && y === 2) {
+          continue;
+        }
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 5, 2, 120, 200, 180, 255);
+
+    const result = fixImage(source, {
+      mode: "single",
+      targetWidth: 7,
+      targetHeight: 5,
+      maxColors: 3,
+      grid: {
+        detect: "manual",
+        scale: 1,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        outlineMode: "add",
+        outlineColor: "#010203"
+      }
+    });
+
+    expect(readPixel(result.image, 2, 2)).toEqual([120, 200, 180, 255]);
+    expect(readPixel(result.image, 5, 2)[3]).toBe(0);
+    expect(readPixel(result.image, 6, 2)[3]).toBe(0);
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyTargetSizePreset, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./fixControls";
+import { applyTargetSizePreset, defaultCleanupSettings, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./fixControls";
 
 describe("fix controls", () => {
   test("keeps target aspect locked from the source image", () => {
@@ -65,5 +65,13 @@ describe("fix controls", () => {
         locked: false
       })
     ).toEqual({ targetWidth: 64, targetHeight: 48 });
+  });
+
+  test("defaults single-sprite cleanup toward conservative mask repair", () => {
+    expect(defaultCleanupSettings).toEqual({
+      removeOrphans: true,
+      jaggyCleanup: true,
+      preserveSinglePixelDetails: true
+    });
   });
 });
