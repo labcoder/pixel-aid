@@ -1,5 +1,5 @@
 import { detectGridCandidates } from "@pixelaid/core";
-import type { AssetMode, DownscaleMethod, RGBAImage } from "@pixelaid/shared";
+import type { AssetMode, DownscaleMethod, GridCandidate, RGBAImage } from "@pixelaid/shared";
 
 export type FixSettingSuggestion = {
   mode: AssetMode;
@@ -16,7 +16,12 @@ export type FixSettingSuggestion = {
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
-  const [candidate] = detectGridCandidates(image, { maxScale: 32 });
+  const candidates = detectGridCandidates(image, { maxScale: 32 });
+  const initial = candidates[0];
+  const initialOutputWidth = initial?.outputWidth ?? image.width;
+  const initialOutputHeight = initial?.outputHeight ?? image.height;
+  const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight);
+  const candidate = chooseSuggestionGrid(image, candidates, initialMode);
   const outputWidth = candidate?.outputWidth ?? image.width;
   const outputHeight = candidate?.outputHeight ?? image.height;
   const sourceRatio = image.width / image.height;
@@ -36,6 +41,29 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence
   };
+}
+
+export function chooseSuggestionGrid(
+  image: Pick<RGBAImage, "width" | "height">,
+  candidates: readonly GridCandidate[],
+  mode: AssetMode
+): GridCandidate | undefined {
+  const [candidate] = candidates;
+  if (!candidate || mode !== "single" || Math.max(image.width, image.height) < 512) {
+    return candidate;
+  }
+
+  const plausible = candidates.find((item) => {
+    const maxOutput = Math.max(item.outputWidth, item.outputHeight);
+    const minOutput = Math.min(item.outputWidth, item.outputHeight);
+    return minOutput >= 32 && maxOutput <= 220 && item.scaleX >= 4 && item.scaleY >= 4;
+  });
+
+  if (plausible && Math.max(candidate.outputWidth, candidate.outputHeight) > 256) {
+    return plausible;
+  }
+
+  return candidate;
 }
 
 function classifyMode(width: number, height: number, outputWidth: number, outputHeight: number): AssetMode {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { suggestFixSettings } from "./fixSuggestions";
-import type { RGBAImage } from "@pixelaid/shared";
+import { chooseSuggestionGrid, suggestFixSettings } from "./fixSuggestions";
+import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
 
 function blankImage(width: number, height: number): RGBAImage {
   return {
@@ -40,5 +40,32 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.mode).toBe("single");
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
+    expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
+    expect(suggestion.targetHeight).toBeLessThanOrEqual(220);
+  });
+
+  test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
+    const tinyScale: GridCandidate = {
+      outputWidth: 353,
+      outputHeight: 439,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      confidence: 0.46,
+      reason: "tiny scale"
+    };
+    const plausibleScale: GridCandidate = {
+      outputWidth: 88,
+      outputHeight: 109,
+      scaleX: 8,
+      scaleY: 8,
+      phaseX: 0,
+      phaseY: 0,
+      confidence: 0.4,
+      reason: "plausible scale"
+    };
+
+    expect(chooseSuggestionGrid({ width: 706, height: 878 }, [tinyScale, plausibleScale], "single")).toBe(plausibleScale);
   });
 });
