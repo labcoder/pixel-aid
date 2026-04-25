@@ -56,14 +56,32 @@ export function chooseSuggestionGrid(
   const plausible = candidates.find((item) => {
     const maxOutput = Math.max(item.outputWidth, item.outputHeight);
     const minOutput = Math.min(item.outputWidth, item.outputHeight);
-    return minOutput >= 32 && maxOutput <= 220 && item.scaleX >= 4 && item.scaleY >= 4;
+    return minOutput >= 32 && maxOutput <= 160 && item.scaleX >= 4 && item.scaleY >= 4;
   });
 
-  if (plausible && Math.max(candidate.outputWidth, candidate.outputHeight) > 256) {
+  const candidateMax = Math.max(candidate.outputWidth, candidate.outputHeight);
+  if (plausible && candidateMax > 160) {
     return plausible;
+  }
+  if (candidateMax > 180) {
+    return createPlausibleSingleSpriteGrid(image);
   }
 
   return candidate;
+}
+
+function createPlausibleSingleSpriteGrid(image: Pick<RGBAImage, "width" | "height">): GridCandidate {
+  const scale = Math.max(4, Math.ceil(Math.max(image.width, image.height) / 128));
+  return {
+    outputWidth: Math.max(1, Math.floor(image.width / scale)),
+    outputHeight: Math.max(1, Math.floor(image.height / scale)),
+    scaleX: scale,
+    scaleY: scale,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: 0.35,
+    reason: "Plausible single-sprite native size"
+  };
 }
 
 function classifyMode(width: number, height: number, outputWidth: number, outputHeight: number): AssetMode {

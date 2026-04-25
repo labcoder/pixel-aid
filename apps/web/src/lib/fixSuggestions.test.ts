@@ -68,4 +68,25 @@ describe("fix setting suggestions", () => {
 
     expect(chooseSuggestionGrid({ width: 706, height: 878 }, [tinyScale, plausibleScale], "single")).toBe(plausibleScale);
   });
+
+  test("creates a plausible single-sprite grid when all candidates are oversized", () => {
+    const oversized: GridCandidate = {
+      outputWidth: 176,
+      outputHeight: 219,
+      scaleX: 4,
+      scaleY: 4,
+      phaseX: 0,
+      phaseY: 0,
+      confidence: 0.43,
+      reason: "oversized"
+    };
+
+    expect(chooseSuggestionGrid({ width: 706, height: 878 }, [oversized], "single")).toMatchObject({
+      outputWidth: 100,
+      outputHeight: 125,
+      scaleX: 7,
+      scaleY: 7,
+      reason: "Plausible single-sprite native size"
+    });
+  });
 });
