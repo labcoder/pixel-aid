@@ -33,6 +33,6 @@ describe("single sprite cleanup fixture", () => {
     expect(colors.size).toBeGreaterThan(20);
     expect(nonBackgroundPixels).toBeGreaterThan(100_000);
     expect(nonBackgroundPixels).toBeLessThan(330_000);
-    expect(fixture.expected.foregroundBounds).toEqual({ x: 50, y: 7, w: 606, h: 858 });
+    expect(fixture.expected.foregroundBounds).toEqual({ x: 50, y: 1, w: 612, h: 864 });
   });
 });

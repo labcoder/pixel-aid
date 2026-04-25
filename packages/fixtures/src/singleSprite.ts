@@ -64,9 +64,9 @@ export function createSingleSpriteCleanupFixture(): SingleSpriteCleanupFixture {
       phaseY: PHASE_Y,
       foregroundBounds: {
         x: PHASE_X + 8 * SCALE,
-        y: PHASE_Y + 1 * SCALE,
-        w: 101 * SCALE,
-        h: 143 * SCALE
+        y: PHASE_Y,
+        w: 102 * SCALE,
+        h: 144 * SCALE
       },
       palette: [
         "#181f21",

@@ -16,5 +16,8 @@
   },
   "dependencies": {
     "@pixelaid/shared": "0.1.0"
+  },
+  "devDependencies": {
+    "@pixelaid/fixtures": "0.1.0"
   }
 }

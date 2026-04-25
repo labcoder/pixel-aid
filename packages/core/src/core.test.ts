@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
+import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
   createImage,
+  detectSpriteBounds,
   detectGridCandidates,
   downsampleBlocks,
   extractPalette,
@@ -82,6 +84,13 @@ describe("RGBA image helpers", () => {
 });
 
 describe("grid detection", () => {
+  test("detects foreground bounds for a bright-background single sprite fixture", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const bounds = detectSpriteBounds(fixture.image, { backgroundTolerance: 18 });
+
+    expect(bounds).toEqual(fixture.expected.foregroundBounds);
+  });
+
   test("returns a high-confidence 2x candidate for a clean blocky source", () => {
     const [candidate] = detectGridCandidates(blockySource(), { maxScale: 4 });
 

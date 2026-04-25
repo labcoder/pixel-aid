@@ -10,6 +10,8 @@ export type {
 
 export { applyAlphaMode } from "./alpha";
 export type { AlphaOptions } from "./alpha";
+export { detectSpriteBounds } from "./bounds";
+export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
 export { downsampleBlocks } from "./downsample";
