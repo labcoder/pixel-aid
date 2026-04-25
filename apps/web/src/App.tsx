@@ -28,6 +28,7 @@ import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFil
 import {
   applyTargetSizePreset,
   defaultCleanupSettings,
+  denoiseStrengthLabel,
   deriveGridScale,
   resizeWithAspectLock,
   targetSizePresets
@@ -79,6 +80,7 @@ export function App() {
   const [removeOrphans, setRemoveOrphans] = useState(defaultCleanupSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(defaultCleanupSettings.jaggyCleanup);
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(defaultCleanupSettings.preserveSinglePixelDetails);
+  const [denoiseStrength, setDenoiseStrength] = useState(defaultCleanupSettings.denoiseStrength);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -191,6 +193,7 @@ export function App() {
         removeOrphans,
         jaggyCleanup,
         preserveSinglePixelDetails,
+        denoiseStrength,
         outlineMode,
         outlineSize,
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
@@ -202,6 +205,7 @@ export function App() {
     return options;
   }, [
     alpha,
+    denoiseStrength,
     downscale,
     gridDetect,
     gridScaleX,
@@ -760,6 +764,12 @@ export function App() {
           </p>
           <div className="subsection-label">Cleanup</div>
           <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
+          <StrengthField
+            label="Denoise"
+            value={denoiseStrength}
+            labelValue={denoiseStrengthLabel(denoiseStrength)}
+            onChange={setDenoiseStrength}
+          />
           <SelectField
             label="Downscale"
             value={downscale}
@@ -919,6 +929,7 @@ export function App() {
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
+                  ["Denoise", denoiseStrengthLabel(denoiseStrength)],
                   [
                     "Outline",
                     outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
@@ -1113,6 +1124,36 @@ function NumberField({
         disabled={disabled}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
+    </label>
+  );
+}
+
+function StrengthField({
+  label,
+  value,
+  labelValue,
+  onChange
+}: {
+  label: string;
+  value: number;
+  labelValue: string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="field-row strength-field">
+      <span>{label}</span>
+      <div className="strength-control">
+        <input
+          type="range"
+          min="0"
+          max="100"
+          step="5"
+          value={value}
+          aria-label={`${label} strength`}
+          onChange={(event) => onChange(Number(event.currentTarget.value))}
+        />
+        <output>{value === 0 ? labelValue : `${labelValue} ${value}`}</output>
+      </div>
     </label>
   );
 }

@@ -16,11 +16,30 @@ export const defaultCleanupSettings: {
   removeOrphans: boolean;
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
+  denoiseStrength: number;
 } = {
   removeOrphans: true,
   jaggyCleanup: true,
-  preserveSinglePixelDetails: true
+  preserveSinglePixelDetails: true,
+  denoiseStrength: 20
 };
+
+export function denoiseStrengthLabel(strength: number): string {
+  if (strength <= 0) {
+    return "Off";
+  }
+  if (strength < 35) {
+    return "Light";
+  }
+  if (strength < 65) {
+    return "Medium";
+  }
+  if (strength < 90) {
+    return "Strong";
+  }
+
+  return "Flat";
+}
 
 export type TargetSizePresetRequest = Omit<ResizeRequest, "changed" | "value"> & {
   dimension: "width" | "height";

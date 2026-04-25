@@ -1,6 +1,7 @@
 import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
+import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
 import { applyOutlineCleanup } from "./outline";
@@ -19,7 +20,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     alpha: options.alpha
   });
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
-  const outlineCleaned = applyOutlineCleanup(alphaCleaned, options.cleanup.outlineMode ?? "none", {
+  const denoised = applyDenoise(alphaCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
+  const outlineCleaned = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     alpha: options.cleanup.outlineAlpha,
     size: options.cleanup.outlineSize,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
+  applyDenoise,
   applyOutlineCleanup,
   createImage,
   detectSpriteBounds,
@@ -238,6 +239,82 @@ describe("alpha cleanup", () => {
 
     expect(readPixel(cleaned, 0, 0)[3]).toBe(0);
     expect(readPixel(cleaned, 1, 1)).toEqual([200, 20, 20, 255]);
+  });
+});
+
+describe("denoise cleanup", () => {
+  test("leaves the image unchanged when strength is zero", () => {
+    const source = imageFromPixels(2, [rgba(10, 20, 30), rgba(40, 50, 60), rgba(70, 80, 90), rgba(0, 0, 0, 0)]);
+
+    const denoised = applyDenoise(source, { strength: 0 });
+
+    expect(Array.from(denoised.data)).toEqual(Array.from(source.data));
+    expect(denoised).not.toBe(source);
+  });
+
+  test("removes a mild off-color speck inside a flat color region", () => {
+    const source = createImage(3, 3);
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 3; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 1, 1, 130, 207, 187, 255);
+
+    const denoised = applyDenoise(source, { strength: 20 });
+
+    expect(readPixel(denoised, 1, 1)).toEqual([120, 200, 180, 255]);
+  });
+
+  test("does not spread the first scanned noisy color across a clean cluster", () => {
+    const source = createImage(3, 3);
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 3; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 0, 0, 130, 207, 187, 255);
+
+    const denoised = applyDenoise(source, { strength: 20 });
+
+    expect(readPixel(denoised, 0, 0)).toEqual([120, 200, 180, 255]);
+    expect(readPixel(denoised, 1, 1)).toEqual([120, 200, 180, 255]);
+  });
+
+  test("uses stronger settings to flatten a wider similar-color patch", () => {
+    const source = createImage(5, 5);
+    for (let y = 0; y < 5; y += 1) {
+      for (let x = 0; x < 5; x += 1) {
+        const variant = (x + y) % 3;
+        const color =
+          variant === 0
+            ? [120, 200, 180, 255]
+            : variant === 1
+              ? [145, 210, 190, 255]
+              : [104, 188, 170, 255];
+        writePixel(source, x, y, color[0]!, color[1]!, color[2]!, color[3]!);
+      }
+    }
+
+    const light = applyDenoise(source, { strength: 20 });
+    const strong = applyDenoise(source, { strength: 90 });
+
+    expect(new Set([readPixel(light, 1, 1).join(","), readPixel(light, 2, 1).join(","), readPixel(light, 3, 1).join(",")]).size).toBeGreaterThan(1);
+    expect(new Set([readPixel(strong, 1, 1).join(","), readPixel(strong, 2, 1).join(","), readPixel(strong, 3, 1).join(",")]).size).toBe(1);
+  });
+
+  test("does not denoise transparent pixels into visible colors", () => {
+    const source = createImage(3, 3);
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 3; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 1, 1, 0, 0, 0, 0);
+
+    const denoised = applyDenoise(source, { strength: 100 });
+
+    expect(readPixel(denoised, 1, 1)).toEqual([0, 0, 0, 0]);
   });
 });
 
@@ -570,5 +647,39 @@ describe("fix pipeline", () => {
     expect(readPixel(result.image, 2, 2)).toEqual([120, 200, 180, 255]);
     expect(readPixel(result.image, 5, 2)[3]).toBe(0);
     expect(readPixel(result.image, 6, 2)[3]).toBe(0);
+  });
+
+  test("passes denoise strength through before palette extraction", () => {
+    const source = createImage(3, 3);
+    for (let y = 0; y < 3; y += 1) {
+      for (let x = 0; x < 3; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+    writePixel(source, 1, 1, 130, 207, 187, 255);
+
+    const result = fixImage(source, {
+      mode: "single",
+      targetWidth: 3,
+      targetHeight: 3,
+      maxColors: 8,
+      grid: {
+        detect: "manual",
+        scale: 1,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        denoiseStrength: 20
+      }
+    });
+
+    expect(result.palette).toEqual(["#78c8b4"]);
+    expect(readPixel(result.image, 1, 1)).toEqual([120, 200, 180, 255]);
   });
 });

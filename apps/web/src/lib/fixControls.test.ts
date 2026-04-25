@@ -1,5 +1,12 @@
 import { describe, expect, test } from "vitest";
-import { applyTargetSizePreset, defaultCleanupSettings, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./fixControls";
+import {
+  applyTargetSizePreset,
+  defaultCleanupSettings,
+  denoiseStrengthLabel,
+  deriveGridScale,
+  resizeWithAspectLock,
+  targetSizePresets
+} from "./fixControls";
 
 describe("fix controls", () => {
   test("keeps target aspect locked from the source image", () => {
@@ -71,7 +78,16 @@ describe("fix controls", () => {
     expect(defaultCleanupSettings).toEqual({
       removeOrphans: true,
       jaggyCleanup: true,
-      preserveSinglePixelDetails: true
+      preserveSinglePixelDetails: true,
+      denoiseStrength: 20
     });
+  });
+
+  test("labels denoise strength for compact editor display", () => {
+    expect(denoiseStrengthLabel(0)).toBe("Off");
+    expect(denoiseStrengthLabel(20)).toBe("Light");
+    expect(denoiseStrengthLabel(50)).toBe("Medium");
+    expect(denoiseStrengthLabel(75)).toBe("Strong");
+    expect(denoiseStrengthLabel(100)).toBe("Flat");
   });
 });

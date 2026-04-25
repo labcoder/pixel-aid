@@ -46,6 +46,7 @@ export type FixOptions = {
     removeOrphans: boolean;
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
+    denoiseStrength?: number;
     outlineMode?: OutlineMode;
     outlineSize?: number;
     outlineColor?: string;

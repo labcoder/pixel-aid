@@ -592,6 +592,25 @@ button:disabled {
   text-align: right;
 }
 
+.strength-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.strength-control output {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .target-preset-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);

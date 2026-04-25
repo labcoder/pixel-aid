@@ -53,6 +53,7 @@ The viewport renders images through Canvas2D with smoothing disabled.
 Cleanup controls run after block downsampling and alpha handling.
 
 - Max colors limits the fixed output palette.
+- Denoise controls local color cleanup before palette reduction. `Off` preserves current behavior, `Light` removes mild AI speckles, and `Flat` aggressively merges similar local colors into broader pixel-art regions.
 - Downscale selects the block-to-pixel strategy.
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.

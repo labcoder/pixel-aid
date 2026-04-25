@@ -27,6 +27,7 @@ The metrics panel shows:
 - Output size.
 - Palette count.
 - Downscale method.
+- Denoise strength.
 - Grid confidence.
 - Worker operation duration.
 

@@ -48,6 +48,17 @@ This is the main fake-pixel-to-real-pixel conversion path. It does not use bilin
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
 
+## Denoise
+
+`applyDenoise` is a native-resolution cleanup pass that runs after alpha cleanup and before outline cleanup and palette extraction.
+
+It is separate from `maxColors`:
+
+- Denoise controls where similar local colors should be merged.
+- Max colors controls how many final palette entries are allowed.
+
+Strength is a 0-100 value. `0` clones the image unchanged. Low values remove mild off-color speckles inside otherwise flat regions. High values increase color tolerance and neighborhood size so similar local variations collapse into flatter pixel-art regions. The pass skips transparent pixels and only remaps visible pixels to a representative color from their similar-color cluster; that representative is chosen near the cluster centroid so a first-scanned speck does not become the replacement color. It does not blur or resample the image.
+
 ## Alpha Cleanup
 
 Implemented modes:
@@ -88,9 +99,10 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 2. Align the crop to the detected pseudo-pixel grid.
 3. Downsample with `adaptive` so clean blocks keep their dominant color while mixed blocks fall back to median color.
 4. Use `backgroundFloodFill` for simple opaque backgrounds.
-5. Apply optional outline cleanup.
-6. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
-7. Reserve explicit outline colors before palette remapping.
+5. Apply denoise when the cleanup strength is above zero.
+6. Apply optional outline cleanup.
+7. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
+8. Reserve explicit outline colors before palette remapping.
 
 Remaining quality targets:
 

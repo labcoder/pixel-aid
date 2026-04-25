@@ -70,6 +70,7 @@ Processing:
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
+- Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files.
@@ -86,7 +87,7 @@ Processing:
 
 ## Prioritized Roadmap
 
-1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, connected-component tuning, and crop/cleanup metadata in exported manifests.
+1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/cleanup metadata in exported manifests.
 2. Grid detection UX: show candidate previews, explain confidence, expose source crop/output rects, and make manual override easier to reason about.
 3. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
 4. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.
