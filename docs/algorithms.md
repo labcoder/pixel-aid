@@ -18,7 +18,20 @@ Pixel loops use typed arrays and integer offsets.
 
 ## Grid Detection
 
-`detectGridCandidates` computes simple vertical and horizontal edge-energy arrays and scores periodic boundary candidates by scale and phase. It returns multiple candidates with confidence and reasons. This is the API shape future runs-based and hybrid scoring should extend.
+`detectGridCandidates` returns multiple grid interpretations with output size, scale, phase, confidence, reason, and optional `sourceRect` crop metadata.
+
+Current scoring combines:
+
+- Edge energy: vertical and horizontal boundary energy at candidate scale/phase.
+- Runs scoring: sampled foreground color runs are quantized coarsely and scored for likely pseudo-pixel block spans.
+- Background-aware bounds: bright or transparent corner background is detected so single-sprite sources can be scored and cropped around the actual sprite silhouette.
+- Plausibility: large source images are biased toward engine-usable native sprite sizes rather than hundreds of output pixels.
+
+Run evidence is moderated by edge agreement so divisor candidates such as 2px, 3px, or 4px do not outrank a clearer 6px pseudo-pixel grid just because they explain short noisy spans.
+
+When a meaningful background crop is found, candidates include a grid-aligned `sourceRect`. The fix pipeline uses that rect as the sampling origin while preserving the global phase metadata.
+
+The next detector upgrades should add stronger edge-period analysis, candidate preview thumbnails, and local drift correction for uneven AI-generated grids.
 
 ## Block Downsampling
 

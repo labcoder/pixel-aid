@@ -26,6 +26,7 @@ packages/core         Pure TypeScript image-processing algorithms
 packages/worker       Web Worker protocol and fix pipeline wrapper
 packages/exporters    Generic JSON manifest exporter
 packages/shared       Shared types, constants, and manifest contracts
+packages/fixtures     Generated benchmark fixtures and expected metadata
 docs                  Architecture, algorithms, performance, and licensing notes
 ```
 
@@ -38,13 +39,14 @@ Implemented:
 - Browser decode adapter from image file to `RGBAImage`.
 - Canvas preview with `imageSmoothingEnabled = false`, checkerboard background, integer zoom, and optional pixel grid.
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
+- Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 Known limitations:
 
-- Grid detection is intentionally simple and will need stronger runs-based and edge-energy scoring.
+- Grid detection now handles the first single-sprite fixture, but still needs candidate previews, local drift correction, and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer.
 - Manual sheet slicing metadata exists, but the UI does not yet expose full sheet controls.
 - Export currently downloads a ZIP containing PNG + generic JSON only; Godot, Unity, Phaser, and TexturePacker adapters are future work.

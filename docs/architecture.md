@@ -9,6 +9,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 - `packages/worker`: owns worker protocol and orchestration around core algorithms.
 - `packages/exporters`: owns generic asset manifests and validation.
 - `packages/shared`: owns shared serializable contracts and app constants.
+- `packages/fixtures`: owns generated benchmark fixtures and expected metadata used by tests.
 
 ## Data Flow
 
@@ -16,9 +17,10 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 2. The viewport renders that native buffer through Canvas2D with smoothing disabled.
 3. The app clones the image buffer and transfers it to a Web Worker.
 4. The worker runs `fixImage` from `packages/core`.
-5. The worker transfers the fixed output buffer back to the app.
-6. The app displays the fixed output, metrics, palette count, and grid confidence.
-7. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`.
+5. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
+6. The worker transfers the fixed output buffer back to the app.
+7. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
+8. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`.
 
 ## Future Extension Points
 
