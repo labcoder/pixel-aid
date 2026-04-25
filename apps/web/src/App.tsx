@@ -17,8 +17,8 @@ import {
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, OutlineMode, PixelFixResult } from "@pixelaid/shared";
-import { sliceSheetFrames } from "@pixelaid/core";
+import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, GridCandidate, OutlineMode, PixelFixResult, RGBAImage } from "@pixelaid/shared";
+import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
@@ -37,6 +37,7 @@ import {
 import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
+import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
@@ -128,6 +129,7 @@ export function App() {
     [selectedAsset]
   );
   const sourceColorCount = useMemo(() => (selectedAsset ? countVisibleColors(selectedAsset.image) : 0), [selectedAsset]);
+  const gridCandidates = useMemo(() => (selectedAsset ? detectGridCandidates(selectedAsset.image, { maxScale: 32 }) : []), [selectedAsset]);
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
   const sheetOptions = useMemo(
@@ -406,6 +408,22 @@ export function App() {
     [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
 
+  const applyGridCandidate = useCallback(
+    (candidate: GridCandidate) => {
+      setGridDetect("auto");
+      setTargetWidth(candidate.outputWidth);
+      setTargetHeight(candidate.outputHeight);
+      setGridScaleX(candidate.scaleX);
+      setGridScaleY(candidate.scaleY);
+      setCropToBounds(mode === "single" && candidate.sourceRect !== undefined);
+      setSuggestionReason(
+        `Candidate ${candidate.outputWidth}x${candidate.outputHeight}: ${candidate.diagnostics?.notes.slice(0, 2).join(". ") ?? candidate.reason}.`
+      );
+      appendLog(`Applied grid candidate ${candidate.outputWidth}x${candidate.outputHeight} at ${candidate.scaleX}x${candidate.scaleY}`);
+    },
+    [appendLog, mode]
+  );
+
   const selectAsset = useCallback(
     (assetId: string) => {
       if (assetId !== selectedAsset?.id) {
@@ -621,6 +639,12 @@ export function App() {
     ),
     grid: (
       <>
+        <GridCandidateList
+          image={selectedAsset?.image ?? null}
+          candidates={gridCandidates}
+          activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY }}
+          onApply={applyGridCandidate}
+        />
         <SelectField
           label="Detect"
           value={gridDetect}
@@ -1002,6 +1026,118 @@ function MetricGroup({ title, metrics }: { title: string; metrics: Array<[string
       </dl>
     </div>
   );
+}
+
+function GridCandidateList({
+  image,
+  candidates,
+  activeSettings,
+  onApply
+}: {
+  image: RGBAImage | null;
+  candidates: GridCandidate[];
+  activeSettings: { targetWidth: number; targetHeight: number; scaleX: number; scaleY: number };
+  onApply: (candidate: GridCandidate) => void;
+}) {
+  if (!image || candidates.length === 0) {
+    return <p className="field-note">Import an asset to inspect grid candidates.</p>;
+  }
+
+  return (
+    <div className="grid-candidate-list" aria-label="Grid candidates">
+      {candidates.map((candidate, index) => {
+        const preview = formatGridCandidatePreview(candidate, index);
+        const active = candidateMatchesSettings(candidate, activeSettings);
+        return (
+          <button
+            key={`${candidate.outputWidth}-${candidate.outputHeight}-${candidate.scaleX}-${candidate.phaseX}-${candidate.phaseY}`}
+            type="button"
+            className={`grid-candidate-card${active ? " active" : ""}`}
+            onClick={() => onApply(candidate)}
+          >
+            <GridCandidateCanvas image={image} candidate={candidate} />
+            <span className="grid-candidate-copy">
+              <span className="grid-candidate-heading">
+                <strong>{preview.title}</strong>
+                <em>{preview.confidence}</em>
+              </span>
+              <span className="grid-candidate-meta">
+                {preview.nativeSize} / {preview.scale}
+              </span>
+              <span className={`grid-confidence ${preview.confidenceLabel.toLowerCase()}`}>{preview.confidenceLabel}</span>
+              {preview.badges.length > 0 ? (
+                <span className="grid-candidate-badges">
+                  {preview.badges.map((badge) => (
+                    <span key={badge}>{badge}</span>
+                  ))}
+                </span>
+              ) : null}
+              <span className="grid-candidate-scores">
+                {preview.scoreRows.map(([label, value]) => (
+                  <span key={label}>
+                    {label} {value}
+                  </span>
+                ))}
+              </span>
+              <span className="grid-candidate-notes">{preview.notes.join(" / ")}</span>
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate: GridCandidate }) {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      return;
+    }
+
+    const width = 54;
+    const height = 46;
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    const source = document.createElement("canvas");
+    source.width = image.width;
+    source.height = image.height;
+    const sourceContext = source.getContext("2d");
+    if (!sourceContext) {
+      return;
+    }
+    sourceContext.imageSmoothingEnabled = false;
+    sourceContext.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
+
+    const sourceRect = candidate.sourceRect ?? {
+      x: candidate.phaseX,
+      y: candidate.phaseY,
+      w: Math.min(image.width - candidate.phaseX, candidate.outputWidth * candidate.scaleX),
+      h: Math.min(image.height - candidate.phaseY, candidate.outputHeight * candidate.scaleY)
+    };
+    const scale = Math.min(width / sourceRect.w, height / sourceRect.h);
+    const drawWidth = Math.max(1, Math.floor(sourceRect.w * scale));
+    const drawHeight = Math.max(1, Math.floor(sourceRect.h * scale));
+    const x = Math.floor((width - drawWidth) / 2);
+    const y = Math.floor((height - drawHeight) / 2);
+
+    context.imageSmoothingEnabled = false;
+    context.clearRect(0, 0, width, height);
+    context.fillStyle = "#101112";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(source, sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, x, y, drawWidth, drawHeight);
+    context.strokeStyle = "#f1c75b";
+    context.strokeRect(x + 0.5, y + 0.5, drawWidth - 1, drawHeight - 1);
+  }, [candidate, image]);
+
+  return <canvas className="grid-candidate-thumb" ref={canvasRef} aria-hidden="true" />;
 }
 
 function formatSuggestionReason(reason: string, modeConfidence: number, gridConfidence: number): string {

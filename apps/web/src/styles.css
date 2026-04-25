@@ -566,6 +566,115 @@ button:disabled {
   font-size: 0.72rem;
 }
 
+.grid-candidate-list {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+}
+
+.grid-candidate-card {
+  width: 100%;
+  min-height: 82px;
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0.55rem;
+  padding: 0.5rem;
+  color: var(--muted);
+  background: #141818;
+  border-color: var(--line);
+  text-align: left;
+}
+
+.grid-candidate-card.active {
+  border-color: var(--cyan);
+  background: #19302e;
+}
+
+.grid-candidate-thumb {
+  width: 54px;
+  height: 46px;
+  align-self: start;
+  display: block;
+  background: #101112;
+  border: 1px solid #485252;
+  border-radius: 4px;
+}
+
+.grid-candidate-copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.grid-candidate-heading,
+.grid-candidate-badges,
+.grid-candidate-scores {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.grid-candidate-heading {
+  justify-content: space-between;
+}
+
+.grid-candidate-heading strong {
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.grid-candidate-heading em {
+  color: var(--amber);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.grid-candidate-meta,
+.grid-candidate-notes {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-confidence,
+.grid-candidate-badges span,
+.grid-candidate-scores span {
+  width: fit-content;
+  min-height: 18px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.35rem;
+  color: var(--muted);
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.64rem;
+  text-transform: uppercase;
+}
+
+.grid-confidence.high {
+  color: #101112;
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.grid-confidence.medium {
+  color: #101112;
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.grid-confidence.low {
+  color: var(--rose);
+  border-color: var(--rose);
+}
+
 .field-row {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
