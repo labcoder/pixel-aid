@@ -580,6 +580,110 @@ button:disabled {
   accent-color: var(--cyan);
 }
 
+.dimension-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 68px minmax(0, 1fr);
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.field-row .dimension-number {
+  text-align: right;
+}
+
+.target-preset-row {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: start;
+  margin-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.target-preset-buttons {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.target-preset-buttons button {
+  min-width: 30px;
+  min-height: 24px;
+  padding: 0 0.35rem;
+  color: var(--muted);
+  background: #151818;
+  border-radius: 4px;
+  font-size: 0.68rem;
+}
+
+.target-preset-buttons button.active {
+  color: #101112;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  font-weight: 800;
+}
+
+.rgba-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px 34px minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.rgba-field.is-disabled {
+  opacity: 0.72;
+}
+
+.rgba-swatch {
+  width: 30px;
+  height: 30px;
+  display: block;
+  padding: 3px;
+  background: repeating-linear-gradient(45deg, #111515, #111515 5px, #252b2b 5px, #252b2b 10px);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.rgba-swatch span {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 3px;
+}
+
+.field-row .rgba-picker {
+  padding: 2px;
+}
+
+.field-row .rgba-hex {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.76rem;
+}
+
+.rgba-alpha {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px 34px;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.field-row .rgba-alpha input[type="number"] {
+  padding: 0 0.35rem;
+  text-align: right;
+}
+
+.rgba-alpha small {
+  color: var(--amber);
+  font-size: 0.68rem;
+  text-align: right;
+}
+
 .toggle-row {
   min-height: 30px;
   display: flex;

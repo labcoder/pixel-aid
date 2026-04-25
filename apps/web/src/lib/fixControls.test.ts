@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { deriveGridScale, resizeWithAspectLock } from "./fixControls";
+import { applyTargetSizePreset, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./fixControls";
 
 describe("fix controls", () => {
   test("keeps target aspect locked from the source image", () => {
@@ -35,5 +35,35 @@ describe("fix controls", () => {
       scaleX: 11.03125,
       scaleY: 10.975
     });
+  });
+
+  test("exposes editor-friendly target size presets", () => {
+    expect(targetSizePresets).toEqual([16, 32, 48, 64, 128, 256, 512]);
+  });
+
+  test("applies a target preset through the aspect-lock rules", () => {
+    expect(
+      applyTargetSizePreset({
+        sourceWidth: 706,
+        sourceHeight: 878,
+        targetWidth: 64,
+        targetHeight: 80,
+        dimension: "width",
+        preset: 128,
+        locked: true
+      })
+    ).toEqual({ targetWidth: 128, targetHeight: 159 });
+
+    expect(
+      applyTargetSizePreset({
+        sourceWidth: 706,
+        sourceHeight: 878,
+        targetWidth: 64,
+        targetHeight: 80,
+        dimension: "height",
+        preset: 48,
+        locked: false
+      })
+    ).toEqual({ targetWidth: 64, targetHeight: 48 });
   });
 });

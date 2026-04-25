@@ -25,7 +25,7 @@ import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
-import { deriveGridScale, resizeWithAspectLock } from "./lib/fixControls";
+import { applyTargetSizePreset, deriveGridScale, resizeWithAspectLock, targetSizePresets } from "./lib/fixControls";
 import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -66,6 +66,7 @@ export function App() {
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
   const [outlineSize, setOutlineSize] = useState(1);
   const [outlineColor, setOutlineColor] = useState("#101112");
+  const [outlineAlpha, setOutlineAlpha] = useState(255);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -176,7 +177,7 @@ export function App() {
         preserveSinglePixelDetails: true,
         outlineMode,
         outlineSize,
-        ...(outlineMode === "add" ? { outlineColor } : {})
+        ...(outlineMode === "add" ? { outlineColor, outlineAlpha } : {})
       },
       ...(sheetMode ? { sheet: sheetOptions } : {})
     };
@@ -191,6 +192,7 @@ export function App() {
     maxColors,
     mode,
     outlineColor,
+    outlineAlpha,
     outlineMode,
     outlineSize,
     sheetMode,
@@ -287,27 +289,53 @@ export function App() {
     [alpha, appendLog, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
   );
 
-  const updateTargetSize = useCallback(
-    (changed: "width" | "height", value: number) => {
-      const next = resizeWithAspectLock({
-        sourceWidth: selectedAsset?.image.width ?? targetWidth,
-        sourceHeight: selectedAsset?.image.height ?? targetHeight,
-        targetWidth,
-        targetHeight,
-        changed,
-        value,
-        locked: aspectLocked
-      });
-
-      setTargetWidth(next.targetWidth);
-      setTargetHeight(next.targetHeight);
+  const commitTargetSize = useCallback(
+    (next: { targetWidth: number; targetHeight: number }) => {
+      const nextWidth = Math.max(1, Math.round(next.targetWidth));
+      const nextHeight = Math.max(1, Math.round(next.targetHeight));
+      setTargetWidth(nextWidth);
+      setTargetHeight(nextHeight);
       if (selectedAsset) {
-        const scale = deriveGridScale(selectedAsset.image, { width: next.targetWidth, height: next.targetHeight });
+        const scale = deriveGridScale(selectedAsset.image, { width: nextWidth, height: nextHeight });
         setGridScaleX(scale.scaleX);
         setGridScaleY(scale.scaleY);
       }
     },
-    [aspectLocked, selectedAsset, targetHeight, targetWidth]
+    [selectedAsset]
+  );
+
+  const updateTargetSize = useCallback(
+    (changed: "width" | "height", value: number) => {
+      commitTargetSize(
+        resizeWithAspectLock({
+          sourceWidth: selectedAsset?.image.width ?? targetWidth,
+          sourceHeight: selectedAsset?.image.height ?? targetHeight,
+          targetWidth,
+          targetHeight,
+          changed,
+          value,
+          locked: aspectLocked
+        })
+      );
+    },
+    [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
+  );
+
+  const applyTargetPreset = useCallback(
+    (dimension: "width" | "height", preset: number) => {
+      commitTargetSize(
+        applyTargetSizePreset({
+          sourceWidth: selectedAsset?.image.width ?? targetWidth,
+          sourceHeight: selectedAsset?.image.height ?? targetHeight,
+          targetWidth,
+          targetHeight,
+          dimension,
+          preset,
+          locked: aspectLocked
+        })
+      );
+    },
+    [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
 
   const selectAsset = useCallback(
@@ -611,18 +639,34 @@ export function App() {
             ]}
             onChange={(value) => setMode(value as AssetMode)}
           />
-          <NumberField
+          <DimensionField
             label="Target W"
             value={targetWidth}
             min={1}
+            max={Math.max(512, targetWidth)}
             onChange={(value) => updateTargetSize("width", value)}
           />
-          <NumberField
+          <DimensionField
             label="Target H"
             value={targetHeight}
             min={1}
+            max={Math.max(512, targetHeight)}
             onChange={(value) => updateTargetSize("height", value)}
           />
+          <TargetPresetButtons
+            label={aspectLocked ? "Size presets" : "Width presets"}
+            presets={targetSizePresets}
+            activeValue={targetWidth}
+            onSelect={(preset) => applyTargetPreset("width", preset)}
+          />
+          {!aspectLocked ? (
+            <TargetPresetButtons
+              label="Height presets"
+              presets={targetSizePresets}
+              activeValue={targetHeight}
+              onSelect={(preset) => applyTargetPreset("height", preset)}
+            />
+          ) : null}
           <label className="toggle-row">
             <input
               type="checkbox"
@@ -723,8 +767,10 @@ export function App() {
           <ColorField
             label="Color"
             value={outlineColor}
+            alpha={outlineAlpha}
             disabled={outlineMode !== "add"}
-            onChange={setOutlineColor}
+            onColorChange={setOutlineColor}
+            onAlphaChange={setOutlineAlpha}
           />
           <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
@@ -806,7 +852,10 @@ export function App() {
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
-                  ["Outline", outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px`],
+                  [
+                    "Outline",
+                    outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
+                  ],
                   ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
                 ]}
               />
@@ -1001,23 +1050,181 @@ function NumberField({
   );
 }
 
-function ColorField({
+function DimensionField({
   label,
   value,
-  disabled,
+  min = 1,
+  max = 512,
   onChange
 }: {
   label: string;
-  value: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  const maxValue = Math.max(min, max, value);
+  const commit = (next: number) => onChange(Math.max(min, Math.round(next)));
+
+  return (
+    <div className="field-row dimension-field">
+      <span>{label}</span>
+      <div className="dimension-control">
+        <input
+          className="dimension-number"
+          type="number"
+          min={min}
+          max={maxValue}
+          value={value}
+          onChange={(event) => commit(Number(event.currentTarget.value))}
+        />
+        <input
+          className="dimension-slider"
+          type="range"
+          min={min}
+          max={maxValue}
+          step="1"
+          value={Math.min(value, maxValue)}
+          aria-label={`${label} slider`}
+          onChange={(event) => commit(Number(event.currentTarget.value))}
+        />
+      </div>
+    </div>
+  );
+}
+
+function TargetPresetButtons({
+  label,
+  presets,
+  activeValue,
+  onSelect
+}: {
+  label: string;
+  presets: readonly number[];
+  activeValue: number;
+  onSelect: (value: number) => void;
 }) {
   return (
-    <label className="field-row">
+    <div className="target-preset-row">
       <span>{label}</span>
-      <input type="color" value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
-    </label>
+      <div className="target-preset-buttons">
+        {presets.map((preset) => (
+          <button
+            key={`${label}-${preset}`}
+            type="button"
+            className={activeValue === preset ? "active" : ""}
+            onClick={() => onSelect(preset)}
+          >
+            {preset}
+          </button>
+        ))}
+      </div>
+    </div>
   );
+}
+
+function ColorField({
+  label,
+  value,
+  alpha,
+  disabled,
+  onColorChange,
+  onAlphaChange
+}: {
+  label: string;
+  value: string;
+  alpha: number;
+  disabled?: boolean;
+  onColorChange: (value: string) => void;
+  onAlphaChange: (value: number) => void;
+}) {
+  const [draftHex, setDraftHex] = useState(value);
+  const [r, g, b] = hexToRgb(value);
+  const safeAlpha = clampAlpha(alpha);
+  const alphaPercent = Math.round((safeAlpha / 255) * 100);
+
+  useEffect(() => {
+    setDraftHex(value);
+  }, [value]);
+
+  const commitColor = (next: string) => {
+    setDraftHex(next);
+    const normalized = normalizeHexColor(next);
+    if (normalized) {
+      onColorChange(normalized);
+    }
+  };
+
+  return (
+    <div className={`field-row rgba-field${disabled ? " is-disabled" : ""}`}>
+      <span>{label}</span>
+      <div className="rgba-control">
+        <span className="rgba-swatch" aria-hidden="true">
+          <span style={{ backgroundColor: `rgba(${r}, ${g}, ${b}, ${safeAlpha / 255})` }} />
+        </span>
+        <input
+          className="rgba-picker"
+          type="color"
+          value={value}
+          disabled={disabled}
+          aria-label={`${label} RGB`}
+          onChange={(event) => commitColor(event.currentTarget.value)}
+        />
+        <input
+          className="rgba-hex"
+          type="text"
+          value={draftHex}
+          maxLength={7}
+          spellCheck={false}
+          disabled={disabled}
+          aria-label={`${label} hex color`}
+          onChange={(event) => commitColor(event.currentTarget.value)}
+          onBlur={() => setDraftHex(normalizeHexColor(draftHex) ?? value)}
+        />
+        <div className="rgba-alpha">
+          <input
+            type="range"
+            min="0"
+            max="255"
+            step="1"
+            value={safeAlpha}
+            disabled={disabled}
+            aria-label={`${label} alpha`}
+            onChange={(event) => onAlphaChange(clampAlpha(Number(event.currentTarget.value)))}
+          />
+          <input
+            type="number"
+            min="0"
+            max="255"
+            value={safeAlpha}
+            disabled={disabled}
+            aria-label={`${label} alpha value`}
+            onChange={(event) => onAlphaChange(clampAlpha(Number(event.currentTarget.value)))}
+          />
+          <small>{alphaPercent}%</small>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function normalizeHexColor(value: string): string | null {
+  const trimmed = value.trim();
+  const hex = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+  return /^#[0-9a-fA-F]{6}$/.test(hex) ? hex.toLowerCase() : null;
+}
+
+function hexToRgb(value: string): [number, number, number] {
+  const normalized = normalizeHexColor(value) ?? "#000000";
+  return [
+    Number.parseInt(normalized.slice(1, 3), 16),
+    Number.parseInt(normalized.slice(3, 5), 16),
+    Number.parseInt(normalized.slice(5, 7), 16)
+  ];
+}
+
+function clampAlpha(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.min(255, Math.round(value))) : 255;
 }
 
 function ReadonlyField({ label, value, text = false, disabled = false }: { label: string; value: string; text?: boolean; disabled?: boolean }) {

@@ -68,7 +68,9 @@ The pass treats transparent pixels and detected corner-background pixels as draw
 
 Outline size is applied as repeated 8-neighbor pixel dilation around subject pixels. The pass writes into a cloned output buffer while reading neighbor visibility from the source buffer, so newly added outline pixels do not cascade beyond the requested size during the same operation.
 
-When add mode uses an explicit outline color and the palette is auto-extracted, the fix pipeline reserves that color before frequency-based palette reduction.
+When add mode uses an explicit outline color and alpha, the pass writes that RGBA value into eligible outside pixels. If the palette is auto-extracted, the fix pipeline reserves the explicit RGB color before frequency-based palette reduction and filters quantized duplicates so the exact outline color survives remapping.
+
+Known edge cases remain around noisy adaptive downsampling near silhouettes. The next quality pass should build a binary subject mask before outlining, close tiny background holes in that mask, remove isolated one-pixel exterior artifacts, then composite the outline under the sprite. That would keep adaptive's better color choices while preventing outlines from following accidental edge noise.
 
 ## Sheet Slicing
 

@@ -10,6 +10,13 @@ export type ResizeRequest = {
   locked: boolean;
 };
 
+export const targetSizePresets = [16, 32, 48, 64, 128, 256, 512] as const;
+
+export type TargetSizePresetRequest = Omit<ResizeRequest, "changed" | "value"> & {
+  dimension: "width" | "height";
+  preset: number;
+};
+
 export function resizeWithAspectLock(request: ResizeRequest): { targetWidth: number; targetHeight: number } {
   const value = Math.max(1, Math.round(request.value));
   if (!request.locked || request.sourceWidth <= 0 || request.sourceHeight <= 0) {
@@ -30,6 +37,18 @@ export function resizeWithAspectLock(request: ResizeRequest): { targetWidth: num
     targetWidth: Math.max(1, Math.round(value * aspect)),
     targetHeight: value
   };
+}
+
+export function applyTargetSizePreset(request: TargetSizePresetRequest): { targetWidth: number; targetHeight: number } {
+  return resizeWithAspectLock({
+    sourceWidth: request.sourceWidth,
+    sourceHeight: request.sourceHeight,
+    targetWidth: request.targetWidth,
+    targetHeight: request.targetHeight,
+    changed: request.dimension,
+    value: request.preset,
+    locked: request.locked
+  });
 }
 
 export function deriveGridScale(source: Size, target: Size): { scaleX: number; scaleY: number } {

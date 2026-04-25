@@ -21,6 +21,8 @@ Mode describes the kind of source you are fixing.
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
 
+Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
+
 # Grid
 
 Auto candidate detects likely pseudo-pixel block size, phase, and native output dimensions. Target width and height can guide the candidate, while detected scale and phase fields are read-only unless manual mode is selected.
@@ -54,6 +56,7 @@ Cleanup controls run after block downsampling and alpha handling.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.
 - Outline size controls how many native pixels are added around the sprite.
 - Outline color is used by add mode and is reserved in the generated palette so it is not immediately remapped away.
+- Outline alpha is stored separately from RGB so custom outlines can be fully opaque, semi-transparent, or transparent according to the game style.
 - With preserved alpha, outline cleanup can still draw over detected background pixels such as a white AI-image canvas.
 
 # Timeline
