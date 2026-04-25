@@ -1,5 +1,6 @@
 import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
+import { parseHexColor, rgbToHex } from "./color";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
 import { applyOutlineCleanup } from "./outline";
@@ -22,7 +23,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     color: options.cleanup.outlineColor,
     size: options.cleanup.outlineSize
   });
-  const palette = options.palette ?? extractPalette(outlineCleaned, options.maxColors);
+  const reservedPalette = reservedOutlinePalette(options);
+  const palette = options.palette ?? extractPaletteWithReservedColors(outlineCleaned, options.maxColors, reservedPalette);
   const remapped = remapToPalette(outlineCleaned, palette);
 
   return {
@@ -40,6 +42,26 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     },
     settings: options
   };
+}
+
+function reservedOutlinePalette(options: FixOptions): string[] {
+  if ((options.cleanup.outlineMode ?? "none") === "none" || !options.cleanup.outlineColor) {
+    return [];
+  }
+
+  return [rgbToHex(parseHexColor(options.cleanup.outlineColor))];
+}
+
+function extractPaletteWithReservedColors(image: RGBAImage, maxColors: number, reservedColors: string[]): string[] {
+  if (reservedColors.length === 0) {
+    return extractPalette(image, maxColors);
+  }
+
+  const uniqueReserved = [...new Set(reservedColors)];
+  const remainingBudget = Math.max(0, maxColors - uniqueReserved.length);
+  const extracted = remainingBudget > 0 ? extractPalette(image, remainingBudget) : [];
+
+  return [...uniqueReserved, ...extracted.filter((color) => !uniqueReserved.includes(color))].slice(0, Math.max(1, maxColors));
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {

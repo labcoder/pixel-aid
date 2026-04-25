@@ -377,4 +377,39 @@ describe("fix pipeline", () => {
     expect(result.palette.length).toBeLessThanOrEqual(24);
     expect(result.grid.confidence).toBeGreaterThan(0.82);
   });
+
+  test("reserves custom outline color during palette reduction", () => {
+    const source = createImage(9, 9, [255, 255, 255, 255]);
+    for (let y = 2; y <= 6; y += 1) {
+      for (let x = 2; x <= 6; x += 1) {
+        writePixel(source, x, y, 120, 200, 180, 255);
+      }
+    }
+
+    const result = fixImage(source, {
+      mode: "single",
+      targetWidth: 9,
+      targetHeight: 9,
+      maxColors: 2,
+      grid: {
+        detect: "manual",
+        scale: 1,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        outlineMode: "add",
+        outlineSize: 1,
+        outlineColor: "#443322"
+      }
+    });
+
+    expect(result.palette).toContain("#443322");
+    expect(readPixel(result.image, 1, 1)).toEqual([68, 51, 34, 255]);
+  });
 });
