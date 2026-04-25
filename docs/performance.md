@@ -23,25 +23,36 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 The metrics panel shows:
 
 - Source size.
+- Source color count.
 - Output size.
 - Palette count.
+- Downscale method.
 - Grid confidence.
 - Worker operation duration.
 
 Grid candidates may also include a source crop rectangle. This is useful when a high-resolution single sprite sits on a bright background because the output dimensions and palette pass then reflect the sprite asset instead of the full image canvas.
 
+## Current Benchmark
+
+The core package includes a fixture-driven benchmark for single-sprite cleanup. It exercises the generated high-resolution robot-like source, background-aware grid detection, adaptive downsampling, palette reduction, and cleanup pipeline.
+
+Run it with:
+
+```sh
+npm run benchmark -w @pixelaid/core
+```
+
 ## Future Benchmarks
 
 Add fixtures and budget checks for:
 
-- Generated single-sprite cleanup fixture based on a high-resolution fake-pixel character shape.
 - 720p fake-pixel sprite.
 - 1080p fake-pixel sprite.
 - Large multi-frame sprite sheet.
 - Transparent sprite with halos.
 - Uneven AI-generated sheet with inconsistent gutters.
 
-Run the current benchmark with:
+Run all available benchmarks with:
 
 ```sh
 npm run benchmark

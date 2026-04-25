@@ -56,6 +56,8 @@ Implemented modes:
 - `binary`: threshold alpha to 0 or 255.
 - `backgroundFloodFill`: flood-fill connected edge/corner background color to transparency.
 
+For opaque AI-image backgrounds, `backgroundFloodFill` is the preferred cleanup mode because it converts connected corner background pixels to transparency before outline and palette work. `preserve` is useful when the source already has meaningful alpha or when the user intentionally wants to keep the imported canvas footprint.
+
 ## Outline Cleanup
 
 `applyOutlineCleanup` is an optional post-alpha cleanup pass. It never resizes the image.
@@ -71,6 +73,25 @@ Outline size is applied as repeated 8-neighbor pixel dilation around subject pix
 When add mode uses an explicit outline color and alpha, the pass writes that RGBA value into eligible outside pixels. If the palette is auto-extracted, the fix pipeline reserves the explicit RGB color before frequency-based palette reduction and filters quantized duplicates so the exact outline color survives remapping.
 
 Known edge cases remain around noisy adaptive downsampling near silhouettes. The next quality pass should build a binary subject mask before outlining, close tiny background holes in that mask, remove isolated one-pixel exterior artifacts, then composite the outline under the sprite. That would keep adaptive's better color choices while preventing outlines from following accidental edge noise.
+
+## Single-Sprite Cleanup Quality
+
+The current single-sprite fixture covers a high-resolution fake-pixel character on a bright background. The strongest path today is:
+
+1. Detect foreground bounds from corner background samples.
+2. Align the crop to the detected pseudo-pixel grid.
+3. Downsample with `adaptive` so clean blocks keep their dominant color while mixed blocks fall back to median color.
+4. Use `backgroundFloodFill` for simple opaque backgrounds.
+5. Apply optional outline cleanup.
+6. Reserve explicit outline colors before palette remapping.
+
+The next quality target is a mask-first cleanup stage:
+
+- Build a binary subject mask after alpha/background cleanup.
+- Close one-pixel holes so outlines do not trace accidental interior gaps.
+- Remove isolated exterior pixels that adaptive downsampling can create around silhouettes.
+- Composite added outlines under the cleaned subject mask rather than treating every noisy visible pixel as part of the subject.
+- Record crop and cleanup metadata so the UI can explain why output dimensions changed.
 
 ## Sheet Slicing
 

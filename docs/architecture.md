@@ -14,13 +14,21 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 ## Data Flow
 
 1. The web app decodes an imported image file into an `RGBAImage`.
-2. The viewport renders that native buffer through Canvas2D with smoothing disabled.
-3. The app clones the image buffer and transfers it to a Web Worker.
-4. The worker runs `fixImage` from `packages/core`.
-5. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
-6. The worker transfers the fixed output buffer back to the app.
-7. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
-8. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`.
+2. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
+3. The viewport renders native buffers through Canvas2D with smoothing disabled.
+4. The app clones the selected image buffer and transfers it to a Web Worker.
+5. The worker runs `fixImage` from `packages/core`.
+6. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
+7. The core applies block downsampling, alpha cleanup, optional outline cleanup, and palette extraction/remapping.
+8. The worker transfers the fixed output buffer back to the app.
+9. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
+10. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`, then bundles both files into a ZIP.
+
+## Documentation Flow
+
+The in-app `/docs` route imports markdown from `docs/` as raw text through Vite. Editor section tooltips link to those same sections, so product documentation and in-app help stay in one source of truth.
+
+When adding a new public editor section, update both the markdown file and `apps/web/src/lib/docsContent.ts` so the route and tooltips can find it.
 
 ## Future Extension Points
 

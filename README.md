@@ -2,7 +2,9 @@
 
 PixelAid is a Vite + React + TypeScript editor for turning AI-generated images that only look like pixel art into real, grid-aligned, palette-limited, engine-ready pixel assets.
 
-The first milestone is a functional foundation: import an image, preview it on a pixel-perfect canvas, run a worker-backed block downsample + palette reduction pipeline, and export a ZIP bundle containing a fixed PNG with a JSON manifest.
+The current milestone is a functional editor foundation: import an image, inspect it in a pixel-perfect viewport, run a worker-backed fake-pixel cleanup pipeline, compare before/after output, and export a ZIP bundle containing a fixed PNG plus JSON manifest.
+
+The near-term product focus is single-sprite cleanup for high-resolution AI images on simple backgrounds, followed by sprite-sheet workflows with frame slicing, playback, pivots, and engine-specific exports.
 
 ## Commands
 
@@ -13,11 +15,20 @@ npm install
 npm run dev
 npm run test
 npm run lint
+npm run typecheck
 npm run build
 npm run benchmark
 ```
 
 The web app runs from `apps/web` through the root `npm run dev` command.
+
+Useful scoped commands:
+
+```sh
+npm run test -w @pixelaid/core
+npm run benchmark -w @pixelaid/core
+npm run test -w @pixelaid/web
+```
 
 ## Workspace Layout
 
@@ -31,33 +42,60 @@ packages/fixtures     Generated benchmark fixtures and expected metadata
 docs                  Architecture, algorithms, performance, and licensing notes
 ```
 
-## First Milestone Status
+## Current Workflow
 
-Implemented:
+1. Import an image through the toolbar, drag/drop, file picker, or paste.
+2. Select the asset from the Assets panel. The editor keeps the source image immutable.
+3. Use Auto Suggest for a first pass, then adjust target size, grid, palette, alpha, crop, and outline controls.
+4. Run Fix. The Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping.
+5. Compare source and output in Before, After, or Split view. Pan, zoom, inspect rulers, and watch source/output metrics.
+6. Export a ZIP containing the fixed PNG and generic JSON manifest.
+
+## Implemented Features
+
+Editor:
 
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
+- Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
+- Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, pan, mouse-wheel zoom, rulers, grid overlay, and draggable split comparison.
+- Crop-aware before/after alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
+- Inspector sections for mode, target size, aspect lock, presets, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
+- Source/output metrics and logs in the bottom panel.
+- In-app docs route backed by files in `docs/`, with section tooltips in the editor.
+
+Processing:
+
 - Browser decode adapter from image file to `RGBAImage`.
-- Canvas preview with `imageSmoothingEnabled = false`, checkerboard background, integer zoom, and optional pixel grid.
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
+- Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
-Known limitations:
+## Known Limitations
 
-- Grid detection now handles the first single-sprite fixture, but still needs candidate previews, local drift correction, and stronger sprite-sheet-specific detection.
-- Palette reduction is frequency-based, not a full production quantizer.
-- Manual sheet slicing metadata exists, but the UI does not yet expose full sheet controls.
-- Export currently downloads a ZIP containing PNG + generic JSON only; Godot, Unity, Phaser, and TexturePacker adapters are future work.
+- Single-sprite cleanup is improving, but adaptive downsampling can still produce small exterior artifacts or outline gaps near noisy silhouettes.
+- Grid detection handles the first single-sprite fixture, but still needs candidate previews, clearer confidence explanations, local drift correction, and stronger sprite-sheet-specific detection.
+- Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
+- Manual sheet slicing metadata exists, but the UI does not yet expose full rows/columns/frame/pivot controls.
+- Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
-## Next Steps
+## Prioritized Roadmap
 
-1. Add stronger grid detection with candidate previews and manual candidate selection.
-2. Expand palette controls with fixed palettes and palette locking.
-3. Add sheet slicing controls, frame list, pivots, and timeline playback.
-4. Add engine-specific import helper docs/scripts.
-5. Add benchmark fixtures for larger fake-pixel images and sprite sheets.
+1. Single-sprite cleanup quality: improve subject masking, halo removal, outline repair, gap closing, exterior orphan cleanup, crop metadata, and fixture-backed regression tests.
+2. Grid detection UX: show candidate previews, explain confidence, expose source crop/output rects, and make manual override easier to reason about.
+3. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
+4. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.
+5. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
+6. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts.
+7. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
+8. CLI/API/MCP: expose the deterministic core through batch commands, a local API, and MCP tools after the main cleanup and sheet workflows stabilize.
+9. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
+
+## Suggested Next Step
+
+The next best implementation step is item 1 from the roadmap: make single-sprite cleanup more robust by building a binary subject mask before outlining, closing tiny holes, removing isolated exterior artifacts, and proving the behavior with fixture tests.
