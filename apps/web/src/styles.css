@@ -144,16 +144,19 @@ button:disabled {
   background: var(--surface-1);
   border-color: var(--line);
   min-width: 0;
+  min-height: 0;
 }
 
 .left-panel {
   grid-area: left;
   border-right: 1px solid var(--line);
+  overflow: auto;
 }
 
 .right-panel {
   grid-area: right;
   border-left: 1px solid var(--line);
+  overflow: auto;
 }
 
 .panel-header {
@@ -595,6 +598,7 @@ button:disabled {
   border-top: 1px solid var(--line);
   display: grid;
   grid-template-rows: 40px minmax(0, 1fr);
+  min-height: 0;
 }
 
 .tab-strip {
@@ -624,12 +628,15 @@ button:disabled {
   grid-template-columns: 1.1fr 1fr 0.9fr;
   gap: 1px;
   background: var(--line);
+  overflow: hidden;
 }
 
 .bottom-content section {
   min-width: 0;
+  min-height: 0;
   padding: 12px;
   background: var(--surface-1);
+  overflow: auto;
 }
 
 .timeline-rail {
