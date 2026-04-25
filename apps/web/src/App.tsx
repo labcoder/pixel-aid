@@ -1,8 +1,9 @@
 import {
   Ban,
+  ArrowDown,
+  ArrowUp,
   CircleHelp,
   Download,
-  Eye,
   FileImage,
   Gauge,
   Layers,
@@ -37,6 +38,7 @@ import { suggestFixSettings } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
+import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
@@ -44,9 +46,41 @@ import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
+const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: string; tooltip: string }> = {
+  asset: {
+    title: "Asset",
+    docsId: "fix-settings",
+    tooltip: "Mode, target size, presets, and Auto Suggest."
+  },
+  cleanup: {
+    title: "Cleanup",
+    docsId: "fix-settings",
+    tooltip: "Palette limit, denoise, downscale, alpha, outline, and mask cleanup."
+  },
+  grid: {
+    title: "Grid",
+    docsId: "grid",
+    tooltip: "Pseudo-pixel grid detection and manual grid settings."
+  },
+  frame: {
+    title: "Frame / Cell",
+    docsId: "frame-cell",
+    tooltip: "Sheet frame dimensions, rows, columns, margin, and spacing."
+  },
+  viewport: {
+    title: "Viewport",
+    docsId: "viewport",
+    tooltip: "Preview grid, zoom, pan, split comparison, and rulers."
+  },
+  export: {
+    title: "Export",
+    docsId: "export",
+    tooltip: "Fixed PNG and manifest bundle for engine workflows."
+  }
+};
+
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const presetsRef = useRef<HTMLDivElement | null>(null);
   const [route, setRoute] = useState(window.location.pathname);
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -85,6 +119,7 @@ export function App() {
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
+  const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const activeJobRef = useRef<FixJob | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
@@ -318,6 +353,10 @@ export function App() {
     [alpha, appendLog, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
   );
 
+  const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
+    setInspectorGroupOrder((current) => moveInspectorGroup(current, group, direction));
+  }, []);
+
   const commitTargetSize = useCallback(
     (next: { targetWidth: number; targetHeight: number }) => {
       const nextWidth = Math.max(1, Math.round(next.targetWidth));
@@ -449,6 +488,215 @@ export function App() {
     void importFiles(event.dataTransfer.files);
   };
 
+  const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
+    asset: (
+      <>
+        <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
+          <WandSparkles size={15} />
+          Auto Suggest
+        </button>
+        <p className="control-hint">{suggestionReason}</p>
+        <SelectField
+          label="Mode"
+          value={mode}
+          options={[
+            ["single", "Single sprite"],
+            ["spriteSheet", "Sprite sheet"],
+            ["characterSheet", "Character sheet"],
+            ["tileSheet", "Tile sheet"]
+          ]}
+          onChange={(value) => setMode(value as AssetMode)}
+        />
+        <DimensionField
+          label="Target W"
+          value={targetWidth}
+          min={1}
+          max={Math.max(512, targetWidth)}
+          onChange={(value) => updateTargetSize("width", value)}
+        />
+        <DimensionField
+          label="Target H"
+          value={targetHeight}
+          min={1}
+          max={Math.max(512, targetHeight)}
+          onChange={(value) => updateTargetSize("height", value)}
+        />
+        <TargetPresetButtons
+          label={aspectLocked ? "Size presets" : "Width presets"}
+          presets={targetSizePresets}
+          activeValue={targetWidth}
+          onSelect={(preset) => applyTargetPreset("width", preset)}
+        />
+        {!aspectLocked ? (
+          <TargetPresetButtons
+            label="Height presets"
+            presets={targetSizePresets}
+            activeValue={targetHeight}
+            onSelect={(preset) => applyTargetPreset("height", preset)}
+          />
+        ) : null}
+        <label className="toggle-row">
+          <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
+          Lock aspect ratio
+        </label>
+        <p className="field-note">
+          Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
+        </p>
+      </>
+    ),
+    cleanup: (
+      <>
+        <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
+        <StrengthField
+          label="Denoise"
+          value={denoiseStrength}
+          labelValue={denoiseStrengthLabel(denoiseStrength)}
+          onChange={setDenoiseStrength}
+        />
+        <SelectField
+          label="Downscale"
+          value={downscale}
+          options={[
+            ["dominant", "Dominant"],
+            ["median", "Median"],
+            ["adaptive", "Adaptive"],
+            ["averageThenPalette", "Average + palette"]
+          ]}
+          onChange={(value) => setDownscale(value as DownscaleMethod)}
+        />
+        <SelectField
+          label="Alpha"
+          value={alpha}
+          options={[
+            ["preserve", "Preserve"],
+            ["binary", "Binary"],
+            ["backgroundFloodFill", "Flood fill"]
+          ]}
+          onChange={(value) => setAlpha(value as AlphaMode)}
+        />
+        <SelectField
+          label="Outline"
+          value={outlineMode}
+          options={[
+            ["none", "None"],
+            ["repairExisting", "Repair existing"],
+            ["add", "Add outline"]
+          ]}
+          onChange={(value) => setOutlineMode(value as OutlineMode)}
+        />
+        <NumberField label="Outline px" value={outlineSize} min={1} max={8} disabled={outlineMode === "none"} onChange={setOutlineSize} />
+        <ColorField
+          label="Color"
+          value={outlineColor}
+          alpha={outlineAlpha}
+          disabled={!isOutlineColorEditable(outlineMode)}
+          isAuto={!outlineColorEdited}
+          onColorChange={(value) => {
+            setOutlineColor(value);
+            setOutlineColorEdited(true);
+          }}
+          onAlphaChange={setOutlineAlpha}
+          onResetAuto={() => setOutlineColorEdited(false)}
+        />
+        <label className="toggle-row">
+          <input type="checkbox" checked={removeOrphans} onChange={(event) => setRemoveOrphans(event.currentTarget.checked)} />
+          Remove orphan pixels
+        </label>
+        <label className="toggle-row">
+          <input type="checkbox" checked={jaggyCleanup} onChange={(event) => setJaggyCleanup(event.currentTarget.checked)} />
+          Close 1px gaps
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={preserveSinglePixelDetails}
+            onChange={(event) => setPreserveSinglePixelDetails(event.currentTarget.checked)}
+          />
+          Preserve tiny details
+        </label>
+        <p className="field-note">
+          Cleanup runs before optional outline drawing so adaptive specks and tiny holes do not pull the edge away from the sprite.
+        </p>
+      </>
+    ),
+    grid: (
+      <>
+        <SelectField
+          label="Detect"
+          value={gridDetect}
+          options={[
+            ["auto", "Auto candidate"],
+            ["manual", "Manual target"]
+          ]}
+          onChange={(value) => setGridDetect(value as "auto" | "manual")}
+        />
+        <NumberField
+          label="Scale X"
+          value={Number(gridScaleX.toFixed(3))}
+          min={0.01}
+          step={0.01}
+          disabled={gridDetect === "auto"}
+          onChange={setGridScaleX}
+        />
+        <NumberField
+          label="Scale Y"
+          value={Number(gridScaleY.toFixed(3))}
+          min={0.01}
+          step={0.01}
+          disabled={gridDetect === "auto"}
+          onChange={setGridScaleY}
+        />
+        <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
+        <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={cropToBounds}
+            disabled={mode !== "single" || gridDetect !== "auto"}
+            onChange={(event) => setCropToBounds(event.currentTarget.checked)}
+          />
+          Crop to detected bounds
+        </label>
+        <p className="field-note">
+          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while target size still guides the grid.
+        </p>
+      </>
+    ),
+    frame: sheetMode ? (
+      <>
+        <NumberField label="Frame W" value={frameWidth} min={1} onChange={setFrameWidth} />
+        <NumberField label="Frame H" value={frameHeight} min={1} onChange={setFrameHeight} />
+        <NumberField label="Rows" value={sheetRows} min={1} onChange={setSheetRows} />
+        <NumberField label="Columns" value={sheetColumns} min={1} onChange={setSheetColumns} />
+        <NumberField label="Margin" value={sheetMargin} min={0} onChange={setSheetMargin} />
+        <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={setSheetSpacing} />
+        <p className="field-note">Frame size describes each sprite tile inside the larger fixed sheet. Bounds are shown in the viewport.</p>
+      </>
+    ) : (
+      <p className="field-note">Frame controls activate for sprite sheet, character sheet, and tile sheet modes.</p>
+    ),
+    viewport: (
+      <>
+        <label className="toggle-row">
+          <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
+          Show grid overlay
+        </label>
+        <label className="field-row">
+          <span>Zoom</span>
+          <input type="range" min="0.05" max="16" step="0.05" value={zoom} onChange={(event) => setZoom(Number(event.currentTarget.value))} />
+        </label>
+      </>
+    ),
+    export: (
+      <>
+        <Field label="Target" value="Generic JSON" />
+        <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
+        <ReadonlyField label="Spacing" value="0" />
+        <ReadonlyField label="Extrude" value="1" />
+      </>
+    )
+  };
+
   if (route === "/docs") {
     return <DocsPage onBack={openEditor} />;
   }
@@ -501,23 +749,9 @@ export function App() {
             <Ban size={16} />
             Cancel
           </button>
-          <button type="button" onClick={() => setViewMode(viewMode === "after" ? "before" : "after")}>
-            <Eye size={16} />
-            Preview
-          </button>
           <button type="button" disabled={!fixResult} onClick={exportFixedAsset}>
             <Download size={16} />
             Export
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              presetsRef.current?.scrollIntoView({ block: "nearest" });
-              presetsRef.current?.querySelector("button")?.focus();
-            }}
-          >
-            <SlidersHorizontal size={16} />
-            Presets
           </button>
         </nav>
       </header>
@@ -593,7 +827,7 @@ export function App() {
           <PaletteSwatches label="Source" colors={sourcePalette} emptyText="Import an asset" />
           <PaletteSwatches label="Output" colors={outputPalette.slice(0, 8)} emptyText="Run Fix" />
         </section>
-        <section className="panel-section" ref={presetsRef}>
+        <section className="panel-section">
           <h2>Presets</h2>
           <div className="preset-list">
             {editorPresets.map((preset) => (
@@ -649,230 +883,21 @@ export function App() {
 
       <aside className="right-panel panel" aria-label="Inspector">
         <PanelHeader icon={<SlidersHorizontal size={16} />} title="Inspector" />
-        <details className="control-group fix-setup" open>
-          <SectionSummary title="Fix Setup" docsId="fix-settings" tooltip="Mode, target size, grid detection, palette, and cleanup controls." onDocs={openDocs} />
-          <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
-            <WandSparkles size={15} />
-            Auto Suggest
-          </button>
-          <p className="control-hint">{suggestionReason}</p>
-          <div className="subsection-label">Asset</div>
-          <SelectField
-            label="Mode"
-            value={mode}
-            options={[
-              ["single", "Single sprite"],
-              ["spriteSheet", "Sprite sheet"],
-              ["characterSheet", "Character sheet"],
-              ["tileSheet", "Tile sheet"]
-            ]}
-            onChange={(value) => setMode(value as AssetMode)}
-          />
-          <DimensionField
-            label="Target W"
-            value={targetWidth}
-            min={1}
-            max={Math.max(512, targetWidth)}
-            onChange={(value) => updateTargetSize("width", value)}
-          />
-          <DimensionField
-            label="Target H"
-            value={targetHeight}
-            min={1}
-            max={Math.max(512, targetHeight)}
-            onChange={(value) => updateTargetSize("height", value)}
-          />
-          <TargetPresetButtons
-            label={aspectLocked ? "Size presets" : "Width presets"}
-            presets={targetSizePresets}
-            activeValue={targetWidth}
-            onSelect={(preset) => applyTargetPreset("width", preset)}
-          />
-          {!aspectLocked ? (
-            <TargetPresetButtons
-              label="Height presets"
-              presets={targetSizePresets}
-              activeValue={targetHeight}
-              onSelect={(preset) => applyTargetPreset("height", preset)}
-            />
-          ) : null}
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={aspectLocked}
-              onChange={(event) => setAspectLocked(event.currentTarget.checked)}
-            />
-            Lock aspect ratio
-          </label>
-          <p className="field-note">
-            Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
-          </p>
-          {sheetMode ? (
-            <>
-              <div className="subsection-label">Frame / Cell</div>
-              <NumberField label="Frame W" value={frameWidth} min={1} onChange={setFrameWidth} />
-              <NumberField label="Frame H" value={frameHeight} min={1} onChange={setFrameHeight} />
-              <NumberField label="Rows" value={sheetRows} min={1} onChange={setSheetRows} />
-              <NumberField label="Columns" value={sheetColumns} min={1} onChange={setSheetColumns} />
-              <NumberField label="Margin" value={sheetMargin} min={0} onChange={setSheetMargin} />
-              <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={setSheetSpacing} />
-              <p className="field-note">
-                Frame size describes each sprite tile inside the larger fixed sheet. Bounds are shown in the viewport.
-              </p>
-            </>
-          ) : null}
-          <div className="subsection-label">Grid</div>
-          <SelectField
-            label="Detect"
-            value={gridDetect}
-            options={[
-              ["auto", "Auto candidate"],
-              ["manual", "Manual target"]
-            ]}
-            onChange={(value) => setGridDetect(value as "auto" | "manual")}
-          />
-          <NumberField
-            label="Scale X"
-            value={Number(gridScaleX.toFixed(3))}
-            min={0.01}
-            step={0.01}
-            disabled={gridDetect === "auto"}
-            onChange={setGridScaleX}
-          />
-          <NumberField
-            label="Scale Y"
-            value={Number(gridScaleY.toFixed(3))}
-            min={0.01}
-            step={0.01}
-            disabled={gridDetect === "auto"}
-            onChange={setGridScaleY}
-          />
-          <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
-          <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={cropToBounds}
-              disabled={mode !== "single" || gridDetect !== "auto"}
-              onChange={(event) => setCropToBounds(event.currentTarget.checked)}
-            />
-            Crop to detected bounds
-          </label>
-          <p className="field-note">
-            Scale is source pixels per output pixel. Phase shifts where the sampling grid starts.
-            Crop trims single sprites to the detected foreground bounds while target size still guides the grid.
-          </p>
-          <div className="subsection-label">Cleanup</div>
-          <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
-          <StrengthField
-            label="Denoise"
-            value={denoiseStrength}
-            labelValue={denoiseStrengthLabel(denoiseStrength)}
-            onChange={setDenoiseStrength}
-          />
-          <SelectField
-            label="Downscale"
-            value={downscale}
-            options={[
-              ["dominant", "Dominant"],
-              ["median", "Median"],
-              ["adaptive", "Adaptive"],
-              ["averageThenPalette", "Average + palette"]
-            ]}
-            onChange={(value) => setDownscale(value as DownscaleMethod)}
-          />
-          <SelectField
-            label="Alpha"
-            value={alpha}
-            options={[
-              ["preserve", "Preserve"],
-              ["binary", "Binary"],
-              ["backgroundFloodFill", "Flood fill"]
-            ]}
-            onChange={(value) => setAlpha(value as AlphaMode)}
-          />
-          <SelectField
-            label="Outline"
-            value={outlineMode}
-            options={[
-              ["none", "None"],
-              ["repairExisting", "Repair existing"],
-              ["add", "Add outline"]
-            ]}
-            onChange={(value) => setOutlineMode(value as OutlineMode)}
-          />
-          <NumberField
-            label="Outline px"
-            value={outlineSize}
-            min={1}
-            max={8}
-            disabled={outlineMode === "none"}
-            onChange={setOutlineSize}
-          />
-          <ColorField
-            label="Color"
-            value={outlineColor}
-            alpha={outlineAlpha}
-            disabled={!isOutlineColorEditable(outlineMode)}
-            isAuto={!outlineColorEdited}
-            onColorChange={(value) => {
-              setOutlineColor(value);
-              setOutlineColorEdited(true);
-            }}
-            onAlphaChange={setOutlineAlpha}
-            onResetAuto={() => setOutlineColorEdited(false)}
-          />
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={removeOrphans}
-              onChange={(event) => setRemoveOrphans(event.currentTarget.checked)}
-            />
-            Remove orphan pixels
-          </label>
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={jaggyCleanup}
-              onChange={(event) => setJaggyCleanup(event.currentTarget.checked)}
-            />
-            Close 1px gaps
-          </label>
-          <label className="toggle-row">
-            <input
-              type="checkbox"
-              checked={preserveSinglePixelDetails}
-              onChange={(event) => setPreserveSinglePixelDetails(event.currentTarget.checked)}
-            />
-            Preserve tiny details
-          </label>
-          <p className="field-note">
-            Mask cleanup runs before optional outline drawing so adaptive specks and tiny holes do not pull the edge away from the sprite.
-          </p>
-          <div className="subsection-label">Viewport</div>
-          <label className="toggle-row">
-            <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
-            Show grid overlay
-          </label>
-          <label className="field-row">
-            <span>Zoom</span>
-            <input
-              type="range"
-              min="1"
-              max="16"
-              step="1"
-              value={zoom}
-              onChange={(event) => setZoom(Number(event.currentTarget.value))}
-            />
-          </label>
-        </details>
-        <details className="control-group" open>
-          <SectionSummary title="Export" docsId="export" tooltip="Fixed PNG and manifest bundle for engine workflows." onDocs={openDocs} />
-          <Field label="Target" value="Generic JSON" />
-          <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
-          <ReadonlyField label="Spacing" value="0" />
-          <ReadonlyField label="Extrude" value="1" />
-        </details>
+        {inspectorGroupOrder.map((group, index) => (
+          <InspectorGroup
+            key={group}
+            title={inspectorGroupMeta[group].title}
+            docsId={inspectorGroupMeta[group].docsId}
+            tooltip={inspectorGroupMeta[group].tooltip}
+            onDocs={openDocs}
+            canMoveUp={index > 0}
+            canMoveDown={index < inspectorGroupOrder.length - 1}
+            onMoveUp={() => moveInspectorGroupInPanel(group, "up")}
+            onMoveDown={() => moveInspectorGroupInPanel(group, "down")}
+          >
+            {inspectorGroupContent[group]}
+          </InspectorGroup>
+        ))}
       </aside>
 
       <footer className="bottom-panel panel" aria-label="Timeline logs and metrics">
@@ -1011,22 +1036,63 @@ function SectionTitle({
   );
 }
 
-function SectionSummary({
+function InspectorGroup({
   title,
   docsId,
   tooltip,
-  onDocs
+  onDocs,
+  canMoveUp,
+  canMoveDown,
+  onMoveUp,
+  onMoveDown,
+  children
 }: {
   title: string;
   docsId: string;
   tooltip: string;
   onDocs: (sectionId: string) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  children: ReactNode;
 }) {
   return (
-    <summary>
-      <span>{title}</span>
-      <HelpButton docsId={docsId} tooltip={tooltip} onDocs={onDocs} />
-    </summary>
+    <details className="control-group" open>
+      <summary>
+        <span>{title}</span>
+        <span className="inspector-group-actions">
+          <button
+            type="button"
+            className="mini-icon-button"
+            disabled={!canMoveUp}
+            aria-label={`Move ${title} up`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onMoveUp();
+            }}
+          >
+            <ArrowUp size={13} />
+          </button>
+          <button
+            type="button"
+            className="mini-icon-button"
+            disabled={!canMoveDown}
+            aria-label={`Move ${title} down`}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onMoveDown();
+            }}
+          >
+            <ArrowDown size={13} />
+          </button>
+          <HelpButton docsId={docsId} tooltip={tooltip} onDocs={onDocs} />
+        </span>
+      </summary>
+      {children}
+    </details>
   );
 }
 
