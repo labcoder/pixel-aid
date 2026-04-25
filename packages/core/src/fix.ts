@@ -20,7 +20,9 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     alpha: options.alpha
   });
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
-  const denoised = applyDenoise(alphaCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
+  const outlinePadding = getAutoCroppedOutlinePadding(options, grid);
+  const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
+  const denoised = applyDenoise(paddedForOutline, { strength: options.cleanup.denoiseStrength ?? 0 });
   const outlineCleaned = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     alpha: options.cleanup.outlineAlpha,
@@ -32,11 +34,12 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const reservedPalette = reservedOutlinePalette(options);
   const palette = options.palette ?? extractPaletteWithReservedColors(outlineCleaned, options.maxColors, reservedPalette);
   const remapped = remapToPalette(outlineCleaned, palette);
+  const resultGrid = outlinePadding > 0 ? padGridForOutline(grid, outlinePadding) : grid;
 
   return {
     image: remapped,
     palette,
-    grid,
+    grid: resultGrid,
     metrics: {
       durationMs: 0,
       sourceWidth: image.width,
@@ -44,10 +47,97 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
       outputWidth: remapped.width,
       outputHeight: remapped.height,
       paletteCount: palette.length,
-      gridConfidence: grid.confidence
+      gridConfidence: resultGrid.confidence
     },
     settings: options
   };
+}
+
+function getAutoCroppedOutlinePadding(options: FixOptions, grid: GridCandidate): number {
+  const outlineMode = options.cleanup.outlineMode ?? "none";
+  const cropToBounds = options.grid.cropToBounds ?? options.mode === "single";
+  if (outlineMode === "none" || options.grid.detect !== "auto" || !cropToBounds || !grid.sourceRect) {
+    return 0;
+  }
+
+  const size = options.cleanup.outlineSize ?? 1;
+  if (!Number.isFinite(size)) {
+    return 1;
+  }
+
+  return Math.max(1, Math.min(8, Math.round(size)));
+}
+
+function padImageForOutline(image: RGBAImage, padding: number, alpha: FixOptions["alpha"]): RGBAImage {
+  const background = alpha === "backgroundFloodFill" ? [0, 0, 0, 0] : estimateImageCornerColor(image);
+  const outputWidth = image.width + padding * 2;
+  const outputHeight = image.height + padding * 2;
+  const data = new Uint8ClampedArray(outputWidth * outputHeight * 4);
+
+  for (let offset = 0; offset < data.length; offset += 4) {
+    data[offset] = background[0]!;
+    data[offset + 1] = background[1]!;
+    data[offset + 2] = background[2]!;
+    data[offset + 3] = background[3]!;
+  }
+
+  for (let y = 0; y < image.height; y += 1) {
+    const sourceOffset = y * image.width * 4;
+    const targetOffset = ((y + padding) * outputWidth + padding) * 4;
+    data.set(image.data.subarray(sourceOffset, sourceOffset + image.width * 4), targetOffset);
+  }
+
+  return {
+    width: outputWidth,
+    height: outputHeight,
+    data
+  };
+}
+
+function padGridForOutline(grid: GridCandidate, padding: number): GridCandidate {
+  const padded: GridCandidate = {
+    ...grid,
+    outputWidth: grid.outputWidth + padding * 2,
+    outputHeight: grid.outputHeight + padding * 2,
+    reason: `${grid.reason}; padded ${padding}px for outline`
+  };
+
+  if (grid.sourceRect) {
+    padded.sourceRect = {
+      x: grid.sourceRect.x - padding * grid.scaleX,
+      y: grid.sourceRect.y - padding * grid.scaleY,
+      w: grid.sourceRect.w + padding * grid.scaleX * 2,
+      h: grid.sourceRect.h + padding * grid.scaleY * 2
+    };
+  }
+
+  return padded;
+}
+
+function estimateImageCornerColor(image: RGBAImage): [number, number, number, number] {
+  const sampleSize = Math.max(1, Math.min(4, image.width, image.height));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let count = 0;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      const topLeft = (y * image.width + x) * 4;
+      const topRight = (y * image.width + image.width - sampleSize + x) * 4;
+      const bottomLeft = ((image.height - sampleSize + y) * image.width + x) * 4;
+      const bottomRight = ((image.height - sampleSize + y) * image.width + image.width - sampleSize + x) * 4;
+
+      r += image.data[topLeft]! + image.data[topRight]! + image.data[bottomLeft]! + image.data[bottomRight]!;
+      g += image.data[topLeft + 1]! + image.data[topRight + 1]! + image.data[bottomLeft + 1]! + image.data[bottomRight + 1]!;
+      b += image.data[topLeft + 2]! + image.data[topRight + 2]! + image.data[bottomLeft + 2]! + image.data[bottomRight + 2]!;
+      a += image.data[topLeft + 3]! + image.data[topRight + 3]! + image.data[bottomLeft + 3]! + image.data[bottomRight + 3]!;
+      count += 4;
+    }
+  }
+
+  return [Math.round(r / count), Math.round(g / count), Math.round(b / count), Math.round(a / count)];
 }
 
 function reservedOutlinePalette(options: FixOptions): string[] {

@@ -610,6 +610,44 @@ describe("fix pipeline", () => {
     expect(readPixel(result.image, 0, 0)).toEqual([68, 51, 34, 128]);
   });
 
+  test("adds native padding for outlines on auto-cropped preserved-alpha sprites", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+
+    const result = fixImage(fixture.image, {
+      mode: "single",
+      targetWidth: fixture.expected.nativeWidth,
+      targetHeight: fixture.expected.nativeHeight,
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        scaleX: fixture.expected.scale,
+        scaleY: fixture.expected.scale
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        outlineMode: "add",
+        outlineSize: 1,
+        outlineColor: "#101112"
+      }
+    });
+
+    expect(result.image.width).toBe(104);
+    expect(result.image.height).toBe(146);
+    expect(result.grid.outputWidth).toBe(104);
+    expect(result.grid.outputHeight).toBe(146);
+    expect(result.grid.sourceRect).toEqual({
+      x: fixture.expected.foregroundBounds.x - fixture.expected.scale,
+      y: fixture.expected.foregroundBounds.y - fixture.expected.scale,
+      w: fixture.expected.foregroundBounds.w + fixture.expected.scale * 2,
+      h: fixture.expected.foregroundBounds.h + fixture.expected.scale * 2
+    });
+    expect(readPixel(result.image, 47, 0)).toEqual([16, 17, 18, 255]);
+  });
+
   test("passes orphan and gap cleanup into the outline stage", () => {
     const source = createImage(7, 5);
     for (let y = 1; y <= 3; y += 1) {
