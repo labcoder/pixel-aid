@@ -560,6 +560,7 @@ export function App() {
         <ViewportCanvas
           sourceImage={selectedAsset?.image ?? null}
           fixedImage={fixResult?.image ?? null}
+          fixedSourceRect={fixResult?.grid.sourceRect}
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}

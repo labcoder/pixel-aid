@@ -2,7 +2,7 @@ import type { Rect as FrameRect, RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chooseRulerTickStep, clampZoom, getComparisonSize, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
+import { chooseRulerTickStep, clampZoom, getAlignedComparisonRects, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -13,11 +13,21 @@ export type ViewportCanvasProps = {
   viewMode: ViewMode;
   zoom: number;
   showGrid: boolean;
+  fixedSourceRect?: FrameRect | undefined;
   frameRects?: FrameRect[];
   onZoomChange: (zoom: number) => void;
 };
 
-export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGrid, frameRects = [], onZoomChange }: ViewportCanvasProps) {
+export function ViewportCanvas({
+  sourceImage,
+  fixedImage,
+  viewMode,
+  zoom,
+  showGrid,
+  fixedSourceRect,
+  frameRects = [],
+  onZoomChange
+}: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
@@ -75,6 +85,7 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
         viewMode,
         zoom,
         showGrid,
+        fixedSourceRect,
         frameRects,
         panRef.current,
         splitRatioRef.current
@@ -85,7 +96,7 @@ export function ViewportCanvas({ sourceImage, fixedImage, viewMode, zoom, showGr
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fixedImage, frameRects, renderKey, showGrid, sourceImage, viewMode, zoom]);
+  }, [fixedImage, fixedSourceRect, frameRects, renderKey, showGrid, sourceImage, viewMode, zoom]);
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 || !sourceImage) {
@@ -234,30 +245,29 @@ function drawImageView(
   viewMode: ViewMode,
   zoom: number,
   showGrid: boolean,
+  fixedSourceRect: FrameRect | undefined,
   frameRects: FrameRect[],
   pan: Point,
   splitRatio: number
 ): void {
   const afterCanvas = fixedCanvas ?? sourceCanvas;
   const activeCanvas = viewMode === "after" ? afterCanvas : sourceCanvas;
-  const comparisonSize =
-    viewMode === "split" && fixedCanvas
-      ? getComparisonSize(
-          { width: sourceCanvas.width, height: sourceCanvas.height },
-          { width: fixedCanvas.width, height: fixedCanvas.height }
-        )
-      : { width: activeCanvas.width, height: activeCanvas.height };
-  const rect = getImageDrawRect({ width, height }, comparisonSize, zoom, pan);
-  const drawWidth = rect.width;
-  const drawHeight = rect.height;
-  const x = rect.x;
-  const y = rect.y;
+  const activeSize = { width: activeCanvas.width, height: activeCanvas.height };
+  const rect = getImageDrawRect({ width, height }, activeSize, zoom, pan);
 
   ctx.imageSmoothingEnabled = false;
   if (viewMode === "split" && fixedCanvas) {
+    const layout = getAlignedComparisonRects({
+      viewport: { width, height },
+      before: { width: sourceCanvas.width, height: sourceCanvas.height },
+      after: { width: fixedCanvas.width, height: fixedCanvas.height },
+      afterSourceRect: fixedSourceRect,
+      zoom,
+      pan
+    });
     const splitX = Math.floor(width * splitRatio);
-    drawClipped(ctx, sourceCanvas, x, y, drawWidth, drawHeight, 0, splitX);
-    drawClipped(ctx, fixedCanvas, x, y, drawWidth, drawHeight, splitX, width - splitX);
+    drawClipped(ctx, sourceCanvas, layout.before, 0, splitX);
+    drawClipped(ctx, fixedCanvas, layout.after, splitX, width - splitX);
     ctx.fillStyle = "#101112";
     ctx.fillRect(splitX - 3, 0, 6, height);
     ctx.strokeStyle = "#f1c75b";
@@ -266,21 +276,26 @@ function drawImageView(
     ctx.lineTo(splitX + 0.5, height);
     ctx.stroke();
     ctx.fillStyle = "#f1c75b";
-    ctx.fillRect(splitX - 10, Math.max(8, y - 28), 20, 18);
+    ctx.fillRect(splitX - 10, Math.max(8, Math.min(layout.before.y, layout.after.y) - 28), 20, 18);
     ctx.fillStyle = "#101112";
     ctx.font = "10px Consolas, monospace";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText("S", splitX, Math.max(17, y - 19));
-  } else {
-    ctx.drawImage(activeCanvas, x, y, drawWidth, drawHeight);
-  }
+    ctx.fillText("S", splitX, Math.max(17, Math.min(layout.before.y, layout.after.y) - 19));
 
-  if (showGrid && zoom >= 4) {
-    drawPixelGrid(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
+    if (showGrid && zoom >= 4) {
+      drawPixelGrid(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, zoom);
+    }
+    drawFrameBounds(ctx, layout.after.x, layout.after.y, frameRects, layout.after.width / fixedCanvas.width);
+    drawRulers(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, zoom);
+  } else {
+    ctx.drawImage(activeCanvas, rect.x, rect.y, rect.width, rect.height);
+    if (showGrid && zoom >= 4) {
+      drawPixelGrid(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
+    }
+    drawFrameBounds(ctx, rect.x, rect.y, frameRects, zoom);
+    drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
   }
-  drawFrameBounds(ctx, x, y, frameRects, zoom);
-  drawRulers(ctx, x, y, comparisonSize.width, comparisonSize.height, zoom);
 }
 
 function drawFrameBounds(ctx: CanvasRenderingContext2D, startX: number, startY: number, frameRects: FrameRect[], zoom: number): void {
@@ -301,10 +316,7 @@ function drawFrameBounds(ctx: CanvasRenderingContext2D, startX: number, startY: 
 function drawClipped(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
+  rect: { x: number; y: number; width: number; height: number },
   clipX: number,
   clipWidth: number
 ): void {
@@ -312,7 +324,7 @@ function drawClipped(
   ctx.beginPath();
   ctx.rect(clipX, 0, clipWidth, ctx.canvas.height);
   ctx.clip();
-  ctx.drawImage(canvas, x, y, width, height);
+  ctx.drawImage(canvas, rect.x, rect.y, rect.width, rect.height);
   ctx.restore();
 }
 

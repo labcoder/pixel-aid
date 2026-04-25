@@ -10,6 +10,18 @@ export type Point = {
 
 export type Rect = Point & Size;
 
+export type SourceRect = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+};
+
+export type ComparisonLayout = {
+  before: Rect;
+  after: Rect;
+};
+
 export function getImageDrawRect(viewport: Size, image: Size, zoom: number, pan: Point): Rect {
   const width = image.width * zoom;
   const height = image.height * zoom;
@@ -18,6 +30,50 @@ export function getImageDrawRect(viewport: Size, image: Size, zoom: number, pan:
     y: Math.floor((viewport.height - height) / 2 + pan.y),
     width,
     height
+  };
+}
+
+export function getAlignedComparisonRects({
+  viewport,
+  before,
+  after,
+  afterSourceRect,
+  zoom,
+  pan
+}: {
+  viewport: Size;
+  before: Size;
+  after: Size;
+  afterSourceRect?: SourceRect | undefined;
+  zoom: number;
+  pan: Point;
+}): ComparisonLayout {
+  const beforeRect = getImageDrawRect(viewport, before, zoom, pan);
+  if (!afterSourceRect) {
+    return {
+      before: beforeRect,
+      after: getImageDrawRect(viewport, after, zoom, pan)
+    };
+  }
+
+  const sourceScaleX = afterSourceRect.w / after.width;
+  const sourceScaleY = afterSourceRect.h / after.height;
+  const uniformSourceScale = Math.max(0.01, Math.min(sourceScaleX, sourceScaleY));
+  const afterWidth = after.width * uniformSourceScale * zoom;
+  const afterHeight = after.height * uniformSourceScale * zoom;
+  const sourceFootprintWidth = afterSourceRect.w * zoom;
+  const sourceFootprintHeight = afterSourceRect.h * zoom;
+  const sourceFootprintX = beforeRect.x + afterSourceRect.x * zoom;
+  const sourceFootprintY = beforeRect.y + afterSourceRect.y * zoom;
+
+  return {
+    before: beforeRect,
+    after: {
+      x: Math.floor(sourceFootprintX + (sourceFootprintWidth - afterWidth) / 2),
+      y: Math.floor(sourceFootprintY + (sourceFootprintHeight - afterHeight) / 2),
+      width: Math.round(afterWidth),
+      height: Math.round(afterHeight)
+    }
   };
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { chooseRulerTickStep, getComparisonSize, getImageDrawRect, zoomAtPoint } from "./viewportMath";
+import { chooseRulerTickStep, getAlignedComparisonRects, getComparisonSize, getImageDrawRect, zoomAtPoint } from "./viewportMath";
 
 describe("viewport math", () => {
   test("centers the image with pan offset applied", () => {
@@ -35,5 +35,33 @@ describe("viewport math", () => {
       width: 64,
       height: 32
     });
+  });
+
+  test("aligns a cropped fixed image back into its source crop without stretching", () => {
+    const layout = getAlignedComparisonRects({
+      viewport: { width: 900, height: 700 },
+      before: { width: 706, height: 878 },
+      after: { width: 102, height: 144 },
+      afterSourceRect: { x: 50, y: 1, w: 612, h: 864 },
+      zoom: 1,
+      pan: { x: 0, y: 0 }
+    });
+
+    expect(layout.before).toEqual({ x: 97, y: -89, width: 706, height: 878 });
+    expect(layout.after).toEqual({ x: 147, y: -88, width: 612, height: 864 });
+  });
+
+  test("centers a non-matching fixed crop inside the detected source footprint", () => {
+    const layout = getAlignedComparisonRects({
+      viewport: { width: 200, height: 100 },
+      before: { width: 100, height: 50 },
+      after: { width: 20, height: 20 },
+      afterSourceRect: { x: 10, y: 5, w: 80, h: 40 },
+      zoom: 2,
+      pan: { x: 0, y: 0 }
+    });
+
+    expect(layout.before).toEqual({ x: 0, y: 0, width: 200, height: 100 });
+    expect(layout.after).toEqual({ x: 60, y: 10, width: 80, height: 80 });
   });
 });
