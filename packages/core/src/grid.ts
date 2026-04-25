@@ -8,6 +8,7 @@ export type GridDetectionOptions = {
 export function detectGridCandidates(image: RGBAImage, options: GridDetectionOptions = {}): GridCandidate[] {
   const maxScale = Math.max(1, Math.min(options.maxScale ?? 32, image.width, image.height));
   const bounds = detectSpriteBounds(image);
+  const cropBounds = hasMeaningfulCrop(bounds, image) ? bounds : undefined;
   const vertical = verticalEdgeEnergy(image);
   const horizontal = horizontalEdgeEnergy(image);
   const runScores = runLengthScores(image, bounds, maxScale);
@@ -19,8 +20,9 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   for (let scale = 2; scale <= maxScale; scale += 1) {
     const bestX = bestPhase(vertical, scale);
     const bestY = bestPhase(horizontal, scale);
-    const outputWidth = Math.floor((image.width - bestX.phase) / scale);
-    const outputHeight = Math.floor((image.height - bestY.phase) / scale);
+    const sourceRect = cropBounds ? alignRectToGrid(cropBounds, scale, bestX.phase, bestY.phase, image) : undefined;
+    const outputWidth = sourceRect ? Math.floor(sourceRect.w / scale) : Math.floor((image.width - bestX.phase) / scale);
+    const outputHeight = sourceRect ? Math.floor(sourceRect.h / scale) : Math.floor((image.height - bestY.phase) / scale);
     if (outputWidth <= 0 || outputHeight <= 0) {
       continue;
     }
@@ -39,7 +41,7 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
       Math.min(1, hybridScore * 0.78 + divisibility * 0.04 + sizeScore * 0.12 + scaleScore * 0.06)
     );
 
-    candidates.push({
+    const candidate: GridCandidate = {
       outputWidth,
       outputHeight,
       scaleX: scale,
@@ -48,7 +50,11 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
       phaseY: bestY.phase,
       confidence,
       reason: runScore > 0.5 ? `Hybrid edge/run score at ${scale}px source blocks` : `Periodic edge energy at ${scale}px source blocks`
-    });
+    };
+    if (sourceRect) {
+      candidate.sourceRect = sourceRect;
+    }
+    candidates.push(candidate);
   }
 
   if (candidates.length === 0) {
@@ -67,6 +73,43 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   }
 
   return candidates.sort((a, b) => b.confidence - a.confidence || a.scaleX - b.scaleX).slice(0, 5);
+}
+
+function hasMeaningfulCrop(bounds: Rect, image: RGBAImage): boolean {
+  if (bounds.x === 0 && bounds.y === 0 && bounds.w === image.width && bounds.h === image.height) {
+    return false;
+  }
+
+  const boundsArea = bounds.w * bounds.h;
+  const imageArea = image.width * image.height;
+  return bounds.w > 1 && bounds.h > 1 && boundsArea < imageArea * 0.98;
+}
+
+function alignRectToGrid(bounds: Rect, scale: number, phaseX: number, phaseY: number, image: RGBAImage): Rect {
+  const x = Math.max(0, alignStart(bounds.x, phaseX, scale));
+  const y = Math.max(0, alignStart(bounds.y, phaseY, scale));
+  const right = Math.min(image.width, alignEnd(bounds.x + bounds.w, phaseX, scale));
+  const bottom = Math.min(image.height, alignEnd(bounds.y + bounds.h, phaseY, scale));
+
+  return {
+    x,
+    y,
+    w: Math.max(scale, right - x),
+    h: Math.max(scale, bottom - y)
+  };
+}
+
+function alignStart(value: number, phase: number, scale: number): number {
+  return value - positiveModulo(value - phase, scale);
+}
+
+function alignEnd(value: number, phase: number, scale: number): number {
+  const modulo = positiveModulo(value - phase, scale);
+  return modulo === 0 ? value : value + scale - modulo;
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
 }
 
 function plausibleOutputScore(sourceWidth: number, sourceHeight: number, outputWidth: number, outputHeight: number): number {

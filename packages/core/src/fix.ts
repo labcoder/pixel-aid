@@ -11,8 +11,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     outputHeight: grid.outputHeight,
     scaleX: grid.scaleX,
     scaleY: grid.scaleY,
-    phaseX: grid.phaseX,
-    phaseY: grid.phaseY,
+    phaseX: grid.sourceRect?.x ?? grid.phaseX,
+    phaseY: grid.sourceRect?.y ?? grid.phaseY,
     method: options.downscale,
     alpha: options.alpha
   });
@@ -42,8 +42,6 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
     const candidates = detectGridCandidates(image);
     const [candidate] = candidates;
     if (options.targetWidth && options.targetHeight) {
-      const scaleX = options.grid.scaleX ?? options.grid.scale ?? image.width / options.targetWidth;
-      const scaleY = options.grid.scaleY ?? options.grid.scale ?? image.height / options.targetHeight;
       const closest = candidates.reduce(
         (best, item) => {
           const distance = Math.abs(item.outputWidth - options.targetWidth!) + Math.abs(item.outputHeight - options.targetHeight!);
@@ -51,8 +49,12 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
         },
         { candidate: candidate!, distance: Number.POSITIVE_INFINITY }
       ).candidate;
+      const scaleSourceWidth = closest.sourceRect?.w ?? image.width;
+      const scaleSourceHeight = closest.sourceRect?.h ?? image.height;
+      const scaleX = options.grid.scaleX ?? options.grid.scale ?? scaleSourceWidth / options.targetWidth;
+      const scaleY = options.grid.scaleY ?? options.grid.scale ?? scaleSourceHeight / options.targetHeight;
 
-      return {
+      const targetCandidate: GridCandidate = {
         outputWidth: options.targetWidth,
         outputHeight: options.targetHeight,
         scaleX,
@@ -62,6 +64,10 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
         confidence: closest.confidence,
         reason: `Target-guided auto grid from ${options.targetWidth}x${options.targetHeight}`
       };
+      if (closest.sourceRect) {
+        targetCandidate.sourceRect = closest.sourceRect;
+      }
+      return targetCandidate;
     }
 
     return candidate!;

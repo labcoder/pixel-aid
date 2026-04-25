@@ -17,6 +17,7 @@ export type GridCandidate = {
   scaleY: number;
   phaseX: number;
   phaseY: number;
+  sourceRect?: Rect;
   confidence: number;
   reason: string;
 };

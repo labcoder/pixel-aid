@@ -295,4 +295,30 @@ describe("fix pipeline", () => {
     expect(result.image.height).toBe(4);
     expect(result.grid.reason).toContain("Target-guided");
   });
+
+  test("auto-fixes the single-sprite fixture from its background-aware source crop", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const result = fixImage(fixture.image, {
+      mode: "single",
+      maxColors: 24,
+      grid: {
+        detect: "auto"
+      },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.grid.sourceRect).toEqual(fixture.expected.foregroundBounds);
+    expect(result.grid.scaleX).toBe(fixture.expected.scale);
+    expect(result.grid.scaleY).toBe(fixture.expected.scale);
+    expect(result.image.width).toBe(102);
+    expect(result.image.height).toBe(144);
+    expect(result.palette.length).toBeLessThanOrEqual(24);
+    expect(result.grid.confidence).toBeGreaterThan(0.82);
+  });
 });
