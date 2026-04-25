@@ -14,6 +14,7 @@ npm run dev
 npm run test
 npm run lint
 npm run build
+npm run benchmark
 ```
 
 The web app runs from `apps/web` through the root `npm run dev` command.
@@ -40,6 +41,7 @@ Implemented:
 - Canvas preview with `imageSmoothingEnabled = false`, checkerboard background, integer zoom, and optional pixel grid.
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
+- Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.

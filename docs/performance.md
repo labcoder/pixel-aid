@@ -40,3 +40,9 @@ Add fixtures and budget checks for:
 - Large multi-frame sprite sheet.
 - Transparent sprite with halos.
 - Uneven AI-generated sheet with inconsistent gutters.
+
+Run the current benchmark with:
+
+```sh
+npm run benchmark
+```
