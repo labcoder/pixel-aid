@@ -22,6 +22,8 @@ export type ComparisonLayout = {
   after: Rect;
 };
 
+export type ViewMode = "before" | "after" | "split";
+
 export function getImageDrawRect(viewport: Size, image: Size, zoom: number, pan: Point): Rect {
   const width = image.width * zoom;
   const height = image.height * zoom;
@@ -131,5 +133,48 @@ export function getComparisonSize(before: Size, after: Size | null): Size {
 }
 
 export function clampZoom(value: number): number {
-  return Math.max(1, Math.min(32, Math.round(value)));
+  return Math.max(0.05, Math.min(32, Math.round(value * 100) / 100));
+}
+
+export function getWheelZoom(zoom: number, deltaY: number): number {
+  const direction = deltaY < 0 ? 1 : -1;
+  const step = zoom < 1 ? 0.1 : 1;
+  return clampZoom(zoom + direction * step);
+}
+
+export function getAutoViewportZoom({
+  viewport,
+  source,
+  fixed,
+  fixedSourceRect,
+  viewMode,
+  padding = 0.9
+}: {
+  viewport: Size;
+  source: Size;
+  fixed: Size | null;
+  fixedSourceRect?: SourceRect | undefined;
+  viewMode: ViewMode;
+  padding?: number;
+}): number {
+  if (viewport.width <= 0 || viewport.height <= 0 || source.width <= 0 || source.height <= 0) {
+    return 1;
+  }
+
+  if (viewMode === "after" && fixed) {
+    const footprint = fixedSourceRect ? { width: fixedSourceRect.w, height: fixedSourceRect.h } : fixed;
+    const sourceFit = fitZoom(viewport, footprint, padding);
+    const sourceScale = fixedSourceRect ? Math.min(fixedSourceRect.w / fixed.width, fixedSourceRect.h / fixed.height) : 1;
+    return clampZoom(sourceFit * sourceScale);
+  }
+
+  return clampZoom(fitZoom(viewport, source, padding));
+}
+
+function fitZoom(viewport: Size, image: Size, padding: number): number {
+  if (image.width <= 0 || image.height <= 0) {
+    return 1;
+  }
+
+  return Math.min(viewport.width / image.width, viewport.height / image.height) * padding;
 }

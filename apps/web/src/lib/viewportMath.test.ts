@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { chooseRulerTickStep, getAlignedComparisonRects, getComparisonSize, getImageDrawRect, zoomAtPoint } from "./viewportMath";
+import {
+  chooseRulerTickStep,
+  getAlignedComparisonRects,
+  getAutoViewportZoom,
+  getComparisonSize,
+  getImageDrawRect,
+  getWheelZoom,
+  zoomAtPoint
+} from "./viewportMath";
 
 describe("viewport math", () => {
   test("centers the image with pan offset applied", () => {
@@ -63,5 +71,46 @@ describe("viewport math", () => {
 
     expect(layout.before).toEqual({ x: 0, y: 0, width: 200, height: 100 });
     expect(layout.after).toEqual({ x: 60, y: 10, width: 80, height: 80 });
+  });
+
+  test("auto-fits large before images below 100 percent", () => {
+    expect(
+      getAutoViewportZoom({
+        viewport: { width: 900, height: 700 },
+        source: { width: 706, height: 878 },
+        fixed: null,
+        viewMode: "before"
+      })
+    ).toBeCloseTo(0.72, 2);
+  });
+
+  test("auto-fits cropped after images to their source footprint scale", () => {
+    const zoom = getAutoViewportZoom({
+      viewport: { width: 900, height: 700 },
+      source: { width: 706, height: 878 },
+      fixed: { width: 102, height: 144 },
+      fixedSourceRect: { x: 50, y: 1, w: 612, h: 864 },
+      viewMode: "after"
+    });
+
+    expect(zoom).toBeCloseTo(4.38, 2);
+  });
+
+  test("auto-fits split view from the source image footprint", () => {
+    expect(
+      getAutoViewportZoom({
+        viewport: { width: 900, height: 700 },
+        source: { width: 706, height: 878 },
+        fixed: { width: 102, height: 144 },
+        fixedSourceRect: { x: 50, y: 1, w: 612, h: 864 },
+        viewMode: "split"
+      })
+    ).toBeCloseTo(0.72, 2);
+  });
+
+  test("uses smaller wheel zoom steps below 100 percent", () => {
+    expect(getWheelZoom(0.72, -1)).toBe(0.82);
+    expect(getWheelZoom(0.72, 1)).toBe(0.62);
+    expect(getWheelZoom(4, -1)).toBe(5);
   });
 });

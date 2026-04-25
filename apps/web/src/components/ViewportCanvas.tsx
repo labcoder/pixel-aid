@@ -2,7 +2,14 @@ import type { Rect as FrameRect, RGBAImage } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { chooseRulerTickStep, clampZoom, getAlignedComparisonRects, getImageDrawRect, zoomAtPoint } from "../lib/viewportMath";
+import {
+  chooseRulerTickStep,
+  getAlignedComparisonRects,
+  getAutoViewportZoom,
+  getImageDrawRect,
+  getWheelZoom,
+  zoomAtPoint
+} from "../lib/viewportMath";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -33,6 +40,7 @@ export function ViewportCanvas({
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
+  const autoFitSignatureRef = useRef("");
   const [renderKey, setRenderKey] = useState(0);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
@@ -45,6 +53,42 @@ export function ViewportCanvas({
   useEffect(() => {
     resetPan();
   }, [sourceImage, resetPan]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !sourceImage) {
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const signature = [
+      viewMode,
+      sourceImage.width,
+      sourceImage.height,
+      fixedImage?.width ?? 0,
+      fixedImage?.height ?? 0,
+      fixedSourceRect ? `${fixedSourceRect.x},${fixedSourceRect.y},${fixedSourceRect.w},${fixedSourceRect.h}` : "none",
+      Math.round(rect.width),
+      Math.round(rect.height)
+    ].join("|");
+
+    if (signature === autoFitSignatureRef.current || rect.width <= 0 || rect.height <= 0) {
+      return;
+    }
+
+    autoFitSignatureRef.current = signature;
+    panRef.current = { x: 0, y: 0 };
+    onZoomChange(
+      getAutoViewportZoom({
+        viewport: { width: rect.width, height: rect.height },
+        source: { width: sourceImage.width, height: sourceImage.height },
+        fixed: fixedImage ? { width: fixedImage.width, height: fixedImage.height } : null,
+        fixedSourceRect,
+        viewMode
+      })
+    );
+    invalidate();
+  }, [fixedImage, fixedSourceRect, invalidate, onZoomChange, sourceImage, viewMode]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -162,14 +206,17 @@ export function ViewportCanvas({
 
       event.preventDefault();
       const rect = canvas.getBoundingClientRect();
-      const nextZoom = clampZoom(zoom + (event.deltaY < 0 ? 1 : -1));
+      const nextZoom = getWheelZoom(zoom, event.deltaY);
       if (nextZoom === zoom) {
         return;
       }
 
       panRef.current = zoomAtPoint({
         viewport: { width: rect.width, height: rect.height },
-        image: { width: sourceImage.width, height: sourceImage.height },
+        image:
+          viewMode === "after" && fixedImage
+            ? { width: fixedImage.width, height: fixedImage.height }
+            : { width: sourceImage.width, height: sourceImage.height },
         pan: panRef.current,
         pointer: { x: event.clientX - rect.left, y: event.clientY - rect.top },
         zoom,
@@ -178,7 +225,7 @@ export function ViewportCanvas({
       onZoomChange(nextZoom);
       invalidate();
     },
-    [invalidate, onZoomChange, sourceImage, zoom]
+    [fixedImage, invalidate, onZoomChange, sourceImage, viewMode, zoom]
   );
 
   useEffect(() => {
