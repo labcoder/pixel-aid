@@ -51,7 +51,10 @@ Cleanup controls run after block downsampling and alpha handling.
 - Max colors limits the fixed output palette.
 - Downscale selects the block-to-pixel strategy.
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
-- Outline can stay off, repair an existing dark outline, or add a one-pixel outline around visible pixels.
+- Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.
+- Outline size controls how many native pixels are added around the sprite.
+- Outline color is used by add mode and is reserved in the generated palette so it is not immediately remapped away.
+- With preserved alpha, outline cleanup can still draw over detected background pixels such as a white AI-image canvas.
 
 # Timeline
 

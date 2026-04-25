@@ -61,10 +61,14 @@ Implemented modes:
 `applyOutlineCleanup` is an optional post-alpha cleanup pass. It never resizes the image.
 
 - `none`: clone the image unchanged.
-- `repairExisting`: detect an existing dark edge color and fill transparent one-pixel gaps around visible pixels. If no dark edge exists, the image is left unchanged.
-- `add`: add a one-pixel outline around visible pixels. It reuses a detected dark edge color when possible, otherwise it uses the darkest visible color or a supplied outline color.
+- `repairExisting`: detect an existing dark edge color and fill transparent or background-colored gaps around visible pixels. If no dark edge exists, the image is left unchanged.
+- `add`: add an outline around visible pixels. It reuses a detected dark edge color when possible, otherwise it uses the darkest visible color or a supplied outline color.
 
-The pass writes into a cloned output buffer while reading neighbor visibility from the source buffer, so newly added outline pixels do not cascade into thicker outlines during the same operation.
+The pass treats transparent pixels and detected corner-background pixels as drawable outside space. This lets it work when alpha is preserved and the source still has an opaque white or flat-color background.
+
+Outline size is applied as repeated 8-neighbor pixel dilation around subject pixels. The pass writes into a cloned output buffer while reading neighbor visibility from the source buffer, so newly added outline pixels do not cascade beyond the requested size during the same operation.
+
+When add mode uses an explicit outline color and the palette is auto-extracted, the fix pipeline reserves that color before frequency-based palette reduction.
 
 ## Sheet Slicing
 
