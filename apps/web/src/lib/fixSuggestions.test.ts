@@ -39,6 +39,7 @@ describe("fix setting suggestions", () => {
     const suggestion = suggestFixSettings(blankImage(706, 878));
 
     expect(suggestion.mode).toBe("single");
+    expect(suggestion.downscale).toBe("adaptive");
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
     expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
     expect(suggestion.targetHeight).toBeLessThanOrEqual(220);

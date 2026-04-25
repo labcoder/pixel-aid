@@ -36,7 +36,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
-    downscale: sourceRatio > 2 ? "adaptive" : "dominant",
+    downscale: mode === "single" && Math.max(image.width, image.height) >= 512 ? "adaptive" : sourceRatio > 2 ? "adaptive" : "dominant",
     reason: suggestionReason(mode, sourceRatio),
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence
