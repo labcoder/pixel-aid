@@ -53,7 +53,8 @@ describe("fix setting suggestions", () => {
     const suggestion = suggestFixSettings(blankImage(706, 878));
 
     expect(suggestion.mode).toBe("single");
-    expect(suggestion.downscale).toBe("adaptive");
+    expect(suggestion.downscale).toBe("dominant");
+    expect(suggestion.reason).toContain("dominant");
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
     expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
     expect(suggestion.targetHeight).toBeLessThanOrEqual(220);
@@ -64,6 +65,7 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.downscale).toBe("dominant");
   });
 
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {

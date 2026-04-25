@@ -28,6 +28,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const sourceRatio = image.width / image.height;
   const mode = classifyMode(image.width, image.height, outputWidth, outputHeight);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height);
+  const downscale = suggestDownscaleMethod(image, candidate, mode, sourceRatio);
 
   return {
     mode,
@@ -37,9 +38,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
-    downscale: mode === "single" && Math.max(image.width, image.height) >= 512 ? "adaptive" : sourceRatio > 2 ? "adaptive" : "dominant",
+    downscale,
     alpha: suggestAlphaMode(image, mode),
-    reason: suggestionReason(mode, sourceRatio),
+    reason: suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate)),
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence
   };
@@ -104,6 +105,94 @@ function suggestAlphaMode(image: RGBAImage, mode: AssetMode): AlphaMode {
   return alpha > 240 && brightness > 220 ? "backgroundFloodFill" : "preserve";
 }
 
+function suggestDownscaleMethod(
+  image: RGBAImage,
+  candidate: GridCandidate | undefined,
+  mode: AssetMode,
+  sourceRatio: number
+): DownscaleMethod {
+  const purity = estimateBlockPurity(image, candidate);
+  if (purity >= 0.68) {
+    return "dominant";
+  }
+
+  if (mode === "single" && purity >= 0.52) {
+    return "dominant";
+  }
+
+  if (sourceRatio > 2 || sourceRatio < 0.5 || purity >= 0.38) {
+    return "adaptive";
+  }
+
+  return "median";
+}
+
+function estimateBlockPurity(image: RGBAImage, candidate: GridCandidate | undefined): number {
+  if (!candidate) {
+    return 1;
+  }
+
+  const sourceX = candidate.sourceRect?.x ?? candidate.phaseX;
+  const sourceY = candidate.sourceRect?.y ?? candidate.phaseY;
+  const sourceWidth = candidate.sourceRect?.w ?? Math.max(1, image.width - sourceX);
+  const sourceHeight = candidate.sourceRect?.h ?? Math.max(1, image.height - sourceY);
+  const sampledColumns = Math.max(1, Math.min(14, candidate.outputWidth));
+  const sampledRows = Math.max(1, Math.min(14, candidate.outputHeight));
+  const columnStep = Math.max(1, Math.floor(candidate.outputWidth / sampledColumns));
+  const rowStep = Math.max(1, Math.floor(candidate.outputHeight / sampledRows));
+  const counts = new Uint16Array(4096);
+  const touched = new Uint16Array(1024);
+  let totalPurity = 0;
+  let sampledBlocks = 0;
+
+  for (let outputY = 0; outputY < candidate.outputHeight; outputY += rowStep) {
+    for (let outputX = 0; outputX < candidate.outputWidth; outputX += columnStep) {
+      const x0 = Math.max(0, Math.floor(sourceX + outputX * candidate.scaleX));
+      const y0 = Math.max(0, Math.floor(sourceY + outputY * candidate.scaleY));
+      const x1 = Math.min(image.width, Math.ceil(sourceX + (outputX + 1) * candidate.scaleX), sourceX + sourceWidth);
+      const y1 = Math.min(image.height, Math.ceil(sourceY + (outputY + 1) * candidate.scaleY), sourceY + sourceHeight);
+      let total = 0;
+      let best = 0;
+      let touchedCount = 0;
+
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          const offset = (y * image.width + x) * 4;
+          if (image.data[offset + 3]! < 16) {
+            continue;
+          }
+
+          const key =
+            ((image.data[offset]! >> 4) << 8) |
+            ((image.data[offset + 1]! >> 4) << 4) |
+            (image.data[offset + 2]! >> 4);
+          if (counts[key] === 0) {
+            touched[touchedCount] = key;
+            touchedCount += 1;
+          }
+          const nextCount = (counts[key] ?? 0) + 1;
+          counts[key] = nextCount;
+          total += 1;
+          if (nextCount > best) {
+            best = nextCount;
+          }
+        }
+      }
+
+      for (let i = 0; i < touchedCount; i += 1) {
+        counts[touched[i]!] = 0;
+      }
+
+      if (total > 0) {
+        totalPurity += best / total;
+        sampledBlocks += 1;
+      }
+    }
+  }
+
+  return sampledBlocks > 0 ? totalPurity / sampledBlocks : 1;
+}
+
 function createPlausibleSingleSpriteGrid(image: Pick<RGBAImage, "width" | "height">): GridCandidate {
   const scale = Math.max(4, Math.ceil(Math.max(image.width, image.height) / 128));
   return {
@@ -133,14 +222,15 @@ function classifyMode(width: number, height: number, outputWidth: number, output
   return "single";
 }
 
-function suggestionReason(mode: AssetMode, sourceRatio: number): string {
+function suggestionReason(mode: AssetMode, sourceRatio: number, downscale: DownscaleMethod, blockPurity: number): string {
+  const methodReason = `${downscale} downscale from ${(blockPurity * 100).toFixed(0)}% sampled block purity.`;
   if (mode === "spriteSheet") {
-    return `Source is wide or tall (${sourceRatio.toFixed(2)} aspect), so it likely contains multiple frames.`;
+    return `Source is wide or tall (${sourceRatio.toFixed(2)} aspect), so it likely contains multiple frames. ${methodReason}`;
   }
   if (mode === "tileSheet") {
-    return "Source is square and evenly divisible, so it may be a tile sheet.";
+    return `Source is square and evenly divisible, so it may be a tile sheet. ${methodReason}`;
   }
-  return "Source proportions look like a single sprite or prop.";
+  return `Source proportions look like a single sprite or prop. ${methodReason}`;
 }
 
 function classifyModeConfidence(mode: AssetMode, sourceRatio: number, width: number, height: number): number {
