@@ -37,6 +37,7 @@ export type FixOptions = {
     scaleY?: number;
     phaseX?: number;
     phaseY?: number;
+    cropToBounds?: boolean;
     localCorrection?: boolean;
   };
   downscale: DownscaleMethod;

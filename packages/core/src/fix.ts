@@ -90,16 +90,22 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
       const scaleSourceHeight = closest.sourceRect?.h ?? image.height;
       const scaleX = options.grid.scaleX ?? options.grid.scale ?? scaleSourceWidth / options.targetWidth;
       const scaleY = options.grid.scaleY ?? options.grid.scale ?? scaleSourceHeight / options.targetHeight;
+      const cropToBounds = options.grid.cropToBounds ?? (options.mode === "single");
+      const outputWidth = cropToBounds && closest.sourceRect ? Math.max(1, Math.floor(closest.sourceRect.w / scaleX)) : options.targetWidth;
+      const outputHeight = cropToBounds && closest.sourceRect ? Math.max(1, Math.floor(closest.sourceRect.h / scaleY)) : options.targetHeight;
 
       const targetCandidate: GridCandidate = {
-        outputWidth: options.targetWidth,
-        outputHeight: options.targetHeight,
+        outputWidth,
+        outputHeight,
         scaleX,
         scaleY,
         phaseX: options.grid.phaseX ?? closest.phaseX,
         phaseY: options.grid.phaseY ?? closest.phaseY,
         confidence: closest.confidence,
-        reason: `Target-guided auto grid from ${options.targetWidth}x${options.targetHeight}`
+        reason:
+          cropToBounds && closest.sourceRect
+            ? `Target-guided auto grid cropped to detected bounds from ${options.targetWidth}x${options.targetHeight}`
+            : `Target-guided auto grid from ${options.targetWidth}x${options.targetHeight}`
       };
       if (closest.sourceRect) {
         targetCandidate.sourceRect = closest.sourceRect;
