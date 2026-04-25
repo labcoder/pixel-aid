@@ -283,11 +283,12 @@ function drawImageView(
     ctx.textBaseline = "middle";
     ctx.fillText("S", splitX, Math.max(17, Math.min(layout.before.y, layout.after.y) - 19));
 
-    if (showGrid && zoom >= 4) {
-      drawPixelGrid(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, zoom);
+    const comparisonZoom = layout.after.width / fixedCanvas.width;
+    if (showGrid && comparisonZoom >= 4) {
+      drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
     }
-    drawFrameBounds(ctx, layout.after.x, layout.after.y, frameRects, layout.after.width / fixedCanvas.width);
-    drawRulers(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, zoom);
+    drawFrameBounds(ctx, layout.after.x, layout.after.y, frameRects, comparisonZoom);
+    drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
     ctx.drawImage(activeCanvas, rect.x, rect.y, rect.width, rect.height);
     if (showGrid && zoom >= 4) {
