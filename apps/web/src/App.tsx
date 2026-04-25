@@ -64,6 +64,8 @@ export function App() {
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
+  const [outlineSize, setOutlineSize] = useState(1);
+  const [outlineColor, setOutlineColor] = useState("#101112");
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [isFixing, setIsFixing] = useState(false);
@@ -172,13 +174,30 @@ export function App() {
         removeOrphans: false,
         jaggyCleanup: false,
         preserveSinglePixelDetails: true,
-        outlineMode
+        outlineMode,
+        outlineSize,
+        ...(outlineMode === "add" ? { outlineColor } : {})
       },
       ...(sheetMode ? { sheet: sheetOptions } : {})
     };
 
     return options;
-  }, [alpha, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, outlineMode, sheetMode, sheetOptions, targetHeight, targetWidth]);
+  }, [
+    alpha,
+    downscale,
+    gridDetect,
+    gridScaleX,
+    gridScaleY,
+    maxColors,
+    mode,
+    outlineColor,
+    outlineMode,
+    outlineSize,
+    sheetMode,
+    sheetOptions,
+    targetHeight,
+    targetWidth
+  ]);
 
   const runFix = useCallback(() => {
     if (!selectedAsset || isFixing) {
@@ -689,9 +708,23 @@ export function App() {
             options={[
               ["none", "None"],
               ["repairExisting", "Repair existing"],
-              ["add", "Add 1px"]
+              ["add", "Add outline"]
             ]}
             onChange={(value) => setOutlineMode(value as OutlineMode)}
+          />
+          <NumberField
+            label="Outline px"
+            value={outlineSize}
+            min={1}
+            max={8}
+            disabled={outlineMode === "none"}
+            onChange={setOutlineSize}
+          />
+          <ColorField
+            label="Color"
+            value={outlineColor}
+            disabled={outlineMode !== "add"}
+            onChange={setOutlineColor}
           />
           <div className="subsection-label">Viewport</div>
           <label className="toggle-row">
@@ -773,7 +806,7 @@ export function App() {
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
-                  ["Outline", outlineMode],
+                  ["Outline", outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px`],
                   ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
                 ]}
               />
@@ -964,6 +997,25 @@ function NumberField({
         disabled={disabled}
         onChange={(event) => onChange(Number(event.currentTarget.value))}
       />
+    </label>
+  );
+}
+
+function ColorField({
+  label,
+  value,
+  disabled,
+  onChange
+}: {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field-row">
+      <span>{label}</span>
+      <input type="color" value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
     </label>
   );
 }
