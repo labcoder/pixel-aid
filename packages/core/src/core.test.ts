@@ -1060,6 +1060,34 @@ describe("fix pipeline", () => {
     expect(result.image.height).toBe(144);
   });
 
+  test("honors explicit target dimensions when auto-grid cropping is disabled", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const result = fixImage(fixture.image, {
+      mode: "single",
+      targetWidth: fixture.expected.nativeWidth,
+      targetHeight: fixture.expected.nativeHeight,
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        scaleX: fixture.expected.scale,
+        scaleY: fixture.expected.scale,
+        cropToBounds: false
+      },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.image.width).toBe(fixture.expected.nativeWidth);
+    expect(result.image.height).toBe(fixture.expected.nativeHeight);
+    expect(result.grid.sourceRect).toBeUndefined();
+    expect(result.grid.reason).toContain("Target-guided auto grid");
+  });
+
   test("reserves custom outline color during palette reduction", () => {
     const source = createImage(9, 9, [255, 255, 255, 255]);
     for (let y = 2; y <= 6; y += 1) {

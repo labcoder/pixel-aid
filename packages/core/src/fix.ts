@@ -377,7 +377,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
             ? `Target-guided auto grid cropped to detected bounds from ${options.targetWidth}x${options.targetHeight}`
             : `Target-guided auto grid from ${options.targetWidth}x${options.targetHeight}`
       };
-      if (closest.sourceRect) {
+      if (cropToBounds && closest.sourceRect) {
         targetCandidate.sourceRect = closest.sourceRect;
       }
       if (closest.diagnostics) {
