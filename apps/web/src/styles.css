@@ -65,12 +65,13 @@ button:disabled {
 }
 
 .editor-shell {
+  --bottom-panel-height: 198px;
   height: 100vh;
   display: grid;
   grid-template:
     "toolbar toolbar toolbar" 56px
     "left viewport right" minmax(0, 1fr)
-    "bottom bottom bottom" 198px /
+    "bottom bottom bottom" var(--bottom-panel-height) /
     260px minmax(420px, 1fr) 300px;
   overflow: hidden;
 }
@@ -907,8 +908,34 @@ button:disabled {
   grid-area: bottom;
   border-top: 1px solid var(--line);
   display: grid;
-  grid-template-rows: 40px minmax(0, 1fr);
+  grid-template-rows: 8px 40px minmax(0, 1fr);
   min-height: 0;
+}
+
+.bottom-resize-handle {
+  position: relative;
+  min-height: 8px;
+  background: #111414;
+  border-bottom: 1px solid var(--line);
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.bottom-resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 3px;
+  width: 86px;
+  height: 2px;
+  background: #4a5552;
+  border-radius: 999px;
+  transform: translateX(-50%);
+}
+
+.bottom-resize-handle:hover::before,
+.bottom-resize-handle:focus-visible::before {
+  background: var(--cyan);
 }
 
 .tab-strip {

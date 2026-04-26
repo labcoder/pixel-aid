@@ -18,7 +18,7 @@ import {
   Upload,
   WandSparkles
 } from "lucide-react";
-import type { DragEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlphaMode,
@@ -131,6 +131,7 @@ export function App() {
   const [customPivotX, setCustomPivotX] = useState(16);
   const [customPivotY, setCustomPivotY] = useState(32);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
   const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
@@ -155,6 +156,7 @@ export function App() {
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const playbackAccumulatorRef = useRef(0);
   const playbackLastTimeRef = useRef<number | null>(null);
+  const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const sourcePalette = useMemo(
@@ -709,6 +711,31 @@ export function App() {
     void importFiles(event.dataTransfer.files);
   };
 
+  const onBottomResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    bottomResizeRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: bottomPanelHeight
+    };
+  };
+
+  const onBottomResizePointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const resize = bottomResizeRef.current;
+    if (!resize || resize.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const nextHeight = resize.startHeight + resize.startY - event.clientY;
+    setBottomPanelHeight(Math.max(150, Math.min(460, Math.round(nextHeight))));
+  };
+
+  const onBottomResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (bottomResizeRef.current?.pointerId === event.pointerId) {
+      bottomResizeRef.current = null;
+    }
+  };
+
   const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
     asset: (
       <>
@@ -975,6 +1002,7 @@ export function App() {
   return (
     <main
       className={`editor-shell${isDropActive ? " is-drop-active" : ""}`}
+      style={{ "--bottom-panel-height": `${bottomPanelHeight}px` } as CSSProperties}
       aria-label="PixelAid editor"
       onDragEnter={() => setIsDropActive(true)}
       onDragOver={(event) => event.preventDefault()}
@@ -1173,6 +1201,17 @@ export function App() {
       </aside>
 
       <footer className="bottom-panel panel" aria-label="Timeline logs and metrics">
+        <div
+          className="bottom-resize-handle"
+          role="separator"
+          aria-label="Resize bottom panel"
+          aria-orientation="horizontal"
+          tabIndex={0}
+          onPointerDown={onBottomResizePointerDown}
+          onPointerMove={onBottomResizePointerMove}
+          onPointerUp={onBottomResizePointerUp}
+          onPointerCancel={onBottomResizePointerUp}
+        />
         <div className="tab-strip" role="tablist" aria-label="Bottom panels">
           <button type="button" className="active">
             <Play size={15} />
