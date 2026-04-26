@@ -46,8 +46,8 @@ docs                  Architecture, algorithms, performance, and licensing notes
 
 1. Import an image through the toolbar, drag/drop, file picker, or paste. Large imports show decode and analysis status while the app prepares the asset.
 2. Select the asset from the Assets panel. The editor keeps the source image immutable.
-3. Use Auto Suggest for a first pass, then adjust mode-specific controls: target size for a single sprite, or frame/cell dimensions for sprite and tile sheets.
-4. Run Fix. The Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
+3. Use Auto Suggest for a first pass, then adjust mode-specific controls: target size for a single sprite, or frame/cell dimensions for sprite and tile sheets. Auto Suggest shows analysis status and caches the grid candidates used by the preview cards.
+4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Compare source and output in Before, After, or Split view. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
 6. Export a ZIP containing the fixed PNG and generic JSON manifest.
 
@@ -57,7 +57,7 @@ Editor:
 
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
-- Import loading state with decode/analyze phase labels for large images.
+- Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
 - Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, and draggable split comparison.
 - Crop-aware before/after alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
@@ -75,7 +75,7 @@ Processing:
 
 - Browser decode adapter from image file to `RGBAImage`.
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
-- Frame-aware sheet fixing: sprite sheets and tile sheets send the current frame metadata to the worker, fix each cell from its own source rectangle, then apply a shared palette to the packed sheet.
+- Frame-aware sheet fixing: sprite sheets and tile sheets send the current frame metadata to the worker, fix each cell from its own source rectangle, then apply a shared palette to the packed sheet. Detected sheets preserve source rectangles for sampling but pack generated output rectangles into clean native cells with no imported label/gutter margin.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
 - Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.

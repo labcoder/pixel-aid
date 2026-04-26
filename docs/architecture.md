@@ -17,18 +17,19 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 2. Import status is surfaced in the editor while decode and first-pass analysis run.
 3. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
 4. Auto Suggest classifies the asset mode and seeds mode-specific controls. Single sprites use target dimensions; sprite and tile sheets use frame/cell controls. Sheet suggestions can consume row-band detection, outlined-cell separators, first-pass content-centered uneven-gutter normalization, conservative component grouping for mildly drifted unboxed sheets, and common blocky row-label names.
-5. The viewport renders native buffers through Canvas2D with smoothing disabled.
-6. The app clones the selected image buffer and transfers it to a Web Worker.
-7. The worker runs `fixImage` from `packages/core`.
-8. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
-9. For sheet-like modes, the app also sends the current frame records. The core fixes every frame cell from its own `sourceRect`, writes each native frame into the packed sheet, then extracts/remaps one shared palette for the whole result.
-10. For single sprites, the core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
-11. The worker transfers the fixed output buffer back to the app.
-12. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
-13. Sheet-like modes either derive frame rectangles and pivots from manual frame/cell controls or consume explicit detected frame rectangles from Auto Suggest. Detected layouts also carry row-label metadata and row/column confidence diagnostics for the inspector notes. The viewport maps manual rectangles back into source space before Fix and uses detected `sourceRect`s directly when available.
-14. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
-15. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop/direction metadata. Selected frames can also receive explicit `durationMs` overrides, which take priority over clip FPS. Web-side normalization helpers preview frames in a shared pivot-aligned canvas and compute preview-only onion-skin neighbors.
-16. Export passes the current frame metadata, per-frame durations, playback direction, and detected row animations to `packages/exporters`. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
+5. Auto Suggest returns and caches the grid candidates it computed so the grid preview panel can render explanations without rerunning detection during React render.
+6. The viewport renders native buffers through Canvas2D with smoothing disabled.
+7. The app shows a preparing/fixing status, clones the selected image buffer, and transfers it to a Web Worker.
+8. The worker runs `fixImage` from `packages/core`.
+9. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
+10. For sheet-like modes, the app also sends the current frame records. Detected sheet suggestions preserve source-space `sourceRect`s for sampling but pack output `rect`s into clean native row-major cells so imported labels and gutters do not inflate the fixed sheet. The core fixes every frame cell from its own `sourceRect`, writes each native frame into the packed sheet, then extracts/remaps one shared palette for the whole result.
+11. For single sprites, the core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
+12. The worker transfers the fixed output buffer back to the app.
+13. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
+14. Sheet-like modes either derive frame rectangles and pivots from manual frame/cell controls or consume explicit detected frame rectangles from Auto Suggest. Detected layouts also carry row-label metadata and row/column confidence diagnostics for the inspector notes. The viewport maps manual rectangles back into source space before Fix and uses detected `sourceRect`s directly when available.
+15. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
+16. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop/direction metadata. Selected frames can also receive explicit `durationMs` overrides, which take priority over clip FPS. Web-side normalization helpers preview frames in a shared pivot-aligned canvas and compute preview-only onion-skin neighbors.
+17. Export passes the current frame metadata, per-frame durations, playback direction, and detected row animations to `packages/exporters`. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
 
 ## Documentation Flow
 

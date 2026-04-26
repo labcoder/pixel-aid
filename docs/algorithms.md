@@ -77,6 +77,8 @@ Detected frames can be manually nudged or resized in the web viewport. Move and 
 
 Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
 
+For detected sheet suggestions, source and output rectangles are deliberately different. Each frame keeps a source-space `sourceRect` for sampling the imported sheet, but its native `rect` is repacked into a clean row-major output sheet with zero source margin/gutter. Frame width and height are snapped toward common native sprite sizes when the detected grid lands close to values such as 32, 48, or 64 pixels. This prevents source labels, decorative gutters, or loose AI canvas spacing from becoming part of the fixed export.
+
 ## Palette
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
