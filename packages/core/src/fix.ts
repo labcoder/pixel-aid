@@ -1,14 +1,19 @@
-import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval } from "./halo";
+import { createImage } from "./image";
 import { applyOutlineCleanup } from "./outline";
 import { extractPalette, remapToPalette } from "./palette";
 
 export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult {
+  if (isSheetFrameFix(options)) {
+    return fixSheetFrames(image, options);
+  }
+
   const grid = resolveGrid(image, options);
   const downsampled = downsampleBlocks(image, {
     outputWidth: grid.outputWidth,
@@ -53,6 +58,174 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     },
     settings: options
   };
+}
+
+function isSheetFrameFix(options: FixOptions): boolean {
+  return options.mode !== "single" && options.sheetFrames !== undefined && options.sheetFrames.length > 0;
+}
+
+function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
+  const frames = options.sheetFrames ?? [];
+  const outputSize = getSheetOutputSize(options, frames);
+  const packed = createImage(outputSize.width, outputSize.height);
+  const sourceRects: Rect[] = [];
+  const gridScaleX = options.grid.scaleX ?? options.grid.scale ?? 1;
+  const gridScaleY = options.grid.scaleY ?? options.grid.scale ?? gridScaleX;
+  const phaseX = options.grid.phaseX ?? 0;
+  const phaseY = options.grid.phaseY ?? 0;
+
+  for (const frame of frames) {
+    const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
+    sourceRects.push(sourceRect);
+    const fixedFrame = downsampleBlocks(image, {
+      outputWidth: frame.rect.w,
+      outputHeight: frame.rect.h,
+      scaleX: sourceRect.w / frame.rect.w,
+      scaleY: sourceRect.h / frame.rect.h,
+      phaseX: sourceRect.x,
+      phaseY: sourceRect.y,
+      method: options.downscale,
+      alpha: options.alpha
+    });
+    const cleanedFrame = cleanFixedImage(fixedFrame, options);
+    pasteImage(cleanedFrame, packed, frame.rect);
+  }
+
+  const reservedPalette = reservedOutlinePalette(options);
+  const palette = options.palette ?? extractPaletteWithReservedColors(packed, options.maxColors, reservedPalette);
+  const remapped = remapToPalette(packed, palette);
+  const sourceRect = unionRects(sourceRects);
+  const grid: GridCandidate = {
+    outputWidth: remapped.width,
+    outputHeight: remapped.height,
+    scaleX: gridScaleX,
+    scaleY: gridScaleY,
+    phaseX,
+    phaseY,
+    confidence: 1,
+    reason: `Frame-aware sheet fix from ${frames.length} source cell${frames.length === 1 ? "" : "s"}`
+  };
+  if (sourceRect) {
+    grid.sourceRect = sourceRect;
+  }
+
+  return {
+    image: remapped,
+    palette,
+    grid,
+    metrics: {
+      durationMs: 0,
+      sourceWidth: image.width,
+      sourceHeight: image.height,
+      outputWidth: remapped.width,
+      outputHeight: remapped.height,
+      paletteCount: palette.length,
+      gridConfidence: grid.confidence
+    },
+    settings: options
+  };
+}
+
+function cleanFixedImage(image: RGBAImage, options: FixOptions): RGBAImage {
+  const alphaCleaned = applyAlphaMode(image, options.alpha);
+  const haloCleaned = applyHaloRemoval(alphaCleaned, { enabled: options.cleanup.removeHalos ?? false });
+  const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
+  return applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
+    color: options.cleanup.outlineColor,
+    alpha: options.cleanup.outlineAlpha,
+    size: options.cleanup.outlineSize,
+    removeOrphans: options.cleanup.removeOrphans,
+    closeGaps: options.cleanup.jaggyCleanup,
+    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
+  });
+}
+
+function getSheetOutputSize(options: FixOptions, frames: readonly SpriteFrame[]): { width: number; height: number } {
+  let width = options.targetWidth ?? 1;
+  let height = options.targetHeight ?? 1;
+  if (options.sheet) {
+    width = Math.max(
+      width,
+      options.sheet.margin * 2 + options.sheet.columns * options.sheet.frameWidth + Math.max(0, options.sheet.columns - 1) * options.sheet.spacing
+    );
+    height = Math.max(
+      height,
+      options.sheet.margin * 2 + options.sheet.rows * options.sheet.frameHeight + Math.max(0, options.sheet.rows - 1) * options.sheet.spacing
+    );
+  }
+
+  for (const frame of frames) {
+    width = Math.max(width, frame.rect.x + frame.rect.w);
+    height = Math.max(height, frame.rect.y + frame.rect.h);
+  }
+
+  return {
+    width: Math.max(1, Math.round(width)),
+    height: Math.max(1, Math.round(height))
+  };
+}
+
+function getFrameSourceRect(
+  frame: SpriteFrame,
+  scaleX: number,
+  scaleY: number,
+  phaseX: number,
+  phaseY: number,
+  image: RGBAImage
+): Rect {
+  const rect = frame.sourceRect ?? {
+    x: phaseX + frame.rect.x * scaleX,
+    y: phaseY + frame.rect.y * scaleY,
+    w: frame.rect.w * scaleX,
+    h: frame.rect.h * scaleY
+  };
+
+  const x = clampInteger(rect.x, 0, Math.max(0, image.width - 1));
+  const y = clampInteger(rect.y, 0, Math.max(0, image.height - 1));
+  return {
+    x,
+    y,
+    w: clampInteger(rect.w, 1, Math.max(1, image.width - x)),
+    h: clampInteger(rect.h, 1, Math.max(1, image.height - y))
+  };
+}
+
+function pasteImage(source: RGBAImage, target: RGBAImage, rect: Rect): void {
+  const width = Math.min(source.width, rect.w, Math.max(0, target.width - rect.x));
+  const height = Math.min(source.height, rect.h, Math.max(0, target.height - rect.y));
+  for (let y = 0; y < height; y += 1) {
+    const sourceOffset = y * source.width * 4;
+    const targetOffset = ((rect.y + y) * target.width + rect.x) * 4;
+    target.data.set(source.data.subarray(sourceOffset, sourceOffset + width * 4), targetOffset);
+  }
+}
+
+function unionRects(rects: readonly Rect[]): Rect | undefined {
+  if (rects.length === 0) {
+    return undefined;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxX = 0;
+  let maxY = 0;
+  for (const rect of rects) {
+    minX = Math.min(minX, rect.x);
+    minY = Math.min(minY, rect.y);
+    maxX = Math.max(maxX, rect.x + rect.w);
+    maxY = Math.max(maxY, rect.y + rect.h);
+  }
+
+  return {
+    x: minX,
+    y: minY,
+    w: maxX - minX,
+    h: maxY - minY
+  };
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
 }
 
 function getAutoCroppedOutlinePadding(options: FixOptions, grid: GridCandidate): number {

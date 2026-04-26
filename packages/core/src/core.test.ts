@@ -18,7 +18,7 @@ import {
   sliceSheetFrames,
   writePixel
 } from "./index";
-import type { FixOptions, RGBAImage } from "@pixelaid/shared";
+import type { FixOptions, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 const rgba = (r: number, g: number, b: number, a = 255) => [r, g, b, a] as const;
 
@@ -912,6 +912,72 @@ describe("sheet slicing", () => {
 });
 
 describe("fix pipeline", () => {
+  test("fixes sprite sheet frames from their source cells instead of the full sheet canvas", () => {
+    const source = createImage(12, 4, [8, 10, 10, 255]);
+    drawBlock(source, 0, 0, 2, 4, 0, 240, 240, 255);
+    drawBlock(source, 4, 0, 4, 4, 255, 0, 0, 255);
+    drawBlock(source, 8, 0, 4, 4, 0, 0, 255, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "idle_000",
+        rect: { x: 0, y: 0, w: 2, h: 2 },
+        sourceRect: { x: 4, y: 0, w: 4, h: 4 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 120,
+        tags: ["idle"]
+      },
+      {
+        name: "idle_001",
+        rect: { x: 2, y: 0, w: 2, h: 2 },
+        sourceRect: { x: 8, y: 0, w: 4, h: 4 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 120,
+        tags: ["idle"]
+      }
+    ];
+
+    const result = fixImage(source, {
+      mode: "spriteSheet",
+      targetWidth: 4,
+      targetHeight: 2,
+      maxColors: 4,
+      grid: {
+        detect: "manual",
+        scaleX: 2,
+        scaleY: 2,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      },
+      sheet: {
+        frameWidth: 2,
+        frameHeight: 2,
+        rows: 1,
+        columns: 2,
+        margin: 0,
+        spacing: 0,
+        extrude: 0,
+        pivot: { x: 1, y: 2 }
+      },
+      sheetFrames: frames
+    });
+
+    expect(result.image.width).toBe(4);
+    expect(result.image.height).toBe(2);
+    expect(readPixel(result.image, 0, 0)).toEqual([255, 0, 0, 255]);
+    expect(readPixel(result.image, 1, 1)).toEqual([255, 0, 0, 255]);
+    expect(readPixel(result.image, 2, 0)).toEqual([0, 0, 255, 255]);
+    expect(readPixel(result.image, 3, 1)).toEqual([0, 0, 255, 255]);
+    expect(result.palette).toEqual(["#ff0000", "#0000ff"]);
+    expect(result.grid.sourceRect).toEqual({ x: 4, y: 0, w: 8, h: 4 });
+  });
+
   test("downsamples remaps palette and returns reproducible metadata", () => {
     const result = fixImage(blockySource(), defaultOptions);
 

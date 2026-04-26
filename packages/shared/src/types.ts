@@ -67,6 +67,7 @@ export type FixOptions = {
     outlineAlpha?: number;
   };
   sheet?: SheetSliceOptions;
+  sheetFrames?: SpriteFrame[];
 };
 
 export type FixMetrics = {
