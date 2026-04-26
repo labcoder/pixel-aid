@@ -182,14 +182,20 @@ function driftedDisconnectedSheetWithoutBorders(): RGBAImage {
 
 const labelGlyphs: Record<string, readonly string[]> = {
   A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
   D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
   E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  G: ["01111", "10000", "10000", "10011", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
   I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
   J: ["00111", "00010", "00010", "00010", "10010", "10010", "01100"],
   K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
   L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
   M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
   P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
   U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
   W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"]
 };
@@ -223,25 +229,67 @@ function labeledAnimationSheet(): RGBAImage {
   return image;
 }
 
-function drawPixelLabel(image: RGBAImage, text: string, startX: number, startY: number, scale: number): void {
-  let cursorX = startX;
-  for (const char of text) {
-    const glyph = labelGlyphs[char];
-    if (!glyph) {
-      cursorX += 4 * scale;
-      continue;
+function effectHeavyLabeledAnimationSheet(): RGBAImage {
+  const image = createImage(650, 330);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
     }
+  }
 
-    for (let gy = 0; gy < glyph.length; gy += 1) {
-      const row = glyph[gy]!;
-      for (let gx = 0; gx < row.length; gx += 1) {
-        if (row[gx] !== "1") {
-          continue;
-        }
-        drawBlock(image, cursorX + gx * scale, startY + gy * scale, scale, scale, 0, 240, 240, 255);
+  const rows = [
+    { label: "IDLE", y: 18, frames: 5 },
+    { label: "SHOOT", y: 88, frames: 8 },
+    { label: "TAKE\nDAMAGE", y: 162, frames: 7 },
+    { label: "DEATH", y: 238, frames: 7 }
+  ];
+  const startX = 134;
+  const cellWidth = 58;
+  const cellHeight = 42;
+
+  for (const row of rows) {
+    drawPixelLabel(image, row.label, 18, row.y + (row.label.includes("\n") ? 3 : 13), 2);
+    for (let column = 0; column < row.frames; column += 1) {
+      const x = startX + column * cellWidth + ((column % 3) - 1);
+      drawBlock(image, x + 12, row.y, 24, cellHeight, 70, 75, 75, 255);
+      drawBlock(image, x + 19, row.y + 8, 12, 24, 92, 160, 150, 255);
+      if (row.label === "SHOOT" && column >= 3) {
+        drawBlock(image, x + 42, row.y + 13, 11, 7, 0, 240, 240, 255);
+        drawBlock(image, x + 52, row.y + 15, 5, 3, 0, 240, 240, 255);
+      }
+      if (row.label === "DEATH" && column >= 2) {
+        drawBlock(image, x + 37, row.y + 28, 12, 8, 70, 75, 75, 255);
+        drawBlock(image, x + 49, row.y + 31, 6, 4, 0, 240, 240, 255);
       }
     }
-    cursorX += 6 * scale;
+  }
+
+  return image;
+}
+
+function drawPixelLabel(image: RGBAImage, text: string, startX: number, startY: number, scale: number): void {
+  const lines = text.split("\n");
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    let cursorX = startX;
+    const line = lines[lineIndex]!;
+    for (const char of line) {
+      const glyph = labelGlyphs[char];
+      if (!glyph) {
+        cursorX += 4 * scale;
+        continue;
+      }
+
+      for (let gy = 0; gy < glyph.length; gy += 1) {
+        const row = glyph[gy]!;
+        for (let gx = 0; gx < row.length; gx += 1) {
+          if (row[gx] !== "1") {
+            continue;
+          }
+          drawBlock(image, cursorX + gx * scale, startY + lineIndex * 18 + gy * scale, scale, scale, 0, 240, 240, 255);
+        }
+      }
+      cursorX += 6 * scale;
+    }
   }
 }
 
@@ -805,6 +853,20 @@ describe("sheet slicing", () => {
     ]);
     expect(detection.rowLabels![0]!.confidence).toBeGreaterThan(0.8);
     expect(detection.diagnostics!.notes).toContain("Labels: idle, walk, jump detected.");
+  });
+
+  test("keeps labels and frame counts stable on effect-heavy labeled sheets", () => {
+    const detection = detectSheetLayout(effectHeavyLabeledAnimationSheet());
+
+    expect(detection.rowAnimations.map((animation) => animation.name)).toEqual(["idle", "shoot", "take_damage", "death"]);
+    expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual([5, 8, 7, 7]);
+    expect(detection.frames).toHaveLength(27);
+    expect(detection.frames[5]!.name).toBe("shoot_000");
+    expect(detection.frames[13]!.name).toBe("take_damage_000");
+    expect(detection.frames[20]!.name).toBe("death_000");
+    expect(detection.rowLabels?.map((label) => label.rawText)).toEqual(["IDLE", "SHOOT", "TAKE DAMAGE", "DEATH"]);
+    expect(detection.diagnostics!.notes).toContain("Labels: idle, shoot, take_damage, death detected.");
+    expect(detection.confidence).toBeGreaterThan(0.75);
   });
 
   test("generates deterministic frame rects from rows columns margin and spacing", () => {

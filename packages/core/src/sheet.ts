@@ -347,10 +347,7 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
   const sourceSegments = segmentsForBand(image, band, background);
   const contentSegments = chooseFrameSegments(sourceSegments);
   const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
-  const labelFrameStart = Math.min(
-    contentSegments[0]?.x ?? Number.POSITIVE_INFINITY,
-    outlinedSegments[0]?.x ?? Number.POSITIVE_INFINITY
-  );
+  const labelFrameStart = frameStartForLabelSearch(sourceSegments, contentSegments, outlinedSegments);
   const rowLabel = Number.isFinite(labelFrameStart) ? detectRowLabel(image, band, background, labelFrameStart) : undefined;
 
   if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
@@ -477,19 +474,77 @@ function chooseFrameSegments(segments: Segment[]): Segment[] {
     return segments;
   }
 
-  const typicalGap = Math.max(1, medianInteger(gaps));
-  const largeGap = Math.max(20, typicalGap * 1.6);
-  const cutIndex = gaps.findIndex((gap, index) => gap >= largeGap && segments.length - index - 1 >= 2);
+  const cutIndex = findLabelCutIndex(segments, gaps);
   const trimmed = cutIndex >= 0 ? segments.slice(cutIndex + 1) : segments;
+  const startGaps = gapsBetweenStarts(trimmed);
+  if (startGaps.length > 0) {
+    const pitch = Math.max(1, medianInteger(startGaps));
+    const spread = (Math.max(...startGaps) - Math.min(...startGaps)) / pitch;
+    if (spread <= 0.24) {
+      return trimmed;
+    }
+  }
+
   const widths = trimmed.map((segment) => segment.w);
   const typicalWidth = medianInteger(widths);
 
   return trimmed.filter((segment) => segment.w >= typicalWidth * 0.65 && segment.w <= typicalWidth * 1.45);
 }
 
+function frameStartForLabelSearch(sourceSegments: Segment[], contentSegments: Segment[], outlinedSegments: Segment[]): number {
+  const gaps = gapsBetween(sourceSegments);
+  if (gaps.length > 0) {
+    const cutIndex = findLabelCutIndex(sourceSegments, gaps);
+    if (cutIndex >= 0) {
+      return sourceSegments[cutIndex + 1]!.x;
+    }
+  }
+
+  return Math.min(contentSegments[0]?.x ?? Number.POSITIVE_INFINITY, outlinedSegments[0]?.x ?? Number.POSITIVE_INFINITY);
+}
+
+function findLabelCutIndex(segments: Segment[], gaps: number[]): number {
+  if (gaps.length === 0) {
+    return -1;
+  }
+
+  const typicalGap = Math.max(1, medianInteger(gaps));
+  const labelGap = Math.max(20, typicalGap * 1.6);
+  return gaps.findIndex((gap, index) => gap >= labelGap && segments.length - index - 1 >= 2 && isLikelyLabelPrefix(segments, index));
+}
+
+function isLikelyLabelPrefix(segments: Segment[], cutIndex: number): boolean {
+  const after = segments.slice(cutIndex + 1);
+  if (after.length < 2) {
+    return false;
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = -1;
+  for (let index = 0; index <= cutIndex; index += 1) {
+    const segment = segments[index]!;
+    minX = Math.min(minX, segment.x);
+    maxX = Math.max(maxX, segment.x + segment.w);
+  }
+
+  const nextFrameX = after[0]!.x;
+  const afterWidth = Math.max(1, medianInteger(after.slice(0, Math.min(4, after.length)).map((segment) => segment.w)));
+  const prefixWidth = maxX - minX;
+  const prefixIsInLeftLabelGutter = minX <= 72 && maxX <= nextFrameX * 0.72;
+  const prefixIsSingleLabelBlock = cutIndex === 0 && minX <= 72 && prefixWidth <= afterWidth * 0.95;
+  const prefixIsMultiGlyphLabel = cutIndex > 0 && maxX <= nextFrameX * 0.78;
+
+  return prefixIsInLeftLabelGutter || prefixIsSingleLabelBlock || prefixIsMultiGlyphLabel;
+}
+
 function mergeDisconnectedComponents(segments: Segment[]): ComponentMergeResult {
   if (segments.length < 4) {
     return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  const nearbyEffects = mergeNearbyEffectSegments(segments);
+  if (nearbyEffects.usedComponentMerging) {
+    return nearbyEffects;
   }
 
   const rawStartGaps = gapsBetweenStarts(segments);
@@ -518,6 +573,56 @@ function mergeDisconnectedComponents(segments: Segment[]): ComponentMergeResult 
     segments: best.segments,
     usedComponentMerging: true,
     mergedComponentCount: best.mergedComponentCount
+  };
+}
+
+function mergeNearbyEffectSegments(segments: Segment[]): ComponentMergeResult {
+  const typicalWidth = Math.max(1, medianInteger(segments.map((segment) => segment.w)));
+  const merged: Segment[] = [];
+  let mergedComponentCount = 0;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const current = { ...segments[index]! };
+
+    while (index + 1 < segments.length) {
+      const next = segments[index + 1]!;
+      const gap = next.x - (current.x + current.w);
+      const following = segments[index + 2];
+      const followingGap = following ? following.x - (next.x + next.w) : Number.POSITIVE_INFINITY;
+      const closeGap = gap >= 0 && gap <= Math.max(4, Math.min(12, typicalWidth * 0.55));
+      const smallEffect = next.w <= Math.max(8, typicalWidth * 0.72);
+      const nextFrameGap = followingGap >= Math.max(gap * 2, typicalWidth * 0.75);
+
+      if (!closeGap || !smallEffect || !nextFrameGap) {
+        break;
+      }
+
+      current.w = next.x + next.w - current.x;
+      mergedComponentCount += 1;
+      index += 1;
+    }
+
+    merged.push(current);
+  }
+
+  if (mergedComponentCount === 0 || merged.length < 2) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  const startGaps = gapsBetweenStarts(merged);
+  const pitch = Math.max(1, medianInteger(startGaps));
+  const fit = fitRegularStarts(merged, pitch);
+  const maxStartGap = Math.max(...startGaps);
+  const minStartGap = Math.min(...startGaps);
+  const spread = (maxStartGap - minStartGap) / pitch;
+  if (spread > 0.32 || fit.maxDriftPx > Math.max(8, pitch * 0.18)) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  return {
+    segments: merged,
+    usedComponentMerging: true,
+    mergedComponentCount
   };
 }
 
@@ -645,7 +750,7 @@ function detectRowLabel(
     return undefined;
   }
 
-  const rect = foregroundBoundsInRegion(image, 0, band.start, searchEndX, band.end + 1, background);
+  const rect = labelBoundsBeforeFrame(image, band, searchEndX, background);
   if (!rect || rect.w < 6 || rect.h < 6 || rect.w > searchEndX * 0.95) {
     return undefined;
   }
@@ -675,6 +780,43 @@ function detectRowLabel(
     confidence: best.confidence,
     rect: best.rect
   };
+}
+
+function labelBoundsBeforeFrame(
+  image: RGBAImage,
+  band: Band,
+  searchEndX: number,
+  background: [number, number, number, number]
+): Rect | undefined {
+  const counts = new Uint16Array(searchEndX);
+  const bandHeight = band.end - band.start + 1;
+  const threshold = Math.max(1, Math.floor(bandHeight * 0.03));
+
+  for (let x = 0; x < searchEndX; x += 1) {
+    let count = 0;
+    for (let y = band.start; y <= band.end; y += 1) {
+      if (isForeground(image, x, y, background)) {
+        count += 1;
+      }
+    }
+    counts[x] = count;
+  }
+
+  const labelBands = bandsFromCounts(counts, threshold, 3, 2);
+  if (labelBands.length === 0) {
+    return undefined;
+  }
+
+  const gaps: number[] = [];
+  for (let index = 1; index < labelBands.length; index += 1) {
+    gaps.push(labelBands[index]!.start - labelBands[index - 1]!.end - 1);
+  }
+  const typicalGap = Math.max(1, medianInteger(gaps));
+  const largeGap = Math.max(8, Math.min(24, typicalGap * 1.8));
+  const cutIndex = gaps.findIndex((gap) => gap >= largeGap);
+  const lastLabelBand = labelBands[cutIndex >= 0 ? cutIndex : labelBands.length - 1]!;
+
+  return foregroundBoundsInRegion(image, 0, band.start, lastLabelBand.end + 1, band.end + 1, background);
 }
 
 function foregroundBoundsInRegion(
@@ -782,12 +924,26 @@ function scoreLabelTemplate(
   let sourceCount = 0;
   let templateCount = 0;
 
-  for (let y = 0; y < rect.h; y += 1) {
-    const ty = Math.min(template.height - 1, Math.floor((y / rect.h) * template.height));
-    for (let x = 0; x < rect.w; x += 1) {
-      const tx = Math.min(template.width - 1, Math.floor((x / rect.w) * template.width));
-      const sourceOn = isForeground(image, rect.x + x, rect.y + y, background);
+  for (let ty = 0; ty < template.height; ty += 1) {
+    const y0 = Math.floor((ty / template.height) * rect.h);
+    const y1 = Math.max(y0 + 1, Math.ceil(((ty + 1) / template.height) * rect.h));
+    for (let tx = 0; tx < template.width; tx += 1) {
+      const x0 = Math.floor((tx / template.width) * rect.w);
+      const x1 = Math.max(x0 + 1, Math.ceil(((tx + 1) / template.width) * rect.w));
       const templateOn = template.data[ty * template.width + tx] === 1;
+      let foregroundCount = 0;
+      let sampleCount = 0;
+
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          sampleCount += 1;
+          if (isForeground(image, rect.x + x, rect.y + y, background)) {
+            foregroundCount += 1;
+          }
+        }
+      }
+
+      const sourceOn = foregroundCount / Math.max(1, sampleCount) >= 0.28;
 
       if (sourceOn) {
         sourceCount += 1;
