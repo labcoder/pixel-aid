@@ -34,6 +34,14 @@ export function clampSheetInteger(value: number, min: number, max: number): numb
   return Math.max(min, Math.min(max, Math.round(value)));
 }
 
+export function clampSelectedFrameIndex(frameCount: number, index: number): number {
+  if (frameCount <= 0) {
+    return -1;
+  }
+
+  return clampSheetInteger(index, 0, frameCount - 1);
+}
+
 export function deriveSheetGridFromFrameSize(request: SheetGridRequest): { rows: number; columns: number } {
   const availableWidth = Math.max(0, request.sheetWidth - request.margin * 2 + request.spacing);
   const availableHeight = Math.max(0, request.sheetHeight - request.margin * 2 + request.spacing);

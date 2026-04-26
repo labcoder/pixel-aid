@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   clampSheetInteger,
+  clampSelectedFrameIndex,
   deriveSheetGridFromFrameSize,
   getPivotForPreset,
   summarizeSheetFit
@@ -72,5 +73,12 @@ describe("sheet controls", () => {
     expect(clampSheetInteger(-4, 0, 16)).toBe(0);
     expect(clampSheetInteger(Number.NaN, 2, 16)).toBe(2);
     expect(clampSheetInteger(99, 1, 16)).toBe(16);
+  });
+
+  test("clamps selected frame indexes to available frames", () => {
+    expect(clampSelectedFrameIndex(0, 4)).toBe(-1);
+    expect(clampSelectedFrameIndex(3, -2)).toBe(0);
+    expect(clampSelectedFrameIndex(3, 1)).toBe(1);
+    expect(clampSelectedFrameIndex(3, 9)).toBe(2);
   });
 });

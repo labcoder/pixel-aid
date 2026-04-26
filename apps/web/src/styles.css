@@ -950,19 +950,49 @@ button:disabled {
 }
 
 .timeline-rail {
-  height: 54px;
+  min-height: 64px;
   display: flex;
   gap: 8px;
   margin-top: 0.7rem;
-  overflow: hidden;
+  overflow: auto;
 }
 
-.timeline-rail span {
-  min-width: 34px;
-  flex: 1 1 34px;
+.timeline-rail button {
+  min-width: 54px;
+  min-height: 56px;
+  flex: 0 0 54px;
+  display: grid;
+  gap: 0.05rem;
+  padding: 0.35rem;
+  color: var(--muted);
   background: linear-gradient(180deg, #2d3434, #161a19);
   border: 1px solid var(--line);
   border-radius: 5px;
+}
+
+.timeline-rail button.active {
+  color: #101112;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
+.timeline-rail strong,
+.timeline-rail span,
+.timeline-rail small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+.timeline-rail strong {
+  font-size: 0.78rem;
+}
+
+.timeline-rail span,
+.timeline-rail small {
+  font-size: 0.66rem;
 }
 
 .empty-panel-message {

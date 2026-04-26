@@ -53,6 +53,7 @@ import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outli
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 import {
+  clampSelectedFrameIndex,
   clampSheetInteger,
   deriveSheetGridFromFrameSize,
   getPivotForPreset,
@@ -125,6 +126,7 @@ export function App() {
   const [pivotPreset, setPivotPreset] = useState<PivotPreset>("bottomCenter");
   const [customPivotX, setCustomPivotX] = useState(16);
   const [customPivotY, setCustomPivotY] = useState(32);
+  const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
@@ -198,6 +200,10 @@ export function App() {
     setCustomPivotX((current) => clampSheetInteger(current, 0, frameWidth));
     setCustomPivotY((current) => clampSheetInteger(current, 0, frameHeight));
   }, [frameHeight, frameWidth]);
+
+  useEffect(() => {
+    setSelectedFrameIndex((current) => clampSelectedFrameIndex(sheetFrames.length, current));
+  }, [sheetFrames.length]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -1030,6 +1036,7 @@ export function App() {
           zoom={zoom}
           showGrid={showGrid}
           frames={sheetFrames}
+          selectedFrameIndex={selectedFrameIndex}
           onZoomChange={setZoom}
         />
       </section>
@@ -1072,11 +1079,26 @@ export function App() {
           <section>
             <h2>Sprite Player</h2>
             {timelineState.enabled ? (
-              <div className="timeline-rail">
-                {sheetFrames.map((frame) => (
-                  <span key={frame.name} title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`} />
-                ))}
-              </div>
+              <>
+                <div className="timeline-rail">
+                  {sheetFrames.map((frame, index) => (
+                    <button
+                      key={frame.name}
+                      type="button"
+                      className={index === selectedFrameIndex ? "active" : ""}
+                      title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`}
+                      onClick={() => setSelectedFrameIndex(index)}
+                    >
+                      <strong>{index + 1}</strong>
+                      <span>{frame.rect.w}x{frame.rect.h}</span>
+                      <small>
+                        {frame.pivot.x},{frame.pivot.y}
+                      </small>
+                    </button>
+                  ))}
+                </div>
+                <p className="field-note">Select a frame to highlight its bounds and pivot in the viewport.</p>
+              </>
             ) : (
               <p className="empty-panel-message">{timelineState.message}</p>
             )}
