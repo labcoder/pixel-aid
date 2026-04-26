@@ -58,8 +58,9 @@ import {
   targetSizePresets
 } from "./lib/fixControls";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
-import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
+import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
+import { resizeAnimationRowFromSourceFrame } from "./lib/frameRowEditing";
 import { getFramePreviewPlacement, getOnionSkinPlacements } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
@@ -1176,24 +1177,24 @@ export function App() {
       }
 
       setDetectedSheetFrames((current) =>
-        current.map((frame, index) =>
-          index === frameIndex
-            ? resizeFrameBySourceDelta({
-                frame,
-                handle,
-                deltaX: delta.x,
-                deltaY: delta.y,
-                scaleX: gridScaleX,
-                scaleY: gridScaleY,
-                sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
-                outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
-                minOutputSize: { width: 4, height: 4 }
-              })
-            : frame
-        )
+        resizeAnimationRowFromSourceFrame({
+          frames: current,
+          animations: detectedRowAnimations,
+          frameIndex,
+          handle,
+          delta,
+          scaleX: gridScaleX,
+          scaleY: gridScaleY,
+          sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
+          outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
+          margin: sheetMargin,
+          spacing: sheetSpacing
+        })
       );
+      setFixResult(null);
+      setIsPlaying(false);
     },
-    [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
+    [detectedRowAnimations, effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]
   );
 
   const applyGridCandidate = useCallback(
