@@ -94,6 +94,7 @@ import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
@@ -125,7 +126,7 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
   viewport: {
     title: "Viewport",
     docsId: "viewport",
-    tooltip: "Preview grid, zoom, pan, split comparison, and rulers."
+    tooltip: "Preview grid, zoom, pan, input/output comparison, and rulers."
   },
   export: {
     title: "Export",
@@ -1643,19 +1644,19 @@ export function App() {
       <section className="viewport-panel" aria-label="Pixel preview viewport">
         <div className="viewport-strip">
           <div>
-            <strong>Before / After</strong>
-            <HelpButton docsId="viewport" tooltip="Canvas preview, pan, zoom, split comparison, and rulers." onDocs={openDocs} />
-            <span>{viewMode} view</span>
+            <strong>{getViewportModeTitle()}</strong>
+            <HelpButton docsId="viewport" tooltip="Canvas preview, pan, zoom, input/output comparison, and rulers." onDocs={openDocs} />
+            <span>{getViewportModeLabel(viewMode)} view</span>
           </div>
           <div className="view-controls" aria-label="Viewport mode controls">
             <button type="button" className={viewMode === "before" ? "active" : ""} onClick={() => setViewMode("before")}>
-              Before
+              {getViewportModeLabel("before")}
             </button>
             <button type="button" className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>
-              Split
+              {getViewportModeLabel("split")}
             </button>
             <button type="button" className={viewMode === "after" ? "active" : ""} onClick={() => setViewMode("after")}>
-              After
+              {getViewportModeLabel("after")}
             </button>
           </div>
           <div className="viewport-readouts">
