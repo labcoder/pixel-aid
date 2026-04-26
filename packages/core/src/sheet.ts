@@ -3,6 +3,7 @@ import type { SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
   validateSliceOptions(options);
   const frames: SpriteFrame[] = [];
+  const pivot = options.pivot ?? { x: Math.floor(options.frameWidth / 2), y: options.frameHeight };
 
   for (let row = 0; row < options.rows; row += 1) {
     for (let column = 0; column < options.columns; column += 1) {
@@ -13,7 +14,7 @@ export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
       frames.push({
         name: `frame_${index.toString().padStart(3, "0")}`,
         rect: { x, y, w: options.frameWidth, h: options.frameHeight },
-        pivot: { x: Math.floor(options.frameWidth / 2), y: options.frameHeight },
+        pivot: { ...pivot },
         durationMs: 120
       });
     }

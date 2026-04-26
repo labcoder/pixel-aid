@@ -518,6 +518,24 @@ describe("sheet slicing", () => {
     expect(frames[5]!.name).toBe("frame_005");
     expect(frames[5]!.pivot).toEqual({ x: 8, y: 12 });
   });
+
+  test("uses explicit frame pivots when slicing sheet frames", () => {
+    const frames = sliceSheetFrames({
+      frameWidth: 16,
+      frameHeight: 12,
+      rows: 1,
+      columns: 2,
+      margin: 0,
+      spacing: 0,
+      extrude: 0,
+      pivot: { x: 3, y: 10 }
+    });
+
+    expect(frames.map((frame) => frame.pivot)).toEqual([
+      { x: 3, y: 10 },
+      { x: 3, y: 10 }
+    ]);
+  });
 });
 
 describe("fix pipeline", () => {

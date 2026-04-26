@@ -107,6 +107,7 @@ export type SheetSliceOptions = {
   margin: number;
   spacing: number;
   extrude: number;
+  pivot?: Pivot;
 };
 
 export type SpriteFrame = {
