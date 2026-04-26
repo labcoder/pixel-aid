@@ -1,6 +1,6 @@
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { renameAnimationTag, updateAnimationTagTiming } from "./animationTags";
+import { renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
 
 const animations: AnimationTag[] = [
   { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
@@ -57,5 +57,23 @@ describe("animation tag editing", () => {
       { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
       { name: "row_2", frameNames: ["row_2_000"], fps: 12, loop: true }
     ]);
+  });
+
+  test("updates one frame duration without mutating other frame metadata", () => {
+    const updated = updateFrameDuration({ frames, frameName: "row_1_001", durationMs: 83 });
+
+    expect(updated[0]).toEqual(frames[0]);
+    expect(updated[1]).toEqual({
+      ...frames[1],
+      durationMs: 83
+    });
+    expect(updated[2]).toEqual(frames[2]);
+    expect(updated).not.toBe(frames);
+  });
+
+  test("clamps edited frame duration to engine-friendly bounds", () => {
+    expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: -20 })[0]?.durationMs).toBe(1);
+    expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: 120_000 })[0]?.durationMs).toBe(60_000);
+    expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: Number.NaN })[0]?.durationMs).toBe(120);
   });
 });

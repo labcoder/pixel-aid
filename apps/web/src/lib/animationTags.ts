@@ -61,6 +61,27 @@ export function updateAnimationTagTiming({
   );
 }
 
+export function updateFrameDuration({
+  frames,
+  frameName,
+  durationMs
+}: {
+  frames: readonly SpriteFrame[];
+  frameName: string;
+  durationMs: number;
+}): SpriteFrame[] {
+  const nextDurationMs = clampDurationMs(durationMs);
+
+  return frames.map((frame) =>
+    frame.name === frameName
+      ? {
+          ...copyFrame(frame),
+          durationMs: nextDurationMs
+        }
+      : copyFrame(frame)
+  );
+}
+
 function normalizeAnimationName(value: string): string {
   return value.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
 }
@@ -83,4 +104,18 @@ function uniqueAnimationName(name: string, existingNames: string[]): string {
 
 function clampFps(value: number): number {
   return Math.max(1, Math.min(60, Math.round(Number.isFinite(value) ? value : 1)));
+}
+
+function clampDurationMs(value: number): number {
+  return Math.max(1, Math.min(60_000, Math.round(Number.isFinite(value) ? value : 120)));
+}
+
+function copyFrame(frame: SpriteFrame): SpriteFrame {
+  return {
+    ...frame,
+    rect: { ...frame.rect },
+    ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
+    pivot: { ...frame.pivot },
+    ...(frame.tags ? { tags: [...frame.tags] } : {})
+  };
 }
