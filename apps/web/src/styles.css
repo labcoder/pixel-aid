@@ -588,6 +588,10 @@ button:disabled {
   border-radius: 8px;
 }
 
+.guided-fix-panel.is-compact {
+  padding: 10px;
+}
+
 .guided-fix-heading {
   display: grid;
   gap: 0.3rem;
@@ -639,6 +643,28 @@ button:disabled {
   border-radius: 4px;
   font-size: 0.68rem;
   font-weight: 800;
+}
+
+.guided-compact-summary {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.guided-compact-summary div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.guided-compact-summary strong {
+  color: var(--text);
+  font-size: 0.82rem;
+}
+
+.guided-compact-summary small {
+  color: var(--muted);
+  font-size: 0.7rem;
 }
 
 .simple-sprite-controls {

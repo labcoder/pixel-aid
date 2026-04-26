@@ -67,7 +67,7 @@ import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
-import { getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
@@ -2147,22 +2147,36 @@ function GuidedFixPanel({
   onRunFix: () => void | Promise<void>;
   onToggleAdvanced: () => void;
 }) {
+  const panelState = getGuidedFixPanelState({ selected, advancedOpen });
+
   return (
-    <section className="guided-fix-panel" aria-label="Guided fix recommendation">
-      <div className="guided-fix-heading">
-        <span className="guided-kicker">Recommendation</span>
-        <h2>{selected ? summary.title : "Import an asset"}</h2>
-        <p>{selected ? summary.intent : "Drop, paste, or import an image to start."}</p>
-      </div>
-      {selected ? (
-        <div className="guided-metrics" aria-label="Suggested settings">
-          {summary.metrics.map((metric) => (
-            <span key={metric}>{metric}</span>
-          ))}
+    <section className={panelState.showCompactRecommendation ? "guided-fix-panel is-compact" : "guided-fix-panel"} aria-label="Guided fix recommendation">
+      {panelState.showFullRecommendation ? (
+        <>
+          <div className="guided-fix-heading">
+            <span className="guided-kicker">Recommendation</span>
+            <h2>{selected ? summary.title : "Import an asset"}</h2>
+            <p>{selected ? summary.intent : "Drop, paste, or import an image to start."}</p>
+          </div>
+          {selected ? (
+            <div className="guided-metrics" aria-label="Suggested settings">
+              {summary.metrics.map((metric) => (
+                <span key={metric}>{metric}</span>
+              ))}
+            </div>
+          ) : null}
+          {simpleControls}
+          <p className="guided-reason">{reason}</p>
+        </>
+      ) : (
+        <div className="guided-compact-summary">
+          <div>
+            <span className="guided-kicker">Recommendation</span>
+            <strong>{summary.title}</strong>
+          </div>
+          <small>{summary.metrics.slice(0, 3).join(" / ")}</small>
         </div>
-      ) : null}
-      {simpleControls}
-      <p className="guided-reason">{reason}</p>
+      )}
       <div className="guided-actions">
         <button type="button" className="guided-primary" disabled={!selected || busy} onClick={onAutoSuggest}>
           <Sparkles size={14} />
@@ -2174,7 +2188,7 @@ function GuidedFixPanel({
         </button>
         <button type="button" className={advancedOpen ? "active" : ""} disabled={!selected} onClick={onToggleAdvanced}>
           <SlidersHorizontal size={14} />
-          {advancedOpen ? "Hide Advanced" : "Advanced"}
+          {panelState.advancedLabel}
         </button>
       </div>
     </section>

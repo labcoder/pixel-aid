@@ -1,7 +1,21 @@
 import { describe, expect, test } from "vitest";
-import { getGuidedFixSummary } from "./guidedFix";
+import { getGuidedFixPanelState, getGuidedFixSummary } from "./guidedFix";
 
 describe("guided fix summary", () => {
+  test("collapses simple recommendation controls while advanced settings are open", () => {
+    expect(getGuidedFixPanelState({ selected: true, advancedOpen: true })).toEqual({
+      showFullRecommendation: false,
+      showCompactRecommendation: true,
+      advancedLabel: "Guided"
+    });
+
+    expect(getGuidedFixPanelState({ selected: true, advancedOpen: false })).toEqual({
+      showFullRecommendation: true,
+      showCompactRecommendation: false,
+      advancedLabel: "Advanced"
+    });
+  });
+
   test("summarizes a single sprite recommendation in simple language", () => {
     const summary = getGuidedFixSummary({
       mode: "single",

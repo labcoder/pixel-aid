@@ -19,6 +19,27 @@ export type GuidedFixSummary = {
   metrics: string[];
 };
 
+export type GuidedFixPanelState = {
+  showFullRecommendation: boolean;
+  showCompactRecommendation: boolean;
+  advancedLabel: "Advanced" | "Guided";
+};
+
+export function getGuidedFixPanelState({
+  selected,
+  advancedOpen
+}: {
+  selected: boolean;
+  advancedOpen: boolean;
+}): GuidedFixPanelState {
+  const compact = selected && advancedOpen;
+  return {
+    showFullRecommendation: !compact,
+    showCompactRecommendation: compact,
+    advancedLabel: compact ? "Guided" : "Advanced"
+  };
+}
+
 export function getGuidedFixSummary(input: GuidedFixSummaryInput): GuidedFixSummary {
   if (input.mode === "spriteSheet") {
     return {
