@@ -55,7 +55,7 @@ Extrude is export padding metadata for future atlas-safe exports. It does not ch
 
 Pivot controls define the anchor point stored on every generated frame in native frame pixels. Presets are bottom center, center, and top left. Custom enables Pivot X and Pivot Y numeric fields. Pivots are drawn as cross markers in the viewport and exported in the JSON manifest.
 
-The bottom frame list shows each generated frame, its size, and pivot. Selecting a frame highlights its rectangle and pivot marker in the viewport.
+The bottom frame list shows each generated frame, its size, and pivot. Selecting a frame highlights its rectangle and pivot marker in the viewport and pauses playback so the selected frame can be inspected.
 
 # Viewport
 
@@ -92,7 +92,16 @@ Cleanup controls run after block downsampling and alpha handling.
 
 The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the timeline explains what is missing instead of pretending playback is available.
 
-The current first sheet workflow is a frame selector, not a full animation player. It highlights frame bounds and pivots so slicing metadata can be verified before export. Playback, FPS, loop modes, animation tags, and per-frame durations are next-step features.
+The current timeline player uses the generated sheet frames in row-major order. It can:
+
+- Play or pause frame advancement using `requestAnimationFrame`.
+- Step to the previous or next frame.
+- Scrub directly to any frame with the range control.
+- Set FPS from 1 to 60 when frames do not provide their own duration metadata.
+- Toggle looping. With looping disabled, playback stops on the last frame.
+- Show the selected frame name, frame size, and frame duration.
+
+Clicking a frame, scrubbing, or stepping pauses playback and keeps the viewport highlight in sync. Animation tags, clip selection, isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
 
 # Metrics
 

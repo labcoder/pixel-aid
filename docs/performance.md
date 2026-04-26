@@ -9,6 +9,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - The renderer draws native-size image buffers into cached native canvases before scaling.
 - Pixel grid overlays use integer zoom and snapped coordinates.
 - React state drives editor controls and asset selection; it does not run animation loops.
+- Timeline playback uses `requestAnimationFrame` and advances React state only when the selected frame changes.
 
 ## Processing
 
