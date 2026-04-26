@@ -1109,6 +1109,66 @@ button:disabled {
   color: var(--cyan);
 }
 
+.clip-editor {
+  display: grid;
+  gap: 4px;
+  margin-top: 0.7rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.clip-editor-header,
+.clip-row {
+  display: grid;
+  grid-template-columns: minmax(92px, 1fr) 48px 54px 60px;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.clip-editor-header {
+  color: #78837e;
+  text-transform: uppercase;
+}
+
+.clip-row {
+  padding: 0.35rem;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.clip-row.active {
+  border-color: var(--cyan);
+  background: #132625;
+}
+
+.clip-row input[type="text"],
+.clip-row input[type="number"],
+.clip-row input:not([type]) {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.45rem;
+}
+
+.clip-row input[type="number"] {
+  text-align: right;
+}
+
+.clip-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.clip-row input[type="checkbox"] {
+  accent-color: var(--cyan);
+}
+
 .timeline-rail {
   min-height: 64px;
   display: flex;

@@ -43,6 +43,7 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
+import { renameAnimationTag, updateAnimationTagTiming } from "./lib/animationTags";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -752,11 +753,43 @@ export function App() {
     setIsPlaying((current) => !current);
   }, [canPlayTimeline]);
 
-  const changeSelectedAnimation = useCallback((value: string) => {
-    setIsPlaying(false);
-    playbackAccumulatorRef.current = 0;
-    setSelectedAnimationName(value);
-  }, []);
+  const changeSelectedAnimation = useCallback(
+    (value: string) => {
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      setSelectedAnimationName(value);
+      const animation = detectedRowAnimations.find((item) => item.name === value);
+      if (animation) {
+        setPlaybackFps(clampFps(animation.fps ?? playbackFps));
+        setPlaybackLoop(animation.loop);
+      }
+    },
+    [detectedRowAnimations, playbackFps]
+  );
+
+  const renameDetectedAnimation = useCallback(
+    (fromName: string, toName: string) => {
+      const result = renameAnimationTag({ animations: detectedRowAnimations, frames: detectedSheetFrames, fromName, toName });
+      setDetectedRowAnimations(result.animations);
+      setDetectedSheetFrames(result.frames);
+      setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
+    },
+    [detectedRowAnimations, detectedSheetFrames]
+  );
+
+  const updateDetectedAnimationTiming = useCallback(
+    (name: string, timing: { fps?: number; loop?: boolean }) => {
+      const existing = detectedRowAnimations.find((animation) => animation.name === name);
+      const nextFps = clampFps(timing.fps ?? existing?.fps ?? playbackFps);
+      const nextLoop = timing.loop ?? existing?.loop ?? playbackLoop;
+      setDetectedRowAnimations((current) => updateAnimationTagTiming({ animations: current, name, fps: nextFps, loop: nextLoop }));
+      if (selectedAnimationName === name) {
+        setPlaybackFps(nextFps);
+        setPlaybackLoop(nextLoop);
+      }
+    },
+    [detectedRowAnimations, playbackFps, playbackLoop, selectedAnimationName]
+  );
 
   const moveDetectedSourceFrame = useCallback(
     (frameIndex: number, delta: { x: number; y: number }) => {
@@ -1543,6 +1576,52 @@ export function App() {
                   <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
                 </div>
+                {detectedRowAnimations.length > 0 ? (
+                  <div className="clip-editor" aria-label="Detected animation clip metadata">
+                    <div className="clip-editor-header">
+                      <span>Clip name</span>
+                      <span>Frames</span>
+                      <span>FPS</span>
+                      <span>Loop</span>
+                    </div>
+                    {detectedRowAnimations.map((animation) => (
+                      <div key={animation.name} className={animation.name === selectedAnimationName ? "clip-row active" : "clip-row"}>
+                        <input
+                          aria-label={`Rename ${animation.name}`}
+                          type="text"
+                          defaultValue={animation.name}
+                          onBlur={(event) => {
+                            if (event.currentTarget.value !== animation.name) {
+                              renameDetectedAnimation(animation.name, event.currentTarget.value);
+                            }
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter") {
+                              event.currentTarget.blur();
+                            }
+                          }}
+                        />
+                        <span>{animation.frameNames.length}</span>
+                        <input
+                          aria-label={`${animation.name} FPS`}
+                          type="number"
+                          min="1"
+                          max="60"
+                          value={animation.fps ?? playbackFps}
+                          onChange={(event) => updateDetectedAnimationTiming(animation.name, { fps: Number(event.currentTarget.value) })}
+                        />
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={animation.loop}
+                            onChange={(event) => updateDetectedAnimationTiming(animation.name, { loop: event.currentTarget.checked })}
+                          />
+                          <span>{animation.loop ? "On" : "Off"}</span>
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
                 <div className="timeline-rail">
                   {timelineFrames.map((frame, index) => {
                     const globalFrameIndex = animationFrameIndexes[index] ?? index;
