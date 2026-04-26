@@ -260,7 +260,6 @@ function outlinedCellSegmentsForBand(
 
     const separators: number[] = [];
     let separatorStart = -1;
-    let lastSeparator = -1;
     for (let x = segment.x; x < segment.x + segment.w; x += 1) {
       let count = 0;
       for (let y = band.start; y <= band.end; y += 1) {
@@ -273,14 +272,12 @@ function outlinedCellSegmentsForBand(
         if (separatorStart < 0) {
           separatorStart = x;
         }
-        lastSeparator = x;
         continue;
       }
 
       if (separatorStart >= 0) {
         separators.push(separatorStart);
         separatorStart = -1;
-        lastSeparator = -1;
       }
     }
 
