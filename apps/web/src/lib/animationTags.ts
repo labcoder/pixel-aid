@@ -82,6 +82,23 @@ export function updateFrameDuration({
   );
 }
 
+export function applyFrameDurationOverrides(
+  frames: readonly SpriteFrame[],
+  overrides: Readonly<Record<string, number>>
+): SpriteFrame[] {
+  return frames.map((frame) => {
+    const durationMs = overrides[frame.name];
+    if (durationMs === undefined) {
+      return copyFrame(frame);
+    }
+
+    return {
+      ...copyFrame(frame),
+      durationMs: clampDurationMs(durationMs)
+    };
+  });
+}
+
 function normalizeAnimationName(value: string): string {
   return value.trim().replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 48);
 }

@@ -1,6 +1,6 @@
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
+import { applyFrameDurationOverrides, renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
 
 const animations: AnimationTag[] = [
   { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
@@ -75,5 +75,16 @@ describe("animation tag editing", () => {
     expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: -20 })[0]?.durationMs).toBe(1);
     expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: 120_000 })[0]?.durationMs).toBe(60_000);
     expect(updateFrameDuration({ frames, frameName: "row_1_000", durationMs: Number.NaN })[0]?.durationMs).toBe(120);
+  });
+
+  test("applies frame duration overrides by name", () => {
+    const updated = applyFrameDurationOverrides(frames, {
+      row_1_000: 200,
+      missing_frame: 40
+    });
+
+    expect(updated.map((frame) => frame.durationMs)).toEqual([200, 125, 100]);
+    expect(updated[0]?.rect).toEqual(frames[0]?.rect);
+    expect(updated[0]?.rect).not.toBe(frames[0]?.rect);
   });
 });
