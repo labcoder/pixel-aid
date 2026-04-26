@@ -59,18 +59,19 @@ Current signals:
 - Large landscape sources are scanned for repeated horizontal foreground bands against a sampled corner background. Three or more separated bands bias the mode toward sprite sheet because this matches common AI-generated animation sheets with one animation per row.
 - Balanced portrait or square sources without repeated bands remain single sprites unless tile-sheet divisibility is stronger.
 
-For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, splits wide outlined grid rows by vertical cell separators, drops left-side label segments when a larger frame grid follows them, normalizes first-pass unboxed rows whose visible sprite content is centered inside a regular pitch even when the visible gutters are uneven, and can merge nearby disconnected body/effect components when their start positions fit a mildly drifted shared pitch. It returns:
+For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, splits wide outlined grid rows by vertical cell separators, uses the left-side region before the first frame as an optional label candidate, normalizes first-pass unboxed rows whose visible sprite content is centered inside a regular pitch even when the visible gutters are uneven, and can merge nearby disconnected body/effect components when their start positions fit a mildly drifted shared pitch. It returns:
 
 - Estimated frame width and height.
 - Row count and maximum column count.
 - Margin and spacing.
 - Explicit frame rectangles.
 - Per-row frame counts.
-- Initial row animation tags.
+- Initial row animation tags, using confident row labels when available.
+- Row-label metadata for common labels such as IDLE, WALK, JUMP, SHOOT, TAKE DAMAGE, and DEATH.
 - Row and column confidence diagnostics.
-- Confidence and warnings, including notes when outlined cell separators, content-centered uneven-gutter normalization, component merging, or mild drift fitting were used.
+- Confidence and warnings, including notes when outlined cell separators, content-centered uneven-gutter normalization, component merging, mild drift fitting, or row-label matching were used.
 
-This is still conservative. It does not OCR row labels, handle fully irregular center drift, semantically group large overlapping effects, or infer every uneven gutter in unboxed sheets. It gives the editor a useful starting point and preserves manual override.
+This is still conservative. Row-label matching is a small template matcher for common blocky animation words, not full OCR. It does not handle arbitrary text, fully irregular center drift, semantically group large overlapping effects, or infer every uneven gutter in unboxed sheets. It gives the editor a useful starting point and preserves manual override.
 
 Detected frames can be manually nudged or resized in the web viewport. Move and resize operations apply source-space deltas to the frame `sourceRect` and update the corresponding native frame `rect` by the active grid scale. This keeps the source overlay, output slicing metadata, and row animation membership aligned without rerunning detection.
 
@@ -160,4 +161,4 @@ The slicer also accepts an optional pivot. When present, that pivot is copied on
 
 Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, and exported as manifest animations.
 
-The slicer can consume explicit detected frame metadata, including first-pass content-centered gutter normalization, mild drift fitting, and conservative disconnected-component grouping from sheet detection. It does not yet detect fully irregular gutters, source row labels, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.
+The slicer can consume explicit detected frame metadata, including first-pass content-centered gutter normalization, mild drift fitting, conservative disconnected-component grouping, and common row-label names from sheet detection. It does not yet detect fully irregular gutters, arbitrary source text, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.

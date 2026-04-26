@@ -64,7 +64,7 @@ Editor:
 - Collapsible and reorderable inspector sections for mode, target size, aspect lock, presets, cleanup, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
 - Grid candidate preview cards with canvas thumbnails, confidence badges, score rows, crop badges, and one-click candidate application.
 - Sprite sheet and tile sheet modes expose frame width/height, rows, columns, margin, spacing, export extrusion, pivot presets, custom pivot coordinates, a fit summary, and a Fit Rows / Columns action.
-- Auto Suggest can detect row-based sprite sheet layouts, including bordered cell grids where row outlines would otherwise look like one wide segment, first-pass unboxed rows where uneven gutters come from different sprite poses, and mild row/column drift where nearby disconnected body/effect components should be merged into one frame box. It populates frame/cell controls, preserves variable row frame counts, reports detection notes, and seeds row clips such as `row_1`, `row_2`, etc.
+- Auto Suggest can detect row-based sprite sheet layouts, including bordered cell grids where row outlines would otherwise look like one wide segment, first-pass unboxed rows where uneven gutters come from different sprite poses, and mild row/column drift where nearby disconnected body/effect components should be merged into one frame box. It populates frame/cell controls, preserves variable row frame counts, reports detection notes, and seeds row clips from confident left-side labels such as `idle`, `walk`, and `jump`, falling back to `row_1`, `row_2`, etc.
 - Detected source frame boxes can be selected, dragged, and resized from canvas handles in the Before/Split source view. Edits update the detected source rectangle and native output rect while keeping frame names, row tags, pivots, and animation membership stable.
 - The viewport draws exact detector source frame bounds before Fix and fixed-output frame bounds after Fix, with selected-frame highlighting from the bottom frame list.
 - Timeline/player controls for sheet-like modes: choose detected row clips, scrub frames, step previous/next, play/pause through frames with `requestAnimationFrame`, set fallback FPS, choose forward/reverse/ping-pong playback, edit selected-frame duration, toggle looping, show preview-only onion skin, normalize frame preview/export canvases, rename detected row clips, and edit per-clip FPS/loop/direction metadata. Frame `durationMs`, playback `direction`, and detected row clips export into the JSON manifest.
@@ -81,7 +81,7 @@ Processing:
 - Edge halo removal for semi-transparent or background-colored fringes before outline and palette extraction.
 - Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity, favoring dominant color when blocks are already crisp.
 - Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the overall aspect ratio is not extremely wide.
-- Core sheet layout detection finds row bands, regular frame groups, outlined cell separators, first-pass content-centered uneven gutters, and conservative disconnected-component frame groups against a sampled background. It ignores left-side labels when a larger frame grid follows them, aligns drifted rows to a shared column grid, and returns frames, row counts, row animations, row/column confidence diagnostics, and warnings.
+- Core sheet layout detection finds row bands, regular frame groups, outlined cell separators, first-pass content-centered uneven gutters, and conservative disconnected-component frame groups against a sampled background. It can classify common blocky left-side row labels, aligns drifted rows to a shared column grid, and returns frames, row counts, row animations, row-label metadata, row/column confidence diagnostics, and warnings.
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects.
@@ -92,15 +92,15 @@ Processing:
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
-- Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, and mild disconnected-component drift cases. Fully irregular gutters, semantic grouping of complex effects, per-engine normalized atlas options, OCR/label-aware animation naming, and imported timesheet editing are not implemented yet.
+- Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Fully irregular gutters, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
 ## Prioritized Roadmap
 
 1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
-2. Sprite-sheet workflow: add row-label-aware animation naming, stronger irregular-gutter/component fixtures, per-engine normalized atlas options, and editable confidence explanations.
-3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label-aware animation naming.
+2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-engine normalized atlas options, and editable confidence explanations.
+3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
 5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
@@ -109,4 +109,4 @@ Processing:
 
 ## Suggested Next Step
 
-The next best implementation step is row-label-aware animation naming for detected sheets, with stronger irregular-gutter fixtures to keep the detector honest.
+The next best implementation step is stronger real-sheet fixture coverage for labels, irregular gutters, and effect-heavy frames, followed by lightweight controls for correcting detected row names.

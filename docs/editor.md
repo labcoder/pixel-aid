@@ -25,7 +25,7 @@ Auto Suggest seeds controls from the current source. It should make a strong fir
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
 
-For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips such as `row_1` and `row_2` for the timeline player. It can also split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, and merge nearby disconnected body/effect components when mild drift still points to a shared column grid.
+For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips for the timeline player. It can split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, merge nearby disconnected body/effect components when mild drift still points to a shared column grid, and name row clips from confident blocky left-side labels such as `idle`, `walk`, or `jump`.
 
 Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
@@ -57,7 +57,7 @@ Frame boxes and pivot markers are drawn on the Before view before Fix using the 
 
 When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Click a detected frame box in the source view to select it, drag inside the box to move it, or drag one of its resize handles to adjust the detected bounds. The edit updates both the source rectangle and its native output rect while preserving the frame name, row tag, pivot, and row animation membership.
 
-Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, and manual frame controls remain available.
+Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
 
 Editing Frame W/H, Rows, Columns, Margin, Spacing, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
 
