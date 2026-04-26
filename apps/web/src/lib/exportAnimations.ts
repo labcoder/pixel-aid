@@ -15,6 +15,7 @@ export function animationTagsToManifestAnimations(
       frames: [...tag.frameNames],
       fps: tag.fps ?? options.fallbackFps,
       loop: tag.loop ?? options.fallbackLoop,
+      ...(tag.direction ? { direction: tag.direction } : {}),
       ...(tag.durationMs ? { durationMs: tag.durationMs } : {})
     };
   }

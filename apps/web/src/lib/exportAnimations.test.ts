@@ -31,4 +31,19 @@ describe("export animations", () => {
       })
     ).toEqual({});
   });
+
+  test("exports animation playback direction when present", () => {
+    const tags: AnimationTag[] = [
+      { name: "shoot", frameNames: ["shoot_000", "shoot_001"], fps: 12, loop: false, direction: "ping-pong" }
+    ];
+
+    expect(animationTagsToManifestAnimations(tags, { fallbackFps: 8, fallbackLoop: true })).toEqual({
+      shoot: {
+        frames: ["shoot_000", "shoot_001"],
+        fps: 12,
+        loop: false,
+        direction: "ping-pong"
+      }
+    });
+  });
 });

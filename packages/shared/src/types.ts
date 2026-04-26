@@ -125,6 +125,7 @@ export type AnimationTag = {
   fps?: number;
   durationMs?: number;
   loop: boolean;
+  direction?: "forward" | "reverse" | "ping-pong";
 };
 
 export type SheetLayoutDetection = {
