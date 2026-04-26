@@ -41,7 +41,7 @@ These simple controls update the same settings shown in the advanced groups, so 
 
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
 
-In sprite sheet and tile sheet modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is derived from Frame W, Frame H, Rows, Columns, Margin, and Spacing in the Frame / Cell section.
+In sprite sheet and tile sheet modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is shown as read-only Derived W and Derived H. Manual sheets derive that size from Frame W, Frame H, Rows, Columns, Margin, and Spacing. Detected animation sheets derive it from the detected row clips and their per-animation cell sizes.
 
 # Grid
 
@@ -57,11 +57,11 @@ Manual target uses Target W, Target H, Scale X, Scale Y, Phase X, and Phase Y. S
 
 For single sprites on a bright or transparent background, auto candidate may also detect a source crop. The crop is aligned to the selected grid so the fixed output removes empty canvas while preserving the global phase metadata shown in the inspector.
 
-Crop to detected bounds keeps single-sprite output trimmed to the detected foreground. When it is enabled, Target W and Target H guide grid scale and candidate choice, but the final output dimensions may be smaller because empty background around the sprite is removed. Disable it when you intentionally want to preserve the imported canvas footprint.
+Crop to detected bounds keeps single-sprite output trimmed to the detected foreground. When it is enabled, Target W and Target H guide grid scale and candidate choice, but the final output dimensions may be smaller because empty background around the sprite is removed. Editing Target W or Target H disables crop-to-bounds so the requested output dimensions are honored.
 
 # Frame / Cell
 
-Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
+Sprite sheet and tile sheet modes expose frame controls. In manual rectangular mode, Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
 
 Frame boxes and pivot markers are drawn on the Input view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
@@ -71,7 +71,9 @@ When Auto Suggest detected explicit source frame rectangles, the Input view uses
 
 Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
 
-Editing Frame W/H, Rows, Columns, Margin, Spacing, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
+When detected row clips are available, the Frame / Cell section switches to per-animation cell controls. Changing a row's Cell W or Cell H updates every frame in that animation and repacks the output sheet by animation row. Different animations can use different cell sizes, so an idle row can be narrower than a shoot or death row. Margin and Spacing reflow detected rows without clearing the source boxes.
+
+Editing manual Frame W/H, Rows, Columns, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
 
 Fit Rows / Columns calculates how many whole frames fit inside the current fixed image footprint using the configured frame size, margin, and spacing. It is a helper, not a detector: the user can still override the result manually.
 

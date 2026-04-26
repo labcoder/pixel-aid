@@ -29,7 +29,7 @@ Current scoring combines:
 
 Run evidence is moderated by edge agreement so divisor candidates such as 2px, 3px, or 4px do not outrank a clearer 6px pseudo-pixel grid just because they explain short noisy spans.
 
-When a meaningful background crop is found, candidates include a grid-aligned `sourceRect`. The fix pipeline uses that rect as the sampling origin while preserving the global phase metadata.
+When a meaningful background crop is found, candidates include a grid-aligned `sourceRect`. The fix pipeline uses that rect as the sampling origin while preserving the global phase metadata only when crop-to-bounds is enabled. If a user explicitly disables crop-to-bounds, the selected target dimensions are honored and the detected crop stays out of the active sampling grid.
 
 Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a crop-used flag; source coverage; a low/medium/high label; and short notes. The editor uses these diagnostics to explain confidence without parsing prose.
 
@@ -77,7 +77,7 @@ Detected frames can be manually nudged or resized in the web viewport. Move and 
 
 Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
 
-For detected sheet suggestions, source and output rectangles are deliberately different. Each frame keeps a source-space `sourceRect` for sampling the imported sheet, but its native `rect` is repacked into a clean row-major output sheet with zero source margin/gutter. Frame width and height are snapped toward common native sprite sizes when the detected grid lands close to values such as 32, 48, or 64 pixels. This prevents source labels, decorative gutters, or loose AI canvas spacing from becoming part of the fixed export.
+For detected sheet suggestions, source and output rectangles are deliberately different. Each frame keeps a source-space `sourceRect` for sampling the imported sheet, but its native `rect` is repacked into a clean animation-row output sheet with zero source label/gutter margin. Frame width and height are snapped toward common native sprite sizes when the detected grid lands close to values such as 32, 48, or 64 pixels. In the editor, each detected animation row can then have its own cell width and height; changing a row size repacks all output frame rects while preserving the source rectangles. This prevents source labels, decorative gutters, loose AI canvas spacing, and empty cells from becoming part of the fixed export.
 
 ## Palette
 
@@ -163,7 +163,7 @@ Remaining quality targets:
 
 The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
 
-Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, and exported as manifest animations with updated frame-name references.
+Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the packed native output rectangles after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, resized as per-animation cell rows, and exported as manifest animations with updated frame-name references.
 
 When Fix runs in a sheet-like mode, the core does not downsample the whole imported canvas as one image. It uses the current frame metadata as a fix plan: each frame is sampled from its own source rectangle, downsampled to its native frame rectangle, cleaned, and pasted into the output sheet. Palette extraction/remapping happens once after all frames are packed so animation colors stay stable across rows.
 
