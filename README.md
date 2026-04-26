@@ -2,7 +2,7 @@
 
 PixelAid is a Vite + React + TypeScript editor for turning AI-generated images that only look like pixel art into real, grid-aligned, palette-limited, engine-ready pixel assets.
 
-The current milestone is a functional editor foundation: import an image, inspect it in a pixel-perfect viewport, run a worker-backed fake-pixel cleanup pipeline, compare before/after output, and export a ZIP bundle containing a fixed PNG plus JSON manifest.
+The current milestone is a functional editor foundation: import an image, inspect it in a pixel-perfect viewport, run a worker-backed fake-pixel cleanup pipeline, compare input/output, and export a ZIP bundle containing a fixed PNG plus JSON manifest.
 
 The near-term product focus is single-sprite cleanup for high-resolution AI images on simple backgrounds, followed by sprite-sheet workflows with frame slicing, playback, pivots, and engine-specific exports.
 
@@ -46,9 +46,9 @@ docs                  Architecture, algorithms, performance, and licensing notes
 
 1. Import an image through the toolbar, drag/drop, file picker, or paste. Large imports show decode and analysis status while the app prepares the asset.
 2. Select the asset from the Assets panel. The editor keeps the source image immutable.
-3. Use Auto Suggest for a first pass, then adjust mode-specific controls: target size for a single sprite, or frame/cell dimensions for sprite and tile sheets. Auto Suggest shows analysis status and caches the grid candidates used by the preview cards.
+3. Use the guided recommendation card for a first pass. For single sprites, simple choices resize, clean background, reduce noise, change palette count, and add/repair outlines while updating the advanced settings underneath. Auto Suggest shows analysis status and caches the grid candidates used by the preview cards.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
-5. Compare source and output in Before, After, or Split view. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
+5. Compare source and output in Input, Output, or Compare view. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
 6. Export a ZIP containing the fixed PNG and generic JSON manifest.
 
 ## Implemented Features
@@ -58,14 +58,16 @@ Editor:
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
+- Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
+- Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, and palette count.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
 - Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, and draggable split comparison.
-- Crop-aware before/after alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
+- Crop-aware input/output alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
 - Collapsible and reorderable inspector sections for mode, target size, aspect lock, presets, cleanup, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
 - Grid candidate preview cards with canvas thumbnails, confidence badges, score rows, crop badges, and one-click candidate application.
 - Sprite sheet and tile sheet modes expose frame width/height, rows, columns, margin, spacing, export extrusion, pivot presets, custom pivot coordinates, a fit summary, and a Fit Rows / Columns action.
 - Auto Suggest can detect row-based sprite sheet layouts, including bordered cell grids where row outlines would otherwise look like one wide segment, first-pass unboxed rows where uneven gutters come from different sprite poses, and mild row/column drift where nearby disconnected body/effect components should be merged into one frame box. It populates frame/cell controls, preserves variable row frame counts, reports detection notes, and seeds row clips from confident left-side labels such as `idle`, `walk`, `jump`, `shoot`, `take_damage`, and `death`, falling back to `row_1`, `row_2`, etc.
-- Detected source frame boxes can be selected, dragged, and resized from canvas handles in the Before/Split source view. Edits update the detected source rectangle and native output rect while keeping frame names, row tags, pivots, and animation membership stable.
+- Detected source frame boxes can be selected, dragged, and resized from canvas handles in the Input/Compare source view. Edits update the detected source rectangle and native output rect while keeping frame names, row tags, pivots, and animation membership stable.
 - The viewport draws exact detector source frame bounds before Fix and fixed-output frame bounds after Fix, with selected-frame highlighting from the bottom frame list.
 - Timeline/player controls for sheet-like modes: choose detected row clips, scrub frames, step previous/next, play/pause through frames with `requestAnimationFrame`, set fallback FPS, choose forward/reverse/ping-pong playback, edit selected-frame duration, toggle looping, show preview-only onion skin, normalize frame preview/export canvases, rename detected row clips, and edit per-clip FPS/loop/direction metadata. Clip renames update matching frame-name prefixes, timing overrides, and manifest animation IDs. Frame `durationMs`, playback `direction`, and detected row clips export into the JSON manifest.
 - Source/output metrics and logs in a vertically resizable bottom panel.

@@ -2,7 +2,7 @@
 
 PixelAid's editor is organized around an asset browser, a canvas viewport, an inspector, and a bottom timeline/logs/metrics area.
 
-Inspector groups are collapsible and can be moved up or down. The default order puts Cleanup before Grid because palette, alpha, denoise, and outline choices usually explain why a grid result looks good or bad.
+The inspector starts with a guided recommendation card. It summarizes what PixelAid thinks the input is, offers Auto Suggest and Fix actions, and keeps the full advanced inspector collapsed until the user opens it. Inspector groups are collapsible and can be moved up or down. The default order puts Cleanup before Grid because palette, alpha, denoise, and outline choices usually explain why a grid result looks good or bad.
 
 # Assets
 
@@ -29,6 +29,16 @@ For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection
 
 Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
+For single sprites, the guided card exposes simple controls before the advanced inspector:
+
+- Resize applies common native-width presets while preserving source aspect ratio.
+- Background switches between preserving alpha and flood-filling a connected flat background to transparency.
+- Noise maps to existing denoise strengths: off, light, medium, and flat.
+- Outline maps to none, repair existing outline, or add outline.
+- Colors maps to common palette budgets: 16, 24, 32, and 64.
+
+These simple controls update the same settings shown in the advanced groups, so advanced editing and guided editing stay synchronized.
+
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
 
 In sprite sheet and tile sheet modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is derived from Frame W, Frame H, Rows, Columns, Margin, and Spacing in the Frame / Cell section.
@@ -53,11 +63,11 @@ Crop to detected bounds keeps single-sprite output trimmed to the detected foreg
 
 Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
 
-Frame boxes and pivot markers are drawn on the Before view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
+Frame boxes and pivot markers are drawn on the Input view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
 When Fix runs for a sprite sheet or tile sheet, PixelAid fixes the sheet one frame at a time. Each frame box is treated like its own single-sprite cleanup job, then the fixed frames are packed back into the generated sheet. Labels, gutters, empty cells, and unused canvas outside frame boxes should not be squeezed into the fixed sprite pixels.
 
-When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Click a detected frame box in the source view to select it, drag inside the box to move it, or drag one of its resize handles to adjust the detected bounds. The edit updates both the source rectangle and its native output rect while preserving the frame name, row tag, pivot, and row animation membership.
+When Auto Suggest detected explicit source frame rectangles, the Input view uses those exact source rectangles instead of estimating them from scale. Click a detected frame box in the source view to select it, drag inside the box to move it, or drag one of its resize handles to adjust the detected bounds. The edit updates both the source rectangle and its native output rect while preserving the frame name, row tag, pivot, and row animation membership.
 
 Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
 
@@ -77,14 +87,14 @@ The bottom frame list shows each generated frame, its size, and pivot. Selecting
 
 The viewport renders images through Canvas2D with smoothing disabled.
 
-- Switching between Before, After, and Split auto-fits the active source/output footprint so a large import and a small fixed sprite appear at a comparable working distance by default.
+- Switching between Input, Output, and Compare auto-fits the active source/output footprint so a large import and a small fixed sprite appear at a comparable working distance by default.
 - Mouse wheel zooms around the cursor.
 - Hold the left mouse button and drag to pan.
 - Double-click the viewport to recenter.
 - Rulers show native pixel positions and adapt their tick spacing as zoom changes.
-- Split view compares source and fixed output with a draggable divider.
-- When the fixed output is cropped, split view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. It is not stretched to the full imported canvas.
-- Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix. In Split view, each overlay is clipped to its own side of the divider.
+- Compare view shows source and fixed output with a draggable divider.
+- When the fixed output is cropped, Compare view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. It is not stretched to the full imported canvas.
+- Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix. In Compare view, each overlay is clipped to its own side of the divider.
 
 # Cleanup
 

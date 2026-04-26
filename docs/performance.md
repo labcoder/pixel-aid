@@ -9,6 +9,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - The renderer draws native-size image buffers into cached native canvases before scaling.
 - Pixel grid overlays use integer zoom and snapped coordinates.
 - Detected frame box selection and dragging are handled as canvas pointer interactions; frames are not rendered as React DOM nodes.
+- The guided recommendation panel uses normal React controls, but it only updates serialized fix settings. Pixel preview and frame rendering stay on canvas.
 - React state drives editor controls and asset selection; it does not run animation loops.
 - Timeline playback uses `requestAnimationFrame` and advances React state only when the selected frame changes.
 - The bottom timeline/logs/metrics area is resized with a CSS grid variable and pointer events rather than reflow-heavy layout polling.
