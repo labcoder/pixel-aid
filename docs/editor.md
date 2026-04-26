@@ -55,6 +55,8 @@ Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are
 
 Frame boxes and pivot markers are drawn on the Before view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
+When Fix runs for a sprite sheet or tile sheet, PixelAid fixes the sheet one frame at a time. Each frame box is treated like its own single-sprite cleanup job, then the fixed frames are packed back into the generated sheet. Labels, gutters, empty cells, and unused canvas outside frame boxes should not be squeezed into the fixed sprite pixels.
+
 When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Click a detected frame box in the source view to select it, drag inside the box to move it, or drag one of its resize handles to adjust the detected bounds. The edit updates both the source rectangle and its native output rect while preserving the frame name, row tag, pivot, and row animation membership.
 
 Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
