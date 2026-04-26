@@ -115,11 +115,14 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Scrub directly to any frame with the range control.
 - Set FPS from 1 to 60 when frames do not provide their own duration metadata.
 - Toggle looping. With looping disabled, playback stops on the last frame.
+- Toggle Normalize to preview each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
 - Rename detected row clips in the clip editor.
 - Edit per-clip FPS and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
-Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. Isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
+The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, and marks the pivot. The Normalize toggle currently affects timeline preview only; export still uses the current fixed PNG and frame metadata.
+
+Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, ping-pong playback, export repacking for normalized canvases, and editable per-frame durations are future timeline work.
 
 # Metrics
 
