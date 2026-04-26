@@ -22,6 +22,7 @@ import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlphaMode,
+  AnimationTag,
   AssetMode,
   DownscaleMethod,
   FixOptions,
@@ -47,7 +48,7 @@ import {
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
-import { suggestFixSettings } from "./lib/fixSuggestions";
+import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
@@ -137,6 +138,8 @@ export function App() {
   const [customPivotX, setCustomPivotX] = useState(16);
   const [customPivotY, setCustomPivotY] = useState(32);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
+  const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
+  const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
@@ -191,7 +194,8 @@ export function App() {
     }),
     [frameHeight, frameWidth, sheetColumns, sheetExtrude, sheetMargin, sheetPivot, sheetRows, sheetSpacing]
   );
-  const sheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
+  const manualSheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
+  const sheetFrames = sheetMode && detectedSheetFrames.length > 0 ? detectedSheetFrames : manualSheetFrames;
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
   const plannedSheetOutputSize = useMemo(
     () => ({
@@ -319,6 +323,39 @@ export function App() {
     setLogs((current) => [line, ...current].slice(0, 8));
   }, []);
 
+  const clearDetectedSheetLayout = useCallback(() => {
+    setDetectedSheetFrames([]);
+    setDetectedRowAnimations([]);
+  }, []);
+
+  const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion) => {
+    const layout = suggestion.mode === "spriteSheet" ? suggestion.sheetLayout : undefined;
+
+    setMode(suggestion.mode);
+    setTargetWidth(suggestion.targetWidth);
+    setTargetHeight(suggestion.targetHeight);
+    setFrameWidth(layout?.frameWidth ?? suggestion.targetWidth);
+    setFrameHeight(layout?.frameHeight ?? suggestion.targetHeight);
+    setSheetRows(layout?.rows ?? 1);
+    setSheetColumns(layout?.columns ?? (suggestion.mode === "spriteSheet" ? 2 : 1));
+    setSheetMargin(layout?.margin ?? 0);
+    setSheetSpacing(layout?.spacing ?? 0);
+    setDetectedSheetFrames(layout?.frames ?? []);
+    setDetectedRowAnimations(layout?.rowAnimations ?? []);
+    setIsPlaying(false);
+    setPivotPreset("bottomCenter");
+    setCustomPivotX(Math.floor((layout?.frameWidth ?? suggestion.targetWidth) / 2));
+    setCustomPivotY(layout?.frameHeight ?? suggestion.targetHeight);
+    setGridScaleX(suggestion.gridScaleX);
+    setGridScaleY(suggestion.gridScaleY);
+    setGridDetect(suggestion.gridDetect);
+    setCropToBounds(suggestion.mode === "single");
+    setDownscale(suggestion.downscale);
+    setAlpha(suggestion.alpha);
+    setMaxColors(suggestion.maxColors);
+    setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
+  }, []);
+
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
       const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
@@ -348,25 +385,7 @@ export function App() {
             await waitForNextPaint();
 
             const suggestion = suggestFixSettings(asset.image);
-            setMode(suggestion.mode);
-            setTargetWidth(suggestion.targetWidth);
-            setTargetHeight(suggestion.targetHeight);
-            setFrameWidth(suggestion.targetWidth);
-            setFrameHeight(suggestion.targetHeight);
-            setSheetRows(1);
-            setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
-            setIsPlaying(false);
-            setPivotPreset("bottomCenter");
-            setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
-            setCustomPivotY(suggestion.targetHeight);
-            setGridScaleX(suggestion.gridScaleX);
-            setGridScaleY(suggestion.gridScaleY);
-            setGridDetect(suggestion.gridDetect);
-            setCropToBounds(suggestion.mode === "single");
-            setDownscale(suggestion.downscale);
-            setAlpha(suggestion.alpha);
-            setMaxColors(suggestion.maxColors);
-            setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
+            applyFixSuggestion(suggestion);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
             appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
@@ -376,7 +395,7 @@ export function App() {
         setImportStatus(null);
       }
     },
-    [appendLog]
+    [appendLog, applyFixSuggestion]
   );
 
   const buildFixOptions = useCallback((): FixOptions => {
@@ -478,27 +497,9 @@ export function App() {
     }
 
     const suggestion = suggestFixSettings(selectedAsset.image);
-    setMode(suggestion.mode);
-    setTargetWidth(suggestion.targetWidth);
-    setTargetHeight(suggestion.targetHeight);
-    setFrameWidth(suggestion.targetWidth);
-    setFrameHeight(suggestion.targetHeight);
-    setSheetRows(1);
-    setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
-    setIsPlaying(false);
-    setPivotPreset("bottomCenter");
-    setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
-    setCustomPivotY(suggestion.targetHeight);
-    setMaxColors(suggestion.maxColors);
-    setGridDetect(suggestion.gridDetect);
-    setGridScaleX(suggestion.gridScaleX);
-    setGridScaleY(suggestion.gridScaleY);
-    setCropToBounds(suggestion.mode === "single");
-    setDownscale(suggestion.downscale);
-    setAlpha(suggestion.alpha);
-    setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
+    applyFixSuggestion(suggestion);
     appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
-  }, [appendLog, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -517,6 +518,7 @@ export function App() {
         preset
       );
 
+      clearDetectedSheetLayout();
       setMode(next.mode);
       setTargetWidth(next.targetWidth);
       setTargetHeight(next.targetHeight);
@@ -530,7 +532,7 @@ export function App() {
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
+    [alpha, appendLog, clearDetectedSheetLayout, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
   );
 
   const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
@@ -586,6 +588,49 @@ export function App() {
     [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
 
+  const updateManualFrameWidth = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setFrameWidth(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+  const updateManualFrameHeight = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setFrameHeight(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+  const updateManualSheetRows = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setSheetRows(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+  const updateManualSheetColumns = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setSheetColumns(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+  const updateManualSheetMargin = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setSheetMargin(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+  const updateManualSheetSpacing = useCallback(
+    (value: number) => {
+      clearDetectedSheetLayout();
+      setSheetSpacing(value);
+    },
+    [clearDetectedSheetLayout]
+  );
+
   const fitSheetGridToFrameSize = useCallback(() => {
     const nextGrid = deriveSheetGridFromFrameSize({
       sheetWidth: sheetCanvasSize.width,
@@ -595,11 +640,12 @@ export function App() {
       margin: sheetMargin,
       spacing: sheetSpacing
     });
+    clearDetectedSheetLayout();
     setSheetRows(nextGrid.rows);
     setSheetColumns(nextGrid.columns);
     setIsPlaying(false);
     appendLog(`Fit sheet grid to ${nextGrid.columns} columns x ${nextGrid.rows} rows`);
-  }, [appendLog, frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetMargin, sheetSpacing]);
+  }, [appendLog, clearDetectedSheetLayout, frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetMargin, sheetSpacing]);
 
   const changePivotPreset = useCallback(
     (value: string) => {
@@ -656,6 +702,7 @@ export function App() {
 
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
+      clearDetectedSheetLayout();
       setGridDetect("auto");
       setTargetWidth(candidate.outputWidth);
       setTargetHeight(candidate.outputHeight);
@@ -667,7 +714,7 @@ export function App() {
       );
       appendLog(`Applied grid candidate ${candidate.outputWidth}x${candidate.outputHeight} at ${candidate.scaleX}x${candidate.scaleY}`);
     },
-    [appendLog, mode]
+    [appendLog, clearDetectedSheetLayout, mode]
   );
 
   const selectAsset = useCallback(
@@ -797,6 +844,7 @@ export function App() {
           onChange={(value) => {
             const nextMode = value as AssetMode;
             setMode(nextMode);
+            clearDetectedSheetLayout();
             if (nextMode !== "single") {
               setCropToBounds(false);
             }
@@ -947,7 +995,10 @@ export function App() {
             ["auto", "Auto candidate"],
             ["manual", "Manual target"]
           ]}
-          onChange={(value) => setGridDetect(value as "auto" | "manual")}
+          onChange={(value) => {
+            clearDetectedSheetLayout();
+            setGridDetect(value as "auto" | "manual");
+          }}
         />
         <NumberField
           label="Scale X"
@@ -955,7 +1006,10 @@ export function App() {
           min={0.01}
           step={0.01}
           disabled={gridDetect === "auto"}
-          onChange={setGridScaleX}
+          onChange={(value) => {
+            clearDetectedSheetLayout();
+            setGridScaleX(value);
+          }}
         />
         <NumberField
           label="Scale Y"
@@ -963,7 +1017,10 @@ export function App() {
           min={0.01}
           step={0.01}
           disabled={gridDetect === "auto"}
-          onChange={setGridScaleY}
+          onChange={(value) => {
+            clearDetectedSheetLayout();
+            setGridScaleY(value);
+          }}
         />
         <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
         <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
@@ -983,12 +1040,17 @@ export function App() {
     ),
     frame: sheetMode ? (
       <>
-        <NumberField label="Frame W" value={frameWidth} min={1} onChange={setFrameWidth} />
-        <NumberField label="Frame H" value={frameHeight} min={1} onChange={setFrameHeight} />
-        <NumberField label="Rows" value={sheetRows} min={1} onChange={setSheetRows} />
-        <NumberField label="Columns" value={sheetColumns} min={1} onChange={setSheetColumns} />
-        <NumberField label="Margin" value={sheetMargin} min={0} onChange={setSheetMargin} />
-        <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={setSheetSpacing} />
+        {detectedSheetFrames.length > 0 ? (
+          <p className="control-hint">
+            Auto-detected {detectedSheetFrames.length} frames across {detectedRowAnimations.length} rows. Editing cell controls switches back to manual rectangular slicing.
+          </p>
+        ) : null}
+        <NumberField label="Frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
+        <NumberField label="Frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
+        <NumberField label="Rows" value={sheetRows} min={1} onChange={updateManualSheetRows} />
+        <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
+        <NumberField label="Margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
+        <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
         <NumberField label="Extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
         <button type="button" className="wide-tool-button secondary" onClick={fitSheetGridToFrameSize}>
           Fit Rows / Columns
