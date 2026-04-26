@@ -51,6 +51,7 @@ import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
+import { clampFps, getInitialPlaybackState, tickPlayback } from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 import {
   clampSelectedFrameIndex,
@@ -127,6 +128,9 @@ export function App() {
   const [customPivotX, setCustomPivotX] = useState(16);
   const [customPivotY, setCustomPivotY] = useState(32);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
+  const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
@@ -145,6 +149,9 @@ export function App() {
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const activeJobRef = useRef<FixJob | null>(null);
+  const selectedFrameIndexRef = useRef(selectedFrameIndex);
+  const playbackAccumulatorRef = useRef(0);
+  const playbackLastTimeRef = useRef<number | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const sourcePalette = useMemo(
@@ -206,6 +213,54 @@ export function App() {
   }, [sheetFrames.length]);
 
   useEffect(() => {
+    selectedFrameIndexRef.current = selectedFrameIndex;
+  }, [selectedFrameIndex]);
+
+  useEffect(() => {
+    if (!timelineState.enabled || sheetFrames.length <= 1) {
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      playbackLastTimeRef.current = null;
+    }
+  }, [sheetFrames.length, timelineState.enabled]);
+
+  useEffect(() => {
+    if (!isPlaying || !timelineState.enabled || sheetFrames.length <= 1) {
+      playbackLastTimeRef.current = null;
+      return undefined;
+    }
+
+    let animationFrameId = 0;
+    const tick = (now: number) => {
+      const lastTime = playbackLastTimeRef.current ?? now;
+      playbackLastTimeRef.current = now;
+      const next = tickPlayback({
+        frameCount: sheetFrames.length,
+        frameIndex: selectedFrameIndexRef.current,
+        accumulatorMs: playbackAccumulatorRef.current,
+        deltaMs: now - lastTime,
+        fps: playbackFps,
+        loop: playbackLoop,
+        frames: sheetFrames
+      });
+
+      playbackAccumulatorRef.current = next.accumulatorMs;
+      if (next.frameIndex !== selectedFrameIndexRef.current) {
+        selectedFrameIndexRef.current = next.frameIndex;
+        setSelectedFrameIndex(next.frameIndex);
+      }
+      if (!next.playing) {
+        setIsPlaying(false);
+        return;
+      }
+      animationFrameId = window.requestAnimationFrame(tick);
+    };
+
+    animationFrameId = window.requestAnimationFrame(tick);
+    return () => window.cancelAnimationFrame(animationFrameId);
+  }, [isPlaying, playbackFps, playbackLoop, sheetFrames, timelineState.enabled]);
+
+  useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
     window.addEventListener("popstate", syncRoute);
     return () => window.removeEventListener("popstate", syncRoute);
@@ -250,6 +305,7 @@ export function App() {
           setFrameHeight(suggestion.targetHeight);
           setSheetRows(1);
           setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
+          setIsPlaying(false);
           setPivotPreset("bottomCenter");
           setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
           setCustomPivotY(suggestion.targetHeight);
@@ -374,6 +430,7 @@ export function App() {
     setFrameHeight(suggestion.targetHeight);
     setSheetRows(1);
     setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
+    setIsPlaying(false);
     setPivotPreset("bottomCenter");
     setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
     setCustomPivotY(suggestion.targetHeight);
@@ -485,6 +542,7 @@ export function App() {
     });
     setSheetRows(nextGrid.rows);
     setSheetColumns(nextGrid.columns);
+    setIsPlaying(false);
     appendLog(`Fit sheet grid to ${nextGrid.columns} columns x ${nextGrid.rows} rows`);
   }, [appendLog, frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetMargin, sheetSpacing]);
 
@@ -498,6 +556,11 @@ export function App() {
     },
     [sheetPivot]
   );
+
+  const changePlaybackFps = useCallback((value: number) => {
+    setPlaybackFps(clampFps(value));
+    playbackAccumulatorRef.current = 0;
+  }, []);
 
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
