@@ -25,8 +25,8 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 10. The worker transfers the fixed output buffer back to the app.
 11. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
 12. Sheet-like modes either derive frame rectangles and pivots from manual frame/cell controls or consume explicit detected frame rectangles from Auto Suggest. The viewport maps manual rectangles back into source space before Fix and uses detected `sourceRect`s directly when available.
-13. Detected source frame rectangles can be selected and drag-moved in the canvas. The web app updates the explicit frame metadata while preserving frame names, pivots, and row tags.
-14. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected as clips before user-editable animation tags exist.
+13. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
+14. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop metadata.
 15. Export passes the current frame metadata and detected row animations to `packages/exporters`, creates a PNG in browser canvas and a generic JSON manifest, then bundles both files into a ZIP.
 
 ## Documentation Flow
@@ -37,7 +37,7 @@ When adding a new public editor section, update both the markdown file and `apps
 
 ## Future Extension Points
 
-- Sprite player: consume current frame metadata first, then add manifest-backed animation tags, clip selection, and editable per-frame timing.
+- Sprite player: consume current frame metadata and detected animation tags first, then add isolated frame previews, onion skin, ping-pong playback, and editable per-frame timing.
 - 2D sandbox: reuse fixed assets and manifests without touching core algorithms.
 - 3D sandbox: add Three.js in an isolated panel/package later.
 - CLI/API/MCP: call `packages/core` and `packages/exporters` without browser APIs.
