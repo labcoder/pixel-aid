@@ -601,6 +601,32 @@ button:disabled {
   font-size: 0.76rem;
 }
 
+.sheet-detection-notes {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem;
+  color: var(--muted);
+  background: #101414;
+  border: 1px solid #31504c;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.sheet-detection-notes p,
+.sheet-detection-notes small {
+  margin: 0;
+}
+
+.sheet-detection-notes p:first-child {
+  color: var(--cyan);
+  font-weight: 800;
+}
+
+.sheet-detection-notes small {
+  color: #78837e;
+}
+
 .subsection-label {
   margin-top: 0.9rem;
   padding-top: 0.75rem;

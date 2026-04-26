@@ -76,6 +76,7 @@ import {
   summarizeSheetFit,
   type PivotPreset
 } from "./lib/sheetControls";
+import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
@@ -151,6 +152,7 @@ export function App() {
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
+  const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -248,6 +250,18 @@ export function App() {
     [detectedRowAnimations, selectedAnimationName, sheetFrames]
   );
   const timelineFrames = useMemo(() => animationFrameIndexes.map((index) => sheetFrames[index]!).filter(Boolean), [animationFrameIndexes, sheetFrames]);
+  const sheetDetectionNotes = useMemo(
+    () =>
+      detectedSheetFrames.length > 0
+        ? formatSheetDetectionNotes({
+            frameCount: detectedSheetFrames.length,
+            rowCount: detectedRowAnimations.length,
+            rowFrameCounts: detectedRowAnimations.map((animation) => animation.frameNames.length),
+            warnings: detectedSheetWarnings
+          })
+        : [],
+    [detectedRowAnimations, detectedSheetFrames.length, detectedSheetWarnings]
+  );
   const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
@@ -356,6 +370,7 @@ export function App() {
   const clearDetectedSheetLayout = useCallback(() => {
     setDetectedSheetFrames([]);
     setDetectedRowAnimations([]);
+    setDetectedSheetWarnings([]);
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
@@ -373,6 +388,7 @@ export function App() {
     setSheetSpacing(layout?.spacing ?? 0);
     setDetectedSheetFrames(layout?.frames ?? []);
     setDetectedRowAnimations(layout?.rowAnimations ?? []);
+    setDetectedSheetWarnings(layout?.warnings ?? []);
     setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
     setIsPlaying(false);
     setPivotPreset("bottomCenter");
@@ -1188,9 +1204,12 @@ export function App() {
     frame: sheetMode ? (
       <>
         {detectedSheetFrames.length > 0 ? (
-          <p className="control-hint">
-            Auto-detected {detectedSheetFrames.length} frames across {detectedRowAnimations.length} rows. Editing cell controls switches back to manual rectangular slicing.
-          </p>
+          <div className="sheet-detection-notes" aria-label="Sheet detection notes">
+            {sheetDetectionNotes.map((note) => (
+              <p key={note}>{note}</p>
+            ))}
+            <small>Editing cell controls switches back to manual rectangular slicing.</small>
+          </div>
         ) : null}
         <NumberField label="Frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
         <NumberField label="Frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
