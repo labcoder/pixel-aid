@@ -216,7 +216,11 @@ export function App() {
   }, [frameHeight, frameWidth]);
 
   useEffect(() => {
-    setSelectedFrameIndex((current) => clampSelectedFrameIndex(sheetFrames.length, current));
+    setSelectedFrameIndex((current) => {
+      const nextIndex = clampSelectedFrameIndex(sheetFrames.length, current);
+      selectedFrameIndexRef.current = nextIndex;
+      return nextIndex;
+    });
   }, [sheetFrames.length]);
 
   useEffect(() => {
