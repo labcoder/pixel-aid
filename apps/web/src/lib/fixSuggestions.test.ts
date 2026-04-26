@@ -117,6 +117,19 @@ describe("fix setting suggestions", () => {
     expect(suggestion.reason).toContain("multiple frames");
   });
 
+  test("includes detected sheet controls for row-based animation sheets", () => {
+    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+
+    expect(suggestion.sheetLayout).toMatchObject({
+      rows: 6,
+      columns: 9,
+      rowFrameCounts: [5, 8, 6, 9, 7, 9],
+      spacing: expect.any(Number)
+    });
+    expect(suggestion.sheetLayout?.frames).toHaveLength(44);
+    expect(suggestion.sheetLayout?.rowAnimations).toHaveLength(6);
+  });
+
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
     const tinyScale: GridCandidate = {
       outputWidth: 353,

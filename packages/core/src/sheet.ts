@@ -109,7 +109,8 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
   }
 
-  const confidence = Math.min(0.96, 0.52 + Math.min(0.24, rows * 0.06) + Math.min(0.2, columns * 0.04));
+  const repeatedConfidence = Math.min(0.96, 0.52 + Math.min(0.24, rows * 0.06) + Math.min(0.2, columns * 0.04));
+  const confidence = rows >= 2 && columns >= 2 ? repeatedConfidence : Math.min(0.4, repeatedConfidence);
 
   return {
     frameWidth,
@@ -212,7 +213,7 @@ function segmentsForBand(image: RGBAImage, band: Band, background: [number, numb
     counts[x] = count;
   }
 
-  return bandsFromCounts(counts, threshold, 3, 12).map((segment) => ({
+  return bandsFromCounts(counts, threshold, 1, 12).map((segment) => ({
     x: segment.start,
     w: segment.end - segment.start + 1
   }));

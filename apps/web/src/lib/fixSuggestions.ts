@@ -1,5 +1,5 @@
-import { detectGridCandidates } from "@pixelaid/core";
-import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, RGBAImage } from "@pixelaid/shared";
+import { detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
+import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, Rect, RGBAImage, SheetLayoutDetection } from "@pixelaid/shared";
 
 export type FixSettingSuggestion = {
   mode: AssetMode;
@@ -11,6 +11,7 @@ export type FixSettingSuggestion = {
   gridScaleY: number;
   downscale: DownscaleMethod;
   alpha: AlphaMode;
+  sheetLayout?: SheetLayoutDetection;
   reason: string;
   confidence: number;
   modeConfidence: number;
@@ -21,7 +22,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const initial = candidates[0];
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
-  const sheetLayoutScore = estimateSheetLayoutScore(image);
+  const detectedSheetLayout = detectSheetLayout(image);
+  const sheetLayoutScore = Math.max(estimateSheetLayoutScore(image), detectedSheetLayout.confidence);
   const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, sheetLayoutScore);
   const candidate = chooseSuggestionGrid(image, candidates, initialMode);
   const outputWidth = candidate?.outputWidth ?? image.width;
@@ -30,6 +32,10 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const mode = classifyMode(image.width, image.height, outputWidth, outputHeight, sheetLayoutScore);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const downscale = suggestDownscaleMethod(image, candidate, mode, sourceRatio);
+  const sheetLayout =
+    mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
+      ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
+      : undefined;
 
   return {
     mode,
@@ -41,9 +47,44 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
     downscale,
     alpha: suggestAlphaMode(image, mode),
+    ...(sheetLayout ? { sheetLayout } : {}),
     reason: suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore),
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence
+  };
+}
+
+function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number, scaleY: number): SheetLayoutDetection {
+  const safeScaleX = Math.max(1, scaleX);
+  const safeScaleY = Math.max(1, scaleY);
+
+  return {
+    ...layout,
+    frameWidth: Math.max(1, Math.round(layout.frameWidth / safeScaleX)),
+    frameHeight: Math.max(1, Math.round(layout.frameHeight / safeScaleY)),
+    margin: Math.max(0, Math.round(layout.margin / safeScaleX)),
+    spacing: Math.max(0, Math.round(layout.spacing / safeScaleX)),
+    frames: layout.frames.map((frame) => ({
+      ...frame,
+      rect: scaleRect(frame.rect, safeScaleX, safeScaleY),
+      sourceRect: frame.rect
+    })),
+    rowRects: layout.rowRects.map((rect) => scaleRect(rect, safeScaleX, safeScaleY)),
+    rowFrameCounts: [...layout.rowFrameCounts],
+    rowAnimations: layout.rowAnimations.map((animation) => ({
+      ...animation,
+      frameNames: [...animation.frameNames]
+    })),
+    warnings: [...layout.warnings]
+  };
+}
+
+function scaleRect(rect: Rect, scaleX: number, scaleY: number): Rect {
+  return {
+    x: Math.round(rect.x / scaleX),
+    y: Math.round(rect.y / scaleY),
+    w: Math.max(1, Math.round(rect.w / scaleX)),
+    h: Math.max(1, Math.round(rect.h / scaleY))
   };
 }
 
