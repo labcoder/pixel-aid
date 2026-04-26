@@ -115,14 +115,14 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Scrub directly to any frame with the range control.
 - Set FPS from 1 to 60 when frames do not provide their own duration metadata.
 - Toggle looping. With looping disabled, playback stops on the last frame.
-- Toggle Normalize to preview each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
+- Toggle Normalize to preview and export each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
 - Rename detected row clips in the clip editor.
 - Edit per-clip FPS and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
-The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, and marks the pivot. The Normalize toggle currently affects timeline preview only; export still uses the current fixed PNG and frame metadata.
+The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, and marks the pivot.
 
-Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, ping-pong playback, export repacking for normalized canvases, and editable per-frame durations are future timeline work.
+Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, ping-pong playback, per-engine normalized atlas options, and editable per-frame durations are future timeline work.
 
 # Metrics
 
@@ -137,5 +137,6 @@ The first export target is a generic engine-ready bundle.
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest includes source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
+- If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG and manifest frame rects use that packed layout.
 - Detected row clips are exported into the manifest `animations` object with their frame names, FPS, and loop setting.
 - ZIP export packages the PNG and manifest together.
