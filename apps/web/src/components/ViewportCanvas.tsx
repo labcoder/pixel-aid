@@ -11,7 +11,8 @@ import {
   zoomAtPoint
 } from "../lib/viewportMath";
 import { getFrameOverlayGeometry } from "../lib/frameOverlay";
-import { findFrameAtSourcePoint } from "../lib/frameEditing";
+import { findFrameAtSourcePoint, findFrameResizeHandleAtSourcePoint } from "../lib/frameEditing";
+import type { FrameResizeHandle } from "../lib/frameEditing";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -30,6 +31,7 @@ export type ViewportCanvasProps = {
   onZoomChange: (zoom: number) => void;
   onFrameSelect?: (index: number) => void;
   onSourceFrameMove?: (index: number, delta: Point) => void;
+  onSourceFrameResize?: (index: number, handle: FrameResizeHandle, delta: Point) => void;
 };
 
 export function ViewportCanvas({
@@ -45,12 +47,21 @@ export function ViewportCanvas({
   canEditSourceFrames = false,
   onZoomChange,
   onFrameSelect,
-  onSourceFrameMove
+  onSourceFrameMove,
+  onSourceFrameResize
 }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
-  const frameDragRef = useRef<{ pointerId: number; frameIndex: number; lastX: number; lastY: number; sourceZoom: number } | null>(null);
+  const frameDragRef = useRef<{
+    pointerId: number;
+    mode: "move" | "resize";
+    frameIndex: number;
+    handle?: FrameResizeHandle;
+    lastX: number;
+    lastY: number;
+    sourceZoom: number;
+  } | null>(null);
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
   const autoFitSignatureRef = useRef("");
@@ -146,6 +157,7 @@ export function ViewportCanvas({
         sourceFrames,
         frames,
         selectedFrameIndex,
+        canEditSourceFrames,
         panRef.current,
         splitRatioRef.current
       );
@@ -186,12 +198,29 @@ export function ViewportCanvas({
       splitRatio: splitRatioRef.current
     });
     if (canEditSourceFrames && sourceHit) {
+      const handleHit = findFrameResizeHandleAtSourcePoint(sourceFrames, sourceHit.point, Math.max(2, 8 / sourceHit.sourceZoom));
+      if (handleHit) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onFrameSelect?.(handleHit.frameIndex);
+        frameDragRef.current = {
+          pointerId: event.pointerId,
+          mode: "resize",
+          frameIndex: handleHit.frameIndex,
+          handle: handleHit.handle,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          sourceZoom: sourceHit.sourceZoom
+        };
+        return;
+      }
+
       const frameIndex = findFrameAtSourcePoint(sourceFrames, sourceHit.point);
       if (frameIndex >= 0) {
         event.currentTarget.setPointerCapture(event.pointerId);
         onFrameSelect?.(frameIndex);
         frameDragRef.current = {
           pointerId: event.pointerId,
+          mode: "move",
           frameIndex,
           lastX: event.clientX,
           lastY: event.clientY,
@@ -219,7 +248,11 @@ export function ViewportCanvas({
       };
       frameDrag.lastX = event.clientX;
       frameDrag.lastY = event.clientY;
-      onSourceFrameMove?.(frameDrag.frameIndex, delta);
+      if (frameDrag.mode === "resize" && frameDrag.handle) {
+        onSourceFrameResize?.(frameDrag.frameIndex, frameDrag.handle, delta);
+      } else {
+        onSourceFrameMove?.(frameDrag.frameIndex, delta);
+      }
       invalidate();
       return;
     }
@@ -414,6 +447,7 @@ function drawImageView(
   sourceFrames: SpriteFrame[],
   frames: SpriteFrame[],
   selectedFrameIndex: number,
+  canEditSourceFrames: boolean,
   pan: Point,
   splitRatio: number
 ): void {
@@ -442,7 +476,7 @@ function drawImageView(
       });
     }
     drawClippedOverlay(ctx, 0, splitX, () => {
-      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex);
+      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex, canEditSourceFrames);
     });
 
     ctx.fillStyle = "#101112";
@@ -467,7 +501,7 @@ function drawImageView(
       });
     }
     drawClippedOverlay(ctx, splitX, width - splitX, () => {
-      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex);
+      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex, false);
     });
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
@@ -476,9 +510,9 @@ function drawImageView(
       drawPixelGrid(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
     }
     if (viewMode === "after" && fixedCanvas) {
-      drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex);
+      drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex, false);
     } else {
-      drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex);
+      drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex, canEditSourceFrames);
     }
     drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
   }
@@ -490,7 +524,8 @@ function drawFrameOverlays(
   startY: number,
   frames: SpriteFrame[],
   zoom: number,
-  selectedFrameIndex: number
+  selectedFrameIndex: number,
+  showResizeHandles: boolean
 ): void {
   if (frames.length === 0) {
     return;
@@ -522,7 +557,36 @@ function drawFrameOverlays(
       ctx.fillRect(geometry.x, geometry.y - 16, Math.max(46, frame.name.length * 6), 14);
       ctx.fillStyle = "#101112";
       ctx.fillText(frame.name, geometry.x + 4, geometry.y - 14);
+      if (showResizeHandles) {
+        drawFrameResizeHandles(ctx, geometry);
+      }
     }
+  }
+  ctx.restore();
+}
+
+function drawFrameResizeHandles(ctx: CanvasRenderingContext2D, geometry: ReturnType<typeof getFrameOverlayGeometry>): void {
+  const size = 7;
+  const half = Math.floor(size / 2);
+  const points = [
+    { x: geometry.x, y: geometry.y },
+    { x: geometry.x + geometry.width / 2, y: geometry.y },
+    { x: geometry.x + geometry.width, y: geometry.y },
+    { x: geometry.x + geometry.width, y: geometry.y + geometry.height / 2 },
+    { x: geometry.x + geometry.width, y: geometry.y + geometry.height },
+    { x: geometry.x + geometry.width / 2, y: geometry.y + geometry.height },
+    { x: geometry.x, y: geometry.y + geometry.height },
+    { x: geometry.x, y: geometry.y + geometry.height / 2 }
+  ];
+
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#101112";
+  ctx.strokeStyle = "#35c6b6";
+  ctx.lineWidth = 1;
+  for (const point of points) {
+    ctx.fillRect(Math.round(point.x) - half, Math.round(point.y) - half, size, size);
+    ctx.strokeRect(Math.round(point.x) - half + 0.5, Math.round(point.y) - half + 0.5, size - 1, size - 1);
   }
   ctx.restore();
 }

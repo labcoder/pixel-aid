@@ -55,7 +55,8 @@ import {
   targetSizePresets
 } from "./lib/fixControls";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
-import { moveFrameBySourceDelta } from "./lib/frameEditing";
+import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
+import type { FrameResizeHandle } from "./lib/frameEditing";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -782,6 +783,33 @@ export function App() {
     [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
   );
 
+  const resizeDetectedSourceFrame = useCallback(
+    (frameIndex: number, handle: FrameResizeHandle, delta: { x: number; y: number }) => {
+      if (!selectedAsset) {
+        return;
+      }
+
+      setDetectedSheetFrames((current) =>
+        current.map((frame, index) =>
+          index === frameIndex
+            ? resizeFrameBySourceDelta({
+                frame,
+                handle,
+                deltaX: delta.x,
+                deltaY: delta.y,
+                scaleX: gridScaleX,
+                scaleY: gridScaleY,
+                sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
+                outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
+                minOutputSize: { width: 4, height: 4 }
+              })
+            : frame
+        )
+      );
+    },
+    [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
+  );
+
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
       clearDetectedSheetLayout();
@@ -1397,6 +1425,7 @@ export function App() {
           onZoomChange={setZoom}
           onFrameSelect={selectSourceFrame}
           onSourceFrameMove={moveDetectedSourceFrame}
+          onSourceFrameResize={resizeDetectedSourceFrame}
         />
         {importStatus ? (
           <div className="viewport-empty-state viewport-busy-state" role="status" aria-live="polite">
