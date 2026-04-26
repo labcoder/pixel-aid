@@ -129,3 +129,7 @@ Remaining quality targets:
 ## Sheet Slicing
 
 `sliceSheetFrames` generates deterministic row-major frame rectangles from frame size, rows, columns, margin, spacing, and extrusion metadata.
+
+The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
+
+Current slicing is manual and rectangular. It does not yet detect irregular gutters, disconnected frame components, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.

@@ -62,6 +62,8 @@ Editor:
 - Crop-aware before/after alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
 - Collapsible and reorderable inspector sections for mode, target size, aspect lock, presets, cleanup, grid mode, crop-to-bounds, palette limit, downscale method, alpha, and outline cleanup.
 - Grid candidate preview cards with canvas thumbnails, confidence badges, score rows, crop badges, and one-click candidate application.
+- Sheet-like modes expose frame width/height, rows, columns, margin, spacing, export extrusion, pivot presets, custom pivot coordinates, a fit summary, and a Fit Rows / Columns action.
+- The viewport draws fixed-output sheet frame bounds and pivot markers, with selected-frame highlighting from the bottom frame list.
 - Source/output metrics and logs in the bottom panel.
 - In-app docs route backed by files in `docs/`, with section tooltips in the editor.
 
@@ -84,15 +86,15 @@ Processing:
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
-- Manual sheet slicing metadata exists, but the UI does not yet expose full rows/columns/frame/pivot controls.
+- Sheet controls are manual only. Automatic sheet frame detection, irregular cell correction, normalized frame canvases, and animation tag editing are not implemented yet.
 - Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
 ## Prioritized Roadmap
 
 1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
-2. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
-3. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.
+2. Sprite-sheet workflow: add automatic frame detection, irregular gutter correction, editable bounding boxes, normalized frame canvases, and per-frame duration metadata.
+3. Timeline and player: add scrub/play/FPS/loop controls, animation tags, onion-skin options, and clear frame-empty states.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
 5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
@@ -101,4 +103,4 @@ Processing:
 
 ## Suggested Next Step
 
-The next best implementation step is the sprite-sheet workflow: frame controls, bounding boxes, pivots, and a frame list that can feed the timeline/player.
+The next best implementation step is the sheet timeline/player: use the current frame list and pivots to add scrub/play/FPS/loop controls before expanding into automatic sheet detection.

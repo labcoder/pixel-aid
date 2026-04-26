@@ -47,6 +47,16 @@ Crop to detected bounds keeps single-sprite output trimmed to the detected foreg
 
 Sprite sheet, character sheet, and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
 
+Fit Rows / Columns calculates how many whole frames fit inside the current fixed image footprint using the configured frame size, margin, and spacing. It is a helper, not a detector: the user can still override the result manually.
+
+The fit summary reports frame count, used sheet area, the current fixed sheet size, and overflow. If it shows overflow, at least one configured frame rectangle extends outside the output PNG and should be corrected before export.
+
+Extrude is export padding metadata for future atlas-safe exports. It does not change the logical frame rectangle shown in the viewport.
+
+Pivot controls define the anchor point stored on every generated frame in native frame pixels. Presets are bottom center, center, and top left. Custom enables Pivot X and Pivot Y numeric fields. Pivots are drawn as cross markers in the viewport and exported in the JSON manifest.
+
+The bottom frame list shows each generated frame, its size, and pivot. Selecting a frame highlights its rectangle and pivot marker in the viewport.
+
 # Viewport
 
 The viewport renders images through Canvas2D with smoothing disabled.
@@ -82,6 +92,8 @@ Cleanup controls run after block downsampling and alpha handling.
 
 The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the timeline explains what is missing instead of pretending playback is available.
 
+The current first sheet workflow is a frame selector, not a full animation player. It highlights frame bounds and pivots so slicing metadata can be verified before export. Playback, FPS, loop modes, animation tags, and per-frame durations are next-step features.
+
 # Metrics
 
 Metrics are split between source and output. Source metrics describe the imported image. Output metrics describe the fixed result and the operation settings that produced it.
@@ -92,4 +104,5 @@ The first export target is a generic engine-ready bundle.
 
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest includes source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
+- In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
 - ZIP export packages the PNG and manifest together.

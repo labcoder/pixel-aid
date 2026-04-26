@@ -22,7 +22,8 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 7. The core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
 8. The worker transfers the fixed output buffer back to the app.
 9. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
-10. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`, then bundles both files into a ZIP.
+10. Sheet-like modes derive frame rectangles and pivots in the web app from the current frame/cell controls, then pass that metadata to export.
+11. Export creates a PNG in browser canvas and a generic JSON manifest from `packages/exporters`, then bundles both files into a ZIP.
 
 ## Documentation Flow
 
@@ -32,7 +33,7 @@ When adding a new public editor section, update both the markdown file and `apps
 
 ## Future Extension Points
 
-- Sprite player: consume manifest frames and animation tags from the bottom panel.
+- Sprite player: consume current frame metadata first, then manifest frames and animation tags once animation editing exists.
 - 2D sandbox: reuse fixed assets and manifests without touching core algorithms.
 - 3D sandbox: add Three.js in an isolated panel/package later.
 - CLI/API/MCP: call `packages/core` and `packages/exporters` without browser APIs.

@@ -30,6 +30,7 @@ The metrics panel shows:
 - Denoise strength.
 - Halo cleanup state.
 - Outline mode and native outline size.
+- Sheet frame count and frame metadata for sheet-like modes.
 - Grid confidence.
 - Worker operation duration.
 
