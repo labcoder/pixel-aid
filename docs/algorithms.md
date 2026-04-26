@@ -75,6 +75,8 @@ This is still conservative. Row-label matching is a small template matcher for c
 
 Detected frames can be manually nudged or resized in the web viewport. Move and resize operations apply source-space deltas to the frame `sourceRect` and update the corresponding native frame `rect` by the active grid scale. This keeps the source overlay, output slicing metadata, and row animation membership aligned without rerunning detection.
 
+Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
+
 ## Palette
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
@@ -159,6 +161,6 @@ Remaining quality targets:
 
 The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
 
-Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, and exported as manifest animations.
+Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, and exported as manifest animations with updated frame-name references.
 
 The slicer can consume explicit detected frame metadata, including first-pass content-centered gutter normalization, mild drift fitting, conservative disconnected-component grouping, and common row-label names from sheet detection. It does not yet detect fully irregular gutters, arbitrary source text, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.
