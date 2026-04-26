@@ -67,7 +67,7 @@ Editor:
 - Auto Suggest can detect row-based sprite sheet layouts, including bordered cell grids where row outlines would otherwise look like one wide segment. It populates frame/cell controls, preserves variable row frame counts, reports detection notes, and seeds row clips such as `row_1`, `row_2`, etc.
 - Detected source frame boxes can be selected, dragged, and resized from canvas handles in the Before/Split source view. Edits update the detected source rectangle and native output rect while keeping frame names, row tags, pivots, and animation membership stable.
 - The viewport draws exact detector source frame bounds before Fix and fixed-output frame bounds after Fix, with selected-frame highlighting from the bottom frame list.
-- Timeline/player controls for sheet-like modes: choose detected row clips, scrub frames, step previous/next, play/pause through frames with `requestAnimationFrame`, set fallback FPS, choose forward/reverse/ping-pong playback, edit selected-frame duration, toggle looping, normalize frame preview/export canvases, rename detected row clips, and edit per-clip FPS/loop/direction metadata. Frame `durationMs`, playback `direction`, and detected row clips export into the JSON manifest.
+- Timeline/player controls for sheet-like modes: choose detected row clips, scrub frames, step previous/next, play/pause through frames with `requestAnimationFrame`, set fallback FPS, choose forward/reverse/ping-pong playback, edit selected-frame duration, toggle looping, show preview-only onion skin, normalize frame preview/export canvases, rename detected row clips, and edit per-clip FPS/loop/direction metadata. Frame `durationMs`, playback `direction`, and detected row clips export into the JSON manifest.
 - Source/output metrics and logs in a vertically resizable bottom panel.
 - In-app docs route backed by files in `docs/`, with section tooltips in the editor.
 
@@ -92,7 +92,7 @@ Processing:
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
-- Sheet controls are partly automatic for clear row-based and outlined-grid sheets, but true uneven gutter normalization, per-engine normalized atlas options, onion skin, OCR/label-aware animation naming, and imported timesheet editing are not implemented yet.
+- Sheet controls are partly automatic for clear row-based and outlined-grid sheets, but true uneven gutter normalization, per-engine normalized atlas options, OCR/label-aware animation naming, and imported timesheet editing are not implemented yet.
 - Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
@@ -100,7 +100,7 @@ Processing:
 
 1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
 2. Sprite-sheet workflow: add true uneven gutter normalization, per-engine normalized atlas options, and row/column confidence explanations.
-3. Timeline and player: add onion-skin options, richer timesheet editing, and row-label-aware animation naming.
+3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label-aware animation naming.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
 5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
@@ -109,4 +109,4 @@ Processing:
 
 ## Suggested Next Step
 
-The next best implementation step is adding onion-skin playback, followed by deeper uneven-gutter correction for sheets without visible cell outlines.
+The next best implementation step is deeper uneven-gutter correction for sheets without visible cell outlines, with onion-skin opacity/range options as a smaller player polish task.

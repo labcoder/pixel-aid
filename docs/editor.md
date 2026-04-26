@@ -118,13 +118,14 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Edit the selected frame duration in milliseconds. Per-frame duration takes priority over clip FPS for playback and export.
 - Toggle looping. With looping disabled, playback stops on the last frame.
 - Toggle Normalize to preview and export each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
+- Toggle Onion to draw the previous and next frame behind the selected frame at low opacity. Onion skin is preview-only and does not change exported PNGs or manifests.
 - Rename detected row clips in the clip editor.
 - Edit per-clip FPS, direction, and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
-The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, and marks the pivot.
+The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, marks the pivot, and can overlay previous/next onion frames. Looping forward/reverse clips can wrap onion neighbors; ping-pong clips do not wrap onion neighbors at the ends, so the preview does not imply a jump from first to last frame.
 
-Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, imported timesheet editing, and per-engine normalized atlas options are future timeline work.
+Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion opacity/range controls, imported timesheet editing, and per-engine normalized atlas options are future timeline work.
 
 # Metrics
 
