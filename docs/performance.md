@@ -10,11 +10,13 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - Pixel grid overlays use integer zoom and snapped coordinates.
 - React state drives editor controls and asset selection; it does not run animation loops.
 - Timeline playback uses `requestAnimationFrame` and advances React state only when the selected frame changes.
+- The bottom timeline/logs/metrics area is resized with a CSS grid variable and pointer events rather than reflow-heavy layout polling.
 
 ## Processing
 
 - The core uses `Uint8ClampedArray` image buffers and index math.
 - Grid detection uses typed arrays for edge energy and run histograms; the foreground bounds pass scans the source once and avoids per-pixel object allocation.
+- Import currently runs browser decode and first-pass suggestion analysis on the main thread, but the UI yields between phases and shows decode/analyze status so large sheets do not look stalled.
 - Heavy fix work runs in `packages/worker`.
 - The web app clones source buffers before transfer so the imported source remains available for preview.
 - The worker transfers the fixed output buffer back to the main thread.
@@ -34,6 +36,7 @@ The metrics panel shows:
 - Sheet frame count and frame metadata for sheet-like modes.
 - Grid confidence.
 - Worker operation duration.
+- Active import phase while decode or first-pass analysis is running.
 
 Grid candidates may also include a source crop rectangle. This is useful when a high-resolution single sprite sits on a bright background because the output dimensions and palette pass then reflect the sprite asset instead of the full image canvas. If an outline is active on an auto-cropped single sprite, the output can be padded by the outline size so the new edge pixels have room to render.
 

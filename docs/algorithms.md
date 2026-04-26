@@ -48,6 +48,19 @@ This is the main fake-pixel-to-real-pixel conversion path. It does not use bilin
 
 The web Auto Suggest path samples the selected grid candidate and estimates block purity by measuring how often one coarse RGB bucket owns each sampled source block. High-purity sources default to `dominant` because crisp fake-pixel art usually cleans up better when the representative source block color wins. Mixed blocks can still suggest `adaptive` or `median`, and users can override the method at any time.
 
+## Mode Suggestion
+
+Auto Suggest classifies the source as a single sprite, sprite sheet, or tile sheet before the user runs Fix.
+
+Current signals:
+
+- Extreme source aspect ratios are treated as sprite sheets.
+- Square, evenly divisible sources can be suggested as tile sheets.
+- Large landscape sources are scanned for repeated horizontal foreground bands against a sampled corner background. Three or more separated bands bias the mode toward sprite sheet because this matches common AI-generated animation sheets with one animation per row.
+- Balanced portrait or square sources without repeated bands remain single sprites unless tile-sheet divisibility is stronger.
+
+This is not yet automatic cell detection. It chooses the starting mode and control hierarchy. Frame width, rows, columns, margin, and spacing are still manual until a later detector produces editable frame boxes.
+
 ## Palette
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
@@ -132,4 +145,6 @@ Remaining quality targets:
 
 The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
 
-Current slicing is manual and rectangular. It does not yet detect irregular gutters, disconnected frame components, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.
+Current slicing is manual and rectangular. The web viewport can draw those frame rectangles on the source image before Fix by scaling frame metadata through the current grid scale, then draw the same logical frames on the fixed output after Fix.
+
+The slicer does not yet detect irregular gutters, disconnected frame components, per-row animation names, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.

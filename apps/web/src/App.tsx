@@ -77,7 +77,7 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
   asset: {
     title: "Asset",
     docsId: "fix-settings",
-    tooltip: "Mode, target size, presets, and Auto Suggest."
+    tooltip: "Mode, Auto Suggest, single-sprite target size, and sheet-derived output size."
   },
   cleanup: {
     title: "Cleanup",

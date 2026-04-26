@@ -11,21 +11,25 @@ Assets are imported source images. Each item keeps the original filename, source
 - Select an asset to preview and fix it.
 - Delete removes the asset from the editor session.
 - The source image remains separate from the fixed output so destructive changes are reversible.
+- Large imports show a visible decode/analyze status in the Assets panel and viewport while PixelAid prepares suggestions.
 
 # Fix Settings
 
 Mode describes the kind of source you are fixing.
 
 - Single sprite: one sprite, prop, icon, character, or object.
-- Sprite sheet: multiple frames arranged in rows or columns.
-- Character sheet: character poses or directions that will later need animation tags and pivots.
+- Sprite sheet: multiple animation or pose frames arranged in rows or columns. Character sheets are treated as sprite sheets for now because they use the same frame, pivot, and timeline metadata.
 - Tile sheet: tiles or tilesets where frame dimensions and grid alignment matter.
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
 
+Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
+
 Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
+
+In sprite sheet and tile sheet modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is derived from Frame W, Frame H, Rows, Columns, Margin, and Spacing in the Frame / Cell section.
 
 # Grid
 
@@ -45,7 +49,9 @@ Crop to detected bounds keeps single-sprite output trimmed to the detected foreg
 
 # Frame / Cell
 
-Sprite sheet, character sheet, and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
+Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
+
+Frame boxes and pivot markers are drawn on the Before view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
 Fit Rows / Columns calculates how many whole frames fit inside the current fixed image footprint using the configured frame size, margin, and spacing. It is a helper, not a detector: the user can still override the result manually.
 
@@ -68,6 +74,7 @@ The viewport renders images through Canvas2D with smoothing disabled.
 - Rulers show native pixel positions and adapt their tick spacing as zoom changes.
 - Split view compares source and fixed output with a draggable divider.
 - When the fixed output is cropped, split view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. It is not stretched to the full imported canvas.
+- Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix. In Split view, each overlay is clipped to its own side of the divider.
 
 # Cleanup
 
@@ -106,6 +113,8 @@ Clicking a frame, scrubbing, or stepping pauses playback and keeps the viewport 
 # Metrics
 
 Metrics are split between source and output. Source metrics describe the imported image. Output metrics describe the fixed result and the operation settings that produced it.
+
+The bottom panel can be dragged upward from its top handle when logs, metrics, or the frame list need more room.
 
 # Export
 

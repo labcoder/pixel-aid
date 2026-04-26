@@ -14,17 +14,19 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 ## Data Flow
 
 1. The web app decodes an imported image file into an `RGBAImage`.
-2. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
-3. The viewport renders native buffers through Canvas2D with smoothing disabled.
-4. The app clones the selected image buffer and transfers it to a Web Worker.
-5. The worker runs `fixImage` from `packages/core`.
-6. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
-7. The core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
-8. The worker transfers the fixed output buffer back to the app.
-9. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
-10. Sheet-like modes derive frame rectangles and pivots in the web app from the current frame/cell controls.
-11. The timeline player uses those frame records to scrub, step, and play row-major frames with a `requestAnimationFrame` loop.
-12. Export passes the current frame metadata to `packages/exporters`, creates a PNG in browser canvas and a generic JSON manifest, then bundles both files into a ZIP.
+2. Import status is surfaced in the editor while decode and first-pass analysis run.
+3. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
+4. Auto Suggest classifies the asset mode and seeds mode-specific controls. Single sprites use target dimensions; sprite and tile sheets use frame/cell controls.
+5. The viewport renders native buffers through Canvas2D with smoothing disabled.
+6. The app clones the selected image buffer and transfers it to a Web Worker.
+7. The worker runs `fixImage` from `packages/core`.
+8. Auto grid detection may attach a background-aware `sourceRect` so the downsample step operates on the detected sprite bounds rather than the entire source canvas.
+9. The core applies block downsampling, alpha cleanup, optional outline padding for auto-cropped single sprites, optional outline cleanup, and palette extraction/remapping.
+10. The worker transfers the fixed output buffer back to the app.
+11. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
+12. Sheet-like modes derive frame rectangles and pivots in the web app from the current frame/cell controls. The viewport maps those frame rectangles back into source space before Fix and output space after Fix.
+13. The timeline player uses those frame records to scrub, step, and play row-major frames with a `requestAnimationFrame` loop.
+14. Export passes the current frame metadata to `packages/exporters`, creates a PNG in browser canvas and a generic JSON manifest, then bundles both files into a ZIP.
 
 ## Documentation Flow
 
