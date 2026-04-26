@@ -54,6 +54,7 @@ import {
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
+import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
@@ -834,12 +835,16 @@ export function App() {
     const imageName = `${baseName}_fixed.png`;
     const manifestName = `${baseName}_manifest.json`;
     const bundleName = `${baseName}_pixelaid_bundle.zip`;
+    const animations =
+      detectedRowAnimations.length > 0
+        ? animationTagsToManifestAnimations(detectedRowAnimations, { fallbackFps: playbackFps, fallbackLoop: playbackLoop })
+        : undefined;
     const manifest = createPixelAssetManifest({
       result: fixResult,
       imageName,
       originalFilename: selectedAsset.name,
       generatedAt: new Date().toISOString(),
-      ...(sheetMode ? { sheet: sheetOptions, frames: sheetFrames } : {})
+      ...(sheetMode ? { sheet: sheetOptions, frames: sheetFrames, ...(animations ? { animations } : {}) } : {})
     });
 
     void rgbaImageToPngBlob(fixResult.image)
@@ -857,7 +862,7 @@ export function App() {
       .catch((error) => {
         appendLog(error instanceof Error ? error.message : "Export failed");
       });
-  }, [appendLog, fixResult, selectedAsset, sheetFrames, sheetMode, sheetOptions]);
+  }, [appendLog, detectedRowAnimations, fixResult, playbackFps, playbackLoop, selectedAsset, sheetFrames, sheetMode, sheetOptions]);
 
   useEffect(() => {
     const closeAssetMenu = () => setAssetMenu(null);
