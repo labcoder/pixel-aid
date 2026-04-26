@@ -1,4 +1,4 @@
-import type { Rect as FrameRect, RGBAImage } from "@pixelaid/shared";
+import type { Rect as FrameRect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -10,6 +10,7 @@ import {
   getWheelZoom,
   zoomAtPoint
 } from "../lib/viewportMath";
+import { getFrameOverlayGeometry } from "../lib/frameOverlay";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -21,7 +22,8 @@ export type ViewportCanvasProps = {
   zoom: number;
   showGrid: boolean;
   fixedSourceRect?: FrameRect | undefined;
-  frameRects?: FrameRect[];
+  frames?: SpriteFrame[];
+  selectedFrameIndex?: number;
   onZoomChange: (zoom: number) => void;
 };
 
@@ -32,7 +34,8 @@ export function ViewportCanvas({
   zoom,
   showGrid,
   fixedSourceRect,
-  frameRects = [],
+  frames = [],
+  selectedFrameIndex = -1,
   onZoomChange
 }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -130,7 +133,8 @@ export function ViewportCanvas({
         zoom,
         showGrid,
         fixedSourceRect,
-        frameRects,
+        frames,
+        selectedFrameIndex,
         panRef.current,
         splitRatioRef.current
       );
@@ -140,7 +144,7 @@ export function ViewportCanvas({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fixedImage, fixedSourceRect, frameRects, renderKey, showGrid, sourceImage, viewMode, zoom]);
+  }, [fixedImage, fixedSourceRect, frames, renderKey, selectedFrameIndex, showGrid, sourceImage, viewMode, zoom]);
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 || !sourceImage) {
@@ -293,7 +297,8 @@ function drawImageView(
   zoom: number,
   showGrid: boolean,
   fixedSourceRect: FrameRect | undefined,
-  frameRects: FrameRect[],
+  frames: SpriteFrame[],
+  selectedFrameIndex: number,
   pan: Point,
   splitRatio: number
 ): void {
@@ -334,29 +339,59 @@ function drawImageView(
     if (showGrid && comparisonZoom >= 4) {
       drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
     }
-    drawFrameBounds(ctx, layout.after.x, layout.after.y, frameRects, comparisonZoom);
+    drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex);
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
     ctx.drawImage(activeCanvas, rect.x, rect.y, rect.width, rect.height);
     if (showGrid && zoom >= 4) {
       drawPixelGrid(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
     }
-    drawFrameBounds(ctx, rect.x, rect.y, frameRects, zoom);
+    if (viewMode === "after" && fixedCanvas) {
+      drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex);
+    }
     drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
   }
 }
 
-function drawFrameBounds(ctx: CanvasRenderingContext2D, startX: number, startY: number, frameRects: FrameRect[], zoom: number): void {
-  if (frameRects.length <= 1) {
+function drawFrameOverlays(
+  ctx: CanvasRenderingContext2D,
+  startX: number,
+  startY: number,
+  frames: SpriteFrame[],
+  zoom: number,
+  selectedFrameIndex: number
+): void {
+  if (frames.length === 0) {
     return;
   }
 
   ctx.save();
-  ctx.strokeStyle = "#f1c75bcc";
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 4]);
-  for (const frame of frameRects) {
-    ctx.strokeRect(startX + frame.x * zoom + 0.5, startY + frame.y * zoom + 0.5, frame.w * zoom - 1, frame.h * zoom - 1);
+  ctx.font = "10px Consolas, monospace";
+  ctx.textBaseline = "top";
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index]!;
+    const geometry = getFrameOverlayGeometry(frame, { x: startX, y: startY }, zoom);
+    const selected = index === selectedFrameIndex;
+
+    ctx.strokeStyle = selected ? "#35c6b6" : "#f1c75bcc";
+    ctx.fillStyle = selected ? "#35c6b6" : "#f1c75b";
+    ctx.lineWidth = selected ? 3 : 2;
+    ctx.setLineDash(selected ? [] : [6, 4]);
+    ctx.strokeRect(geometry.x, geometry.y, geometry.width, geometry.height);
+
+    ctx.setLineDash([]);
+    ctx.beginPath();
+    ctx.moveTo(geometry.pivotX - 5, geometry.pivotY + 0.5);
+    ctx.lineTo(geometry.pivotX + 5, geometry.pivotY + 0.5);
+    ctx.moveTo(geometry.pivotX + 0.5, geometry.pivotY - 5);
+    ctx.lineTo(geometry.pivotX + 0.5, geometry.pivotY + 5);
+    ctx.stroke();
+
+    if (selected) {
+      ctx.fillRect(geometry.x, geometry.y - 16, Math.max(46, frame.name.length * 6), 14);
+      ctx.fillStyle = "#101112";
+      ctx.fillText(frame.name, geometry.x + 4, geometry.y - 14);
+    }
   }
   ctx.restore();
 }

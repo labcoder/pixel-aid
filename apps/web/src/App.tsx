@@ -1029,7 +1029,7 @@ export function App() {
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
-          frameRects={sheetFrames.map((frame) => frame.rect)}
+          frames={sheetFrames}
           onZoomChange={setZoom}
         />
       </section>
