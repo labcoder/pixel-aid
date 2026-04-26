@@ -67,6 +67,7 @@ import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
+import { getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
@@ -194,9 +195,11 @@ export function App() {
   const [removeHalos, setRemoveHalos] = useState(defaultCleanupSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(defaultCleanupSettings.denoiseStrength);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
+  const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [fixStatus, setFixStatus] = useState<string | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
+  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const activeJobRef = useRef<FixJob | null>(null);
@@ -321,6 +324,35 @@ export function App() {
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
   const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
   const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
+  const guidedFixSummary = useMemo(
+    () =>
+      getGuidedFixSummary({
+        mode,
+        targetWidth: effectiveTargetWidth,
+        targetHeight: effectiveTargetHeight,
+        maxColors,
+        downscale,
+        alpha,
+        confidence: fixResult?.grid.confidence ?? recommendationConfidence,
+        frameCount: sheetMode ? sheetFrames.length : 1,
+        rows: sheetRows,
+        columns: sheetColumns
+      }),
+    [
+      alpha,
+      downscale,
+      effectiveTargetHeight,
+      effectiveTargetWidth,
+      fixResult?.grid.confidence,
+      maxColors,
+      mode,
+      recommendationConfidence,
+      sheetColumns,
+      sheetFrames.length,
+      sheetMode,
+      sheetRows
+    ]
+  );
 
   useEffect(() => {
     setCustomPivotX((current) => clampSheetInteger(current, 0, frameWidth));
@@ -462,6 +494,7 @@ export function App() {
     setDownscale(suggestion.downscale);
     setAlpha(suggestion.alpha);
     setMaxColors(suggestion.maxColors);
+    setRecommendationConfidence(suggestion.confidence);
     setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
   }, []);
 
@@ -490,6 +523,7 @@ export function App() {
             setSelectedAssetId(asset.id);
             setFixResult(null);
             setViewMode(getImportViewMode());
+            setShowAdvancedControls(false);
 
             setImportStatus(`Analyzing ${asset.name}...`);
             await waitForNextPaint();
@@ -1030,6 +1064,7 @@ export function App() {
       setSuggestionReason(
         `Candidate ${candidate.outputWidth}x${candidate.outputHeight}: ${candidate.diagnostics?.notes.slice(0, 2).join(". ") ?? candidate.reason}.`
       );
+      setRecommendationConfidence(candidate.confidence);
       appendLog(`Applied grid candidate ${candidate.outputWidth}x${candidate.outputHeight} at ${candidate.scaleX}x${candidate.scaleY}`);
     },
     [appendLog, clearDetectedSheetLayout, mode]
@@ -1695,21 +1730,39 @@ export function App() {
 
       <aside className="right-panel panel" aria-label="Inspector">
         <PanelHeader icon={<SlidersHorizontal size={16} />} title="Inspector" />
-        {inspectorGroupOrder.map((group, index) => (
-          <InspectorGroup
-            key={group}
-            title={inspectorGroupMeta[group].title}
-            docsId={inspectorGroupMeta[group].docsId}
-            tooltip={inspectorGroupMeta[group].tooltip}
-            onDocs={openDocs}
-            canMoveUp={index > 0}
-            canMoveDown={index < inspectorGroupOrder.length - 1}
-            onMoveUp={() => moveInspectorGroupInPanel(group, "up")}
-            onMoveDown={() => moveInspectorGroupInPanel(group, "down")}
-          >
-            {inspectorGroupContent[group]}
-          </InspectorGroup>
-        ))}
+        <GuidedFixPanel
+          selected={selectedAsset !== null}
+          summary={guidedFixSummary}
+          reason={suggestionReason}
+          busy={isImporting || isAnalyzing || isFixing}
+          canFix={selectedAsset !== null && !isImporting && !isAnalyzing && !isFixing}
+          advancedOpen={showAdvancedControls}
+          onAutoSuggest={autoSuggest}
+          onRunFix={runFix}
+          onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
+        />
+        {showAdvancedControls ? (
+          inspectorGroupOrder.map((group, index) => (
+            <InspectorGroup
+              key={group}
+              title={inspectorGroupMeta[group].title}
+              docsId={inspectorGroupMeta[group].docsId}
+              tooltip={inspectorGroupMeta[group].tooltip}
+              onDocs={openDocs}
+              canMoveUp={index > 0}
+              canMoveDown={index < inspectorGroupOrder.length - 1}
+              onMoveUp={() => moveInspectorGroupInPanel(group, "up")}
+              onMoveDown={() => moveInspectorGroupInPanel(group, "down")}
+            >
+              {inspectorGroupContent[group]}
+            </InspectorGroup>
+          ))
+        ) : (
+          <div className="advanced-collapsed-note">
+            <SlidersHorizontal size={14} />
+            <span>Advanced controls are collapsed.</span>
+          </div>
+        )}
       </aside>
 
       <footer className="bottom-panel panel" aria-label="Timeline logs and metrics">
@@ -2008,6 +2061,60 @@ function PaletteSwatches({ label, colors, emptyText }: { label: string; colors: 
         )}
       </div>
     </div>
+  );
+}
+
+function GuidedFixPanel({
+  selected,
+  summary,
+  reason,
+  busy,
+  canFix,
+  advancedOpen,
+  onAutoSuggest,
+  onRunFix,
+  onToggleAdvanced
+}: {
+  selected: boolean;
+  summary: GuidedFixSummary;
+  reason: string;
+  busy: boolean;
+  canFix: boolean;
+  advancedOpen: boolean;
+  onAutoSuggest: () => void | Promise<void>;
+  onRunFix: () => void | Promise<void>;
+  onToggleAdvanced: () => void;
+}) {
+  return (
+    <section className="guided-fix-panel" aria-label="Guided fix recommendation">
+      <div className="guided-fix-heading">
+        <span className="guided-kicker">Recommendation</span>
+        <h2>{selected ? summary.title : "Import an asset"}</h2>
+        <p>{selected ? summary.intent : "Drop, paste, or import an image to start."}</p>
+      </div>
+      {selected ? (
+        <div className="guided-metrics" aria-label="Suggested settings">
+          {summary.metrics.map((metric) => (
+            <span key={metric}>{metric}</span>
+          ))}
+        </div>
+      ) : null}
+      <p className="guided-reason">{reason}</p>
+      <div className="guided-actions">
+        <button type="button" className="guided-primary" disabled={!selected || busy} onClick={onAutoSuggest}>
+          <Sparkles size={14} />
+          Auto Suggest
+        </button>
+        <button type="button" disabled={!canFix} onClick={onRunFix}>
+          <WandSparkles size={14} />
+          Fix
+        </button>
+        <button type="button" className={advancedOpen ? "active" : ""} disabled={!selected} onClick={onToggleAdvanced}>
+          <SlidersHorizontal size={14} />
+          {advancedOpen ? "Hide Advanced" : "Advanced"}
+        </button>
+      </div>
+    </section>
   );
 }
 
