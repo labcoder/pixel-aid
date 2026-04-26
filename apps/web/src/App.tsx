@@ -28,7 +28,8 @@ import type {
   GridCandidate,
   OutlineMode,
   PixelFixResult,
-  RGBAImage
+  RGBAImage,
+  SpriteFrame
 } from "@pixelaid/shared";
 import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
@@ -201,6 +202,10 @@ export function App() {
   );
   const effectiveTargetWidth = sheetMode ? plannedSheetOutputSize.width : targetWidth;
   const effectiveTargetHeight = sheetMode ? plannedSheetOutputSize.height : targetHeight;
+  const sourceSheetFrames = useMemo(
+    () => (sheetMode ? sheetFrames.map((frame) => scaleFrameForSource(frame, gridScaleX, gridScaleY)) : []),
+    [gridScaleX, gridScaleY, sheetFrames, sheetMode]
+  );
   const sheetCanvasSize = useMemo(
     () => ({
       width: fixResult?.image.width ?? effectiveTargetWidth,
@@ -1237,6 +1242,7 @@ export function App() {
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
+          sourceFrames={sourceSheetFrames}
           frames={sheetFrames}
           selectedFrameIndex={selectedFrameIndex}
           onZoomChange={setZoom}
@@ -1558,6 +1564,22 @@ function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate
 
 function formatSuggestionReason(reason: string, modeConfidence: number, gridConfidence: number): string {
   return `${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.`;
+}
+
+function scaleFrameForSource(frame: SpriteFrame, scaleX: number, scaleY: number): SpriteFrame {
+  return {
+    ...frame,
+    rect: {
+      x: Math.round(frame.rect.x * scaleX),
+      y: Math.round(frame.rect.y * scaleY),
+      w: Math.max(1, Math.round(frame.rect.w * scaleX)),
+      h: Math.max(1, Math.round(frame.rect.h * scaleY))
+    },
+    pivot: {
+      x: Math.round(frame.pivot.x * scaleX),
+      y: Math.round(frame.pivot.y * scaleY)
+    }
+  };
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {

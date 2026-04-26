@@ -22,6 +22,7 @@ export type ViewportCanvasProps = {
   zoom: number;
   showGrid: boolean;
   fixedSourceRect?: FrameRect | undefined;
+  sourceFrames?: SpriteFrame[];
   frames?: SpriteFrame[];
   selectedFrameIndex?: number;
   onZoomChange: (zoom: number) => void;
@@ -34,6 +35,7 @@ export function ViewportCanvas({
   zoom,
   showGrid,
   fixedSourceRect,
+  sourceFrames = [],
   frames = [],
   selectedFrameIndex = -1,
   onZoomChange
@@ -133,6 +135,7 @@ export function ViewportCanvas({
         zoom,
         showGrid,
         fixedSourceRect,
+        sourceFrames,
         frames,
         selectedFrameIndex,
         panRef.current,
@@ -144,7 +147,7 @@ export function ViewportCanvas({
     const observer = new ResizeObserver(draw);
     observer.observe(canvas);
     return () => observer.disconnect();
-  }, [fixedImage, fixedSourceRect, frames, renderKey, selectedFrameIndex, showGrid, sourceImage, viewMode, zoom]);
+  }, [fixedImage, fixedSourceRect, frames, renderKey, selectedFrameIndex, showGrid, sourceFrames, sourceImage, viewMode, zoom]);
 
   const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 || !sourceImage) {
@@ -297,6 +300,7 @@ function drawImageView(
   zoom: number,
   showGrid: boolean,
   fixedSourceRect: FrameRect | undefined,
+  sourceFrames: SpriteFrame[],
   frames: SpriteFrame[],
   selectedFrameIndex: number,
   pan: Point,
@@ -320,6 +324,16 @@ function drawImageView(
     const splitX = Math.floor(width * splitRatio);
     drawClipped(ctx, sourceCanvas, layout.before, 0, splitX);
     drawClipped(ctx, fixedCanvas, layout.after, splitX, width - splitX);
+    const beforeZoom = layout.before.width / sourceCanvas.width;
+    if (showGrid && beforeZoom >= 4) {
+      drawClippedOverlay(ctx, 0, splitX, () => {
+        drawPixelGrid(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
+      });
+    }
+    drawClippedOverlay(ctx, 0, splitX, () => {
+      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex);
+    });
+
     ctx.fillStyle = "#101112";
     ctx.fillRect(splitX - 3, 0, 6, height);
     ctx.strokeStyle = "#f1c75b";
@@ -337,9 +351,13 @@ function drawImageView(
 
     const comparisonZoom = layout.after.width / fixedCanvas.width;
     if (showGrid && comparisonZoom >= 4) {
-      drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
+      drawClippedOverlay(ctx, splitX, width - splitX, () => {
+        drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
+      });
     }
-    drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex);
+    drawClippedOverlay(ctx, splitX, width - splitX, () => {
+      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex);
+    });
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
     ctx.drawImage(activeCanvas, rect.x, rect.y, rect.width, rect.height);
@@ -348,6 +366,8 @@ function drawImageView(
     }
     if (viewMode === "after" && fixedCanvas) {
       drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex);
+    } else {
+      drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex);
     }
     drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
   }
@@ -408,6 +428,15 @@ function drawClipped(
   ctx.rect(clipX, 0, clipWidth, ctx.canvas.height);
   ctx.clip();
   ctx.drawImage(canvas, rect.x, rect.y, rect.width, rect.height);
+  ctx.restore();
+}
+
+function drawClippedOverlay(ctx: CanvasRenderingContext2D, clipX: number, clipWidth: number, draw: () => void): void {
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(clipX, 0, clipWidth, ctx.canvas.height);
+  ctx.clip();
+  draw();
   ctx.restore();
 }
 
