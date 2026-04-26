@@ -1,7 +1,8 @@
-import type { Pivot, SpriteFrame } from "@pixelaid/shared";
+import type { Pivot, Rect, SpriteFrame } from "@pixelaid/shared";
 
 export type FramePreviewPlacement = {
   frame: SpriteFrame;
+  drawRect?: Rect;
   canvas: { width: number; height: number };
   offset: { x: number; y: number };
   normalizedPivot: Pivot;
@@ -14,7 +15,7 @@ export type OnionSkinPlacements = {
   next: FramePreviewPlacement | null;
 };
 
-export function normalizeFramePlacements(frames: readonly SpriteFrame[]): FramePreviewPlacement[] {
+export function normalizeFramePlacements(frames: readonly SpriteFrame[], sourceFrames: readonly SpriteFrame[] = []): FramePreviewPlacement[] {
   if (frames.length === 0) {
     return [];
   }
@@ -29,22 +30,29 @@ export function normalizeFramePlacements(frames: readonly SpriteFrame[]): FrameP
   };
   const normalizedPivot = { x: left, y: top };
 
-  return frames.map((frame) => ({
-    frame,
-    canvas,
-    offset: {
-      x: normalizedPivot.x - frame.pivot.x,
-      y: normalizedPivot.y - frame.pivot.y
-    },
-    normalizedPivot,
-    normalized: true
-  }));
+  const sourceRects = new Map(sourceFrames.map((frame) => [frame.name, frame.rect]));
+
+  return frames.map((frame) => {
+    const drawRect = sourceRects.get(frame.name);
+    return {
+      frame,
+      ...(drawRect ? { drawRect: { ...drawRect } } : {}),
+      canvas,
+      offset: {
+        x: normalizedPivot.x - frame.pivot.x,
+        y: normalizedPivot.y - frame.pivot.y
+      },
+      normalizedPivot,
+      normalized: true
+    };
+  });
 }
 
 export function getFramePreviewPlacement(
   frames: readonly SpriteFrame[],
   selectedFrameIndex: number,
-  normalize: boolean
+  normalize: boolean,
+  sourceFrames: readonly SpriteFrame[] = []
 ): FramePreviewPlacement | null {
   const frame = frames[Math.max(0, Math.min(frames.length - 1, selectedFrameIndex))];
   if (!frame) {
@@ -52,24 +60,28 @@ export function getFramePreviewPlacement(
   }
 
   if (!normalize) {
-    return createPassthroughPlacement(frame);
+    return createPassthroughPlacement(frame, sourceFrames.find((item) => item.name === frame.name)?.rect);
   }
 
-  return normalizeFramePlacements(frames).find((placement) => placement.frame.name === frame.name) ?? null;
+  return normalizeFramePlacements(frames, sourceFrames).find((placement) => placement.frame.name === frame.name) ?? null;
 }
 
 export function getOnionSkinPlacements(
   frames: readonly SpriteFrame[],
   selectedFrameIndex: number,
   normalize: boolean,
-  options: { wrap?: boolean } = {}
+  options: { wrap?: boolean } = {},
+  sourceFrames: readonly SpriteFrame[] = []
 ): OnionSkinPlacements {
   if (frames.length === 0) {
     return { previous: null, current: null, next: null };
   }
 
   const selectedIndex = Math.max(0, Math.min(frames.length - 1, Math.round(selectedFrameIndex)));
-  const placements = normalize ? normalizeFramePlacements(frames) : frames.map(createPassthroughPlacement);
+  const sourceRects = new Map(sourceFrames.map((frame) => [frame.name, frame.rect]));
+  const placements = normalize
+    ? normalizeFramePlacements(frames, sourceFrames)
+    : frames.map((frame) => createPassthroughPlacement(frame, sourceRects.get(frame.name)));
 
   return {
     previous: getNeighborPlacement(placements, selectedIndex, -1, options.wrap === true),
@@ -100,9 +112,10 @@ function getNeighborPlacement(
   return direction < 0 ? placements[placements.length - 1] ?? null : placements[0] ?? null;
 }
 
-function createPassthroughPlacement(frame: SpriteFrame): FramePreviewPlacement {
+function createPassthroughPlacement(frame: SpriteFrame, drawRect?: Rect): FramePreviewPlacement {
   return {
     frame,
+    ...(drawRect ? { drawRect: { ...drawRect } } : {}),
     canvas: { width: frame.rect.w, height: frame.rect.h },
     offset: { x: 0, y: 0 },
     normalizedPivot: { ...frame.pivot },

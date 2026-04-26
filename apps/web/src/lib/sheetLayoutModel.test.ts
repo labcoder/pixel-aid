@@ -102,6 +102,31 @@ describe("sheet layout model", () => {
     expect(idleFrames[0]?.sourceRect).toEqual(frames[0]?.sourceRect);
   });
 
+  test("can resize animation row source footprints around their centers to match the output cell scale", () => {
+    const resized = resizeAnimationCells({
+      frames,
+      animations,
+      animationName: "idle",
+      cellWidth: 80,
+      cellHeight: 72,
+      margin: 0,
+      spacing: 0,
+      scaleX: 4,
+      scaleY: 4,
+      sourceSize: { width: 2048, height: 1024 }
+    });
+
+    const idleFrames = resized.filter((frame) => frame.tags?.includes("idle"));
+
+    expect(idleFrames.map((frame) => frame.rect.w)).toEqual([80, 80, 80]);
+    expect(idleFrames.map((frame) => frame.rect.h)).toEqual([72, 72, 72]);
+    expect(idleFrames.map((frame) => frame.sourceRect)).toEqual([
+      { x: 0, y: 0, w: 320, h: 288 },
+      { x: 224, y: 0, w: 320, h: 288 },
+      { x: 480, y: 0, w: 320, h: 288 }
+    ]);
+  });
+
   test("reflows detected animation rows when margin or spacing changes", () => {
     const repacked = repackAnimationRows({
       frames,

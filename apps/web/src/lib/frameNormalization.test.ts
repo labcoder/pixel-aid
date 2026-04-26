@@ -59,6 +59,25 @@ describe("frame normalization", () => {
     });
   });
 
+  test("can preview source bounds inside the intended output cell before fix", () => {
+    const sourceFrames: SpriteFrame[] = [
+      {
+        ...frames[1]!,
+        rect: { x: 160, y: 80, w: 320, h: 240 },
+        pivot: { x: 160, y: 220 }
+      }
+    ];
+
+    expect(getFramePreviewPlacement([frames[1]!], 0, false, sourceFrames)).toEqual({
+      frame: frames[1],
+      drawRect: { x: 160, y: 80, w: 320, h: 240 },
+      canvas: { width: 30, height: 24 },
+      offset: { x: 0, y: 0 },
+      normalizedPivot: { x: 16, y: 22 },
+      normalized: false
+    });
+  });
+
   test("returns a normalized preview placement for the selected frame", () => {
     expect(getFramePreviewPlacement(frames, 1, true)).toEqual({
       frame: frames[1],

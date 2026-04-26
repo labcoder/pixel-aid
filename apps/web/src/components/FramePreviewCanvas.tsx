@@ -91,20 +91,48 @@ function drawFramePlacement(
   scale: number,
   alpha: number
 ): void {
+  const drawRect = placement.drawRect ?? placement.frame.rect;
+  const targetRect = getPlacementTargetRect(placement, startX, startY, scale, drawRect);
   context.save();
   context.globalAlpha = alpha;
   context.drawImage(
     sourceCanvas,
-    placement.frame.rect.x,
-    placement.frame.rect.y,
-    placement.frame.rect.w,
-    placement.frame.rect.h,
-    startX + placement.offset.x * scale,
-    startY + placement.offset.y * scale,
-    placement.frame.rect.w * scale,
-    placement.frame.rect.h * scale
+    drawRect.x,
+    drawRect.y,
+    drawRect.w,
+    drawRect.h,
+    targetRect.x,
+    targetRect.y,
+    targetRect.w,
+    targetRect.h
   );
   context.restore();
+}
+
+function getPlacementTargetRect(
+  placement: FramePreviewPlacement,
+  startX: number,
+  startY: number,
+  scale: number,
+  drawRect: { w: number; h: number }
+): { x: number; y: number; w: number; h: number } {
+  const cellWidth = placement.frame.rect.w * scale;
+  const cellHeight = placement.frame.rect.h * scale;
+  const cellX = startX + placement.offset.x * scale;
+  const cellY = startY + placement.offset.y * scale;
+  if (!placement.drawRect) {
+    return { x: cellX, y: cellY, w: cellWidth, h: cellHeight };
+  }
+
+  const fit = Math.min(cellWidth / Math.max(1, drawRect.w), cellHeight / Math.max(1, drawRect.h));
+  const width = Math.max(1, Math.round(drawRect.w * fit));
+  const height = Math.max(1, Math.round(drawRect.h * fit));
+  return {
+    x: Math.floor(cellX + (cellWidth - width) / 2),
+    y: Math.floor(cellY + (cellHeight - height) / 2),
+    w: width,
+    h: height
+  };
 }
 
 function drawOnionLabel(context: CanvasRenderingContext2D, label: string, x: number, y: number, color: string): void {

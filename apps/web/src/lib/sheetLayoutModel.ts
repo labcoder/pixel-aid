@@ -1,4 +1,4 @@
-import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
+import type { AnimationTag, Rect, SpriteFrame } from "@pixelaid/shared";
 
 export type SheetOutputFallback = {
   frameWidth: number;
@@ -106,7 +106,10 @@ export function resizeAnimationCells({
   cellWidth,
   cellHeight,
   margin,
-  spacing
+  spacing,
+  scaleX,
+  scaleY,
+  sourceSize
 }: {
   frames: readonly SpriteFrame[];
   animations: readonly AnimationTag[];
@@ -115,12 +118,18 @@ export function resizeAnimationCells({
   cellHeight: number;
   margin: number;
   spacing: number;
+  scaleX?: number;
+  scaleY?: number;
+  sourceSize?: { width: number; height: number };
 }): SpriteFrame[] {
   return repackAnimationRows({
     frames,
     animations,
     margin,
     spacing,
+    ...(scaleX !== undefined ? { scaleX } : {}),
+    ...(scaleY !== undefined ? { scaleY } : {}),
+    ...(sourceSize !== undefined ? { sourceSize } : {}),
     rowOverrides: {
       [animationName]: {
         cellWidth: Math.max(1, Math.round(cellWidth)),
@@ -135,13 +144,19 @@ export function repackAnimationRows({
   animations,
   margin,
   spacing,
-  rowOverrides = {}
+  rowOverrides = {},
+  scaleX,
+  scaleY,
+  sourceSize
 }: {
   frames: readonly SpriteFrame[];
   animations: readonly AnimationTag[];
   margin: number;
   spacing: number;
   rowOverrides?: Record<string, { cellWidth: number; cellHeight: number }>;
+  scaleX?: number;
+  scaleY?: number;
+  sourceSize?: { width: number; height: number };
 }): SpriteFrame[] {
   const framesByName = new Map(frames.map((frame) => [frame.name, frame]));
   const packedFrames: SpriteFrame[] = [];
@@ -162,12 +177,20 @@ export function repackAnimationRows({
     for (let column = 0; column < rowFrames.length; column += 1) {
       const frame = rowFrames[column]!;
       usedNames.add(frame.name);
-      packedFrames.push(copyFrameForCell(frame, {
-        x: Math.max(0, Math.round(margin)) + column * (rowWidth + safeSpacing),
-        y,
-        w: rowWidth,
-        h: rowHeight
-      }));
+      packedFrames.push(
+        copyFrameForCell(
+          frame,
+          {
+            x: Math.max(0, Math.round(margin)) + column * (rowWidth + safeSpacing),
+            y,
+            w: rowWidth,
+            h: rowHeight
+          },
+          override && scaleX && scaleY && sourceSize
+            ? resizeSourceRectAroundCenter(frame.sourceRect ?? frame.rect, rowWidth * scaleX, rowHeight * scaleY, sourceSize)
+            : undefined
+        )
+      );
     }
 
     y += rowHeight + safeSpacing;
@@ -182,7 +205,7 @@ export function repackAnimationRows({
   return packedFrames;
 }
 
-function copyFrameForCell(frame: SpriteFrame, rect: SpriteFrame["rect"]): SpriteFrame {
+function copyFrameForCell(frame: SpriteFrame, rect: SpriteFrame["rect"], sourceRect?: Rect): SpriteFrame {
   return {
     ...frame,
     rect: { ...rect },
@@ -190,7 +213,27 @@ function copyFrameForCell(frame: SpriteFrame, rect: SpriteFrame["rect"]): Sprite
       x: Math.min(rect.w, Math.max(0, Math.round(rect.w / Math.max(1, frame.rect.w) * frame.pivot.x))),
       y: Math.min(rect.h, Math.max(0, Math.round(rect.h / Math.max(1, frame.rect.h) * frame.pivot.y)))
     },
-    ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
+    ...(sourceRect ? { sourceRect } : frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
     ...(frame.tags ? { tags: [...frame.tags] } : {})
   };
+}
+
+function resizeSourceRectAroundCenter(rect: Rect, width: number, height: number, bounds: { width: number; height: number }): Rect {
+  const nextWidth = Math.max(1, Math.round(width));
+  const nextHeight = Math.max(1, Math.round(height));
+  const centerX = rect.x + rect.w / 2;
+  const centerY = rect.y + rect.h / 2;
+  const x = clampInteger(Math.round(centerX - nextWidth / 2), 0, Math.max(0, bounds.width - nextWidth));
+  const y = clampInteger(Math.round(centerY - nextHeight / 2), 0, Math.max(0, bounds.height - nextHeight));
+
+  return {
+    x,
+    y,
+    w: Math.min(nextWidth, Math.max(1, bounds.width - x)),
+    h: Math.min(nextHeight, Math.max(1, bounds.height - y))
+  };
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
 }

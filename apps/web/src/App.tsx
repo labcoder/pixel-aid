@@ -321,12 +321,11 @@ export function App() {
     () => animationFrameIndexes.map((index) => sourceSheetFrames[index]!).filter(Boolean),
     [animationFrameIndexes, sourceSheetFrames]
   );
-  const previewFrames = fixResult ? timelineFrames : sourceTimelineFrames;
   const previewImage = fixResult?.image ?? selectedAsset?.image ?? null;
   const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
   const framePreviewPlacement = useMemo(
-    () => getFramePreviewPlacement(previewFrames, timelinePosition, normalizeTimelineFrames),
-    [normalizeTimelineFrames, previewFrames, timelinePosition]
+    () => getFramePreviewPlacement(timelineFrames, timelinePosition, normalizeTimelineFrames, fixResult ? [] : sourceTimelineFrames),
+    [fixResult, normalizeTimelineFrames, sourceTimelineFrames, timelineFrames, timelinePosition]
   );
   const fixedComparisonSourceRect = useMemo(
     () =>
@@ -349,11 +348,17 @@ export function App() {
   const onionSkinPlacements = useMemo(
     () =>
       showOnionSkin
-        ? getOnionSkinPlacements(previewFrames, timelinePosition, normalizeTimelineFrames, {
-            wrap: playbackLoop && playbackDirection !== "ping-pong"
-          })
+        ? getOnionSkinPlacements(
+            timelineFrames,
+            timelinePosition,
+            normalizeTimelineFrames,
+            {
+              wrap: playbackLoop && playbackDirection !== "ping-pong"
+            },
+            fixResult ? [] : sourceTimelineFrames
+          )
         : { previous: null, current: null, next: null },
-    [normalizeTimelineFrames, playbackDirection, playbackLoop, previewFrames, showOnionSkin, timelinePosition]
+    [fixResult, normalizeTimelineFrames, playbackDirection, playbackLoop, showOnionSkin, sourceTimelineFrames, timelineFrames, timelinePosition]
   );
   const sheetDetectionNotes = useMemo(
     () =>
@@ -1104,14 +1109,17 @@ export function App() {
           cellWidth: dimension === "width" ? nextValue : row?.cellWidth ?? frameWidth,
           cellHeight: dimension === "height" ? nextValue : row?.cellHeight ?? frameHeight,
           margin: sheetMargin,
-          spacing: sheetSpacing
+          spacing: sheetSpacing,
+          scaleX: gridScaleX,
+          scaleY: gridScaleY,
+          ...(selectedAsset ? { sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height } } : {})
         });
       });
       setFixResult(null);
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
     },
-    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+    [detectedRowAnimations, frameHeight, frameWidth, gridScaleX, gridScaleY, selectedAsset, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
 
   const changePlaybackDirection = useCallback(
