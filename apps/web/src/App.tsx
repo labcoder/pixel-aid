@@ -45,7 +45,7 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
-import { applyFrameDurationOverrides, renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
+import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -872,6 +872,7 @@ export function App() {
       const result = renameAnimationTag({ animations: detectedRowAnimations, frames: detectedSheetFrames, fromName, toName });
       setDetectedRowAnimations(result.animations);
       setDetectedSheetFrames(result.frames);
+      setFrameDurationOverrides((current) => renameFrameDurationOverrides({ overrides: current, frameNames: result.frameNameMap }));
       setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
     },
     [detectedRowAnimations, detectedSheetFrames]
@@ -1806,8 +1807,12 @@ export function App() {
                 </div>
                 {detectedRowAnimations.length > 0 ? (
                   <div className="clip-editor" aria-label="Detected animation clip metadata">
+                    <div className="clip-editor-title">
+                      <strong>Detected clips</strong>
+                      <span>{detectedRowAnimations.length} row{detectedRowAnimations.length === 1 ? "" : "s"}</span>
+                    </div>
                     <div className="clip-editor-header">
-                      <span>Clip name</span>
+                      <span>Clip / export ID</span>
                       <span>Frames</span>
                       <span>FPS</span>
                       <span>Direction</span>
@@ -1817,8 +1822,10 @@ export function App() {
                       <div key={animation.name} className={animation.name === selectedAnimationName ? "clip-row active" : "clip-row"}>
                         <input
                           aria-label={`Rename ${animation.name}`}
+                          title="Renaming a detected clip also updates matching frame names, timing overrides, and export manifest IDs."
                           type="text"
                           defaultValue={animation.name}
+                          onFocus={(event) => event.currentTarget.select()}
                           onBlur={(event) => {
                             if (event.currentTarget.value !== animation.name) {
                               renameDetectedAnimation(animation.name, event.currentTarget.value);
@@ -1884,7 +1891,7 @@ export function App() {
                 </div>
                 <p className="field-note">
                   Select a frame to highlight its bounds and pivot in the viewport. Frame duration is used for playback and export;
-                  clip FPS is the fallback speed for frames without custom timing. Onion skin is preview-only.
+                  clip FPS is the fallback speed for frames without custom timing. Clip names become animation keys and frame-name prefixes.
                 </p>
               </>
             ) : (

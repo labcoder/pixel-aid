@@ -1,6 +1,6 @@
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { applyFrameDurationOverrides, renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
+import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
 
 const animations: AnimationTag[] = [
   { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
@@ -39,7 +39,10 @@ describe("animation tag editing", () => {
     const renamed = renameAnimationTag({ animations, frames, fromName: "row_1", toName: "walk" });
 
     expect(renamed.animations.map((animation) => animation.name)).toEqual(["walk", "row_2"]);
+    expect(renamed.animations[0]?.frameNames).toEqual(["walk_000", "walk_001"]);
+    expect(renamed.frames.map((frame) => frame.name)).toEqual(["walk_000", "walk_001", "row_2_000"]);
     expect(renamed.frames.map((frame) => frame.tags)).toEqual([["walk"], ["walk"], ["row_2"]]);
+    expect(renamed.frameNameMap.get("row_1_000")).toBe("walk_000");
     expect(renamed.selectedAnimationName).toBe("walk");
   });
 
@@ -47,6 +50,8 @@ describe("animation tag editing", () => {
     const renamed = renameAnimationTag({ animations, frames, fromName: "row_1", toName: "row_2" });
 
     expect(renamed.animations.map((animation) => animation.name)).toEqual(["row_2_2", "row_2"]);
+    expect(renamed.animations[0]?.frameNames).toEqual(["row_2_2_000", "row_2_2_001"]);
+    expect(renamed.frames[0]?.name).toBe("row_2_2_000");
     expect(renamed.frames[0]?.tags).toEqual(["row_2_2"]);
   });
 
@@ -86,5 +91,22 @@ describe("animation tag editing", () => {
     expect(updated.map((frame) => frame.durationMs)).toEqual([200, 125, 100]);
     expect(updated[0]?.rect).toEqual(frames[0]?.rect);
     expect(updated[0]?.rect).not.toBe(frames[0]?.rect);
+  });
+
+  test("renames frame duration override keys with corrected row names", () => {
+    const renamed = renameAnimationTag({ animations, frames, fromName: "row_1", toName: "walk" });
+
+    expect(
+      renameFrameDurationOverrides({
+        overrides: {
+          row_1_000: 200,
+          row_2_000: 90
+        },
+        frameNames: renamed.frameNameMap
+      })
+    ).toEqual({
+      walk_000: 200,
+      row_2_000: 90
+    });
   });
 });
