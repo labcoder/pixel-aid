@@ -18,6 +18,7 @@ export type {
   RGBAImage,
   SheetLayoutDetection,
   SheetLayoutDiagnostics,
+  SheetRowLabel,
   SheetSliceOptions,
   SpriteAnimation,
   SpriteFrame,

@@ -139,10 +139,19 @@ export type SheetLayoutDetection = {
   rowRects: Rect[];
   rowFrameCounts: number[];
   rowAnimations: AnimationTag[];
+  rowLabels: SheetRowLabel[];
   confidence: number;
   diagnostics?: SheetLayoutDiagnostics;
   reason: string;
   warnings: string[];
+};
+
+export type SheetRowLabel = {
+  rowIndex: number;
+  name: string;
+  rawText: string;
+  confidence: number;
+  rect: Rect;
 };
 
 export type SheetLayoutDiagnostics = {

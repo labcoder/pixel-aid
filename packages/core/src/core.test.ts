@@ -180,6 +180,71 @@ function driftedDisconnectedSheetWithoutBorders(): RGBAImage {
   return image;
 }
 
+const labelGlyphs: Record<string, readonly string[]> = {
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "10010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"]
+};
+
+function labeledAnimationSheet(): RGBAImage {
+  const image = createImage(430, 240);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { label: "IDLE", y: 20, frames: 4 },
+    { label: "WALK", y: 88, frames: 6 },
+    { label: "JUMP", y: 156, frames: 5 }
+  ];
+  const startX = 110;
+  const cellWidth = 54;
+  const cellHeight = 44;
+
+  for (const row of rows) {
+    drawPixelLabel(image, row.label, 18, row.y + 13, 2);
+    for (let column = 0; column < row.frames; column += 1) {
+      const x = startX + column * cellWidth;
+      drawBlock(image, x + 12, row.y, 30, cellHeight, 70, 75, 75, 255);
+      drawBlock(image, x + 20, row.y + 9, 14, 24, 92, 160, 150, 255);
+    }
+  }
+
+  return image;
+}
+
+function drawPixelLabel(image: RGBAImage, text: string, startX: number, startY: number, scale: number): void {
+  let cursorX = startX;
+  for (const char of text) {
+    const glyph = labelGlyphs[char];
+    if (!glyph) {
+      cursorX += 4 * scale;
+      continue;
+    }
+
+    for (let gy = 0; gy < glyph.length; gy += 1) {
+      const row = glyph[gy]!;
+      for (let gx = 0; gx < row.length; gx += 1) {
+        if (row[gx] !== "1") {
+          continue;
+        }
+        drawBlock(image, cursorX + gx * scale, startY + gy * scale, scale, scale, 0, 240, 240, 255);
+      }
+    }
+    cursorX += 6 * scale;
+  }
+}
+
 function drawBlock(
   image: RGBAImage,
   startX: number,
@@ -722,6 +787,24 @@ describe("sheet slicing", () => {
     expect(detection.diagnostics!.columnConfidence.maxCenterDriftPx).toBeGreaterThanOrEqual(3);
     expect(detection.diagnostics!.columnConfidence.mergedComponentCount).toBeGreaterThan(0);
     expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("uses confident left-side row labels for animation and frame names", () => {
+    const detection = detectSheetLayout(labeledAnimationSheet());
+
+    expect(detection.rowAnimations.map((animation) => animation.name)).toEqual(["idle", "walk", "jump"]);
+    expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual([4, 6, 5]);
+    expect(detection.frames[0]!.name).toBe("idle_000");
+    expect(detection.frames[4]!.name).toBe("walk_000");
+    expect(detection.frames[10]!.name).toBe("jump_000");
+    expect(detection.frames[0]!.tags).toEqual(["idle"]);
+    expect(detection.rowLabels).toEqual([
+      expect.objectContaining({ rowIndex: 0, name: "idle", rawText: "IDLE", confidence: expect.any(Number) }),
+      expect.objectContaining({ rowIndex: 1, name: "walk", rawText: "WALK", confidence: expect.any(Number) }),
+      expect.objectContaining({ rowIndex: 2, name: "jump", rawText: "JUMP", confidence: expect.any(Number) })
+    ]);
+    expect(detection.rowLabels![0]!.confidence).toBeGreaterThan(0.8);
+    expect(detection.diagnostics!.notes).toContain("Labels: idle, walk, jump detected.");
   });
 
   test("generates deterministic frame rects from rows columns margin and spacing", () => {

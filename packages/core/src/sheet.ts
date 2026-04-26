@@ -1,4 +1,4 @@
-import type { Rect, RGBAImage, SheetLayoutDetection, SheetLayoutDiagnostics, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { Rect, RGBAImage, SheetLayoutDetection, SheetLayoutDiagnostics, SheetRowLabel, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 
 type Band = {
   start: number;
@@ -30,6 +30,50 @@ type ResolvedSegments = {
   usedDriftFitting: boolean;
   mergedComponentCount: number;
   maxCenterDriftPx: number;
+  rowLabel?: Omit<SheetRowLabel, "rowIndex">;
+};
+
+type LabelTemplate = {
+  name: string;
+  rawText: string;
+  text: string;
+};
+
+type BinaryTemplate = {
+  width: number;
+  height: number;
+  data: Uint8Array;
+};
+
+const labelConfidenceThreshold = 0.72;
+
+const rowLabelTemplates: LabelTemplate[] = [
+  { name: "idle", rawText: "IDLE", text: "IDLE" },
+  { name: "walk", rawText: "WALK", text: "WALK" },
+  { name: "jump", rawText: "JUMP", text: "JUMP" },
+  { name: "shoot", rawText: "SHOOT", text: "SHOOT" },
+  { name: "take_damage", rawText: "TAKE DAMAGE", text: "TAKE\nDAMAGE" },
+  { name: "death", rawText: "DEATH", text: "DEATH" }
+];
+
+const labelGlyphs: Record<string, readonly string[]> = {
+  A: ["01110", "10001", "10001", "11111", "10001", "10001", "10001"],
+  C: ["01111", "10000", "10000", "10000", "10000", "10000", "01111"],
+  D: ["11110", "10001", "10001", "10001", "10001", "10001", "11110"],
+  E: ["11111", "10000", "10000", "11110", "10000", "10000", "11111"],
+  G: ["01111", "10000", "10000", "10011", "10001", "10001", "01111"],
+  H: ["10001", "10001", "10001", "11111", "10001", "10001", "10001"],
+  I: ["11111", "00100", "00100", "00100", "00100", "00100", "11111"],
+  J: ["00111", "00010", "00010", "00010", "10010", "10010", "01100"],
+  K: ["10001", "10010", "10100", "11000", "10100", "10010", "10001"],
+  L: ["10000", "10000", "10000", "10000", "10000", "10000", "11111"],
+  M: ["10001", "11011", "10101", "10101", "10001", "10001", "10001"],
+  O: ["01110", "10001", "10001", "10001", "10001", "10001", "01110"],
+  P: ["11110", "10001", "10001", "11110", "10000", "10000", "10000"],
+  S: ["01111", "10000", "10000", "01110", "00001", "00001", "11110"],
+  T: ["11111", "00100", "00100", "00100", "00100", "00100", "00100"],
+  U: ["10001", "10001", "10001", "10001", "10001", "10001", "01110"],
+  W: ["10001", "10001", "10001", "10101", "10101", "10101", "01010"]
 };
 
 export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
@@ -83,7 +127,8 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
         usedComponentMerging: resolved.usedComponentMerging,
         usedDriftFitting: resolved.usedDriftFitting,
         mergedComponentCount: resolved.mergedComponentCount,
-        maxCenterDriftPx: resolved.maxCenterDriftPx
+        maxCenterDriftPx: resolved.maxCenterDriftPx,
+        rowLabel: resolved.rowLabel
       };
     })
     .filter((row) => row.segments.length > 0)
@@ -105,10 +150,27 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   const spacing = gaps.length > 0 ? Math.max(0, medianInteger(gaps)) : 0;
   const frames: SpriteFrame[] = [];
   const rowRects: Rect[] = [];
+  const usedRowNames = new Set<string>();
+  const rowNames = rawRows.map((row, rowIndex) =>
+    row.rowLabel && row.rowLabel.confidence >= labelConfidenceThreshold
+      ? uniqueAnimationName(row.rowLabel.name, usedRowNames)
+      : uniqueAnimationName(`row_${rowIndex + 1}`, usedRowNames)
+  );
+  const rowLabels: SheetRowLabel[] = rawRows.flatMap((row, rowIndex) =>
+    row.rowLabel && row.rowLabel.confidence >= labelConfidenceThreshold
+      ? [
+          {
+            ...row.rowLabel,
+            rowIndex,
+            name: rowNames[rowIndex]!
+          }
+        ]
+      : []
+  );
 
   for (let rowIndex = 0; rowIndex < rawRows.length; rowIndex += 1) {
     const row = rawRows[rowIndex]!;
-    const rowName = `row_${rowIndex + 1}`;
+    const rowName = rowNames[rowIndex]!;
     const minX = Math.min(...row.segments.map((segment) => segment.x));
     const maxX = Math.max(...row.segments.map((segment) => segment.x + segment.w));
     rowRects.push({ x: minX, y: row.band.start, w: maxX - minX, h: row.band.end - row.band.start + 1 });
@@ -126,7 +188,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
 
   const rowAnimations = rowFrameCounts.map((frameCount, index) => {
-    const rowName = `row_${index + 1}`;
+    const rowName = rowNames[index]!;
     return {
       name: rowName,
       frameNames: Array.from({ length: frameCount }, (_, frameIndex) => `${rowName}_${frameIndex.toString().padStart(3, "0")}`),
@@ -167,7 +229,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     usedComponentMerging: rawRows.some((row) => row.usedComponentMerging),
     usedDriftFitting: rawRows.some((row) => row.usedDriftFitting),
     usedOutlinedCells: rawRows.some((row) => row.usedOutlinedCells),
-    usedContentCentering: rawRows.some((row) => row.usedContentCentering)
+    usedContentCentering: rawRows.some((row) => row.usedContentCentering),
+    labelNames: rowLabels.map((label) => label.name),
+    labelRowCount: rowLabels.length
   });
 
   return {
@@ -181,6 +245,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     rowRects,
     rowFrameCounts,
     rowAnimations,
+    rowLabels,
     confidence,
     diagnostics,
     reason: `Detected ${rows} sprite-sheet row${rows === 1 ? "" : "s"} with up to ${columns} frame${columns === 1 ? "" : "s"} per row`,
@@ -282,6 +347,11 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
   const sourceSegments = segmentsForBand(image, band, background);
   const contentSegments = chooseFrameSegments(sourceSegments);
   const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
+  const labelFrameStart = Math.min(
+    contentSegments[0]?.x ?? Number.POSITIVE_INFINITY,
+    outlinedSegments[0]?.x ?? Number.POSITIVE_INFINITY
+  );
+  const rowLabel = Number.isFinite(labelFrameStart) ? detectRowLabel(image, band, background, labelFrameStart) : undefined;
 
   if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
     return {
@@ -291,7 +361,8 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
       usedComponentMerging: false,
       usedDriftFitting: false,
       mergedComponentCount: 0,
-      maxCenterDriftPx: 0
+      maxCenterDriftPx: 0,
+      ...(rowLabel ? { rowLabel } : {})
     };
   }
 
@@ -305,7 +376,8 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
       usedComponentMerging: true,
       usedDriftFitting: drifted.usedDriftFitting,
       mergedComponentCount: merged.mergedComponentCount,
-      maxCenterDriftPx: drifted.maxCenterDriftPx
+      maxCenterDriftPx: drifted.maxCenterDriftPx,
+      ...(rowLabel ? { rowLabel } : {})
     };
   }
 
@@ -317,7 +389,8 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
     usedComponentMerging: false,
     usedDriftFitting: false,
     mergedComponentCount: 0,
-    maxCenterDriftPx: 0
+    maxCenterDriftPx: 0,
+    ...(rowLabel ? { rowLabel } : {})
   };
 }
 
@@ -561,6 +634,184 @@ function alignDetectedRowsToSharedColumns<
   });
 }
 
+function detectRowLabel(
+  image: RGBAImage,
+  band: Band,
+  background: [number, number, number, number],
+  frameStartX: number
+): Omit<SheetRowLabel, "rowIndex"> | undefined {
+  const searchEndX = Math.max(0, Math.min(image.width, Math.floor(frameStartX) - 6));
+  if (searchEndX < 8) {
+    return undefined;
+  }
+
+  const rect = foregroundBoundsInRegion(image, 0, band.start, searchEndX, band.end + 1, background);
+  if (!rect || rect.w < 6 || rect.h < 6 || rect.w > searchEndX * 0.95) {
+    return undefined;
+  }
+
+  let best: (Omit<SheetRowLabel, "rowIndex"> & { score: number }) | undefined;
+  for (const candidate of rowLabelTemplates) {
+    const template = renderLabelTemplate(candidate.text);
+    const confidence = scoreLabelTemplate(image, rect, background, template);
+    if (!best || confidence > best.score) {
+      best = {
+        name: candidate.name,
+        rawText: candidate.rawText,
+        confidence,
+        rect,
+        score: confidence
+      };
+    }
+  }
+
+  if (!best || best.confidence < labelConfidenceThreshold) {
+    return undefined;
+  }
+
+  return {
+    name: best.name,
+    rawText: best.rawText,
+    confidence: best.confidence,
+    rect: best.rect
+  };
+}
+
+function foregroundBoundsInRegion(
+  image: RGBAImage,
+  startX: number,
+  startY: number,
+  endX: number,
+  endY: number,
+  background: [number, number, number, number]
+): Rect | undefined {
+  let minX = image.width;
+  let minY = image.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = Math.max(0, startY); y < Math.min(image.height, endY); y += 1) {
+    for (let x = Math.max(0, startX); x < Math.min(image.width, endX); x += 1) {
+      if (!isForeground(image, x, y, background)) {
+        continue;
+      }
+
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return undefined;
+  }
+
+  return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+function renderLabelTemplate(text: string): BinaryTemplate {
+  const lines = text.split("\n");
+  const lineGap = 2;
+  const renderedLines = lines.map((line) => renderLabelLine(line));
+  const width = Math.max(1, ...renderedLines.map((line) => line.width));
+  const height = renderedLines.reduce((total, line) => total + line.height, 0) + Math.max(0, renderedLines.length - 1) * lineGap;
+  const data = new Uint8Array(width * height);
+  let yOffset = 0;
+
+  for (const line of renderedLines) {
+    for (let y = 0; y < line.height; y += 1) {
+      for (let x = 0; x < line.width; x += 1) {
+        if (line.data[y * line.width + x] === 1) {
+          data[(yOffset + y) * width + x] = 1;
+        }
+      }
+    }
+    yOffset += line.height + lineGap;
+  }
+
+  return { width, height, data };
+}
+
+function renderLabelLine(line: string): BinaryTemplate {
+  const glyphWidth = 5;
+  const glyphHeight = 7;
+  const letterGap = 1;
+  const wordGap = 3;
+  const width = Math.max(1, Array.from(line).reduce((total, char, index) => total + (char === " " ? wordGap : glyphWidth) + (index > 0 ? letterGap : 0), 0));
+  const data = new Uint8Array(width * glyphHeight);
+  let cursorX = 0;
+
+  for (let index = 0; index < line.length; index += 1) {
+    const char = line[index]!;
+    if (index > 0) {
+      cursorX += letterGap;
+    }
+
+    if (char === " ") {
+      cursorX += wordGap;
+      continue;
+    }
+
+    const glyph = labelGlyphs[char];
+    if (!glyph) {
+      cursorX += glyphWidth;
+      continue;
+    }
+
+    for (let y = 0; y < glyphHeight; y += 1) {
+      for (let x = 0; x < glyphWidth; x += 1) {
+        if (glyph[y]![x] === "1") {
+          data[y * width + cursorX + x] = 1;
+        }
+      }
+    }
+    cursorX += glyphWidth;
+  }
+
+  return { width, height: glyphHeight, data };
+}
+
+function scoreLabelTemplate(
+  image: RGBAImage,
+  rect: Rect,
+  background: [number, number, number, number],
+  template: BinaryTemplate
+): number {
+  let intersection = 0;
+  let sourceCount = 0;
+  let templateCount = 0;
+
+  for (let y = 0; y < rect.h; y += 1) {
+    const ty = Math.min(template.height - 1, Math.floor((y / rect.h) * template.height));
+    for (let x = 0; x < rect.w; x += 1) {
+      const tx = Math.min(template.width - 1, Math.floor((x / rect.w) * template.width));
+      const sourceOn = isForeground(image, rect.x + x, rect.y + y, background);
+      const templateOn = template.data[ty * template.width + tx] === 1;
+
+      if (sourceOn) {
+        sourceCount += 1;
+      }
+      if (templateOn) {
+        templateCount += 1;
+      }
+      if (sourceOn && templateOn) {
+        intersection += 1;
+      }
+    }
+  }
+
+  if (sourceCount === 0 || templateCount === 0) {
+    return 0;
+  }
+
+  const f1 = (2 * intersection) / (sourceCount + templateCount);
+  const sourceRatio = rect.w / rect.h;
+  const templateRatio = template.width / template.height;
+  const aspectPenalty = Math.min(0.55, Math.abs(Math.log(sourceRatio / templateRatio)) * 0.45);
+  return f1 * (1 - aspectPenalty);
+}
+
 function normalizeUnevenContentSegments(
   segments: Segment[],
   imageWidth: number
@@ -648,7 +899,9 @@ function createSheetDiagnostics({
   usedComponentMerging,
   usedDriftFitting,
   usedOutlinedCells,
-  usedContentCentering
+  usedContentCentering,
+  labelNames,
+  labelRowCount
 }: {
   rows: number;
   columns: number;
@@ -660,6 +913,8 @@ function createSheetDiagnostics({
   usedDriftFitting: boolean;
   usedOutlinedCells: boolean;
   usedContentCentering: boolean;
+  labelNames: string[];
+  labelRowCount: number;
 }): SheetLayoutDiagnostics {
   const averageBandHeight =
     frameHeights.length > 0 ? Math.round(frameHeights.reduce((total, height) => total + height, 0) / frameHeights.length) : 0;
@@ -690,6 +945,11 @@ function createSheetDiagnostics({
   if (usedContentCentering) {
     notes.push("Uneven visible gutters were normalized from content centers.");
   }
+  if (labelNames.length > 0) {
+    notes.push(`Labels: ${labelNames.join(", ")} detected.`);
+  } else if (rows > 0 && labelRowCount === 0) {
+    notes.push("Labels: low confidence; kept row names.");
+  }
 
   return {
     rowConfidence: {
@@ -707,6 +967,17 @@ function createSheetDiagnostics({
     },
     notes
   };
+}
+
+function uniqueAnimationName(baseName: string, usedNames: Set<string>): string {
+  let candidate = baseName;
+  let suffix = 2;
+  while (usedNames.has(candidate)) {
+    candidate = `${baseName}_${suffix}`;
+    suffix += 1;
+  }
+  usedNames.add(candidate);
+  return candidate;
 }
 
 function medianInteger(values: number[]): number {
@@ -749,6 +1020,7 @@ function emptyDetection(reason: string): SheetLayoutDetection {
     rowRects: [],
     rowFrameCounts: [],
     rowAnimations: [],
+    rowLabels: [],
     confidence: 0,
     reason,
     warnings: [reason]
