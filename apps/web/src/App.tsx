@@ -113,6 +113,7 @@ import {
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
+import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
@@ -335,6 +336,15 @@ export function App() {
         grid: fixResult?.grid
       }),
     [fixResult?.grid, fixResult?.image, mode]
+  );
+  const viewportNativeReadout = useMemo(
+    () =>
+      getViewportNativeReadout({
+        viewMode,
+        sourceImage: selectedAsset?.image ?? null,
+        fixedImage: fixResult?.image ?? null
+      }),
+    [fixResult?.image, selectedAsset?.image, viewMode]
   );
   const onionSkinPlacements = useMemo(
     () =>
@@ -1874,9 +1884,7 @@ export function App() {
             </button>
           </div>
           <div className="viewport-readouts">
-            <span>
-              Native: {selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"}
-            </span>
+            <span>{viewportNativeReadout}</span>
             <span>Zoom: {zoom * 100}%</span>
             <span>Grid: {showGrid ? "on" : "off"}</span>
           </div>
