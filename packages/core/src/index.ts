@@ -6,6 +6,7 @@ export type {
   OutlineMode,
   PixelFixResult,
   RGBAImage,
+  SheetLayoutDetection,
   SheetSliceOptions
 } from "@pixelaid/shared";
 
@@ -27,4 +28,4 @@ export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup } from "./outline";
 export type { OutlineCleanupOptions } from "./outline";
 export { extractPalette, remapToPalette } from "./palette";
-export { sliceSheetFrames } from "./sheet";
+export { detectSheetLayout, sliceSheetFrames } from "./sheet";

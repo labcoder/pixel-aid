@@ -16,6 +16,7 @@ export type {
   PixelFixResult,
   Rect,
   RGBAImage,
+  SheetLayoutDetection,
   SheetSliceOptions,
   SpriteAnimation,
   SpriteFrame,

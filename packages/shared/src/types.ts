@@ -127,6 +127,22 @@ export type AnimationTag = {
   loop: boolean;
 };
 
+export type SheetLayoutDetection = {
+  frameWidth: number;
+  frameHeight: number;
+  rows: number;
+  columns: number;
+  margin: number;
+  spacing: number;
+  frames: SpriteFrame[];
+  rowRects: Rect[];
+  rowFrameCounts: number[];
+  rowAnimations: AnimationTag[];
+  confidence: number;
+  reason: string;
+  warnings: string[];
+};
+
 export type SpriteAnimation = {
   frames: string[];
   loop: boolean;

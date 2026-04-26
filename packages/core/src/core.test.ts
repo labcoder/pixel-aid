@@ -6,6 +6,7 @@ import {
   applyHaloRemoval,
   applyOutlineCleanup,
   createImage,
+  detectSheetLayout,
   detectSpriteBounds,
   detectGridCandidates,
   downsampleBlocks,
@@ -53,6 +54,50 @@ function blockySource(): RGBAImage {
     rgba(249, 249, 0),
     rgba(255, 250, 2)
   ]);
+}
+
+function sheetLikeSource(): RGBAImage {
+  const image = createImage(420, 280);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { labelX: 20, y: 20, frames: 3 },
+    { labelX: 20, y: 92, frames: 5 },
+    { labelX: 20, y: 164, frames: 4 }
+  ];
+
+  for (const row of rows) {
+    drawBlock(image, row.labelX, row.y + 18, 34, 10, 0, 240, 240, 255);
+    for (let column = 0; column < row.frames; column += 1) {
+      const x = 92 + column * 58;
+      drawBlock(image, x, row.y, 50, 44, 66, 68, 68, 255);
+      drawBlock(image, x + 15, row.y + 8, 20, 28, 92, 160, 150, 255);
+    }
+  }
+
+  return image;
+}
+
+function drawBlock(
+  image: RGBAImage,
+  startX: number,
+  startY: number,
+  width: number,
+  height: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number
+): void {
+  for (let y = startY; y < startY + height; y += 1) {
+    for (let x = startX; x < startX + width; x += 1) {
+      writePixel(image, x, y, r, g, b, a);
+    }
+  }
 }
 
 function countVisibleNearWhitePixels(image: RGBAImage): number {
@@ -496,6 +541,25 @@ describe("outline cleanup", () => {
 });
 
 describe("sheet slicing", () => {
+  test("detects row-based sprite sheet layouts while ignoring left labels", () => {
+    const detection = detectSheetLayout(sheetLikeSource());
+
+    expect(detection).toMatchObject({
+      frameWidth: 50,
+      frameHeight: 44,
+      rows: 3,
+      columns: 5,
+      margin: 92,
+      spacing: 8,
+      rowFrameCounts: [3, 5, 4]
+    });
+    expect(detection.frames).toHaveLength(12);
+    expect(detection.frames[0]!.rect).toEqual({ x: 92, y: 20, w: 50, h: 44 });
+    expect(detection.frames[3]!.name).toBe("row_2_000");
+    expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual([3, 5, 4]);
+    expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
   test("generates deterministic frame rects from rows columns margin and spacing", () => {
     const frames = sliceSheetFrames({
       frameWidth: 16,
