@@ -30,6 +30,7 @@ import type {
   OutlineMode,
   PixelFixResult,
   RGBAImage,
+  SheetLayoutDiagnostics,
   SpriteFrame
 } from "@pixelaid/shared";
 import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
@@ -166,6 +167,7 @@ export function App() {
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
+  const [detectedSheetDiagnostics, setDetectedSheetDiagnostics] = useState<SheetLayoutDiagnostics | undefined>(undefined);
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
@@ -299,10 +301,11 @@ export function App() {
             frameCount: detectedSheetFrames.length,
             rowCount: detectedRowAnimations.length,
             rowFrameCounts: detectedRowAnimations.map((animation) => animation.frameNames.length),
-            warnings: detectedSheetWarnings
+            warnings: detectedSheetWarnings,
+            diagnostics: detectedSheetDiagnostics
           })
         : [],
-    [detectedRowAnimations, detectedSheetFrames.length, detectedSheetWarnings]
+    [detectedRowAnimations, detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings]
   );
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
@@ -415,6 +418,7 @@ export function App() {
     setDetectedSheetFrames([]);
     setDetectedRowAnimations([]);
     setDetectedSheetWarnings([]);
+    setDetectedSheetDiagnostics(undefined);
     setFrameDurationOverrides({});
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
@@ -434,6 +438,7 @@ export function App() {
     setDetectedSheetFrames(layout?.frames ?? []);
     setDetectedRowAnimations(layout?.rowAnimations ?? []);
     setDetectedSheetWarnings(layout?.warnings ?? []);
+    setDetectedSheetDiagnostics(layout?.diagnostics);
     setFrameDurationOverrides({});
     setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
     setIsPlaying(false);

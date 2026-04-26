@@ -8,7 +8,8 @@ describe("sheet detection notes", () => {
         frameCount: 15,
         rowCount: 3,
         rowFrameCounts: [4, 6, 5],
-        warnings: []
+        warnings: [],
+        diagnostics: undefined
       })
     ).toEqual(["Auto-detected 15 frames across 3 rows.", "Rows contain variable frame counts: 4, 6, 5."]);
   });
@@ -19,11 +20,50 @@ describe("sheet detection notes", () => {
         frameCount: 8,
         rowCount: 2,
         rowFrameCounts: [4, 4],
-        warnings: ["Detected outlined cell separators; frame boxes may need review if the grid lines are decorative."]
+        warnings: ["Detected outlined cell separators; frame boxes may need review if the grid lines are decorative."],
+        diagnostics: undefined
       })
     ).toEqual([
       "Auto-detected 8 frames across 2 rows.",
       "Detected outlined cell separators; frame boxes may need review if the grid lines are decorative."
+    ]);
+  });
+
+  test("includes row and column confidence diagnostics before warnings", () => {
+    expect(
+      formatSheetDetectionNotes({
+        frameCount: 15,
+        rowCount: 3,
+        rowFrameCounts: [4, 6, 5],
+        warnings: ["Merged nearby disconnected components into frame boxes; inspect effect-heavy frames."],
+        diagnostics: {
+          rowConfidence: {
+            label: "high",
+            rowCount: 3,
+            averageBandHeight: 42,
+            heightSpreadRatio: 0
+          },
+          columnConfidence: {
+            label: "medium",
+            columnCount: 6,
+            pitchPx: 57,
+            maxCenterDriftPx: 5,
+            mergedComponentCount: 15
+          },
+          notes: [
+            "Rows: high confidence, 3 bands detected.",
+            "Columns: medium confidence, 6 columns at about 57px pitch.",
+            "Frame-center drift: 5px max while fitting columns."
+          ]
+        }
+      })
+    ).toEqual([
+      "Auto-detected 15 frames across 3 rows.",
+      "Rows contain variable frame counts: 4, 6, 5.",
+      "Rows: high confidence, 3 bands detected.",
+      "Columns: medium confidence, 6 columns at about 57px pitch.",
+      "Frame-center drift: 5px max while fitting columns.",
+      "Merged nearby disconnected components into frame boxes; inspect effect-heavy frames."
     ]);
   });
 });
