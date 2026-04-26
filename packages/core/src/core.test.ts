@@ -82,6 +82,41 @@ function sheetLikeSource(): RGBAImage {
   return image;
 }
 
+function outlinedSheetWithLabels(): RGBAImage {
+  const image = createImage(420, 240);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { labelX: 18, y: 18, frames: 4 },
+    { labelX: 18, y: 86, frames: 6 },
+    { labelX: 18, y: 154, frames: 5 }
+  ];
+  const cellWidth = 48;
+  const cellHeight = 42;
+  const startX = 84;
+
+  for (const row of rows) {
+    drawBlock(image, row.labelX, row.y + 16, 34, 10, 0, 240, 240, 255);
+    const rowWidth = row.frames * cellWidth;
+    drawBlock(image, startX, row.y, rowWidth, 2, 76, 80, 82, 255);
+    drawBlock(image, startX, row.y + cellHeight - 2, rowWidth, 2, 76, 80, 82, 255);
+    for (let column = 0; column <= row.frames; column += 1) {
+      drawBlock(image, startX + column * cellWidth, row.y, 2, cellHeight, 76, 80, 82, 255);
+    }
+    for (let column = 0; column < row.frames; column += 1) {
+      const x = startX + column * cellWidth;
+      drawBlock(image, x + 15, row.y + 9, 18, 24, 92, 160, 150, 255);
+      drawBlock(image, x + 21, row.y + 16, 10, 10, 0, 240, 240, 255);
+    }
+  }
+
+  return image;
+}
+
 function drawBlock(
   image: RGBAImage,
   startX: number,
@@ -557,6 +592,25 @@ describe("sheet slicing", () => {
     expect(detection.frames[0]!.rect).toEqual({ x: 92, y: 20, w: 50, h: 44 });
     expect(detection.frames[3]!.name).toBe("row_2_000");
     expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual([3, 5, 4]);
+    expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("detects outlined sprite sheet cells when row borders form one wide segment", () => {
+    const detection = detectSheetLayout(outlinedSheetWithLabels());
+
+    expect(detection).toMatchObject({
+      frameWidth: 48,
+      frameHeight: 42,
+      rows: 3,
+      columns: 6,
+      margin: 84,
+      spacing: 0,
+      rowFrameCounts: [4, 6, 5]
+    });
+    expect(detection.frames).toHaveLength(15);
+    expect(detection.frames[0]!.rect).toEqual({ x: 84, y: 18, w: 48, h: 42 });
+    expect(detection.frames[4]!.name).toBe("row_2_000");
+    expect(detection.warnings).toContain("Detected outlined cell separators; frame boxes may need review if the grid lines are decorative.");
     expect(detection.confidence).toBeGreaterThan(0.75);
   });
 

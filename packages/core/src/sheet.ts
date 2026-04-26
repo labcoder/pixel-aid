@@ -10,6 +10,11 @@ type Segment = {
   w: number;
 };
 
+type ResolvedSegments = {
+  segments: Segment[];
+  usedOutlinedCells: boolean;
+};
+
 export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
   validateSliceOptions(options);
   const frames: SpriteFrame[] = [];
@@ -50,10 +55,14 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
 
   const rowBands = bandsFromCounts(rowCounts, rowThreshold, 3, 12);
   const rawRows = rowBands
-    .map((band) => ({
-      band,
-      segments: chooseFrameSegments(segmentsForBand(image, band, background))
-    }))
+    .map((band) => {
+      const resolved = resolveFrameSegments(image, band, background);
+      return {
+        band,
+        segments: resolved.segments,
+        usedOutlinedCells: resolved.usedOutlinedCells
+      };
+    })
     .filter((row) => row.segments.length > 0);
 
   if (rawRows.length === 0) {
@@ -104,6 +113,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   const warnings: string[] = [];
   if (new Set(rowFrameCounts).size > 1) {
     warnings.push("Rows contain different frame counts; rectangular sheet controls will include empty cells unless explicit frames are used.");
+  }
+  if (rawRows.some((row) => row.usedOutlinedCells)) {
+    warnings.push("Detected outlined cell separators; frame boxes may need review if the grid lines are decorative.");
   }
   if (rows < 2 || columns < 2) {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
@@ -219,6 +231,94 @@ function segmentsForBand(image: RGBAImage, band: Band, background: [number, numb
   }));
 }
 
+function resolveFrameSegments(image: RGBAImage, band: Band, background: [number, number, number, number]): ResolvedSegments {
+  const sourceSegments = segmentsForBand(image, band, background);
+  const contentSegments = chooseFrameSegments(sourceSegments);
+  const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
+
+  if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
+    return { segments: outlinedSegments, usedOutlinedCells: true };
+  }
+
+  return { segments: contentSegments, usedOutlinedCells: false };
+}
+
+function outlinedCellSegmentsForBand(
+  image: RGBAImage,
+  band: Band,
+  background: [number, number, number, number],
+  sourceSegments: Segment[]
+): Segment[] {
+  const bandHeight = band.end - band.start + 1;
+  const separatorThreshold = Math.max(4, Math.floor(bandHeight * 0.78));
+  const candidates: Segment[][] = [];
+
+  for (const segment of sourceSegments) {
+    if (segment.w < bandHeight * 1.8) {
+      continue;
+    }
+
+    const separators: number[] = [];
+    let separatorStart = -1;
+    let lastSeparator = -1;
+    for (let x = segment.x; x < segment.x + segment.w; x += 1) {
+      let count = 0;
+      for (let y = band.start; y <= band.end; y += 1) {
+        if (isForeground(image, x, y, background)) {
+          count += 1;
+        }
+      }
+
+      if (count >= separatorThreshold) {
+        if (separatorStart < 0) {
+          separatorStart = x;
+        }
+        lastSeparator = x;
+        continue;
+      }
+
+      if (separatorStart >= 0) {
+        separators.push(separatorStart);
+        separatorStart = -1;
+        lastSeparator = -1;
+      }
+    }
+
+    if (separatorStart >= 0) {
+      separators.push(separatorStart);
+    }
+
+    const cells = cellsFromSeparators(separators);
+    if (cells.length >= 2) {
+      candidates.push(cells);
+    }
+  }
+
+  if (candidates.length === 0) {
+    return [];
+  }
+
+  candidates.sort((a, b) => b.length - a.length || totalSegmentWidth(b) - totalSegmentWidth(a));
+  return candidates[0]!;
+}
+
+function cellsFromSeparators(separators: number[]): Segment[] {
+  if (separators.length < 3) {
+    return [];
+  }
+
+  const cells: Segment[] = [];
+  for (let index = 1; index < separators.length; index += 1) {
+    const x = separators[index - 1]!;
+    const nextX = separators[index]!;
+    const w = nextX - x;
+    if (w >= 8) {
+      cells.push({ x, w });
+    }
+  }
+  return cells;
+}
+
 function chooseFrameSegments(segments: Segment[]): Segment[] {
   if (segments.length <= 2) {
     return segments;
@@ -237,6 +337,10 @@ function chooseFrameSegments(segments: Segment[]): Segment[] {
   const typicalWidth = medianInteger(widths);
 
   return trimmed.filter((segment) => segment.w >= typicalWidth * 0.65 && segment.w <= typicalWidth * 1.45);
+}
+
+function totalSegmentWidth(segments: Segment[]): number {
+  return segments.reduce((total, segment) => total + segment.w, 0);
 }
 
 function gapsBetween(segments: Segment[]): number[] {
