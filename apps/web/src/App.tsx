@@ -54,6 +54,7 @@ import {
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
+import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -703,6 +704,25 @@ export function App() {
     [animationFrameIndexes, timelineFrames.length]
   );
 
+  const selectSourceFrame = useCallback(
+    (index: number) => {
+      const nextIndex = clampSelectedFrameIndex(sheetFrames.length, index);
+      if (nextIndex < 0) {
+        return;
+      }
+
+      const rowTag = sheetFrames[nextIndex]?.tags?.[0];
+      if (rowTag && detectedRowAnimations.some((animation) => animation.name === rowTag)) {
+        setSelectedAnimationName(rowTag);
+      }
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      selectedFrameIndexRef.current = nextIndex;
+      setSelectedFrameIndex(nextIndex);
+    },
+    [detectedRowAnimations, sheetFrames]
+  );
+
   const stepTimelineFrame = useCallback(
     (direction: -1 | 1) => {
       const next = stepPlaybackFrame({
@@ -735,6 +755,31 @@ export function App() {
     playbackAccumulatorRef.current = 0;
     setSelectedAnimationName(value);
   }, []);
+
+  const moveDetectedSourceFrame = useCallback(
+    (frameIndex: number, delta: { x: number; y: number }) => {
+      if (!selectedAsset) {
+        return;
+      }
+
+      setDetectedSheetFrames((current) =>
+        current.map((frame, index) =>
+          index === frameIndex
+            ? moveFrameBySourceDelta({
+                frame,
+                deltaX: delta.x,
+                deltaY: delta.y,
+                scaleX: gridScaleX,
+                scaleY: gridScaleY,
+                sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
+                outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight }
+              })
+            : frame
+        )
+      );
+    },
+    [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
+  );
 
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
@@ -1343,7 +1388,10 @@ export function App() {
           sourceFrames={sourceSheetFrames}
           frames={sheetFrames}
           selectedFrameIndex={selectedFrameIndex}
+          canEditSourceFrames={detectedSheetFrames.length > 0}
           onZoomChange={setZoom}
+          onFrameSelect={selectSourceFrame}
+          onSourceFrameMove={moveDetectedSourceFrame}
         />
         {importStatus ? (
           <div className="viewport-empty-state viewport-busy-state" role="status" aria-live="polite">

@@ -29,9 +29,11 @@ export function moveFrameBySourceDelta({
 }): SpriteFrame {
   const sourceRect = frame.sourceRect ?? frame.rect;
   const nextSourceRect = moveRect(sourceRect, Math.round(deltaX), Math.round(deltaY), sourceSize);
-  const outputDeltaX = Math.round((nextSourceRect.x - sourceRect.x) / Math.max(0.01, scaleX));
-  const outputDeltaY = Math.round((nextSourceRect.y - sourceRect.y) / Math.max(0.01, scaleY));
-  const nextOutputRect = moveRect(frame.rect, outputDeltaX, outputDeltaY, outputSize);
+  const nextOutputRect = {
+    ...frame.rect,
+    x: clampInteger(Math.round(nextSourceRect.x / Math.max(0.01, scaleX)), 0, Math.max(0, outputSize.width - frame.rect.w)),
+    y: clampInteger(Math.round(nextSourceRect.y / Math.max(0.01, scaleY)), 0, Math.max(0, outputSize.height - frame.rect.h))
+  };
 
   const moved: SpriteFrame = {
     ...frame,
@@ -47,7 +49,7 @@ export function moveFrameBySourceDelta({
 
 export function findFrameAtSourcePoint(frames: readonly SpriteFrame[], point: Point): number {
   for (let index = frames.length - 1; index >= 0; index -= 1) {
-    const rect = frames[index]?.sourceRect;
+    const rect = frames[index]?.sourceRect ?? frames[index]?.rect;
     if (!rect) {
       continue;
     }

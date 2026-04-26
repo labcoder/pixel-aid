@@ -11,6 +11,7 @@ import {
   zoomAtPoint
 } from "../lib/viewportMath";
 import { getFrameOverlayGeometry } from "../lib/frameOverlay";
+import { findFrameAtSourcePoint } from "../lib/frameEditing";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -25,7 +26,10 @@ export type ViewportCanvasProps = {
   sourceFrames?: SpriteFrame[];
   frames?: SpriteFrame[];
   selectedFrameIndex?: number;
+  canEditSourceFrames?: boolean;
   onZoomChange: (zoom: number) => void;
+  onFrameSelect?: (index: number) => void;
+  onSourceFrameMove?: (index: number, delta: Point) => void;
 };
 
 export function ViewportCanvas({
@@ -38,11 +42,15 @@ export function ViewportCanvas({
   sourceFrames = [],
   frames = [],
   selectedFrameIndex = -1,
-  onZoomChange
+  canEditSourceFrames = false,
+  onZoomChange,
+  onFrameSelect,
+  onSourceFrameMove
 }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
+  const frameDragRef = useRef<{ pointerId: number; frameIndex: number; lastX: number; lastY: number; sourceZoom: number } | null>(null);
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
   const autoFitSignatureRef = useRef("");
@@ -154,13 +162,41 @@ export function ViewportCanvas({
       return;
     }
 
+    const canvasRect = event.currentTarget.getBoundingClientRect();
+    const pointer = { x: event.clientX - canvasRect.left, y: event.clientY - canvasRect.top };
+
     if (viewMode === "split" && fixedImage) {
-      const rect = event.currentTarget.getBoundingClientRect();
-      const x = event.clientX - rect.left;
-      const splitX = rect.width * splitRatioRef.current;
-      if (Math.abs(x - splitX) <= 12) {
+      const splitX = canvasRect.width * splitRatioRef.current;
+      if (Math.abs(pointer.x - splitX) <= 12) {
         event.currentTarget.setPointerCapture(event.pointerId);
         splitDragRef.current = { pointerId: event.pointerId };
+        return;
+      }
+    }
+
+    const sourceHit = getSourcePointFromViewport({
+      viewport: { width: canvasRect.width, height: canvasRect.height },
+      pointer,
+      sourceSize: { width: sourceImage.width, height: sourceImage.height },
+      fixedSize: fixedImage ? { width: fixedImage.width, height: fixedImage.height } : null,
+      fixedSourceRect,
+      viewMode,
+      zoom,
+      pan: panRef.current,
+      splitRatio: splitRatioRef.current
+    });
+    if (canEditSourceFrames && sourceHit) {
+      const frameIndex = findFrameAtSourcePoint(sourceFrames, sourceHit.point);
+      if (frameIndex >= 0) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onFrameSelect?.(frameIndex);
+        frameDragRef.current = {
+          pointerId: event.pointerId,
+          frameIndex,
+          lastX: event.clientX,
+          lastY: event.clientY,
+          sourceZoom: sourceHit.sourceZoom
+        };
         return;
       }
     }
@@ -175,6 +211,19 @@ export function ViewportCanvas({
   };
 
   const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const frameDrag = frameDragRef.current;
+    if (frameDrag?.pointerId === event.pointerId) {
+      const delta = {
+        x: (event.clientX - frameDrag.lastX) / frameDrag.sourceZoom,
+        y: (event.clientY - frameDrag.lastY) / frameDrag.sourceZoom
+      };
+      frameDrag.lastX = event.clientX;
+      frameDrag.lastY = event.clientY;
+      onSourceFrameMove?.(frameDrag.frameIndex, delta);
+      invalidate();
+      return;
+    }
+
     const splitDrag = splitDragRef.current;
     if (splitDrag?.pointerId === event.pointerId) {
       const rect = event.currentTarget.getBoundingClientRect();
@@ -196,6 +245,9 @@ export function ViewportCanvas({
   };
 
   const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (frameDragRef.current?.pointerId === event.pointerId) {
+      frameDragRef.current = null;
+    }
     if (splitDragRef.current?.pointerId === event.pointerId) {
       splitDragRef.current = null;
     }
@@ -264,6 +316,65 @@ export function ViewportCanvas({
       ) : null}
     </div>
   );
+}
+
+function getSourcePointFromViewport({
+  viewport,
+  pointer,
+  sourceSize,
+  fixedSize,
+  fixedSourceRect,
+  viewMode,
+  zoom,
+  pan,
+  splitRatio
+}: {
+  viewport: { width: number; height: number };
+  pointer: Point;
+  sourceSize: { width: number; height: number };
+  fixedSize: { width: number; height: number } | null;
+  fixedSourceRect: FrameRect | undefined;
+  viewMode: ViewMode;
+  zoom: number;
+  pan: Point;
+  splitRatio: number;
+}): { point: Point; sourceZoom: number } | null {
+  if (viewMode === "after") {
+    return null;
+  }
+
+  if (viewMode === "split" && fixedSize) {
+    const splitX = viewport.width * splitRatio;
+    if (pointer.x > splitX) {
+      return null;
+    }
+
+    const layout = getAlignedComparisonRects({
+      viewport,
+      before: sourceSize,
+      after: fixedSize,
+      afterSourceRect: fixedSourceRect,
+      zoom,
+      pan
+    });
+    const sourceZoom = layout.before.width / sourceSize.width;
+    return {
+      point: {
+        x: (pointer.x - layout.before.x) / sourceZoom,
+        y: (pointer.y - layout.before.y) / sourceZoom
+      },
+      sourceZoom
+    };
+  }
+
+  const rect = getImageDrawRect(viewport, sourceSize, zoom, pan);
+  return {
+    point: {
+      x: (pointer.x - rect.x) / zoom,
+      y: (pointer.y - rect.y) / zoom
+    },
+    sourceZoom: zoom
+  };
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
