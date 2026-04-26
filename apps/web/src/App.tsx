@@ -69,7 +69,17 @@ import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId }
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
-import { clampFps, getFrameDurationMs, getInitialPlaybackState, scrubPlayback, stepPlaybackFrame, tickPlayback } from "./lib/playbackModel";
+import {
+  clampFps,
+  getFrameDurationMs,
+  getInitialPlayDirection,
+  getInitialPlaybackState,
+  scrubPlayback,
+  stepPlaybackFrame,
+  tickPlayback,
+  type PlaybackDirection,
+  type PlaybackStepDirection
+} from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 import {
   clampSelectedFrameIndex,
@@ -162,6 +172,7 @@ export function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
   const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
+  const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(getInitialPlaybackState(0).direction);
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(true);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
@@ -183,6 +194,7 @@ export function App() {
   const activeJobRef = useRef<FixJob | null>(null);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const playbackAccumulatorRef = useRef(0);
+  const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
   const playbackLastTimeRef = useRef<number | null>(null);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
@@ -346,11 +358,14 @@ export function App() {
         deltaMs: now - lastTime,
         fps: playbackFps,
         loop: playbackLoop,
+        direction: playbackDirection,
+        playDirection: playbackStepDirectionRef.current,
         frames: timelineFrames
       });
       const nextFrameIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
 
       playbackAccumulatorRef.current = next.accumulatorMs;
+      playbackStepDirectionRef.current = next.playDirection;
       if (nextFrameIndex !== selectedFrameIndexRef.current) {
         selectedFrameIndexRef.current = nextFrameIndex;
         setSelectedFrameIndex(nextFrameIndex);
@@ -364,7 +379,7 @@ export function App() {
 
     animationFrameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [animationFrameIndexes, isPlaying, playbackFps, playbackLoop, timelineFrames, timelineState.enabled]);
+  }, [animationFrameIndexes, isPlaying, playbackDirection, playbackFps, playbackLoop, timelineFrames, timelineState.enabled]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -732,6 +747,10 @@ export function App() {
     playbackAccumulatorRef.current = 0;
   }, []);
 
+  const resetPlaybackStepDirection = useCallback((direction: PlaybackDirection) => {
+    playbackStepDirectionRef.current = getInitialPlayDirection(direction);
+  }, []);
+
   const updateSelectedFrameDuration = useCallback(
     (durationMs: number) => {
       if (!currentFrame) {
@@ -745,12 +764,13 @@ export function App() {
 
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
+      resetPlaybackStepDirection(playbackDirection);
       setFrameDurationOverrides((current) => ({
         ...current,
         [currentFrame.name]: updatedFrame.durationMs
       }));
     },
-    [currentFrame]
+    [currentFrame, playbackDirection, resetPlaybackStepDirection]
   );
 
   const selectPlaybackFrame = useCallback(
@@ -759,10 +779,11 @@ export function App() {
       const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, nextPosition);
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
+      resetPlaybackStepDirection(playbackDirection);
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
     },
-    [animationFrameIndexes, timelineFrames.length]
+    [animationFrameIndexes, playbackDirection, resetPlaybackStepDirection, timelineFrames.length]
   );
 
   const selectSourceFrame = useCallback(
@@ -778,10 +799,11 @@ export function App() {
       }
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
+      resetPlaybackStepDirection(playbackDirection);
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
     },
-    [detectedRowAnimations, sheetFrames]
+    [detectedRowAnimations, playbackDirection, resetPlaybackStepDirection, sheetFrames]
   );
 
   const stepTimelineFrame = useCallback(
@@ -795,6 +817,7 @@ export function App() {
       const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
+      playbackStepDirectionRef.current = direction;
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
     },
@@ -808,8 +831,9 @@ export function App() {
     }
 
     playbackAccumulatorRef.current = 0;
+    resetPlaybackStepDirection(playbackDirection);
     setIsPlaying((current) => !current);
-  }, [canPlayTimeline]);
+  }, [canPlayTimeline, playbackDirection, resetPlaybackStepDirection]);
 
   const changeSelectedAnimation = useCallback(
     (value: string) => {
@@ -818,11 +842,14 @@ export function App() {
       setSelectedAnimationName(value);
       const animation = detectedRowAnimations.find((item) => item.name === value);
       if (animation) {
+        const nextDirection = animation.direction ?? playbackDirection;
         setPlaybackFps(clampFps(animation.fps ?? playbackFps));
         setPlaybackLoop(animation.loop);
+        setPlaybackDirection(nextDirection);
+        resetPlaybackStepDirection(nextDirection);
       }
     },
-    [detectedRowAnimations, playbackFps]
+    [detectedRowAnimations, playbackDirection, playbackFps, resetPlaybackStepDirection]
   );
 
   const renameDetectedAnimation = useCallback(
@@ -836,17 +863,44 @@ export function App() {
   );
 
   const updateDetectedAnimationTiming = useCallback(
-    (name: string, timing: { fps?: number; loop?: boolean }) => {
+    (name: string, timing: { fps?: number; loop?: boolean; direction?: PlaybackDirection }) => {
       const existing = detectedRowAnimations.find((animation) => animation.name === name);
       const nextFps = clampFps(timing.fps ?? existing?.fps ?? playbackFps);
       const nextLoop = timing.loop ?? existing?.loop ?? playbackLoop;
-      setDetectedRowAnimations((current) => updateAnimationTagTiming({ animations: current, name, fps: nextFps, loop: nextLoop }));
+      const nextDirection = timing.direction ?? existing?.direction ?? playbackDirection;
+      setDetectedRowAnimations((current) =>
+        updateAnimationTagTiming({ animations: current, name, fps: nextFps, loop: nextLoop, direction: nextDirection })
+      );
       if (selectedAnimationName === name) {
         setPlaybackFps(nextFps);
         setPlaybackLoop(nextLoop);
+        setPlaybackDirection(nextDirection);
+        resetPlaybackStepDirection(nextDirection);
       }
     },
-    [detectedRowAnimations, playbackFps, playbackLoop, selectedAnimationName]
+    [detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
+  );
+
+  const changePlaybackDirection = useCallback(
+    (value: string) => {
+      const nextDirection = value as PlaybackDirection;
+      setPlaybackDirection(nextDirection);
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      resetPlaybackStepDirection(nextDirection);
+      if (selectedAnimationName !== ALL_ANIMATIONS && detectedRowAnimations.some((animation) => animation.name === selectedAnimationName)) {
+        setDetectedRowAnimations((current) =>
+          updateAnimationTagTiming({
+            animations: current,
+            name: selectedAnimationName,
+            fps: playbackFps,
+            loop: playbackLoop,
+            direction: nextDirection
+          })
+        );
+      }
+    },
+    [detectedRowAnimations, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
   );
 
   const moveDetectedSourceFrame = useCallback(
@@ -973,7 +1027,11 @@ export function App() {
     const bundleName = `${baseName}_pixelaid_bundle.zip`;
     const animations =
       detectedRowAnimations.length > 0
-        ? animationTagsToManifestAnimations(detectedRowAnimations, { fallbackFps: playbackFps, fallbackLoop: playbackLoop })
+        ? animationTagsToManifestAnimations(detectedRowAnimations, {
+            fallbackFps: playbackFps,
+            fallbackLoop: playbackLoop,
+            fallbackDirection: playbackDirection
+          })
         : undefined;
     const manifest = createPixelAssetManifest({
       result: exportResult,
@@ -1003,6 +1061,7 @@ export function App() {
     detectedRowAnimations,
     fixResult,
     normalizeTimelineFrames,
+    playbackDirection,
     playbackFps,
     playbackLoop,
     selectedAsset,
@@ -1663,6 +1722,14 @@ export function App() {
                     />
                   </label>
                   <label className="player-number">
+                    <span>Direction</span>
+                    <select value={playbackDirection} onChange={(event) => changePlaybackDirection(event.currentTarget.value)}>
+                      <option value="forward">Forward</option>
+                      <option value="reverse">Reverse</option>
+                      <option value="ping-pong">Ping-pong</option>
+                    </select>
+                  </label>
+                  <label className="player-number">
                     <span>Duration ms</span>
                     <input
                       className="duration-input"
@@ -1712,6 +1779,7 @@ export function App() {
                       <span>Clip name</span>
                       <span>Frames</span>
                       <span>FPS</span>
+                      <span>Direction</span>
                       <span>Loop</span>
                     </div>
                     {detectedRowAnimations.map((animation) => (
@@ -1740,6 +1808,17 @@ export function App() {
                           value={animation.fps ?? playbackFps}
                           onChange={(event) => updateDetectedAnimationTiming(animation.name, { fps: Number(event.currentTarget.value) })}
                         />
+                        <select
+                          aria-label={`${animation.name} direction`}
+                          value={animation.direction ?? "forward"}
+                          onChange={(event) =>
+                            updateDetectedAnimationTiming(animation.name, { direction: event.currentTarget.value as PlaybackDirection })
+                          }
+                        >
+                          <option value="forward">Forward</option>
+                          <option value="reverse">Reverse</option>
+                          <option value="ping-pong">Ping-pong</option>
+                        </select>
                         <label>
                           <input
                             type="checkbox"

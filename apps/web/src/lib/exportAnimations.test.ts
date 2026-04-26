@@ -46,4 +46,19 @@ describe("export animations", () => {
       }
     });
   });
+
+  test("uses fallback playback direction for animation tags without their own direction", () => {
+    const tags: AnimationTag[] = [{ name: "walk", frameNames: ["walk_000"], fps: 8, loop: true }];
+
+    expect(
+      animationTagsToManifestAnimations(tags, { fallbackFps: 8, fallbackLoop: true, fallbackDirection: "reverse" })
+    ).toEqual({
+      walk: {
+        frames: ["walk_000"],
+        fps: 8,
+        loop: true,
+        direction: "reverse"
+      }
+    });
+  });
 });

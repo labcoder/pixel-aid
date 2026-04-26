@@ -1,4 +1,4 @@
-import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
+import type { AnimationTag, SpriteAnimation, SpriteFrame } from "@pixelaid/shared";
 
 export function renameAnimationTag({
   animations,
@@ -42,12 +42,14 @@ export function updateAnimationTagTiming({
   animations,
   name,
   fps,
-  loop
+  loop,
+  direction
 }: {
   animations: readonly AnimationTag[];
   name: string;
   fps: number;
   loop: boolean;
+  direction?: SpriteAnimation["direction"];
 }): AnimationTag[] {
   return animations.map((animation) =>
     animation.name === name
@@ -55,7 +57,8 @@ export function updateAnimationTagTiming({
           ...animation,
           frameNames: [...animation.frameNames],
           fps: clampFps(fps),
-          loop
+          loop,
+          ...(direction ? { direction } : {})
         }
       : { ...animation, frameNames: [...animation.frameNames] }
   );

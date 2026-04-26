@@ -1196,7 +1196,7 @@ button:disabled {
 .clip-editor-header,
 .clip-row {
   display: grid;
-  grid-template-columns: minmax(92px, 1fr) 48px 54px 60px;
+  grid-template-columns: minmax(92px, 1fr) 48px 54px 82px 60px;
   gap: 0.4rem;
   align-items: center;
 }
@@ -1220,6 +1220,7 @@ button:disabled {
 
 .clip-row input[type="text"],
 .clip-row input[type="number"],
+.clip-row select,
 .clip-row input:not([type]) {
   min-width: 0;
   width: 100%;

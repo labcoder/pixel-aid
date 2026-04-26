@@ -51,11 +51,11 @@ describe("animation tag editing", () => {
   });
 
   test("updates animation timing without rewriting other clips", () => {
-    const updated = updateAnimationTagTiming({ animations, name: "row_2", fps: 12, loop: true });
+    const updated = updateAnimationTagTiming({ animations, name: "row_2", fps: 12, loop: true, direction: "ping-pong" });
 
     expect(updated).toEqual([
       { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
-      { name: "row_2", frameNames: ["row_2_000"], fps: 12, loop: true }
+      { name: "row_2", frameNames: ["row_2_000"], fps: 12, loop: true, direction: "ping-pong" }
     ]);
   });
 
