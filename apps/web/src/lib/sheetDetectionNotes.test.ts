@@ -66,4 +66,35 @@ describe("sheet detection notes", () => {
       "Merged nearby disconnected components into frame boxes; inspect effect-heavy frames."
     ]);
   });
+
+  test("shows label confidence notes from detector diagnostics", () => {
+    expect(
+      formatSheetDetectionNotes({
+        frameCount: 15,
+        rowCount: 3,
+        rowFrameCounts: [4, 6, 5],
+        warnings: [],
+        diagnostics: {
+          rowConfidence: {
+            label: "high",
+            rowCount: 3,
+            averageBandHeight: 44,
+            heightSpreadRatio: 0
+          },
+          columnConfidence: {
+            label: "high",
+            columnCount: 6,
+            pitchPx: 54,
+            maxCenterDriftPx: 0,
+            mergedComponentCount: 0
+          },
+          notes: [
+            "Rows: high confidence, 3 bands detected.",
+            "Columns: high confidence, 6 columns at about 54px pitch.",
+            "Labels: idle, walk, jump detected."
+          ]
+        }
+      })
+    ).toContain("Labels: idle, walk, jump detected.");
+  });
 });
