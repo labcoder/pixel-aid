@@ -1,6 +1,6 @@
 import type { SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { getFramePreviewPlacement, normalizeFramePlacements } from "./frameNormalization";
+import { getFramePreviewPlacement, getOnionSkinPlacements, normalizeFramePlacements } from "./frameNormalization";
 
 const frames: SpriteFrame[] = [
   {
@@ -67,5 +67,32 @@ describe("frame normalization", () => {
       normalizedPivot: { x: 16, y: 32 },
       normalized: true
     });
+  });
+
+  test("returns previous current and next placements for onion skin", () => {
+    const onion = getOnionSkinPlacements(frames, 1, true);
+
+    expect(onion.previous?.frame.name).toBe("idle_000");
+    expect(onion.current?.frame.name).toBe("idle_001");
+    expect(onion.next?.frame.name).toBe("idle_002");
+    expect(onion.previous?.canvas).toEqual({ width: 30, height: 34 });
+    expect(onion.next?.offset).toEqual({ x: 6, y: 0 });
+  });
+
+  test("does not wrap onion skin neighbors by default", () => {
+    const onion = getOnionSkinPlacements(frames, 0, true);
+
+    expect(onion.previous).toBeNull();
+    expect(onion.current?.frame.name).toBe("idle_000");
+    expect(onion.next?.frame.name).toBe("idle_001");
+  });
+
+  test("can wrap onion skin neighbors for looping clips", () => {
+    const onion = getOnionSkinPlacements(frames, 0, false, { wrap: true });
+
+    expect(onion.previous?.frame.name).toBe("idle_002");
+    expect(onion.current?.frame.name).toBe("idle_000");
+    expect(onion.next?.frame.name).toBe("idle_001");
+    expect(onion.previous?.canvas).toEqual({ width: 20, height: 34 });
   });
 });
