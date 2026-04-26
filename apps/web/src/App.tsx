@@ -192,12 +192,21 @@ export function App() {
   );
   const sheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
+  const plannedSheetOutputSize = useMemo(
+    () => ({
+      width: sheetMargin * 2 + sheetColumns * frameWidth + Math.max(0, sheetColumns - 1) * sheetSpacing,
+      height: sheetMargin * 2 + sheetRows * frameHeight + Math.max(0, sheetRows - 1) * sheetSpacing
+    }),
+    [frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+  );
+  const effectiveTargetWidth = sheetMode ? plannedSheetOutputSize.width : targetWidth;
+  const effectiveTargetHeight = sheetMode ? plannedSheetOutputSize.height : targetHeight;
   const sheetCanvasSize = useMemo(
     () => ({
-      width: fixResult?.image.width ?? targetWidth,
-      height: fixResult?.image.height ?? targetHeight
+      width: fixResult?.image.width ?? effectiveTargetWidth,
+      height: fixResult?.image.height ?? effectiveTargetHeight
     }),
-    [fixResult, targetHeight, targetWidth]
+    [effectiveTargetHeight, effectiveTargetWidth, fixResult]
   );
   const sheetFit = useMemo(
     () =>
@@ -222,6 +231,12 @@ export function App() {
     setCustomPivotX((current) => clampSheetInteger(current, 0, frameWidth));
     setCustomPivotY((current) => clampSheetInteger(current, 0, frameHeight));
   }, [frameHeight, frameWidth]);
+
+  useEffect(() => {
+    if (mode === "characterSheet") {
+      setMode("spriteSheet");
+    }
+  }, [mode]);
 
   useEffect(() => {
     setSelectedFrameIndex((current) => {
@@ -363,8 +378,8 @@ export function App() {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
     const options: FixOptions = {
       mode,
-      targetWidth,
-      targetHeight,
+      targetWidth: effectiveTargetWidth,
+      targetHeight: effectiveTargetHeight,
       maxColors,
       grid: {
         detect: gridDetect,
@@ -398,6 +413,8 @@ export function App() {
     gridDetect,
     gridScaleX,
     gridScaleY,
+    effectiveTargetHeight,
+    effectiveTargetWidth,
     cropToBounds,
     jaggyCleanup,
     maxColors,
@@ -770,46 +787,65 @@ export function App() {
           options={[
             ["single", "Single sprite"],
             ["spriteSheet", "Sprite sheet"],
-            ["characterSheet", "Character sheet"],
             ["tileSheet", "Tile sheet"]
           ]}
-          onChange={(value) => setMode(value as AssetMode)}
+          onChange={(value) => {
+            const nextMode = value as AssetMode;
+            setMode(nextMode);
+            if (nextMode !== "single") {
+              setCropToBounds(false);
+            }
+          }}
         />
-        <DimensionField
-          label="Target W"
-          value={targetWidth}
-          min={1}
-          max={Math.max(512, targetWidth)}
-          onChange={(value) => updateTargetSize("width", value)}
-        />
-        <DimensionField
-          label="Target H"
-          value={targetHeight}
-          min={1}
-          max={Math.max(512, targetHeight)}
-          onChange={(value) => updateTargetSize("height", value)}
-        />
-        <TargetPresetButtons
-          label={aspectLocked ? "Size presets" : "Width presets"}
-          presets={targetSizePresets}
-          activeValue={targetWidth}
-          onSelect={(preset) => applyTargetPreset("width", preset)}
-        />
-        {!aspectLocked ? (
-          <TargetPresetButtons
-            label="Height presets"
-            presets={targetSizePresets}
-            activeValue={targetHeight}
-            onSelect={(preset) => applyTargetPreset("height", preset)}
-          />
-        ) : null}
-        <label className="toggle-row">
-          <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
-          Lock aspect ratio
-        </label>
-        <p className="field-note">
-          Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
-        </p>
+        {sheetMode ? (
+          <>
+            <ReadonlyField label="Output W" value={String(plannedSheetOutputSize.width)} />
+            <ReadonlyField label="Output H" value={String(plannedSheetOutputSize.height)} />
+            <ReadonlyField label="Cells" value={`${sheetRows}x${sheetColumns}`} text />
+            <p className="field-note">
+              Sprite sheet output size comes from the frame controls below. Set frame size, rows, columns, margins, and
+              spacing there; Grid still controls how source pixels are resampled into those cells.
+            </p>
+          </>
+        ) : (
+          <>
+            <DimensionField
+              label="Target W"
+              value={targetWidth}
+              min={1}
+              max={Math.max(512, targetWidth)}
+              onChange={(value) => updateTargetSize("width", value)}
+            />
+            <DimensionField
+              label="Target H"
+              value={targetHeight}
+              min={1}
+              max={Math.max(512, targetHeight)}
+              onChange={(value) => updateTargetSize("height", value)}
+            />
+            <TargetPresetButtons
+              label={aspectLocked ? "Size presets" : "Width presets"}
+              presets={targetSizePresets}
+              activeValue={targetWidth}
+              onSelect={(preset) => applyTargetPreset("width", preset)}
+            />
+            {!aspectLocked ? (
+              <TargetPresetButtons
+                label="Height presets"
+                presets={targetSizePresets}
+                activeValue={targetHeight}
+                onSelect={(preset) => applyTargetPreset("height", preset)}
+              />
+            ) : null}
+            <label className="toggle-row">
+              <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
+              Lock aspect ratio
+            </label>
+            <p className="field-note">
+              Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
+            </p>
+          </>
+        )}
       </>
     ),
     cleanup: (
@@ -991,7 +1027,7 @@ export function App() {
         </p>
       </>
     ) : (
-      <p className="field-note">Frame controls activate for sprite sheet, character sheet, and tile sheet modes.</p>
+      <p className="field-note">Frame controls activate for sprite sheet and tile sheet modes.</p>
     ),
     viewport: (
       <>
@@ -1354,7 +1390,7 @@ export function App() {
               <MetricGroup
                 title="Output"
                 metrics={[
-                  ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${targetWidth}x${targetHeight}`],
+                  ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${effectiveTargetWidth}x${effectiveTargetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
