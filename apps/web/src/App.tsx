@@ -67,6 +67,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
+import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { clampFps, getFrameDurationMs, getInitialPlaybackState, scrubPlayback, stepPlaybackFrame, tickPlayback } from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
@@ -922,7 +923,24 @@ export function App() {
     }
 
     const baseName = assetBaseName(selectedAsset.name);
-    const imageName = `${baseName}_fixed.png`;
+    const shouldNormalizeExport = sheetMode && normalizeTimelineFrames && sheetFrames.length > 0;
+    const normalizedExport = shouldNormalizeExport
+      ? createNormalizedSheetExport({
+          result: fixResult,
+          frames: sheetFrames,
+          columns: sheetColumns,
+          ...(detectedRowAnimations.length > 0
+            ? { rowFrameCounts: detectedRowAnimations.map((animation) => animation.frameNames.length) }
+            : {}),
+          margin: sheetMargin,
+          spacing: sheetSpacing,
+          extrude: sheetExtrude
+        })
+      : null;
+    const exportResult = normalizedExport?.result ?? fixResult;
+    const exportSheet = normalizedExport?.sheet ?? sheetOptions;
+    const exportFrames = normalizedExport?.frames ?? sheetFrames;
+    const imageName = shouldNormalizeExport ? `${baseName}_normalized.png` : `${baseName}_fixed.png`;
     const manifestName = `${baseName}_manifest.json`;
     const bundleName = `${baseName}_pixelaid_bundle.zip`;
     const animations =
@@ -930,14 +948,14 @@ export function App() {
         ? animationTagsToManifestAnimations(detectedRowAnimations, { fallbackFps: playbackFps, fallbackLoop: playbackLoop })
         : undefined;
     const manifest = createPixelAssetManifest({
-      result: fixResult,
+      result: exportResult,
       imageName,
       originalFilename: selectedAsset.name,
       generatedAt: new Date().toISOString(),
-      ...(sheetMode ? { sheet: sheetOptions, frames: sheetFrames, ...(animations ? { animations } : {}) } : {})
+      ...(sheetMode ? { sheet: exportSheet, frames: exportFrames, ...(animations ? { animations } : {}) } : {})
     });
 
-    void rgbaImageToPngBlob(fixResult.image)
+    void rgbaImageToPngBlob(exportResult.image)
       .then(async (png) => {
         const bundle = createAssetBundleZip({
           pngFilename: imageName,
@@ -947,12 +965,27 @@ export function App() {
         });
         const bundleBuffer = bundle.buffer.slice(bundle.byteOffset, bundle.byteOffset + bundle.byteLength) as ArrayBuffer;
         downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
-        appendLog(`Exported ${bundleName}`);
+        appendLog(`Exported ${bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}`);
       })
       .catch((error) => {
         appendLog(error instanceof Error ? error.message : "Export failed");
       });
-  }, [appendLog, detectedRowAnimations, fixResult, playbackFps, playbackLoop, selectedAsset, sheetFrames, sheetMode, sheetOptions]);
+  }, [
+    appendLog,
+    detectedRowAnimations,
+    fixResult,
+    normalizeTimelineFrames,
+    playbackFps,
+    playbackLoop,
+    selectedAsset,
+    sheetColumns,
+    sheetExtrude,
+    sheetFrames,
+    sheetMargin,
+    sheetMode,
+    sheetOptions,
+    sheetSpacing
+  ]);
 
   useEffect(() => {
     const closeAssetMenu = () => setAssetMenu(null);
@@ -1291,6 +1324,11 @@ export function App() {
       <>
         <Field label="Target" value="Generic JSON" />
         <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
+        <ReadonlyField
+          label="Sheet PNG"
+          value={sheetMode ? (normalizeTimelineFrames ? "Normalized" : "Current") : "Single"}
+          text
+        />
         <ReadonlyField label="Spacing" value={String(sheetMode ? sheetSpacing : 0)} />
         <ReadonlyField label="Extrude" value={String(sheetMode ? sheetExtrude : 0)} />
       </>
