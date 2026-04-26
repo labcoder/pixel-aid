@@ -67,6 +67,7 @@ Cleanup controls run after block downsampling and alpha handling.
 - Denoise controls local color cleanup before palette reduction. `Off` preserves current behavior, `Light` removes mild AI speckles, and `Flat` aggressively merges similar local colors into broader pixel-art regions.
 - Downscale selects the block-to-pixel strategy.
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
+- Remove edge halos remaps semi-transparent or background-colored edge pixels to nearby subject colors before outline and palette extraction. It is useful for AI images with pale fringes from white or transparent backgrounds.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.
 - Outline size controls how many native pixels are added around the sprite.
 - Outline color starts in automatic mode, which lets the cleanup pass reuse a detected edge color when possible. Editing the color switches to custom RGBA, and that RGB value is reserved in the generated palette so it is not immediately remapped away.

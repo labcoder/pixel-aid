@@ -79,6 +79,7 @@ describe("fix controls", () => {
       removeOrphans: true,
       jaggyCleanup: true,
       preserveSinglePixelDetails: true,
+      removeHalos: true,
       denoiseStrength: 20
     });
   });

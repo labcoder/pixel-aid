@@ -115,6 +115,7 @@ export function App() {
   const [removeOrphans, setRemoveOrphans] = useState(defaultCleanupSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(defaultCleanupSettings.jaggyCleanup);
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(defaultCleanupSettings.preserveSinglePixelDetails);
+  const [removeHalos, setRemoveHalos] = useState(defaultCleanupSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(defaultCleanupSettings.denoiseStrength);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
@@ -230,6 +231,7 @@ export function App() {
         removeOrphans,
         jaggyCleanup,
         preserveSinglePixelDetails,
+        removeHalos,
         denoiseStrength,
         outlineMode,
         outlineSize,
@@ -257,6 +259,7 @@ export function App() {
     outlineMode,
     outlineSize,
     preserveSinglePixelDetails,
+    removeHalos,
     removeOrphans,
     sheetMode,
     sheetOptions,
@@ -616,6 +619,10 @@ export function App() {
           onAlphaChange={setOutlineAlpha}
           onResetAuto={() => setOutlineColorEdited(false)}
         />
+        <label className="toggle-row">
+          <input type="checkbox" checked={removeHalos} onChange={(event) => setRemoveHalos(event.currentTarget.checked)} />
+          Remove edge halos
+        </label>
         <label className="toggle-row">
           <input type="checkbox" checked={removeOrphans} onChange={(event) => setRemoveOrphans(event.currentTarget.checked)} />
           Remove orphan pixels
@@ -979,6 +986,7 @@ export function App() {
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
+                  ["Halos", removeHalos ? "remove" : "keep"],
                   [
                     "Outline",
                     outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`

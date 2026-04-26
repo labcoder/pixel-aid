@@ -63,6 +63,14 @@ It is separate from `maxColors`:
 
 Strength is a 0-100 value. `0` clones the image unchanged. Low values remove mild off-color speckles inside otherwise flat regions. High values increase color tolerance and neighborhood size so similar local variations collapse into flatter pixel-art regions. The pass skips transparent pixels and only remaps visible pixels to a representative color from their similar-color cluster; that representative is chosen near the cluster centroid so a first-scanned speck does not become the replacement color. It does not blur or resample the image.
 
+## Halo Removal
+
+`applyHaloRemoval` is an optional native-resolution edge cleanup pass that runs after alpha cleanup and before denoise, outline cleanup, and palette extraction.
+
+The pass estimates corner background color, finds visible edge pixels adjacent to transparent or background-like outside space, and treats semi-transparent or background-colored edge pixels as halos. Those pixels are remapped to the average color of nearby solid subject neighbors. The pass reads from the source image and writes to a cloned output buffer, so corrected halo pixels do not cascade into later replacements during the same pass.
+
+This is intentionally conservative. It targets pale transparent fringes and opaque white-background fringes first; broader matting and color-decontamination controls can be added later.
+
 ## Alpha Cleanup
 
 Implemented modes:
@@ -105,10 +113,11 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 2. Align the crop to the detected pseudo-pixel grid.
 3. Downsample with the Auto Suggest method. High-purity blocks usually select `dominant`; mixed/noisy blocks can use `adaptive`.
 4. Use `backgroundFloodFill` for simple opaque backgrounds.
-5. Apply denoise when the cleanup strength is above zero.
-6. Apply optional outline cleanup, with crop padding when an added or repaired outline needs room outside the detected bounds.
-7. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
-8. Reserve explicit outline colors before palette remapping.
+5. Remove edge halos when enabled.
+6. Apply denoise when the cleanup strength is above zero.
+7. Apply optional outline cleanup, with crop padding when an added or repaired outline needs room outside the detected bounds.
+8. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
+9. Reserve explicit outline colors before palette remapping.
 
 Remaining quality targets:
 

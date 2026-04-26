@@ -72,6 +72,7 @@ Processing:
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
 - Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.
+- Edge halo removal for semi-transparent or background-colored fringes before outline and palette extraction.
 - Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity, favoring dominant color when blocks are already crisp.
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
@@ -80,7 +81,7 @@ Processing:
 
 ## Known Limitations
 
-- Single-sprite cleanup now includes conservative mask repair and outline padding, but halo removal and broader real-image golden tests are still needed.
+- Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
 - Manual sheet slicing metadata exists, but the UI does not yet expose full rows/columns/frame/pivot controls.
@@ -89,7 +90,7 @@ Processing:
 
 ## Prioritized Roadmap
 
-1. Single-sprite cleanup quality: add halo removal, stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
+1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
 2. Sprite-sheet workflow: add frame controls for rows, columns, frame size, margins, spacing, pivots, normalized frame bounds, and frame list.
 3. Timeline and player: enable playback only for sheet-like assets with frame metadata, add scrub/play/FPS/loop controls, and document empty states.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.

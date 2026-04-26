@@ -28,6 +28,7 @@ The metrics panel shows:
 - Palette count.
 - Downscale method.
 - Denoise strength.
+- Halo cleanup state.
 - Outline mode and native outline size.
 - Grid confidence.
 - Worker operation duration.

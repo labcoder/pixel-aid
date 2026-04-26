@@ -16,11 +16,13 @@ export const defaultCleanupSettings: {
   removeOrphans: boolean;
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
+  removeHalos: boolean;
   denoiseStrength: number;
 } = {
   removeOrphans: true,
   jaggyCleanup: true,
   preserveSinglePixelDetails: true,
+  removeHalos: true,
   denoiseStrength: 20
 };
 
