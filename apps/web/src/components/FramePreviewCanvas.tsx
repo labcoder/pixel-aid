@@ -4,10 +4,14 @@ import type { FramePreviewPlacement } from "../lib/frameNormalization";
 
 export function FramePreviewCanvas({
   image,
-  placement
+  placement,
+  previousPlacement,
+  nextPlacement
 }: {
   image: RGBAImage | null;
   placement: FramePreviewPlacement | null;
+  previousPlacement?: FramePreviewPlacement | null;
+  nextPlacement?: FramePreviewPlacement | null;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -46,17 +50,15 @@ export function FramePreviewCanvas({
 
     context.fillStyle = "#101414";
     context.fillRect(startX - 1, startY - 1, drawWidth + 2, drawHeight + 2);
-    context.drawImage(
-      sourceCanvas,
-      placement.frame.rect.x,
-      placement.frame.rect.y,
-      placement.frame.rect.w,
-      placement.frame.rect.h,
-      startX + placement.offset.x * scale,
-      startY + placement.offset.y * scale,
-      placement.frame.rect.w * scale,
-      placement.frame.rect.h * scale
-    );
+    if (previousPlacement) {
+      drawFramePlacement(context, sourceCanvas, previousPlacement, startX, startY, scale, 0.28);
+      drawOnionLabel(context, "prev", startX + 4, startY + drawHeight - 15, "#8fb8ff");
+    }
+    if (nextPlacement) {
+      drawFramePlacement(context, sourceCanvas, nextPlacement, startX, startY, scale, 0.28);
+      drawOnionLabel(context, "next", startX + drawWidth - 28, startY + drawHeight - 15, "#ff9fb2");
+    }
+    drawFramePlacement(context, sourceCanvas, placement, startX, startY, scale, 1);
 
     context.strokeStyle = "#35c6b6";
     context.lineWidth = 1;
@@ -75,9 +77,43 @@ export function FramePreviewCanvas({
     context.font = "10px Consolas, monospace";
     context.textBaseline = "top";
     context.fillText(`${placement.canvas.width}x${placement.canvas.height}`, startX, Math.max(2, startY - 14));
-  }, [image, placement]);
+  }, [image, nextPlacement, placement, previousPlacement]);
 
   return <canvas ref={canvasRef} className="frame-preview-canvas" aria-label="Normalized frame preview" />;
+}
+
+function drawFramePlacement(
+  context: CanvasRenderingContext2D,
+  sourceCanvas: HTMLCanvasElement,
+  placement: FramePreviewPlacement,
+  startX: number,
+  startY: number,
+  scale: number,
+  alpha: number
+): void {
+  context.save();
+  context.globalAlpha = alpha;
+  context.drawImage(
+    sourceCanvas,
+    placement.frame.rect.x,
+    placement.frame.rect.y,
+    placement.frame.rect.w,
+    placement.frame.rect.h,
+    startX + placement.offset.x * scale,
+    startY + placement.offset.y * scale,
+    placement.frame.rect.w * scale,
+    placement.frame.rect.h * scale
+  );
+  context.restore();
+}
+
+function drawOnionLabel(context: CanvasRenderingContext2D, label: string, x: number, y: number, color: string): void {
+  context.save();
+  context.fillStyle = color;
+  context.font = "9px Consolas, monospace";
+  context.textBaseline = "top";
+  context.fillText(label, x, y);
+  context.restore();
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {

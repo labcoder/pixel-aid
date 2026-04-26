@@ -59,7 +59,7 @@ import {
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
-import { getFramePreviewPlacement } from "./lib/frameNormalization";
+import { getFramePreviewPlacement, getOnionSkinPlacements } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -174,6 +174,7 @@ export function App() {
   const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
   const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(getInitialPlaybackState(0).direction);
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(true);
+  const [showOnionSkin, setShowOnionSkin] = useState(false);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
@@ -281,6 +282,15 @@ export function App() {
   const framePreviewPlacement = useMemo(
     () => getFramePreviewPlacement(previewFrames, timelinePosition, normalizeTimelineFrames),
     [normalizeTimelineFrames, previewFrames, timelinePosition]
+  );
+  const onionSkinPlacements = useMemo(
+    () =>
+      showOnionSkin
+        ? getOnionSkinPlacements(previewFrames, timelinePosition, normalizeTimelineFrames, {
+            wrap: playbackLoop && playbackDirection !== "ping-pong"
+          })
+        : { previous: null, current: null, next: null },
+    [normalizeTimelineFrames, playbackDirection, playbackLoop, previewFrames, showOnionSkin, timelinePosition]
   );
   const sheetDetectionNotes = useMemo(
     () =>
@@ -1753,6 +1763,14 @@ export function App() {
                     />
                     Normalize
                   </label>
+                  <label className="player-loop">
+                    <input
+                      type="checkbox"
+                      checked={showOnionSkin}
+                      onChange={(event) => setShowOnionSkin(event.currentTarget.checked)}
+                    />
+                    Onion
+                  </label>
                 </div>
                 <div className="player-readout">
                   <strong>
@@ -1762,7 +1780,12 @@ export function App() {
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
                 </div>
                 <div className="frame-preview-panel">
-                  <FramePreviewCanvas image={previewImage} placement={framePreviewPlacement} />
+                  <FramePreviewCanvas
+                    image={previewImage}
+                    placement={framePreviewPlacement}
+                    previousPlacement={showOnionSkin ? onionSkinPlacements.previous : null}
+                    nextPlacement={showOnionSkin ? onionSkinPlacements.next : null}
+                  />
                   <div className="frame-preview-meta">
                     <strong>{framePreviewPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
                     <span>
@@ -1770,7 +1793,10 @@ export function App() {
                         ? `${framePreviewPlacement.canvas.width}x${framePreviewPlacement.canvas.height} pivot ${framePreviewPlacement.normalizedPivot.x},${framePreviewPlacement.normalizedPivot.y}`
                         : "No preview frame"}
                     </span>
-                    <small>{fixResult ? "Previewing fixed output" : "Previewing source frame bounds"}</small>
+                    <small>
+                      {fixResult ? "Previewing fixed output" : "Previewing source frame bounds"}
+                      {showOnionSkin ? " with onion skin" : ""}
+                    </small>
                   </div>
                 </div>
                 {detectedRowAnimations.length > 0 ? (
@@ -1853,7 +1879,7 @@ export function App() {
                 </div>
                 <p className="field-note">
                   Select a frame to highlight its bounds and pivot in the viewport. Frame duration is used for playback and export;
-                  clip FPS is the fallback speed for frames without custom timing.
+                  clip FPS is the fallback speed for frames without custom timing. Onion skin is preview-only.
                 </p>
               </>
             ) : (
