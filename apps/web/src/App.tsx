@@ -65,6 +65,7 @@ import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggesti
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
+import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
@@ -488,6 +489,7 @@ export function App() {
             });
             setSelectedAssetId(asset.id);
             setFixResult(null);
+            setViewMode(getImportViewMode());
 
             setImportStatus(`Analyzing ${asset.name}...`);
             await waitForNextPaint();
