@@ -16,7 +16,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 1. The web app decodes an imported image file into an `RGBAImage`.
 2. Import status is surfaced in the editor while decode and first-pass analysis run.
 3. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
-4. Auto Suggest classifies the asset mode and seeds mode-specific controls. Single sprites use target dimensions; sprite and tile sheets use frame/cell controls.
+4. Auto Suggest classifies the asset mode and seeds mode-specific controls. Single sprites use target dimensions; sprite and tile sheets use frame/cell controls. Sheet suggestions can consume row-band detection, outlined-cell separators, and first-pass content-centered uneven-gutter normalization.
 5. The viewport renders native buffers through Canvas2D with smoothing disabled.
 6. The app clones the selected image buffer and transfers it to a Web Worker.
 7. The worker runs `fixImage` from `packages/core`.
