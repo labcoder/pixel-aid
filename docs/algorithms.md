@@ -59,7 +59,7 @@ Current signals:
 - Large landscape sources are scanned for repeated horizontal foreground bands against a sampled corner background. Three or more separated bands bias the mode toward sprite sheet because this matches common AI-generated animation sheets with one animation per row.
 - Balanced portrait or square sources without repeated bands remain single sprites unless tile-sheet divisibility is stronger.
 
-For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, drops left-side label segments when a larger frame grid follows them, and returns:
+For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, splits wide outlined grid rows by vertical cell separators, drops left-side label segments when a larger frame grid follows them, and returns:
 
 - Estimated frame width and height.
 - Row count and maximum column count.
@@ -67,9 +67,9 @@ For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples t
 - Explicit frame rectangles.
 - Per-row frame counts.
 - Initial row animation tags.
-- Confidence and warnings.
+- Confidence and warnings, including a note when outlined cell separators were used.
 
-This is still conservative. It does not OCR row labels, repair irregular gutters, or normalize frame canvases. It gives the editor a useful starting point and preserves manual override.
+This is still conservative. It does not OCR row labels, infer every uneven gutter in unboxed sheets, or normalize frame canvases. It gives the editor a useful starting point and preserves manual override.
 
 Detected frames can be manually nudged or resized in the web viewport. Move and resize operations apply source-space deltas to the frame `sourceRect` and update the corresponding native frame `rect` by the active grid scale. This keeps the source overlay, output slicing metadata, and row animation membership aligned without rerunning detection.
 
