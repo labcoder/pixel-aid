@@ -94,6 +94,7 @@ import {
 } from "./lib/sheetControls";
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
+import { deriveSheetOutputLayout } from "./lib/sheetLayoutModel";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import {
   getSimpleAlphaChoice,
@@ -262,15 +263,28 @@ export function App() {
     [baseSheetFrames, frameDurationOverrides]
   );
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
-  const plannedSheetOutputSize = useMemo(
-    () => ({
-      width: sheetMargin * 2 + sheetColumns * frameWidth + Math.max(0, sheetColumns - 1) * sheetSpacing,
-      height: sheetMargin * 2 + sheetRows * frameHeight + Math.max(0, sheetRows - 1) * sheetSpacing
-    }),
-    [frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+  const plannedSheetLayout = useMemo(
+    () =>
+      deriveSheetOutputLayout({
+        frames: sheetMode ? sheetFrames : [],
+        animations: detectedRowAnimations,
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        fallback: {
+          frameWidth,
+          frameHeight,
+          rows: sheetRows,
+          columns: sheetColumns
+        }
+      }),
+    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetFrames, sheetMargin, sheetMode, sheetRows, sheetSpacing]
   );
-  const effectiveTargetWidth = sheetMode ? plannedSheetOutputSize.width : targetWidth;
-  const effectiveTargetHeight = sheetMode ? plannedSheetOutputSize.height : targetHeight;
+  const plannedSheetOutputSize = useMemo(
+    () => ({ width: plannedSheetLayout.width, height: plannedSheetLayout.height }),
+    [plannedSheetLayout.height, plannedSheetLayout.width]
+  );
+  const effectiveTargetWidth = sheetMode ? plannedSheetLayout.width : targetWidth;
+  const effectiveTargetHeight = sheetMode ? plannedSheetLayout.height : targetHeight;
   const sourceSheetFrames = useMemo(
     () => (sheetMode ? sheetFrames.map((frame) => mapFrameToSource(frame, gridScaleX, gridScaleY)) : []),
     [gridScaleX, gridScaleY, sheetFrames, sheetMode]
@@ -349,8 +363,8 @@ export function App() {
         alpha,
         confidence: fixResult?.grid.confidence ?? recommendationConfidence,
         frameCount: sheetMode ? sheetFrames.length : 1,
-        rows: sheetRows,
-        columns: sheetColumns
+        rows: sheetMode ? plannedSheetLayout.rowCount : sheetRows,
+        columns: sheetMode ? plannedSheetLayout.maxColumns : sheetColumns
       }),
     [
       alpha,
@@ -361,6 +375,8 @@ export function App() {
       maxColors,
       mode,
       recommendationConfidence,
+      plannedSheetLayout.maxColumns,
+      plannedSheetLayout.rowCount,
       sheetColumns,
       sheetFrames.length,
       sheetMode,
@@ -1295,12 +1311,13 @@ export function App() {
         />
         {sheetMode ? (
           <>
-            <ReadonlyField label="Output W" value={String(plannedSheetOutputSize.width)} />
-            <ReadonlyField label="Output H" value={String(plannedSheetOutputSize.height)} />
-            <ReadonlyField label="Cells" value={`${sheetRows}x${sheetColumns}`} text />
+            <ReadonlyField label="Derived W" value={String(plannedSheetOutputSize.width)} />
+            <ReadonlyField label="Derived H" value={String(plannedSheetOutputSize.height)} />
+            <ReadonlyField label="Rows" value={String(plannedSheetLayout.rowCount)} text />
+            <ReadonlyField label="Max cells" value={String(plannedSheetLayout.maxColumns)} text />
             <p className="field-note">
-              Sprite sheet output size comes from the frame controls below. Set frame size, rows, columns, margins, and
-              spacing there; Grid still controls how source pixels are resampled into those cells.
+              Sheet output is calculated from animation rows and cell frames. Edit row cell sizes in Frame / Cell;
+              Grid still controls how source pixels are resampled into each cell.
             </p>
           </>
         ) : (
