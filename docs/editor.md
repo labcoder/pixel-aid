@@ -114,16 +114,17 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Step to the previous or next frame.
 - Scrub directly to any frame with the range control.
 - Set FPS from 1 to 60 as the clip fallback speed.
+- Choose playback direction: Forward, Reverse, or Ping-pong. Ping-pong bounces at the first and last frame, and non-looping ping-pong stops after returning to the first frame.
 - Edit the selected frame duration in milliseconds. Per-frame duration takes priority over clip FPS for playback and export.
 - Toggle looping. With looping disabled, playback stops on the last frame.
 - Toggle Normalize to preview and export each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
 - Rename detected row clips in the clip editor.
-- Edit per-clip FPS and loop metadata for manifest export.
+- Edit per-clip FPS, direction, and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
 The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, and marks the pivot.
 
-Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, ping-pong playback, imported timesheet editing, and per-engine normalized atlas options are future timeline work.
+Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion skin, imported timesheet editing, and per-engine normalized atlas options are future timeline work.
 
 # Metrics
 
@@ -139,5 +140,5 @@ The first export target is a generic engine-ready bundle.
 - JSON manifest includes source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
 - If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG and manifest frame rects use that packed layout.
-- Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, and loop setting.
+- Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting.
 - ZIP export packages the PNG and manifest together.
