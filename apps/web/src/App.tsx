@@ -66,6 +66,7 @@ import {
   summarizeSheetFit,
   type PivotPreset
 } from "./lib/sheetControls";
+import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -207,7 +208,7 @@ export function App() {
   const effectiveTargetWidth = sheetMode ? plannedSheetOutputSize.width : targetWidth;
   const effectiveTargetHeight = sheetMode ? plannedSheetOutputSize.height : targetHeight;
   const sourceSheetFrames = useMemo(
-    () => (sheetMode ? sheetFrames.map((frame) => scaleFrameForSource(frame, gridScaleX, gridScaleY)) : []),
+    () => (sheetMode ? sheetFrames.map((frame) => mapFrameToSource(frame, gridScaleX, gridScaleY)) : []),
     [gridScaleX, gridScaleY, sheetFrames, sheetMode]
   );
   const sheetCanvasSize = useMemo(
@@ -1626,22 +1627,6 @@ function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate
 
 function formatSuggestionReason(reason: string, modeConfidence: number, gridConfidence: number): string {
   return `${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.`;
-}
-
-function scaleFrameForSource(frame: SpriteFrame, scaleX: number, scaleY: number): SpriteFrame {
-  return {
-    ...frame,
-    rect: {
-      x: Math.round(frame.rect.x * scaleX),
-      y: Math.round(frame.rect.y * scaleY),
-      w: Math.max(1, Math.round(frame.rect.w * scaleX)),
-      h: Math.max(1, Math.round(frame.rect.h * scaleY))
-    },
-    pivot: {
-      x: Math.round(frame.pivot.x * scaleX),
-      y: Math.round(frame.pivot.y * scaleY)
-    }
-  };
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
