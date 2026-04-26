@@ -71,6 +71,8 @@ For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples t
 
 This is still conservative. It does not OCR row labels, repair irregular gutters, normalize frame canvases, or provide drag handles. It gives the editor a useful starting point and preserves manual override.
 
+Detected frames can be manually nudged in the web viewport. A drag operation applies a source-space delta to the frame `sourceRect` and updates the corresponding native frame `rect` by the active grid scale. This keeps the source overlay, output slicing metadata, and row animation membership aligned without rerunning detection.
+
 ## Palette
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
@@ -155,6 +157,6 @@ Remaining quality targets:
 
 The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
 
-Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix.
+Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix. Detected row animation tags export as manifest animations.
 
 The slicer does not yet detect irregular gutters, disconnected frame components, per-row animation names, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.

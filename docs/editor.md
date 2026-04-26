@@ -55,7 +55,9 @@ Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are
 
 Frame boxes and pivot markers are drawn on the Before view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
-When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Editing Frame W/H, Rows, Columns, Margin, Spacing, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
+When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Click a detected frame box in the source view to select it, then drag it to move the box. The edit updates both the source rectangle and its native output rect while preserving the frame name, row tag, pivot, and row animation membership.
+
+Editing Frame W/H, Rows, Columns, Margin, Spacing, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
 
 Fit Rows / Columns calculates how many whole frames fit inside the current fixed image footprint using the configured frame size, margin, and spacing. It is a helper, not a detector: the user can still override the result manually.
 
@@ -113,7 +115,7 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Toggle looping. With looping disabled, playback stops on the last frame.
 - Show the selected frame name, frame size, and frame duration.
 
-Clicking a frame, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. User-renamed animation tags, isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
+Clicking a frame, dragging a detected source box, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. User-renamed animation tags, isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
 
 # Metrics
 
@@ -128,4 +130,5 @@ The first export target is a generic engine-ready bundle.
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest includes source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
+- Detected row clips are exported into the manifest `animations` object with their frame names, FPS, and loop setting.
 - ZIP export packages the PNG and manifest together.

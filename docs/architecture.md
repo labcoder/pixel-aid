@@ -25,8 +25,9 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 10. The worker transfers the fixed output buffer back to the app.
 11. The app displays the fixed output, metrics, palette count, grid confidence, and source crop metadata.
 12. Sheet-like modes either derive frame rectangles and pivots from manual frame/cell controls or consume explicit detected frame rectangles from Auto Suggest. The viewport maps manual rectangles back into source space before Fix and uses detected `sourceRect`s directly when available.
-13. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected as clips before user-editable animation tags exist.
-14. Export passes the current frame metadata to `packages/exporters`, creates a PNG in browser canvas and a generic JSON manifest, then bundles both files into a ZIP.
+13. Detected source frame rectangles can be selected and drag-moved in the canvas. The web app updates the explicit frame metadata while preserving frame names, pivots, and row tags.
+14. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected as clips before user-editable animation tags exist.
+15. Export passes the current frame metadata and detected row animations to `packages/exporters`, creates a PNG in browser canvas and a generic JSON manifest, then bundles both files into a ZIP.
 
 ## Documentation Flow
 
