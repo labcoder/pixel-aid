@@ -6,6 +6,7 @@ export type CreateManifestOptions = {
   imageName: string;
   originalFilename?: string;
   generatedAt?: string;
+  sheet?: SheetSliceOptions;
   frames?: SpriteFrame[];
   animations?: Record<string, SpriteAnimation>;
 };
@@ -23,8 +24,9 @@ export const UNITY_IMPORT_GUIDANCE = [
 ] as const;
 
 export function createPixelAssetManifest(options: CreateManifestOptions): PixelAssetManifest {
-  const sheetOptions = options.result.settings.sheet;
+  const sheetOptions = options.sheet ?? options.result.settings.sheet;
   const frames = options.frames ?? createFrames(options.result, sheetOptions);
+  const operationSettings = options.sheet ? { ...options.result.settings, sheet: options.sheet } : options.result.settings;
   const sheet = {
     width: options.result.image.width,
     height: options.result.image.height,
@@ -52,7 +54,7 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
       palette: options.result.palette,
       source,
       operation: {
-        settings: options.result.settings,
+        settings: operationSettings,
         grid: options.result.grid,
         durationMs: options.result.metrics.durationMs
       }
@@ -108,6 +110,7 @@ function createFrames(result: PixelFixResult, sheetOptions: SheetSliceOptions | 
   }
 
   const frames: SpriteFrame[] = [];
+  const pivot = sheetOptions.pivot ?? { x: Math.floor(sheetOptions.frameWidth / 2), y: sheetOptions.frameHeight };
   for (let row = 0; row < sheetOptions.rows; row += 1) {
     for (let column = 0; column < sheetOptions.columns; column += 1) {
       const index = row * sheetOptions.columns + column;
@@ -119,7 +122,7 @@ function createFrames(result: PixelFixResult, sheetOptions: SheetSliceOptions | 
           w: sheetOptions.frameWidth,
           h: sheetOptions.frameHeight
         },
-        pivot: { x: Math.floor(sheetOptions.frameWidth / 2), y: sheetOptions.frameHeight },
+        pivot: { ...pivot },
         durationMs: 120
       });
     }

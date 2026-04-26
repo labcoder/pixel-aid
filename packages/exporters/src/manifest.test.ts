@@ -132,6 +132,36 @@ describe("generic manifest export", () => {
     ]);
   });
 
+  test("uses explicit sheet export settings and pivots", () => {
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png",
+      sheet: {
+        frameWidth: 8,
+        frameHeight: 16,
+        rows: 1,
+        columns: 4,
+        margin: 0,
+        spacing: 0,
+        extrude: 2,
+        pivot: { x: 4, y: 14 }
+      }
+    });
+
+    expect(manifest.sheet).toMatchObject({
+      frameWidth: 8,
+      frameHeight: 16,
+      extrude: 2
+    });
+    expect(manifest.frames).toHaveLength(4);
+    expect(manifest.frames.map((frame) => frame.pivot)).toEqual([
+      { x: 4, y: 14 },
+      { x: 4, y: 14 },
+      { x: 4, y: 14 },
+      { x: 4, y: 14 }
+    ]);
+  });
+
   test("exports engine guidance placeholders for Godot and Unity", () => {
     expect(GODOT_IMPORT_GUIDANCE.join("\n")).toContain("nearest");
     expect(UNITY_IMPORT_GUIDANCE.join("\n")).toContain("Point");

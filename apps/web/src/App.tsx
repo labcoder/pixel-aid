@@ -555,7 +555,8 @@ export function App() {
       result: fixResult,
       imageName,
       originalFilename: selectedAsset.name,
-      generatedAt: new Date().toISOString()
+      generatedAt: new Date().toISOString(),
+      ...(sheetMode ? { sheet: sheetOptions, frames: sheetFrames } : {})
     });
 
     void rgbaImageToPngBlob(fixResult.image)
@@ -573,7 +574,7 @@ export function App() {
       .catch((error) => {
         appendLog(error instanceof Error ? error.message : "Export failed");
       });
-  }, [appendLog, fixResult, selectedAsset]);
+  }, [appendLog, fixResult, selectedAsset, sheetFrames, sheetMode, sheetOptions]);
 
   useEffect(() => {
     const closeAssetMenu = () => setAssetMenu(null);
