@@ -860,6 +860,53 @@ button:disabled {
   color: var(--amber);
 }
 
+.animation-cell-controls {
+  display: grid;
+  gap: 5px;
+  margin-top: 0.6rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.animation-cell-header,
+.animation-cell-row {
+  display: grid;
+  grid-template-columns: minmax(72px, 1fr) 46px 58px 58px;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.animation-cell-header {
+  color: #78837e;
+  text-transform: uppercase;
+}
+
+.animation-cell-row {
+  padding: 0.35rem;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.animation-cell-row strong {
+  min-width: 0;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.animation-cell-row input {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.35rem;
+  text-align: right;
+}
+
 .grid-candidate-list {
   display: grid;
   gap: 0.5rem;

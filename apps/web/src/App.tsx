@@ -94,7 +94,7 @@ import {
 } from "./lib/sheetControls";
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
-import { deriveSheetOutputLayout } from "./lib/sheetLayoutModel";
+import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./lib/sheetLayoutModel";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import {
   getSimpleAlphaChoice,
@@ -858,17 +858,43 @@ export function App() {
   );
   const updateManualSheetMargin = useCallback(
     (value: number) => {
-      clearDetectedSheetLayout();
+      if (detectedRowAnimations.length === 0) {
+        clearDetectedSheetLayout();
+      } else {
+        setDetectedSheetFrames((current) =>
+          repackAnimationRows({
+            frames: current,
+            animations: detectedRowAnimations,
+            margin: value,
+            spacing: sheetSpacing
+          })
+        );
+      }
       setSheetMargin(value);
+      setFixResult(null);
+      setIsPlaying(false);
     },
-    [clearDetectedSheetLayout]
+    [clearDetectedSheetLayout, detectedRowAnimations, sheetSpacing]
   );
   const updateManualSheetSpacing = useCallback(
     (value: number) => {
-      clearDetectedSheetLayout();
+      if (detectedRowAnimations.length === 0) {
+        clearDetectedSheetLayout();
+      } else {
+        setDetectedSheetFrames((current) =>
+          repackAnimationRows({
+            frames: current,
+            animations: detectedRowAnimations,
+            margin: sheetMargin,
+            spacing: value
+          })
+        );
+      }
       setSheetSpacing(value);
+      setFixResult(null);
+      setIsPlaying(false);
     },
-    [clearDetectedSheetLayout]
+    [clearDetectedSheetLayout, detectedRowAnimations, sheetMargin]
   );
 
   const fitSheetGridToFrameSize = useCallback(() => {
@@ -1036,6 +1062,35 @@ export function App() {
       }
     },
     [detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
+  );
+
+  const updateDetectedAnimationCellSize = useCallback(
+    (animationName: string, dimension: "width" | "height", value: number) => {
+      const nextValue = clampSheetInteger(value, 1, 1024);
+      setDetectedSheetFrames((current) => {
+        const layout = deriveSheetOutputLayout({
+          frames: current,
+          animations: detectedRowAnimations,
+          margin: sheetMargin,
+          spacing: sheetSpacing,
+          fallback: { frameWidth, frameHeight, rows: sheetRows, columns: sheetColumns }
+        });
+        const row = layout.rows.find((item) => item.name === animationName);
+        return resizeAnimationCells({
+          frames: current,
+          animations: detectedRowAnimations,
+          animationName,
+          cellWidth: dimension === "width" ? nextValue : row?.cellWidth ?? frameWidth,
+          cellHeight: dimension === "height" ? nextValue : row?.cellHeight ?? frameHeight,
+          margin: sheetMargin,
+          spacing: sheetSpacing
+        });
+      });
+      setFixResult(null);
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+    },
+    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
 
   const changePlaybackDirection = useCallback(
@@ -1505,26 +1560,76 @@ export function App() {
             {sheetDetectionNotes.map((note) => (
               <p key={note}>{note}</p>
             ))}
-            <small>Editing cell controls switches back to manual rectangular slicing.</small>
+            <small>Detected rows keep their source boxes. Cell edits change the packed output canvas, not the source selection.</small>
           </div>
         ) : null}
-        <NumberField label="Frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
-        <NumberField label="Frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
-        <NumberField label="Rows" value={sheetRows} min={1} onChange={updateManualSheetRows} />
-        <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
+        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+          <div className="animation-cell-controls" aria-label="Animation row cell sizes">
+            <div className="animation-cell-header">
+              <span>Animation</span>
+              <span>Frames</span>
+              <span>Cell W</span>
+              <span>Cell H</span>
+            </div>
+            {detectedRowAnimations.map((animation) => {
+              const row = plannedSheetLayout.rows.find((item) => item.name === animation.name);
+              return (
+                <div key={animation.name} className="animation-cell-row">
+                  <strong>{animation.name}</strong>
+                  <span>{animation.frameNames.length}</span>
+                  <input
+                    aria-label={`${animation.name} cell width`}
+                    type="number"
+                    min="1"
+                    max="1024"
+                    value={row?.cellWidth ?? frameWidth}
+                    onChange={(event) => updateDetectedAnimationCellSize(animation.name, "width", Number(event.currentTarget.value))}
+                  />
+                  <input
+                    aria-label={`${animation.name} cell height`}
+                    type="number"
+                    min="1"
+                    max="1024"
+                    value={row?.cellHeight ?? frameHeight}
+                    onChange={(event) => updateDetectedAnimationCellSize(animation.name, "height", Number(event.currentTarget.value))}
+                  />
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <>
+            <NumberField label="Frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
+            <NumberField label="Frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
+            <NumberField label="Rows" value={sheetRows} min={1} onChange={updateManualSheetRows} />
+            <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
+          </>
+        )}
         <NumberField label="Margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
         <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
         <NumberField label="Extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
-        <button type="button" className="wide-tool-button secondary" onClick={fitSheetGridToFrameSize}>
-          Fit Rows / Columns
-        </button>
-        <div className={`sheet-fit-summary${sheetFit.fits ? " is-valid" : " is-warning"}`}>
-          <strong>{sheetFit.frameCount} frames</strong>
-          <span>
-            {sheetFit.usedWidth}x{sheetFit.usedHeight} on {sheetCanvasSize.width}x{sheetCanvasSize.height}
-          </span>
-          <small>{sheetFit.message}</small>
-        </div>
+        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+          <div className="sheet-fit-summary is-valid">
+            <strong>{plannedSheetLayout.frameCount} frames</strong>
+            <span>
+              Derived {plannedSheetLayout.width}x{plannedSheetLayout.height}, widest row {plannedSheetLayout.maxColumns} cells
+            </span>
+            <small>Rows may have different cell sizes; output is packed by animation row.</small>
+          </div>
+        ) : (
+          <>
+            <button type="button" className="wide-tool-button secondary" onClick={fitSheetGridToFrameSize}>
+              Fit Rows / Columns
+            </button>
+            <div className={`sheet-fit-summary${sheetFit.fits ? " is-valid" : " is-warning"}`}>
+              <strong>{sheetFit.frameCount} frames</strong>
+              <span>
+                {sheetFit.usedWidth}x{sheetFit.usedHeight} on {sheetCanvasSize.width}x{sheetCanvasSize.height}
+              </span>
+              <small>{sheetFit.message}</small>
+            </div>
+          </>
+        )}
         <SelectField
           label="Pivot"
           value={pivotPreset}

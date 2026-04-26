@@ -98,3 +98,99 @@ function deriveAnimationRows(frames: readonly SpriteFrame[], animations: readonl
     })
     .filter((row): row is SheetOutputRow => row !== null);
 }
+
+export function resizeAnimationCells({
+  frames,
+  animations,
+  animationName,
+  cellWidth,
+  cellHeight,
+  margin,
+  spacing
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  animationName: string;
+  cellWidth: number;
+  cellHeight: number;
+  margin: number;
+  spacing: number;
+}): SpriteFrame[] {
+  return repackAnimationRows({
+    frames,
+    animations,
+    margin,
+    spacing,
+    rowOverrides: {
+      [animationName]: {
+        cellWidth: Math.max(1, Math.round(cellWidth)),
+        cellHeight: Math.max(1, Math.round(cellHeight))
+      }
+    }
+  });
+}
+
+export function repackAnimationRows({
+  frames,
+  animations,
+  margin,
+  spacing,
+  rowOverrides = {}
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  margin: number;
+  spacing: number;
+  rowOverrides?: Record<string, { cellWidth: number; cellHeight: number }>;
+}): SpriteFrame[] {
+  const framesByName = new Map(frames.map((frame) => [frame.name, frame]));
+  const packedFrames: SpriteFrame[] = [];
+  const usedNames = new Set<string>();
+  let y = Math.max(0, Math.round(margin));
+  const safeSpacing = Math.max(0, Math.round(spacing));
+
+  for (const animation of animations) {
+    const rowFrames = animation.frameNames.map((name) => framesByName.get(name)).filter((frame): frame is SpriteFrame => frame !== undefined);
+    if (rowFrames.length === 0) {
+      continue;
+    }
+
+    const override = rowOverrides[animation.name];
+    const rowWidth = override ? Math.max(1, Math.round(override.cellWidth)) : Math.max(1, ...rowFrames.map((frame) => frame.rect.w));
+    const rowHeight = override ? Math.max(1, Math.round(override.cellHeight)) : Math.max(1, ...rowFrames.map((frame) => frame.rect.h));
+
+    for (let column = 0; column < rowFrames.length; column += 1) {
+      const frame = rowFrames[column]!;
+      usedNames.add(frame.name);
+      packedFrames.push(copyFrameForCell(frame, {
+        x: Math.max(0, Math.round(margin)) + column * (rowWidth + safeSpacing),
+        y,
+        w: rowWidth,
+        h: rowHeight
+      }));
+    }
+
+    y += rowHeight + safeSpacing;
+  }
+
+  for (const frame of frames) {
+    if (!usedNames.has(frame.name)) {
+      packedFrames.push(copyFrameForCell(frame, frame.rect));
+    }
+  }
+
+  return packedFrames;
+}
+
+function copyFrameForCell(frame: SpriteFrame, rect: SpriteFrame["rect"]): SpriteFrame {
+  return {
+    ...frame,
+    rect: { ...rect },
+    pivot: {
+      x: Math.min(rect.w, Math.max(0, Math.round(rect.w / Math.max(1, frame.rect.w) * frame.pivot.x))),
+      y: Math.min(rect.h, Math.max(0, Math.round(rect.h / Math.max(1, frame.rect.h) * frame.pivot.y)))
+    },
+    ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
+    ...(frame.tags ? { tags: [...frame.tags] } : {})
+  };
+}

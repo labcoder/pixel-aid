@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
-import { deriveSheetOutputLayout } from "./sheetLayoutModel";
+import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./sheetLayoutModel";
 
 const frames: SpriteFrame[] = [
   ...makeRow("idle", 3, 64, 64),
@@ -76,6 +76,44 @@ describe("sheet layout model", () => {
       rowCount: 3,
       maxColumns: 4
     });
+  });
+
+  test("resizes one animation row and repacks every row without trimming source boxes", () => {
+    const resized = resizeAnimationCells({
+      frames,
+      animations,
+      animationName: "idle",
+      cellWidth: 80,
+      cellHeight: 72,
+      margin: 1,
+      spacing: 2
+    });
+
+    const idleFrames = resized.filter((frame) => frame.tags?.includes("idle"));
+    const runFrames = resized.filter((frame) => frame.tags?.includes("run"));
+
+    expect(idleFrames.map((frame) => frame.rect)).toEqual([
+      { x: 1, y: 1, w: 80, h: 72 },
+      { x: 83, y: 1, w: 80, h: 72 },
+      { x: 165, y: 1, w: 80, h: 72 }
+    ]);
+    expect(runFrames[0]?.rect).toEqual({ x: 1, y: 75, w: 64, h: 64 });
+    expect(runFrames.at(-1)?.rect).toEqual({ x: 463, y: 75, w: 64, h: 64 });
+    expect(idleFrames[0]?.sourceRect).toEqual(frames[0]?.sourceRect);
+  });
+
+  test("reflows detected animation rows when margin or spacing changes", () => {
+    const repacked = repackAnimationRows({
+      frames,
+      animations,
+      margin: 4,
+      spacing: 3
+    });
+
+    expect(repacked[0]?.rect).toEqual({ x: 4, y: 4, w: 64, h: 64 });
+    expect(repacked[2]?.rect).toEqual({ x: 138, y: 4, w: 64, h: 64 });
+    expect(repacked[3]?.rect).toEqual({ x: 4, y: 71, w: 64, h: 64 });
+    expect(repacked.at(-1)?.rect).toEqual({ x: 473, y: 71, w: 64, h: 64 });
   });
 });
 
