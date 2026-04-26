@@ -544,6 +544,12 @@ button:disabled {
   font-weight: 800;
 }
 
+.wide-tool-button.secondary {
+  color: var(--text);
+  background: #172221;
+  border-color: #31504c;
+}
+
 .control-hint {
   margin: 0.65rem 0 0;
   color: var(--muted);
@@ -564,6 +570,43 @@ button:disabled {
   margin: 0.45rem 0 0;
   color: #78837e;
   font-size: 0.72rem;
+}
+
+.sheet-fit-summary {
+  display: grid;
+  gap: 0.15rem;
+  margin-top: 0.65rem;
+  padding: 0.55rem;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.sheet-fit-summary strong {
+  color: var(--text);
+  font-size: 0.78rem;
+}
+
+.sheet-fit-summary span,
+.sheet-fit-summary small {
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.sheet-fit-summary.is-valid {
+  border-color: #2f6f62;
+}
+
+.sheet-fit-summary.is-valid small {
+  color: var(--green);
+}
+
+.sheet-fit-summary.is-warning {
+  border-color: #76583a;
+}
+
+.sheet-fit-summary.is-warning small {
+  color: var(--amber);
 }
 
 .grid-candidate-list {

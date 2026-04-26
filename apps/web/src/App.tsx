@@ -17,7 +17,16 @@ import {
 } from "lucide-react";
 import type { DragEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AlphaMode, AssetMode, DownscaleMethod, FixOptions, GridCandidate, OutlineMode, PixelFixResult, RGBAImage } from "@pixelaid/shared";
+import type {
+  AlphaMode,
+  AssetMode,
+  DownscaleMethod,
+  FixOptions,
+  GridCandidate,
+  OutlineMode,
+  PixelFixResult,
+  RGBAImage
+} from "@pixelaid/shared";
 import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
@@ -43,6 +52,13 @@ import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId }
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
+import {
+  clampSheetInteger,
+  deriveSheetGridFromFrameSize,
+  getPivotForPreset,
+  summarizeSheetFit,
+  type PivotPreset
+} from "./lib/sheetControls";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -105,6 +121,10 @@ export function App() {
   const [sheetColumns, setSheetColumns] = useState(1);
   const [sheetMargin, setSheetMargin] = useState(0);
   const [sheetSpacing, setSheetSpacing] = useState(0);
+  const [sheetExtrude, setSheetExtrude] = useState(1);
+  const [pivotPreset, setPivotPreset] = useState<PivotPreset>("bottomCenter");
+  const [customPivotX, setCustomPivotX] = useState(16);
+  const [customPivotY, setCustomPivotY] = useState(32);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
@@ -133,6 +153,10 @@ export function App() {
   const gridCandidates = useMemo(() => (selectedAsset ? detectGridCandidates(selectedAsset.image, { maxScale: 32 }) : []), [selectedAsset]);
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
+  const sheetPivot = useMemo(
+    () => getPivotForPreset(pivotPreset, frameWidth, frameHeight, { x: customPivotX, y: customPivotY }),
+    [customPivotX, customPivotY, frameHeight, frameWidth, pivotPreset]
+  );
   const sheetOptions = useMemo(
     () => ({
       frameWidth,
@@ -141,12 +165,39 @@ export function App() {
       columns: sheetColumns,
       margin: sheetMargin,
       spacing: sheetSpacing,
-      extrude: 1
+      extrude: sheetExtrude,
+      pivot: sheetPivot
     }),
-    [frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+    [frameHeight, frameWidth, sheetColumns, sheetExtrude, sheetMargin, sheetPivot, sheetRows, sheetSpacing]
   );
   const sheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
+  const sheetCanvasSize = useMemo(
+    () => ({
+      width: fixResult?.image.width ?? targetWidth,
+      height: fixResult?.image.height ?? targetHeight
+    }),
+    [fixResult, targetHeight, targetWidth]
+  );
+  const sheetFit = useMemo(
+    () =>
+      summarizeSheetFit({
+        sheetWidth: sheetCanvasSize.width,
+        sheetHeight: sheetCanvasSize.height,
+        frameWidth,
+        frameHeight,
+        rows: sheetRows,
+        columns: sheetColumns,
+        margin: sheetMargin,
+        spacing: sheetSpacing
+      }),
+    [frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+  );
   const timelineState = getTimelineState(mode, sheetFrames.length);
+
+  useEffect(() => {
+    setCustomPivotX((current) => clampSheetInteger(current, 0, frameWidth));
+    setCustomPivotY((current) => clampSheetInteger(current, 0, frameHeight));
+  }, [frameHeight, frameWidth]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -193,6 +244,9 @@ export function App() {
           setFrameHeight(suggestion.targetHeight);
           setSheetRows(1);
           setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
+          setPivotPreset("bottomCenter");
+          setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
+          setCustomPivotY(suggestion.targetHeight);
           setGridScaleX(suggestion.gridScaleX);
           setGridScaleY(suggestion.gridScaleY);
           setGridDetect(suggestion.gridDetect);
@@ -314,6 +368,9 @@ export function App() {
     setFrameHeight(suggestion.targetHeight);
     setSheetRows(1);
     setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
+    setPivotPreset("bottomCenter");
+    setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
+    setCustomPivotY(suggestion.targetHeight);
     setMaxColors(suggestion.maxColors);
     setGridDetect(suggestion.gridDetect);
     setGridScaleX(suggestion.gridScaleX);
@@ -409,6 +466,31 @@ export function App() {
       );
     },
     [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
+  );
+
+  const fitSheetGridToFrameSize = useCallback(() => {
+    const nextGrid = deriveSheetGridFromFrameSize({
+      sheetWidth: sheetCanvasSize.width,
+      sheetHeight: sheetCanvasSize.height,
+      frameWidth,
+      frameHeight,
+      margin: sheetMargin,
+      spacing: sheetSpacing
+    });
+    setSheetRows(nextGrid.rows);
+    setSheetColumns(nextGrid.columns);
+    appendLog(`Fit sheet grid to ${nextGrid.columns} columns x ${nextGrid.rows} rows`);
+  }, [appendLog, frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetMargin, sheetSpacing]);
+
+  const changePivotPreset = useCallback(
+    (value: string) => {
+      if (value === "custom") {
+        setCustomPivotX(sheetPivot.x);
+        setCustomPivotY(sheetPivot.y);
+      }
+      setPivotPreset(value as PivotPreset);
+    },
+    [sheetPivot]
   );
 
   const applyGridCandidate = useCallback(
@@ -701,7 +783,47 @@ export function App() {
         <NumberField label="Columns" value={sheetColumns} min={1} onChange={setSheetColumns} />
         <NumberField label="Margin" value={sheetMargin} min={0} onChange={setSheetMargin} />
         <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={setSheetSpacing} />
-        <p className="field-note">Frame size describes each sprite tile inside the larger fixed sheet. Bounds are shown in the viewport.</p>
+        <NumberField label="Extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
+        <button type="button" className="wide-tool-button secondary" onClick={fitSheetGridToFrameSize}>
+          Fit Rows / Columns
+        </button>
+        <div className={`sheet-fit-summary${sheetFit.fits ? " is-valid" : " is-warning"}`}>
+          <strong>{sheetFit.frameCount} frames</strong>
+          <span>
+            {sheetFit.usedWidth}x{sheetFit.usedHeight} on {sheetCanvasSize.width}x{sheetCanvasSize.height}
+          </span>
+          <small>{sheetFit.message}</small>
+        </div>
+        <SelectField
+          label="Pivot"
+          value={pivotPreset}
+          options={[
+            ["bottomCenter", "Bottom center"],
+            ["center", "Center"],
+            ["topLeft", "Top left"],
+            ["custom", "Custom"]
+          ]}
+          onChange={changePivotPreset}
+        />
+        <NumberField
+          label="Pivot X"
+          value={sheetPivot.x}
+          min={0}
+          max={frameWidth}
+          disabled={pivotPreset !== "custom"}
+          onChange={(value) => setCustomPivotX(clampSheetInteger(value, 0, frameWidth))}
+        />
+        <NumberField
+          label="Pivot Y"
+          value={sheetPivot.y}
+          min={0}
+          max={frameHeight}
+          disabled={pivotPreset !== "custom"}
+          onChange={(value) => setCustomPivotY(clampSheetInteger(value, 0, frameHeight))}
+        />
+        <p className="field-note">
+          Frame size describes each sprite tile inside the fixed sheet. Margin starts the first cell, spacing is the gutter, extrude is export padding metadata, and pivot is stored per frame in native pixels.
+        </p>
       </>
     ) : (
       <p className="field-note">Frame controls activate for sprite sheet, character sheet, and tile sheet modes.</p>
@@ -722,8 +844,8 @@ export function App() {
       <>
         <Field label="Target" value="Generic JSON" />
         <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
-        <ReadonlyField label="Spacing" value="0" />
-        <ReadonlyField label="Extrude" value="1" />
+        <ReadonlyField label="Spacing" value={String(sheetMode ? sheetSpacing : 0)} />
+        <ReadonlyField label="Extrude" value={String(sheetMode ? sheetExtrude : 0)} />
       </>
     )
   };
