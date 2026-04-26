@@ -117,6 +117,38 @@ function outlinedSheetWithLabels(): RGBAImage {
   return image;
 }
 
+function unevenGutterSheetWithoutBorders(): RGBAImage {
+  const image = createImage(430, 240);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { labelX: 18, y: 20, frames: 4 },
+    { labelX: 18, y: 88, frames: 6 },
+    { labelX: 18, y: 156, frames: 5 }
+  ];
+  const startX = 92;
+  const cellWidth = 54;
+  const cellHeight = 44;
+  const widths = [28, 34, 24, 31, 36, 26];
+
+  for (const row of rows) {
+    drawBlock(image, row.labelX, row.y + 16, 34, 10, 0, 240, 240, 255);
+    for (let column = 0; column < row.frames; column += 1) {
+      const contentWidth = widths[column]!;
+      const cellX = startX + column * cellWidth;
+      const contentX = cellX + Math.floor((cellWidth - contentWidth) / 2);
+      drawBlock(image, contentX, row.y, contentWidth, cellHeight, 70, 75, 75, 255);
+      drawBlock(image, contentX + Math.floor(contentWidth / 3), row.y + 9, Math.max(8, Math.floor(contentWidth / 3)), 24, 92, 160, 150, 255);
+    }
+  }
+
+  return image;
+}
+
 function drawBlock(
   image: RGBAImage,
   startX: number,
@@ -611,6 +643,26 @@ describe("sheet slicing", () => {
     expect(detection.frames[0]!.rect).toEqual({ x: 84, y: 18, w: 48, h: 42 });
     expect(detection.frames[4]!.name).toBe("row_2_000");
     expect(detection.warnings).toContain("Detected outlined cell separators; frame boxes may need review if the grid lines are decorative.");
+    expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("normalizes uneven gutters from content centers when sheets have no cell borders", () => {
+    const detection = detectSheetLayout(unevenGutterSheetWithoutBorders());
+
+    expect(detection).toMatchObject({
+      frameWidth: 54,
+      frameHeight: 44,
+      rows: 3,
+      columns: 6,
+      margin: 92,
+      spacing: 0,
+      rowFrameCounts: [4, 6, 5]
+    });
+    expect(detection.frames).toHaveLength(15);
+    expect(detection.frames[0]!.rect).toEqual({ x: 92, y: 20, w: 54, h: 44 });
+    expect(detection.frames[4]!.rect).toEqual({ x: 92, y: 88, w: 54, h: 44 });
+    expect(detection.frames[10]!.rect).toEqual({ x: 92, y: 156, w: 54, h: 44 });
+    expect(detection.warnings).toContain("Normalized uneven gutters from content centers; inspect frame boxes before export.");
     expect(detection.confidence).toBeGreaterThan(0.75);
   });
 

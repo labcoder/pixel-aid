@@ -13,6 +13,7 @@ type Segment = {
 type ResolvedSegments = {
   segments: Segment[];
   usedOutlinedCells: boolean;
+  usedContentCentering: boolean;
 };
 
 export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
@@ -60,7 +61,8 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
       return {
         band,
         segments: resolved.segments,
-        usedOutlinedCells: resolved.usedOutlinedCells
+        usedOutlinedCells: resolved.usedOutlinedCells,
+        usedContentCentering: resolved.usedContentCentering
       };
     })
     .filter((row) => row.segments.length > 0);
@@ -116,6 +118,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
   if (rawRows.some((row) => row.usedOutlinedCells)) {
     warnings.push("Detected outlined cell separators; frame boxes may need review if the grid lines are decorative.");
+  }
+  if (rawRows.some((row) => row.usedContentCentering)) {
+    warnings.push("Normalized uneven gutters from content centers; inspect frame boxes before export.");
   }
   if (rows < 2 || columns < 2) {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
@@ -237,10 +242,11 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
   const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
 
   if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
-    return { segments: outlinedSegments, usedOutlinedCells: true };
+    return { segments: outlinedSegments, usedOutlinedCells: true, usedContentCentering: false };
   }
 
-  return { segments: contentSegments, usedOutlinedCells: false };
+  const centeredSegments = normalizeUnevenContentSegments(contentSegments, image.width);
+  return { segments: centeredSegments.segments, usedOutlinedCells: false, usedContentCentering: centeredSegments.usedContentCentering };
 }
 
 function outlinedCellSegmentsForBand(
@@ -327,13 +333,57 @@ function chooseFrameSegments(segments: Segment[]): Segment[] {
   }
 
   const typicalGap = Math.max(1, medianInteger(gaps));
-  const largeGap = Math.max(20, typicalGap * 2.5);
+  const largeGap = Math.max(20, typicalGap * 1.6);
   const cutIndex = gaps.findIndex((gap, index) => gap >= largeGap && segments.length - index - 1 >= 2);
   const trimmed = cutIndex >= 0 ? segments.slice(cutIndex + 1) : segments;
   const widths = trimmed.map((segment) => segment.w);
   const typicalWidth = medianInteger(widths);
 
   return trimmed.filter((segment) => segment.w >= typicalWidth * 0.65 && segment.w <= typicalWidth * 1.45);
+}
+
+function normalizeUnevenContentSegments(
+  segments: Segment[],
+  imageWidth: number
+): { segments: Segment[]; usedContentCentering: boolean } {
+  if (segments.length < 2) {
+    return { segments, usedContentCentering: false };
+  }
+
+  const centers = segments.map((segment) => segment.x + segment.w / 2);
+  const centerGaps: number[] = [];
+  for (let index = 1; index < centers.length; index += 1) {
+    centerGaps.push(centers[index]! - centers[index - 1]!);
+  }
+
+  const pitch = Math.max(1, medianInteger(centerGaps));
+  const typicalWidth = Math.max(1, medianInteger(segments.map((segment) => segment.w)));
+  const minGap = Math.min(...centerGaps);
+  const maxGap = Math.max(...centerGaps);
+  const minWidth = Math.min(...segments.map((segment) => segment.w));
+  const maxWidth = Math.max(...segments.map((segment) => segment.w));
+  const centerGapSpread = (maxGap - minGap) / pitch;
+  const widthSpread = (maxWidth - minWidth) / typicalWidth;
+  const contentOccupancy = typicalWidth / pitch;
+
+  if (contentOccupancy >= 0.78 || (centerGapSpread < 0.12 && widthSpread < 0.18)) {
+    return { segments, usedContentCentering: false };
+  }
+
+  if (centerGaps.some((gap) => Math.abs(gap - pitch) > pitch * 0.28)) {
+    return { segments, usedContentCentering: false };
+  }
+
+  const starts = centers.map((center, index) => center - index * pitch - pitch / 2);
+  const gridStart = Math.max(0, Math.round(medianNumber(starts)));
+  const maxX = Math.max(0, imageWidth - pitch);
+  return {
+    segments: segments.map((_, index) => ({
+      x: Math.max(0, Math.min(maxX, gridStart + index * pitch)),
+      w: pitch
+    })),
+    usedContentCentering: true
+  };
 }
 
 function totalSegmentWidth(segments: Segment[]): number {
@@ -360,6 +410,20 @@ function medianInteger(values: number[]): number {
   }
 
   return Math.round((sorted[middle - 1]! + sorted[middle]!) / 2);
+}
+
+function medianNumber(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 1) {
+    return sorted[middle]!;
+  }
+
+  return (sorted[middle - 1]! + sorted[middle]!) / 2;
 }
 
 function emptyDetection(reason: string): SheetLayoutDetection {
