@@ -200,6 +200,43 @@ button:disabled {
   padding: 0;
 }
 
+.import-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.7rem;
+  padding: 0.48rem 0.6rem;
+  color: var(--cyan);
+  background: #10201f;
+  border: 1px solid #214744;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.activity-dot {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  background: var(--cyan);
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 #52fff066;
+  animation: pulse-status 1.05s ease-in-out infinite;
+}
+
+@keyframes pulse-status {
+  0%,
+  100% {
+    opacity: 0.45;
+    box-shadow: 0 0 0 0 #52fff000;
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 0 5px #52fff024;
+  }
+}
+
 .asset-list li {
   margin: 0;
 }
@@ -471,6 +508,13 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 6px;
   transform: translate(-50%, -50%);
+}
+
+.viewport-busy-state {
+  z-index: 3;
+  color: var(--cyan);
+  border-color: #214744;
+  box-shadow: 0 18px 38px #00000070;
 }
 
 .control-group summary {

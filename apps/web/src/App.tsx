@@ -68,6 +68,10 @@ import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 
+function waitForNextPaint(): Promise<void> {
+  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
 const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: string; tooltip: string }> = {
   asset: {
     title: "Asset",
@@ -108,6 +112,7 @@ export function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [logs, setLogs] = useState(defaultLogLines);
   const [isDropActive, setIsDropActive] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
@@ -159,6 +164,7 @@ export function App() {
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+  const isImporting = importStatus !== null;
   const sourcePalette = useMemo(
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
     [selectedAsset]
@@ -301,39 +307,53 @@ export function App() {
         return;
       }
 
-      for (const file of imageFiles) {
-        try {
-          const asset = await decodeImageFile(file);
-          setAssets((current) => {
-            const withoutDuplicate = current.filter((item) => item.id !== asset.id);
-            return [asset, ...withoutDuplicate];
-          });
-          setSelectedAssetId(asset.id);
-          setFixResult(null);
-          const suggestion = suggestFixSettings(asset.image);
-          setMode(suggestion.mode);
-          setTargetWidth(suggestion.targetWidth);
-          setTargetHeight(suggestion.targetHeight);
-          setFrameWidth(suggestion.targetWidth);
-          setFrameHeight(suggestion.targetHeight);
-          setSheetRows(1);
-          setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
-          setIsPlaying(false);
-          setPivotPreset("bottomCenter");
-          setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
-          setCustomPivotY(suggestion.targetHeight);
-          setGridScaleX(suggestion.gridScaleX);
-          setGridScaleY(suggestion.gridScaleY);
-          setGridDetect(suggestion.gridDetect);
-          setCropToBounds(suggestion.mode === "single");
-          setDownscale(suggestion.downscale);
-          setAlpha(suggestion.alpha);
-          setMaxColors(suggestion.maxColors);
-          setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
-          appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
-        } catch (error) {
-          appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
+      setImportStatus(`Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
+      await waitForNextPaint();
+
+      try {
+        for (const file of imageFiles) {
+          try {
+            setImportStatus(`Decoding ${file.name}...`);
+            await waitForNextPaint();
+
+            const asset = await decodeImageFile(file);
+            setAssets((current) => {
+              const withoutDuplicate = current.filter((item) => item.id !== asset.id);
+              return [asset, ...withoutDuplicate];
+            });
+            setSelectedAssetId(asset.id);
+            setFixResult(null);
+
+            setImportStatus(`Analyzing ${asset.name}...`);
+            await waitForNextPaint();
+
+            const suggestion = suggestFixSettings(asset.image);
+            setMode(suggestion.mode);
+            setTargetWidth(suggestion.targetWidth);
+            setTargetHeight(suggestion.targetHeight);
+            setFrameWidth(suggestion.targetWidth);
+            setFrameHeight(suggestion.targetHeight);
+            setSheetRows(1);
+            setSheetColumns(suggestion.mode === "spriteSheet" ? 2 : 1);
+            setIsPlaying(false);
+            setPivotPreset("bottomCenter");
+            setCustomPivotX(Math.floor(suggestion.targetWidth / 2));
+            setCustomPivotY(suggestion.targetHeight);
+            setGridScaleX(suggestion.gridScaleX);
+            setGridScaleY(suggestion.gridScaleY);
+            setGridDetect(suggestion.gridDetect);
+            setCropToBounds(suggestion.mode === "single");
+            setDownscale(suggestion.downscale);
+            setAlpha(suggestion.alpha);
+            setMaxColors(suggestion.maxColors);
+            setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
+            appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
+          } catch (error) {
+            appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
+          }
         }
+      } finally {
+        setImportStatus(null);
       }
     },
     [appendLog]
@@ -1036,11 +1056,11 @@ export function App() {
           </div>
         </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button" onClick={() => fileInputRef.current?.click()}>
+          <button type="button" disabled={isImporting} onClick={() => fileInputRef.current?.click()}>
             <Upload size={16} />
-            Import
+            {isImporting ? "Importing" : "Import"}
           </button>
-          <button type="button" disabled={!selectedAsset || isFixing} onClick={runFix}>
+          <button type="button" disabled={!selectedAsset || isFixing || isImporting} onClick={runFix}>
             <WandSparkles size={16} />
             {isFixing ? "Fixing" : "Fix"}
           </button>
@@ -1059,6 +1079,12 @@ export function App() {
         <PanelHeader icon={<Layers size={16} />} title="Project" />
         <section className="panel-section">
           <SectionTitle title="Assets" docsId="assets" tooltip="Imported source files, dimensions, thumbnails, and removal controls." onDocs={openDocs} />
+          {importStatus ? (
+            <div className="import-status" role="status" aria-live="polite">
+              <span className="activity-dot" />
+              <span>{importStatus}</span>
+            </div>
+          ) : null}
           <ul className="asset-list">
             {assets.length === 0 ? (
               <li className="muted-row">
@@ -1179,6 +1205,12 @@ export function App() {
           selectedFrameIndex={selectedFrameIndex}
           onZoomChange={setZoom}
         />
+        {importStatus ? (
+          <div className="viewport-empty-state viewport-busy-state" role="status" aria-live="polite">
+            <span className="activity-dot" />
+            <span>{importStatus}</span>
+          </div>
+        ) : null}
       </section>
 
       <aside className="right-panel panel" aria-label="Inspector">
