@@ -40,7 +40,68 @@ describe("playback model", () => {
     expect(next).toEqual({
       frameIndex: 2,
       accumulatorMs: 60,
+      playDirection: 1,
       playing: true
+    });
+  });
+
+  test("ticks in reverse direction", () => {
+    const next = tickPlayback({
+      frameCount: 4,
+      frameIndex: 3,
+      accumulatorMs: 0,
+      deltaMs: 110,
+      fps: 10,
+      loop: true,
+      direction: "reverse",
+      playDirection: -1
+    });
+
+    expect(next).toEqual({
+      frameIndex: 2,
+      accumulatorMs: 10,
+      playDirection: -1,
+      playing: true
+    });
+  });
+
+  test("bounces at the ends in ping-pong direction", () => {
+    const next = tickPlayback({
+      frameCount: 4,
+      frameIndex: 3,
+      accumulatorMs: 0,
+      deltaMs: 110,
+      fps: 10,
+      loop: true,
+      direction: "ping-pong",
+      playDirection: 1
+    });
+
+    expect(next).toEqual({
+      frameIndex: 2,
+      accumulatorMs: 10,
+      playDirection: -1,
+      playing: true
+    });
+  });
+
+  test("stops ping-pong playback after returning to the first frame when loop is disabled", () => {
+    const next = tickPlayback({
+      frameCount: 3,
+      frameIndex: 1,
+      accumulatorMs: 0,
+      deltaMs: 220,
+      fps: 10,
+      loop: false,
+      direction: "ping-pong",
+      playDirection: -1
+    });
+
+    expect(next).toEqual({
+      frameIndex: 0,
+      accumulatorMs: 0,
+      playDirection: -1,
+      playing: false
     });
   });
 
