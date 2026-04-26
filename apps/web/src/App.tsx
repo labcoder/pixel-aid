@@ -44,7 +44,7 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
-import { renameAnimationTag, updateAnimationTagTiming } from "./lib/animationTags";
+import { applyFrameDurationOverrides, renameAnimationTag, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -156,6 +156,7 @@ export function App() {
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
+  const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -213,7 +214,11 @@ export function App() {
     [frameHeight, frameWidth, sheetColumns, sheetExtrude, sheetMargin, sheetPivot, sheetRows, sheetSpacing]
   );
   const manualSheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
-  const sheetFrames = sheetMode && detectedSheetFrames.length > 0 ? detectedSheetFrames : manualSheetFrames;
+  const baseSheetFrames = sheetMode && detectedSheetFrames.length > 0 ? detectedSheetFrames : manualSheetFrames;
+  const sheetFrames = useMemo(
+    () => applyFrameDurationOverrides(baseSheetFrames, frameDurationOverrides),
+    [baseSheetFrames, frameDurationOverrides]
+  );
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
   const plannedSheetOutputSize = useMemo(
     () => ({
@@ -385,6 +390,7 @@ export function App() {
     setDetectedSheetFrames([]);
     setDetectedRowAnimations([]);
     setDetectedSheetWarnings([]);
+    setFrameDurationOverrides({});
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
@@ -403,6 +409,7 @@ export function App() {
     setDetectedSheetFrames(layout?.frames ?? []);
     setDetectedRowAnimations(layout?.rowAnimations ?? []);
     setDetectedSheetWarnings(layout?.warnings ?? []);
+    setFrameDurationOverrides({});
     setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
     setIsPlaying(false);
     setPivotPreset("bottomCenter");
@@ -724,6 +731,27 @@ export function App() {
     setPlaybackFps(clampFps(value));
     playbackAccumulatorRef.current = 0;
   }, []);
+
+  const updateSelectedFrameDuration = useCallback(
+    (durationMs: number) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      const updatedFrame = updateFrameDuration({ frames: [currentFrame], frameName: currentFrame.name, durationMs })[0];
+      if (!updatedFrame) {
+        return;
+      }
+
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      setFrameDurationOverrides((current) => ({
+        ...current,
+        [currentFrame.name]: updatedFrame.durationMs
+      }));
+    },
+    [currentFrame]
+  );
 
   const selectPlaybackFrame = useCallback(
     (index: number) => {
@@ -1634,6 +1662,18 @@ export function App() {
                       onChange={(event) => changePlaybackFps(Number(event.currentTarget.value))}
                     />
                   </label>
+                  <label className="player-number">
+                    <span>Duration ms</span>
+                    <input
+                      className="duration-input"
+                      type="number"
+                      min="1"
+                      max="60000"
+                      value={currentFrame ? Math.round(currentFrame.durationMs) : 0}
+                      disabled={!currentFrame}
+                      onChange={(event) => updateSelectedFrameDuration(Number(event.currentTarget.value))}
+                    />
+                  </label>
                   <label className="player-loop">
                     <input type="checkbox" checked={playbackLoop} onChange={(event) => setPlaybackLoop(event.currentTarget.checked)} />
                     Loop
@@ -1720,19 +1760,22 @@ export function App() {
                       key={frame.name}
                       type="button"
                       className={globalFrameIndex === selectedFrameIndex ? "active" : ""}
-                      title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`}
+                      title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.durationMs)}ms`}
                       onClick={() => selectPlaybackFrame(index)}
                     >
                       <strong>{index + 1}</strong>
                       <span>{frame.rect.w}x{frame.rect.h}</span>
                       <small>
-                        {frame.pivot.x},{frame.pivot.y}
+                        {Math.round(frame.durationMs)}ms
                       </small>
                     </button>
                     );
                   })}
                 </div>
-                <p className="field-note">Select a frame to highlight its bounds and pivot in the viewport.</p>
+                <p className="field-note">
+                  Select a frame to highlight its bounds and pivot in the viewport. Frame duration is used for playback and export;
+                  clip FPS is the fallback speed for frames without custom timing.
+                </p>
               </>
             ) : (
               <p className="empty-panel-message">{timelineState.message}</p>

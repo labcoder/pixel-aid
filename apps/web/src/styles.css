@@ -1093,6 +1093,10 @@ button:disabled {
   text-align: right;
 }
 
+.player-number input.duration-input {
+  width: 68px;
+}
+
 .player-number select {
   width: 94px;
   text-align: left;
