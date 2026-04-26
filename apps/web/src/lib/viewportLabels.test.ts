@@ -6,6 +6,7 @@ describe("viewport labels", () => {
     expect(getViewportModeLabel("before")).toBe("Input");
     expect(getViewportModeLabel("after")).toBe("Output");
     expect(getViewportModeLabel("split")).toBe("Compare");
+    expect(getViewportModeLabel("timeline")).toBe("Timeline");
   });
 
   test("uses input and output in the viewport title", () => {

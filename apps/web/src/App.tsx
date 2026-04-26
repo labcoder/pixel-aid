@@ -38,7 +38,7 @@ import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
-import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import { ViewportCanvas } from "./components/ViewportCanvas";
 import {
   ALL_ANIMATIONS,
   getAnimationFrameIndexes,
@@ -47,6 +47,7 @@ import {
 } from "./lib/animationTimeline";
 import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
 import { removeAssetAndSelectNext } from "./lib/assets";
+import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import {
@@ -114,6 +115,7 @@ import {
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
+import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type EditorViewMode } from "./lib/viewportModes";
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -164,7 +166,7 @@ export function App() {
   const [isDropActive, setIsDropActive] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
   const [mode, setMode] = useState<AssetMode>("single");
@@ -337,14 +339,15 @@ export function App() {
       }),
     [fixResult?.grid, fixResult?.image, mode]
   );
+  const canvasViewMode = getCanvasViewMode(viewMode, fixResult !== null);
   const viewportNativeReadout = useMemo(
     () =>
       getViewportNativeReadout({
-        viewMode,
+        viewMode: canvasViewMode,
         sourceImage: selectedAsset?.image ?? null,
         fixedImage: fixResult?.image ?? null
       }),
-    [fixResult?.image, selectedAsset?.image, viewMode]
+    [canvasViewMode, fixResult?.image, selectedAsset?.image]
   );
   const onionSkinPlacements = useMemo(
     () =>
@@ -375,6 +378,9 @@ export function App() {
     [detectedRowAnimations, detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings]
   );
   const timelineState = getTimelineState(mode, timelineFrames.length);
+  const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
+  const bottomPanelSections = useMemo(() => getBottomPanelSections(mode), [mode]);
+  const showTimelinePanel = bottomPanelSections.includes("timeline");
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
   const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
   const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
@@ -419,6 +425,10 @@ export function App() {
     if (mode === "characterSheet") {
       setMode("spriteSheet");
     }
+  }, [mode]);
+
+  useEffect(() => {
+    setViewMode((current) => coerceEditorViewMode(mode, current));
   }, [mode]);
 
   useEffect(() => {
@@ -1882,15 +1892,16 @@ export function App() {
             <span>{getViewportModeLabel(viewMode)} view</span>
           </div>
           <div className="view-controls" aria-label="Viewport mode controls">
-            <button type="button" className={viewMode === "before" ? "active" : ""} onClick={() => setViewMode("before")}>
-              {getViewportModeLabel("before")}
-            </button>
-            <button type="button" className={viewMode === "split" ? "active" : ""} onClick={() => setViewMode("split")}>
-              {getViewportModeLabel("split")}
-            </button>
-            <button type="button" className={viewMode === "after" ? "active" : ""} onClick={() => setViewMode("after")}>
-              {getViewportModeLabel("after")}
-            </button>
+            {editorViewModes.map((modeOption) => (
+              <button
+                key={modeOption}
+                type="button"
+                className={viewMode === modeOption ? "active" : ""}
+                onClick={() => setViewMode(modeOption)}
+              >
+                {getViewportModeLabel(modeOption)}
+              </button>
+            ))}
           </div>
           <div className="viewport-readouts">
             <span>{viewportNativeReadout}</span>
@@ -1902,7 +1913,7 @@ export function App() {
           sourceImage={selectedAsset?.image ?? null}
           fixedImage={fixResult?.image ?? null}
           fixedSourceRect={fixedComparisonSourceRect}
-          viewMode={viewMode}
+          viewMode={canvasViewMode}
           zoom={zoom}
           showGrid={showGrid}
           sourceFrames={sourceSheetFrames}
@@ -1988,10 +1999,12 @@ export function App() {
           onPointerCancel={onBottomResizePointerUp}
         />
         <div className="tab-strip" role="tablist" aria-label="Bottom panels">
-          <button type="button" className="active">
-            <Play size={15} />
-            Timeline
-          </button>
+          {showTimelinePanel ? (
+            <button type="button" className="active">
+              <Play size={15} />
+              Timeline
+            </button>
+          ) : null}
           <button type="button">
             <Terminal size={15} />
             Logs
@@ -2001,7 +2014,8 @@ export function App() {
             Metrics
           </button>
         </div>
-        <div className="bottom-content">
+        <div className={showTimelinePanel ? "bottom-content" : "bottom-content without-timeline"}>
+          {showTimelinePanel ? (
           <section>
             <h2>Sprite Player</h2>
             {timelineState.enabled ? (
@@ -2213,6 +2227,7 @@ export function App() {
               <p className="empty-panel-message">{timelineState.message}</p>
             )}
           </section>
+          ) : null}
           <section>
             <h2>Console</h2>
             <ol className="log-list">

@@ -1,12 +1,13 @@
-import type { ViewMode } from "../components/ViewportCanvas";
+import type { EditorViewMode } from "./viewportModes";
 
-const viewportModeLabels: Record<ViewMode, string> = {
+const viewportModeLabels: Record<EditorViewMode, string> = {
   before: "Input",
   split: "Compare",
-  after: "Output"
+  after: "Output",
+  timeline: "Timeline"
 };
 
-export function getViewportModeLabel(mode: ViewMode): string {
+export function getViewportModeLabel(mode: EditorViewMode): string {
   return viewportModeLabels[mode];
 }
 
