@@ -1021,8 +1021,8 @@ button:disabled {
 }
 
 .player-controls {
-  display: grid;
-  grid-template-columns: 32px 78px 32px minmax(120px, 1fr) 62px auto;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.45rem;
   align-items: center;
   margin-top: 0.65rem;
@@ -1056,7 +1056,8 @@ button:disabled {
   accent-color: var(--cyan);
 }
 
-.player-number input {
+.player-number input,
+.player-number select {
   width: 42px;
   height: 30px;
   color: var(--text);
@@ -1064,6 +1065,15 @@ button:disabled {
   border: 1px solid var(--line);
   border-radius: 5px;
   text-align: right;
+}
+
+.player-number select {
+  width: 94px;
+  text-align: left;
+}
+
+.player-scrub {
+  flex: 1 1 160px;
 }
 
 .player-loop input {

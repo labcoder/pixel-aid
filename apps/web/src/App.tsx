@@ -37,6 +37,12 @@ import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
+import {
+  ALL_ANIMATIONS,
+  getAnimationFrameIndexes,
+  getFrameIndexFromTimelinePosition,
+  getTimelinePositionForFrame
+} from "./lib/animationTimeline";
 import { removeAssetAndSelectNext } from "./lib/assets";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -141,6 +147,7 @@ export function App() {
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
+  const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
@@ -232,9 +239,15 @@ export function App() {
       }),
     [frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
-  const timelineState = getTimelineState(mode, sheetFrames.length);
-  const canScrubTimeline = timelineState.enabled && sheetFrames.length > 0;
-  const canPlayTimeline = timelineState.enabled && sheetFrames.length > 1;
+  const animationFrameIndexes = useMemo(
+    () => getAnimationFrameIndexes(sheetFrames, detectedRowAnimations, selectedAnimationName),
+    [detectedRowAnimations, selectedAnimationName, sheetFrames]
+  );
+  const timelineFrames = useMemo(() => animationFrameIndexes.map((index) => sheetFrames[index]!).filter(Boolean), [animationFrameIndexes, sheetFrames]);
+  const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
+  const timelineState = getTimelineState(mode, timelineFrames.length);
+  const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
+  const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
   const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
 
   useEffect(() => {
@@ -257,19 +270,30 @@ export function App() {
   }, [sheetFrames.length]);
 
   useEffect(() => {
+    if (animationFrameIndexes.length === 0) {
+      return;
+    }
+    if (!animationFrameIndexes.includes(selectedFrameIndexRef.current)) {
+      const nextIndex = animationFrameIndexes[0]!;
+      selectedFrameIndexRef.current = nextIndex;
+      setSelectedFrameIndex(nextIndex);
+    }
+  }, [animationFrameIndexes]);
+
+  useEffect(() => {
     selectedFrameIndexRef.current = selectedFrameIndex;
   }, [selectedFrameIndex]);
 
   useEffect(() => {
-    if (!timelineState.enabled || sheetFrames.length <= 1) {
+    if (!timelineState.enabled || timelineFrames.length <= 1) {
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
       playbackLastTimeRef.current = null;
     }
-  }, [sheetFrames.length, timelineState.enabled]);
+  }, [timelineFrames.length, timelineState.enabled]);
 
   useEffect(() => {
-    if (!isPlaying || !timelineState.enabled || sheetFrames.length <= 1) {
+    if (!isPlaying || !timelineState.enabled || timelineFrames.length <= 1) {
       playbackLastTimeRef.current = null;
       return undefined;
     }
@@ -279,19 +303,20 @@ export function App() {
       const lastTime = playbackLastTimeRef.current ?? now;
       playbackLastTimeRef.current = now;
       const next = tickPlayback({
-        frameCount: sheetFrames.length,
-        frameIndex: selectedFrameIndexRef.current,
+        frameCount: timelineFrames.length,
+        frameIndex: getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndexRef.current),
         accumulatorMs: playbackAccumulatorRef.current,
         deltaMs: now - lastTime,
         fps: playbackFps,
         loop: playbackLoop,
-        frames: sheetFrames
+        frames: timelineFrames
       });
+      const nextFrameIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
 
       playbackAccumulatorRef.current = next.accumulatorMs;
-      if (next.frameIndex !== selectedFrameIndexRef.current) {
-        selectedFrameIndexRef.current = next.frameIndex;
-        setSelectedFrameIndex(next.frameIndex);
+      if (nextFrameIndex !== selectedFrameIndexRef.current) {
+        selectedFrameIndexRef.current = nextFrameIndex;
+        setSelectedFrameIndex(nextFrameIndex);
       }
       if (!next.playing) {
         setIsPlaying(false);
@@ -302,7 +327,7 @@ export function App() {
 
     animationFrameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [isPlaying, playbackFps, playbackLoop, sheetFrames, timelineState.enabled]);
+  }, [animationFrameIndexes, isPlaying, playbackFps, playbackLoop, timelineFrames, timelineState.enabled]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -327,6 +352,7 @@ export function App() {
   const clearDetectedSheetLayout = useCallback(() => {
     setDetectedSheetFrames([]);
     setDetectedRowAnimations([]);
+    setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
   const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion) => {
@@ -343,6 +369,7 @@ export function App() {
     setSheetSpacing(layout?.spacing ?? 0);
     setDetectedSheetFrames(layout?.frames ?? []);
     setDetectedRowAnimations(layout?.rowAnimations ?? []);
+    setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
     setIsPlaying(false);
     setPivotPreset("bottomCenter");
     setCustomPivotX(Math.floor((layout?.frameWidth ?? suggestion.targetWidth) / 2));
@@ -666,29 +693,31 @@ export function App() {
 
   const selectPlaybackFrame = useCallback(
     (index: number) => {
-      const nextIndex = scrubPlayback({ frameCount: sheetFrames.length, frameIndex: index });
+      const nextPosition = scrubPlayback({ frameCount: timelineFrames.length, frameIndex: index });
+      const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, nextPosition);
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
     },
-    [sheetFrames.length]
+    [animationFrameIndexes, timelineFrames.length]
   );
 
   const stepTimelineFrame = useCallback(
     (direction: -1 | 1) => {
       const next = stepPlaybackFrame({
-        frameCount: sheetFrames.length,
-        frameIndex: selectedFrameIndexRef.current,
+        frameCount: timelineFrames.length,
+        frameIndex: getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndexRef.current),
         direction,
         loop: playbackLoop
       });
+      const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
       setIsPlaying(false);
       playbackAccumulatorRef.current = 0;
-      selectedFrameIndexRef.current = next.frameIndex;
-      setSelectedFrameIndex(next.frameIndex);
+      selectedFrameIndexRef.current = nextIndex;
+      setSelectedFrameIndex(nextIndex);
     },
-    [playbackLoop, sheetFrames.length]
+    [animationFrameIndexes, playbackLoop, timelineFrames.length]
   );
 
   const togglePlayback = useCallback(() => {
@@ -700,6 +729,12 @@ export function App() {
     playbackAccumulatorRef.current = 0;
     setIsPlaying((current) => !current);
   }, [canPlayTimeline]);
+
+  const changeSelectedAnimation = useCallback((value: string) => {
+    setIsPlaying(false);
+    playbackAccumulatorRef.current = 0;
+    setSelectedAnimationName(value);
+  }, []);
 
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
@@ -1369,6 +1404,19 @@ export function App() {
             {timelineState.enabled ? (
               <>
                 <div className="player-controls" aria-label="Sprite playback controls">
+                  {detectedRowAnimations.length > 0 ? (
+                    <label className="player-number">
+                      <span>Clip</span>
+                      <select value={selectedAnimationName} onChange={(event) => changeSelectedAnimation(event.currentTarget.value)}>
+                        <option value={ALL_ANIMATIONS}>All rows</option>
+                        {detectedRowAnimations.map((animation) => (
+                          <option key={animation.name} value={animation.name}>
+                            {animation.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <button type="button" disabled={!canPlayTimeline} aria-label="Previous frame" onClick={() => stepTimelineFrame(-1)}>
                     <SkipBack size={14} />
                   </button>
@@ -1384,9 +1432,9 @@ export function App() {
                     <input
                       type="range"
                       min="0"
-                      max={Math.max(0, sheetFrames.length - 1)}
+                      max={Math.max(0, timelineFrames.length - 1)}
                       step="1"
-                      value={Math.max(0, selectedFrameIndex)}
+                      value={Math.max(0, timelinePosition)}
                       disabled={!canScrubTimeline}
                       onChange={(event) => selectPlaybackFrame(Number(event.currentTarget.value))}
                     />
@@ -1408,17 +1456,19 @@ export function App() {
                 </div>
                 <div className="player-readout">
                   <strong>
-                    Frame {selectedFrameIndex >= 0 ? selectedFrameIndex + 1 : 0}/{sheetFrames.length}
+                    Frame {timelinePosition >= 0 ? timelinePosition + 1 : 0}/{timelineFrames.length}
                   </strong>
                   <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
                 </div>
                 <div className="timeline-rail">
-                  {sheetFrames.map((frame, index) => (
+                  {timelineFrames.map((frame, index) => {
+                    const globalFrameIndex = animationFrameIndexes[index] ?? index;
+                    return (
                     <button
                       key={frame.name}
                       type="button"
-                      className={index === selectedFrameIndex ? "active" : ""}
+                      className={globalFrameIndex === selectedFrameIndex ? "active" : ""}
                       title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`}
                       onClick={() => selectPlaybackFrame(index)}
                     >
@@ -1428,7 +1478,8 @@ export function App() {
                         {frame.pivot.x},{frame.pivot.y}
                       </small>
                     </button>
-                  ))}
+                    );
+                  })}
                 </div>
                 <p className="field-note">Select a frame to highlight its bounds and pivot in the viewport.</p>
               </>
