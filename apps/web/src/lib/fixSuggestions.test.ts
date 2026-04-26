@@ -24,6 +24,47 @@ function singleSpriteOnBrightBackground(): RGBAImage {
   return image;
 }
 
+function largeAnimationSheetLikeSource(): RGBAImage {
+  const image = blankImage(768, 512);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 10;
+    image.data[offset + 1] = 12;
+    image.data[offset + 2] = 12;
+    image.data[offset + 3] = 255;
+  }
+
+  const rows = [
+    { y: 24, cells: 5 },
+    { y: 98, cells: 8 },
+    { y: 172, cells: 6 },
+    { y: 246, cells: 9 },
+    { y: 320, cells: 7 },
+    { y: 394, cells: 9 }
+  ];
+
+  for (const row of rows) {
+    for (let column = 0; column < row.cells; column += 1) {
+      const x = 92 + column * 62;
+      drawRect(image, x, row.y, 60, 56, [70, 75, 75, 255]);
+      drawRect(image, x + 16, row.y + 10, 28, 32, [90, 178, 166, 255]);
+    }
+  }
+
+  return image;
+}
+
+function drawRect(image: RGBAImage, startX: number, startY: number, width: number, height: number, rgba: [number, number, number, number]) {
+  for (let y = startY; y < startY + height; y += 1) {
+    for (let x = startX; x < startX + width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      image.data[offset] = rgba[0];
+      image.data[offset + 1] = rgba[1];
+      image.data[offset + 2] = rgba[2];
+      image.data[offset + 3] = rgba[3];
+    }
+  }
+}
+
 describe("fix setting suggestions", () => {
   test("suggests sprite sheet mode for wide sources", () => {
     const suggestion = suggestFixSettings(blankImage(256, 64));
@@ -66,6 +107,14 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
     expect(suggestion.downscale).toBe("dominant");
+  });
+
+  test("suggests sprite sheet mode for large landscape animation sheets with rows", () => {
+    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.modeConfidence).toBeGreaterThan(0.75);
+    expect(suggestion.reason).toContain("multiple frames");
   });
 
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
