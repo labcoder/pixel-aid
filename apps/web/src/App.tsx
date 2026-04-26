@@ -36,6 +36,7 @@ import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
+import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
 import { ViewportCanvas, type ViewMode } from "./components/ViewportCanvas";
 import {
   ALL_ANIMATIONS,
@@ -58,6 +59,7 @@ import {
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
+import { getFramePreviewPlacement } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -158,6 +160,7 @@ export function App() {
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
   const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
+  const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(true);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
@@ -250,6 +253,17 @@ export function App() {
     [detectedRowAnimations, selectedAnimationName, sheetFrames]
   );
   const timelineFrames = useMemo(() => animationFrameIndexes.map((index) => sheetFrames[index]!).filter(Boolean), [animationFrameIndexes, sheetFrames]);
+  const sourceTimelineFrames = useMemo(
+    () => animationFrameIndexes.map((index) => sourceSheetFrames[index]!).filter(Boolean),
+    [animationFrameIndexes, sourceSheetFrames]
+  );
+  const previewFrames = fixResult ? timelineFrames : sourceTimelineFrames;
+  const previewImage = fixResult?.image ?? selectedAsset?.image ?? null;
+  const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
+  const framePreviewPlacement = useMemo(
+    () => getFramePreviewPlacement(previewFrames, timelinePosition, normalizeTimelineFrames),
+    [normalizeTimelineFrames, previewFrames, timelinePosition]
+  );
   const sheetDetectionNotes = useMemo(
     () =>
       detectedSheetFrames.length > 0
@@ -262,7 +276,6 @@ export function App() {
         : [],
     [detectedRowAnimations, detectedSheetFrames.length, detectedSheetWarnings]
   );
-  const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
   const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
@@ -1587,6 +1600,14 @@ export function App() {
                     <input type="checkbox" checked={playbackLoop} onChange={(event) => setPlaybackLoop(event.currentTarget.checked)} />
                     Loop
                   </label>
+                  <label className="player-loop">
+                    <input
+                      type="checkbox"
+                      checked={normalizeTimelineFrames}
+                      onChange={(event) => setNormalizeTimelineFrames(event.currentTarget.checked)}
+                    />
+                    Normalize
+                  </label>
                 </div>
                 <div className="player-readout">
                   <strong>
@@ -1594,6 +1615,18 @@ export function App() {
                   </strong>
                   <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
+                </div>
+                <div className="frame-preview-panel">
+                  <FramePreviewCanvas image={previewImage} placement={framePreviewPlacement} />
+                  <div className="frame-preview-meta">
+                    <strong>{framePreviewPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
+                    <span>
+                      {framePreviewPlacement
+                        ? `${framePreviewPlacement.canvas.width}x${framePreviewPlacement.canvas.height} pivot ${framePreviewPlacement.normalizedPivot.x},${framePreviewPlacement.normalizedPivot.y}`
+                        : "No preview frame"}
+                    </span>
+                    <small>{fixResult ? "Previewing fixed output" : "Previewing source frame bounds"}</small>
+                  </div>
                 </div>
                 {detectedRowAnimations.length > 0 ? (
                   <div className="clip-editor" aria-label="Detected animation clip metadata">

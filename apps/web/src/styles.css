@@ -1135,6 +1135,52 @@ button:disabled {
   color: var(--cyan);
 }
 
+.frame-preview-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 132px minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: stretch;
+  margin-top: 0.65rem;
+}
+
+.frame-preview-canvas {
+  width: 132px;
+  height: 96px;
+  display: block;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.frame-preview-meta {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 0.25rem;
+  padding: 0.55rem;
+  color: var(--muted);
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 0.72rem;
+}
+
+.frame-preview-meta strong {
+  color: var(--cyan);
+}
+
+.frame-preview-meta span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.frame-preview-meta small {
+  color: #78837e;
+}
+
 .clip-editor {
   display: grid;
   gap: 4px;
