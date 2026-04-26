@@ -91,6 +91,7 @@ import {
   type PivotPreset
 } from "./lib/sheetControls";
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
+import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 
@@ -525,7 +526,7 @@ export function App() {
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
         ...(useCustomOutlineColor ? { outlineColor } : {})
       },
-      ...(sheetMode ? { sheet: sheetOptions } : {})
+      ...(sheetMode ? { sheet: sheetOptions, sheetFrames: createSheetFixFramePlan(sheetFrames) } : {})
     };
 
     return options;
@@ -550,6 +551,7 @@ export function App() {
     preserveSinglePixelDetails,
     removeHalos,
     removeOrphans,
+    sheetFrames,
     sheetMode,
     sheetOptions,
     targetHeight,
