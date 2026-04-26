@@ -130,6 +130,36 @@ describe("fix setting suggestions", () => {
     expect(suggestion.sheetLayout?.rowAnimations).toHaveLength(6);
   });
 
+  test("packs detected sheet frames into clean output coordinates while preserving source rects", () => {
+    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+    const layout = suggestion.sheetLayout;
+
+    expect(layout).toBeDefined();
+    expect(layout?.margin).toBe(0);
+    expect(layout?.spacing).toBe(0);
+    expect(layout?.frames[0]).toMatchObject({
+      rect: { x: 0, y: 0, w: layout?.frameWidth, h: layout?.frameHeight }
+    });
+    expect(layout?.frames[0]?.sourceRect?.x).toBeGreaterThan(80);
+    expect(layout?.frames[0]?.sourceRect?.y).toBeGreaterThan(10);
+
+    const secondRowFirstFrame = layout?.frames[5];
+    expect(secondRowFirstFrame).toMatchObject({
+      rect: { x: 0, y: layout?.frameHeight, w: layout?.frameWidth, h: layout?.frameHeight }
+    });
+    expect(secondRowFirstFrame?.sourceRect?.x).toBeGreaterThan(80);
+    expect(secondRowFirstFrame?.sourceRect?.y).toBeGreaterThan(80);
+  });
+
+  test("targets the packed sheet dimensions from detected native frames", () => {
+    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+    const layout = suggestion.sheetLayout;
+
+    expect(layout).toBeDefined();
+    expect(suggestion.targetWidth).toBe((layout?.columns ?? 0) * (layout?.frameWidth ?? 0));
+    expect(suggestion.targetHeight).toBe((layout?.rows ?? 0) * (layout?.frameHeight ?? 0));
+  });
+
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
     const tinyScale: GridCandidate = {
       outputWidth: 353,

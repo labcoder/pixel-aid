@@ -1,5 +1,7 @@
 import { detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
-import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, Rect, RGBAImage, SheetLayoutDetection } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, Rect, RGBAImage, SheetLayoutDetection, SpriteFrame } from "@pixelaid/shared";
+
+const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 512] as const;
 
 export type FixSettingSuggestion = {
   mode: AssetMode;
@@ -36,11 +38,12 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
       : undefined;
+  const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
 
   return {
     mode,
-    targetWidth: outputWidth,
-    targetHeight: outputHeight,
+    targetWidth: targetSize.width,
+    targetHeight: targetSize.height,
     maxColors: mode === "tileSheet" ? 16 : 24,
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
@@ -57,19 +60,24 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
 function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number, scaleY: number): SheetLayoutDetection {
   const safeScaleX = Math.max(1, scaleX);
   const safeScaleY = Math.max(1, scaleY);
+  const frameWidth = snapNativeFrameSize(layout.frameWidth / safeScaleX);
+  const frameHeight = snapNativeFrameSize(layout.frameHeight / safeScaleY);
+  const frames = packDetectedFrames(layout, frameWidth, frameHeight);
+  const rowRects: Rect[] = layout.rowFrameCounts.map((frameCount, rowIndex) => ({
+    x: 0,
+    y: rowIndex * frameHeight,
+    w: frameCount * frameWidth,
+    h: frameHeight
+  }));
 
   return {
     ...layout,
-    frameWidth: Math.max(1, Math.round(layout.frameWidth / safeScaleX)),
-    frameHeight: Math.max(1, Math.round(layout.frameHeight / safeScaleY)),
-    margin: Math.max(0, Math.round(layout.margin / safeScaleX)),
-    spacing: Math.max(0, Math.round(layout.spacing / safeScaleX)),
-    frames: layout.frames.map((frame) => ({
-      ...frame,
-      rect: scaleRect(frame.rect, safeScaleX, safeScaleY),
-      sourceRect: frame.rect
-    })),
-    rowRects: layout.rowRects.map((rect) => scaleRect(rect, safeScaleX, safeScaleY)),
+    frameWidth,
+    frameHeight,
+    margin: 0,
+    spacing: 0,
+    frames,
+    rowRects,
     rowFrameCounts: [...layout.rowFrameCounts],
     rowAnimations: layout.rowAnimations.map((animation) => ({
       ...animation,
@@ -79,12 +87,58 @@ function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number,
   };
 }
 
-function scaleRect(rect: Rect, scaleX: number, scaleY: number): Rect {
+function packDetectedFrames(layout: SheetLayoutDetection, frameWidth: number, frameHeight: number): SpriteFrame[] {
+  const frames: SpriteFrame[] = [];
+  let frameIndex = 0;
+
+  for (let rowIndex = 0; rowIndex < layout.rowFrameCounts.length; rowIndex += 1) {
+    const rowFrameCount = layout.rowFrameCounts[rowIndex] ?? 0;
+    for (let column = 0; column < rowFrameCount; column += 1) {
+      const frame = layout.frames[frameIndex];
+      if (!frame) {
+        break;
+      }
+
+      frames.push({
+        ...frame,
+        rect: {
+          x: column * frameWidth,
+          y: rowIndex * frameHeight,
+          w: frameWidth,
+          h: frameHeight
+        },
+        sourceRect: frame.sourceRect ?? frame.rect,
+        pivot: { x: Math.floor(frameWidth / 2), y: frameHeight }
+      });
+      frameIndex += 1;
+    }
+  }
+
+  return frames;
+}
+
+function snapNativeFrameSize(value: number): number {
+  const rounded = Math.max(1, Math.round(value));
+  let best = rounded;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const size of commonNativeFrameSizes) {
+    const distance = Math.abs(size - value);
+    if (distance <= bestDistance) {
+      best = size;
+      bestDistance = distance;
+    }
+  }
+
+  const relativeDistance = bestDistance / Math.max(1, value);
+  return relativeDistance <= 0.18 || bestDistance <= 4 ? best : rounded;
+}
+
+function packedSheetSize(layout: SheetLayoutDetection): { width: number; height: number } {
+  const widestRow = Math.max(1, ...layout.rowFrameCounts);
   return {
-    x: Math.round(rect.x / scaleX),
-    y: Math.round(rect.y / scaleY),
-    w: Math.max(1, Math.round(rect.w / scaleX)),
-    h: Math.max(1, Math.round(rect.h / scaleY))
+    width: layout.margin * 2 + widestRow * layout.frameWidth + Math.max(0, widestRow - 1) * layout.spacing,
+    height: layout.margin * 2 + layout.rows * layout.frameHeight + Math.max(0, layout.rows - 1) * layout.spacing
   };
 }
 
