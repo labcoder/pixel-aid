@@ -140,8 +140,26 @@ export type SheetLayoutDetection = {
   rowFrameCounts: number[];
   rowAnimations: AnimationTag[];
   confidence: number;
+  diagnostics?: SheetLayoutDiagnostics;
   reason: string;
   warnings: string[];
+};
+
+export type SheetLayoutDiagnostics = {
+  rowConfidence: {
+    label: "low" | "medium" | "high";
+    rowCount: number;
+    averageBandHeight: number;
+    heightSpreadRatio: number;
+  };
+  columnConfidence: {
+    label: "low" | "medium" | "high";
+    columnCount: number;
+    pitchPx: number;
+    maxCenterDriftPx: number;
+    mergedComponentCount: number;
+  };
+  notes: string[];
 };
 
 export type SpriteAnimation = {

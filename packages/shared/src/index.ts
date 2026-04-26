@@ -17,6 +17,7 @@ export type {
   Rect,
   RGBAImage,
   SheetLayoutDetection,
+  SheetLayoutDiagnostics,
   SheetSliceOptions,
   SpriteAnimation,
   SpriteFrame,

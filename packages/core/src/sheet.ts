@@ -1,4 +1,4 @@
-import type { Rect, RGBAImage, SheetLayoutDetection, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { Rect, RGBAImage, SheetLayoutDetection, SheetLayoutDiagnostics, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 
 type Band = {
   start: number;
@@ -10,10 +10,26 @@ type Segment = {
   w: number;
 };
 
+type ComponentMergeResult = {
+  segments: Segment[];
+  usedComponentMerging: boolean;
+  mergedComponentCount: number;
+};
+
+type DriftNormalizationResult = {
+  segments: Segment[];
+  usedDriftFitting: boolean;
+  maxCenterDriftPx: number;
+};
+
 type ResolvedSegments = {
   segments: Segment[];
   usedOutlinedCells: boolean;
   usedContentCentering: boolean;
+  usedComponentMerging: boolean;
+  usedDriftFitting: boolean;
+  mergedComponentCount: number;
+  maxCenterDriftPx: number;
 };
 
 export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
@@ -55,17 +71,23 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
 
   const rowBands = bandsFromCounts(rowCounts, rowThreshold, 3, 12);
-  const rawRows = rowBands
+  const rawRows = alignDetectedRowsToSharedColumns(
+    rowBands
     .map((band) => {
       const resolved = resolveFrameSegments(image, band, background);
       return {
         band,
         segments: resolved.segments,
         usedOutlinedCells: resolved.usedOutlinedCells,
-        usedContentCentering: resolved.usedContentCentering
+        usedContentCentering: resolved.usedContentCentering,
+        usedComponentMerging: resolved.usedComponentMerging,
+        usedDriftFitting: resolved.usedDriftFitting,
+        mergedComponentCount: resolved.mergedComponentCount,
+        maxCenterDriftPx: resolved.maxCenterDriftPx
       };
     })
-    .filter((row) => row.segments.length > 0);
+    .filter((row) => row.segments.length > 0)
+  );
 
   if (rawRows.length === 0) {
     return emptyDetection("No repeated sheet rows detected");
@@ -122,12 +144,31 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   if (rawRows.some((row) => row.usedContentCentering)) {
     warnings.push("Normalized uneven gutters from content centers; inspect frame boxes before export.");
   }
+  if (rawRows.some((row) => row.usedComponentMerging)) {
+    warnings.push("Merged nearby disconnected components into frame boxes; inspect effect-heavy frames.");
+  }
+  if (rawRows.some((row) => row.usedDriftFitting)) {
+    warnings.push("Tolerated mild frame-center drift while fitting sheet columns; inspect frame boxes before export.");
+  }
   if (rows < 2 || columns < 2) {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
   }
 
   const repeatedConfidence = Math.min(0.96, 0.52 + Math.min(0.24, rows * 0.06) + Math.min(0.2, columns * 0.04));
-  const confidence = rows >= 2 && columns >= 2 ? repeatedConfidence : Math.min(0.4, repeatedConfidence);
+  const confidencePenalty = rawRows.some((row) => row.usedDriftFitting) ? 0.04 : 0;
+  const confidence = rows >= 2 && columns >= 2 ? Math.max(0.2, repeatedConfidence - confidencePenalty) : Math.min(0.4, repeatedConfidence);
+  const diagnostics = createSheetDiagnostics({
+    rows,
+    columns,
+    frameHeights,
+    pitchPx: frameWidth + spacing,
+    mergedComponentCount: rawRows.reduce((total, row) => total + row.mergedComponentCount, 0),
+    maxCenterDriftPx: Math.max(0, ...rawRows.map((row) => row.maxCenterDriftPx)),
+    usedComponentMerging: rawRows.some((row) => row.usedComponentMerging),
+    usedDriftFitting: rawRows.some((row) => row.usedDriftFitting),
+    usedOutlinedCells: rawRows.some((row) => row.usedOutlinedCells),
+    usedContentCentering: rawRows.some((row) => row.usedContentCentering)
+  });
 
   return {
     frameWidth,
@@ -141,6 +182,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     rowFrameCounts,
     rowAnimations,
     confidence,
+    diagnostics,
     reason: `Detected ${rows} sprite-sheet row${rows === 1 ? "" : "s"} with up to ${columns} frame${columns === 1 ? "" : "s"} per row`,
     warnings
   };
@@ -242,11 +284,41 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
   const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
 
   if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
-    return { segments: outlinedSegments, usedOutlinedCells: true, usedContentCentering: false };
+    return {
+      segments: outlinedSegments,
+      usedOutlinedCells: true,
+      usedContentCentering: false,
+      usedComponentMerging: false,
+      usedDriftFitting: false,
+      mergedComponentCount: 0,
+      maxCenterDriftPx: 0
+    };
+  }
+
+  const merged = mergeDisconnectedComponents(contentSegments);
+  if (merged.usedComponentMerging) {
+    const drifted = normalizeDriftedSegmentsByStart(merged.segments, image.width);
+    return {
+      segments: drifted.segments,
+      usedOutlinedCells: false,
+      usedContentCentering: false,
+      usedComponentMerging: true,
+      usedDriftFitting: drifted.usedDriftFitting,
+      mergedComponentCount: merged.mergedComponentCount,
+      maxCenterDriftPx: drifted.maxCenterDriftPx
+    };
   }
 
   const centeredSegments = normalizeUnevenContentSegments(contentSegments, image.width);
-  return { segments: centeredSegments.segments, usedOutlinedCells: false, usedContentCentering: centeredSegments.usedContentCentering };
+  return {
+    segments: centeredSegments.segments,
+    usedOutlinedCells: false,
+    usedContentCentering: centeredSegments.usedContentCentering,
+    usedComponentMerging: false,
+    usedDriftFitting: false,
+    mergedComponentCount: 0,
+    maxCenterDriftPx: 0
+  };
 }
 
 function outlinedCellSegmentsForBand(
@@ -342,6 +414,153 @@ function chooseFrameSegments(segments: Segment[]): Segment[] {
   return trimmed.filter((segment) => segment.w >= typicalWidth * 0.65 && segment.w <= typicalWidth * 1.45);
 }
 
+function mergeDisconnectedComponents(segments: Segment[]): ComponentMergeResult {
+  if (segments.length < 4) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  const rawStartGaps = gapsBetweenStarts(segments);
+  if (rawStartGaps.length === 0) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  const rawPitch = Math.max(1, medianInteger(rawStartGaps));
+  const rawGapSpread = (Math.max(...rawStartGaps) - Math.min(...rawStartGaps)) / rawPitch;
+  if (rawGapSpread < 0.22) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  const candidates = [2, 3]
+    .filter((groupSize) => segments.length % groupSize === 0 && segments.length / groupSize >= 2)
+    .map((groupSize) => createComponentMergeCandidate(segments, groupSize))
+    .filter((candidate): candidate is ComponentMergeResult & { score: number } => candidate !== undefined)
+    .sort((a, b) => b.score - a.score);
+
+  const best = candidates[0];
+  if (!best) {
+    return { segments, usedComponentMerging: false, mergedComponentCount: 0 };
+  }
+
+  return {
+    segments: best.segments,
+    usedComponentMerging: true,
+    mergedComponentCount: best.mergedComponentCount
+  };
+}
+
+function createComponentMergeCandidate(
+  segments: Segment[],
+  groupSize: number
+): (ComponentMergeResult & { score: number }) | undefined {
+  const componentWidths = segments.map((segment) => segment.w);
+  const typicalComponentWidth = Math.max(1, medianInteger(componentWidths));
+  const groups: Segment[] = [];
+  const withinGaps: number[] = [];
+
+  for (let index = 0; index < segments.length; index += groupSize) {
+    const group = segments.slice(index, index + groupSize);
+    const first = group[0]!;
+    const last = group[group.length - 1]!;
+    groups.push({ x: first.x, w: last.x + last.w - first.x });
+    withinGaps.push(...gapsBetween(group));
+  }
+
+  if (withinGaps.length === 0) {
+    return undefined;
+  }
+
+  const largestWithinGap = Math.max(...withinGaps);
+  const withinGapLimit = Math.max(3, Math.min(10, typicalComponentWidth * 0.45));
+  if (largestWithinGap > withinGapLimit) {
+    return undefined;
+  }
+
+  const startGaps = gapsBetweenStarts(groups);
+  if (startGaps.length === 0) {
+    return undefined;
+  }
+
+  const pitch = Math.max(1, medianInteger(startGaps));
+  const typicalGroupWidth = Math.max(1, medianInteger(groups.map((group) => group.w)));
+  if (pitch < typicalComponentWidth * 1.8 || typicalGroupWidth < typicalComponentWidth * 1.7 || typicalGroupWidth > pitch * 1.05) {
+    return undefined;
+  }
+
+  const fit = fitRegularStarts(groups, pitch);
+  const driftLimit = Math.max(3, Math.min(8, pitch * 0.18));
+  if (fit.maxDriftPx > driftLimit) {
+    return undefined;
+  }
+
+  const mergedComponentCount = segments.length - groups.length;
+  const score = groups.length * 10 + groupSize * 2 - fit.maxDriftPx - largestWithinGap * 0.2;
+  return {
+    segments: groups,
+    usedComponentMerging: true,
+    mergedComponentCount,
+    score
+  };
+}
+
+function normalizeDriftedSegmentsByStart(segments: Segment[], imageWidth: number): DriftNormalizationResult {
+  if (segments.length < 2) {
+    return { segments, usedDriftFitting: false, maxCenterDriftPx: 0 };
+  }
+
+  const startGaps = gapsBetweenStarts(segments);
+  const pitch = Math.max(1, medianInteger(startGaps));
+  const fit = fitRegularStarts(segments, pitch);
+  const maxX = Math.max(0, imageWidth - pitch);
+  const normalized = segments.map((_, index) => ({
+    x: Math.max(0, Math.min(maxX, fit.gridStart + index * pitch)),
+    w: pitch
+  }));
+
+  return {
+    segments: normalized,
+    usedDriftFitting: fit.maxDriftPx >= 1,
+    maxCenterDriftPx: fit.maxDriftPx
+  };
+}
+
+function alignDetectedRowsToSharedColumns<
+  Row extends {
+    segments: Segment[];
+    usedComponentMerging: boolean;
+    usedDriftFitting: boolean;
+    maxCenterDriftPx: number;
+  }
+>(rows: Row[]): Row[] {
+  const driftRows = rows.filter((row) => (row.usedComponentMerging || row.usedDriftFitting) && row.segments.length >= 2);
+  if (driftRows.length < 2) {
+    return rows;
+  }
+
+  const pitches = driftRows.flatMap((row) => [medianInteger(gapsBetweenStarts(row.segments)), medianInteger(row.segments.map((segment) => segment.w))]);
+  const pitch = Math.max(1, medianInteger(pitches.filter((value) => value > 0)));
+  const gridStart = Math.max(0, medianInteger(driftRows.map((row) => row.segments[0]!.x)));
+
+  return rows.map((row) => {
+    if (!driftRows.includes(row)) {
+      return row;
+    }
+
+    let maxAlignmentDrift = row.maxCenterDriftPx;
+    const segments = row.segments.map((segment, index) => {
+      const x = gridStart + index * pitch;
+      maxAlignmentDrift = Math.max(maxAlignmentDrift, Math.abs(segment.x - x));
+      return { x, w: pitch };
+    });
+
+    return {
+      ...row,
+      segments,
+      usedDriftFitting: row.usedDriftFitting || maxAlignmentDrift >= 1,
+      maxCenterDriftPx: maxAlignmentDrift
+    };
+  });
+}
+
 function normalizeUnevenContentSegments(
   segments: Segment[],
   imageWidth: number
@@ -396,6 +615,98 @@ function gapsBetween(segments: Segment[]): number[] {
     gaps.push(Math.max(0, segments[index]!.x - (segments[index - 1]!.x + segments[index - 1]!.w)));
   }
   return gaps;
+}
+
+function gapsBetweenStarts(segments: Segment[]): number[] {
+  const gaps: number[] = [];
+  for (let index = 1; index < segments.length; index += 1) {
+    gaps.push(Math.max(0, segments[index]!.x - segments[index - 1]!.x));
+  }
+  return gaps;
+}
+
+function fitRegularStarts(segments: Segment[], pitch: number): { gridStart: number; maxDriftPx: number } {
+  const starts = segments.map((segment, index) => segment.x - index * pitch);
+  const gridStart = Math.max(0, Math.round(medianNumber(starts)));
+  let maxDriftPx = 0;
+
+  for (let index = 0; index < segments.length; index += 1) {
+    const expectedX = gridStart + index * pitch;
+    maxDriftPx = Math.max(maxDriftPx, Math.abs(segments[index]!.x - expectedX));
+  }
+
+  return { gridStart, maxDriftPx };
+}
+
+function createSheetDiagnostics({
+  rows,
+  columns,
+  frameHeights,
+  pitchPx,
+  mergedComponentCount,
+  maxCenterDriftPx,
+  usedComponentMerging,
+  usedDriftFitting,
+  usedOutlinedCells,
+  usedContentCentering
+}: {
+  rows: number;
+  columns: number;
+  frameHeights: number[];
+  pitchPx: number;
+  mergedComponentCount: number;
+  maxCenterDriftPx: number;
+  usedComponentMerging: boolean;
+  usedDriftFitting: boolean;
+  usedOutlinedCells: boolean;
+  usedContentCentering: boolean;
+}): SheetLayoutDiagnostics {
+  const averageBandHeight =
+    frameHeights.length > 0 ? Math.round(frameHeights.reduce((total, height) => total + height, 0) / frameHeights.length) : 0;
+  const minHeight = frameHeights.length > 0 ? Math.min(...frameHeights) : 0;
+  const maxHeight = frameHeights.length > 0 ? Math.max(...frameHeights) : 0;
+  const heightSpreadRatio = averageBandHeight > 0 ? (maxHeight - minHeight) / averageBandHeight : 0;
+  const rowLabel = rows >= 3 && heightSpreadRatio <= 0.2 ? "high" : rows >= 2 && heightSpreadRatio <= 0.35 ? "medium" : "low";
+  const columnLabel =
+    columns >= 2 && maxCenterDriftPx <= 1 && !usedComponentMerging
+      ? "high"
+      : columns >= 2 && maxCenterDriftPx <= Math.max(4, pitchPx * 0.12)
+        ? "medium"
+        : "low";
+  const notes = [
+    `Rows: ${rowLabel} confidence, ${rows} band${rows === 1 ? "" : "s"} detected.`,
+    `Columns: ${columnLabel} confidence, ${columns} column${columns === 1 ? "" : "s"} at about ${pitchPx}px pitch.`
+  ];
+
+  if (usedComponentMerging) {
+    notes.push(`Merged ${mergedComponentCount} nearby component${mergedComponentCount === 1 ? "" : "s"} into frame boxes.`);
+  }
+  if (usedDriftFitting) {
+    notes.push(`Frame-center drift: ${Math.round(maxCenterDriftPx)}px max while fitting columns.`);
+  }
+  if (usedOutlinedCells) {
+    notes.push("Outlined cells provided strong column separators.");
+  }
+  if (usedContentCentering) {
+    notes.push("Uneven visible gutters were normalized from content centers.");
+  }
+
+  return {
+    rowConfidence: {
+      label: rowLabel,
+      rowCount: rows,
+      averageBandHeight,
+      heightSpreadRatio
+    },
+    columnConfidence: {
+      label: columnLabel,
+      columnCount: columns,
+      pitchPx,
+      maxCenterDriftPx,
+      mergedComponentCount
+    },
+    notes
+  };
 }
 
 function medianInteger(values: number[]): number {

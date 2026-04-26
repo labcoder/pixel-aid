@@ -149,6 +149,37 @@ function unevenGutterSheetWithoutBorders(): RGBAImage {
   return image;
 }
 
+function driftedDisconnectedSheetWithoutBorders(): RGBAImage {
+  const image = createImage(470, 250);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { labelX: 18, y: 22, frames: 4, drift: [0, 2, -3, 1] },
+    { labelX: 18, y: 92, frames: 6, drift: [0, -2, 3, -1, 2, -3] },
+    { labelX: 18, y: 162, frames: 5, drift: [1, -3, 2, -2, 0] }
+  ];
+  const startX = 96;
+  const cellWidth = 58;
+  const cellHeight = 42;
+
+  for (const row of rows) {
+    drawBlock(image, row.labelX, row.y + 15, 34, 10, 0, 240, 240, 255);
+    for (let column = 0; column < row.frames; column += 1) {
+      const cellX = startX + column * cellWidth + row.drift[column]!;
+      drawBlock(image, cellX + 13, row.y, 23, cellHeight, 70, 75, 75, 255);
+      drawBlock(image, cellX + 20, row.y + 8, 12, 24, 92, 160, 150, 255);
+      drawBlock(image, cellX + 42, row.y + 12, 10, 9, 0, 240, 240, 255);
+      drawBlock(image, cellX + 51, row.y + 15, 7, 3, 0, 240, 240, 255);
+    }
+  }
+
+  return image;
+}
+
 function drawBlock(
   image: RGBAImage,
   startX: number,
@@ -663,6 +694,33 @@ describe("sheet slicing", () => {
     expect(detection.frames[4]!.rect).toEqual({ x: 92, y: 88, w: 54, h: 44 });
     expect(detection.frames[10]!.rect).toEqual({ x: 92, y: 156, w: 54, h: 44 });
     expect(detection.warnings).toContain("Normalized uneven gutters from content centers; inspect frame boxes before export.");
+    expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("merges disconnected frame components and tolerates mild center drift", () => {
+    const detection = detectSheetLayout(driftedDisconnectedSheetWithoutBorders());
+
+    expect(detection).toMatchObject({
+      frameWidth: 57,
+      frameHeight: 42,
+      rows: 3,
+      columns: 6,
+      margin: 110,
+      spacing: 0,
+      rowFrameCounts: [4, 6, 5]
+    });
+    expect(detection.frames).toHaveLength(15);
+    expect(detection.frames[0]!.rect).toEqual({ x: 110, y: 22, w: 57, h: 42 });
+    expect(detection.frames[4]!.rect).toEqual({ x: 110, y: 92, w: 57, h: 42 });
+    expect(detection.frames[10]!.rect).toEqual({ x: 110, y: 162, w: 57, h: 42 });
+    expect(detection.warnings).toContain("Merged nearby disconnected components into frame boxes; inspect effect-heavy frames.");
+    expect(detection.warnings).toContain("Tolerated mild frame-center drift while fitting sheet columns; inspect frame boxes before export.");
+    expect(detection.diagnostics).toMatchObject({
+      rowConfidence: expect.objectContaining({ label: "high", rowCount: 3 }),
+      columnConfidence: expect.objectContaining({ label: "medium", maxCenterDriftPx: expect.any(Number), mergedComponentCount: expect.any(Number) })
+    });
+    expect(detection.diagnostics!.columnConfidence.maxCenterDriftPx).toBeGreaterThanOrEqual(3);
+    expect(detection.diagnostics!.columnConfidence.mergedComponentCount).toBeGreaterThan(0);
     expect(detection.confidence).toBeGreaterThan(0.75);
   });
 
