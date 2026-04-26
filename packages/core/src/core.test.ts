@@ -144,7 +144,7 @@ describe("grid detection", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const [candidate] = detectGridCandidates(fixture.image, { maxScale: 16 });
 
-    expect((candidate as any).diagnostics).toMatchObject({
+    expect(candidate!.diagnostics).toMatchObject({
       confidenceLabel: "high",
       cropUsed: true,
       scaleScore: expect.any(Number),
@@ -152,7 +152,7 @@ describe("grid detection", () => {
       runScore: expect.any(Number),
       sizeScore: expect.any(Number)
     });
-    expect((candidate as any).diagnostics.notes).toContain("Foreground crop used");
+    expect(candidate!.diagnostics!.notes).toContain("Foreground crop used");
   });
 });
 
