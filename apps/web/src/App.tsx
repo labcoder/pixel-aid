@@ -7,9 +7,12 @@ import {
   FileImage,
   Gauge,
   Layers,
+  Pause,
   Play,
   SlidersHorizontal,
   Sparkles,
+  SkipBack,
+  SkipForward,
   Terminal,
   Trash2,
   Upload,
@@ -51,7 +54,7 @@ import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
-import { clampFps, getInitialPlaybackState, tickPlayback } from "./lib/playbackModel";
+import { clampFps, getFrameDurationMs, getInitialPlaybackState, scrubPlayback, stepPlaybackFrame, tickPlayback } from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
 import {
   clampSelectedFrameIndex,
@@ -180,6 +183,7 @@ export function App() {
     [frameHeight, frameWidth, sheetColumns, sheetExtrude, sheetMargin, sheetPivot, sheetRows, sheetSpacing]
   );
   const sheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
+  const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
   const sheetCanvasSize = useMemo(
     () => ({
       width: fixResult?.image.width ?? targetWidth,
@@ -202,6 +206,9 @@ export function App() {
     [frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
   const timelineState = getTimelineState(mode, sheetFrames.length);
+  const canScrubTimeline = timelineState.enabled && sheetFrames.length > 0;
+  const canPlayTimeline = timelineState.enabled && sheetFrames.length > 1;
+  const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
 
   useEffect(() => {
     setCustomPivotX((current) => clampSheetInteger(current, 0, frameWidth));
@@ -561,6 +568,43 @@ export function App() {
     setPlaybackFps(clampFps(value));
     playbackAccumulatorRef.current = 0;
   }, []);
+
+  const selectPlaybackFrame = useCallback(
+    (index: number) => {
+      const nextIndex = scrubPlayback({ frameCount: sheetFrames.length, frameIndex: index });
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      selectedFrameIndexRef.current = nextIndex;
+      setSelectedFrameIndex(nextIndex);
+    },
+    [sheetFrames.length]
+  );
+
+  const stepTimelineFrame = useCallback(
+    (direction: -1 | 1) => {
+      const next = stepPlaybackFrame({
+        frameCount: sheetFrames.length,
+        frameIndex: selectedFrameIndexRef.current,
+        direction,
+        loop: playbackLoop
+      });
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+      selectedFrameIndexRef.current = next.frameIndex;
+      setSelectedFrameIndex(next.frameIndex);
+    },
+    [playbackLoop, sheetFrames.length]
+  );
+
+  const togglePlayback = useCallback(() => {
+    if (!canPlayTimeline) {
+      setIsPlaying(false);
+      return;
+    }
+
+    playbackAccumulatorRef.current = 0;
+    setIsPlaying((current) => !current);
+  }, [canPlayTimeline]);
 
   const applyGridCandidate = useCallback(
     (candidate: GridCandidate) => {
@@ -1144,6 +1188,51 @@ export function App() {
             <h2>Sprite Player</h2>
             {timelineState.enabled ? (
               <>
+                <div className="player-controls" aria-label="Sprite playback controls">
+                  <button type="button" disabled={!canPlayTimeline} aria-label="Previous frame" onClick={() => stepTimelineFrame(-1)}>
+                    <SkipBack size={14} />
+                  </button>
+                  <button type="button" className="play-toggle" disabled={!canPlayTimeline} onClick={togglePlayback}>
+                    {isPlaying ? <Pause size={15} /> : <Play size={15} />}
+                    {isPlaying ? "Pause" : "Play"}
+                  </button>
+                  <button type="button" disabled={!canPlayTimeline} aria-label="Next frame" onClick={() => stepTimelineFrame(1)}>
+                    <SkipForward size={14} />
+                  </button>
+                  <label className="player-scrub">
+                    <span>Scrub</span>
+                    <input
+                      type="range"
+                      min="0"
+                      max={Math.max(0, sheetFrames.length - 1)}
+                      step="1"
+                      value={Math.max(0, selectedFrameIndex)}
+                      disabled={!canScrubTimeline}
+                      onChange={(event) => selectPlaybackFrame(Number(event.currentTarget.value))}
+                    />
+                  </label>
+                  <label className="player-number">
+                    <span>FPS</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="60"
+                      value={playbackFps}
+                      onChange={(event) => changePlaybackFps(Number(event.currentTarget.value))}
+                    />
+                  </label>
+                  <label className="player-loop">
+                    <input type="checkbox" checked={playbackLoop} onChange={(event) => setPlaybackLoop(event.currentTarget.checked)} />
+                    Loop
+                  </label>
+                </div>
+                <div className="player-readout">
+                  <strong>
+                    Frame {selectedFrameIndex >= 0 ? selectedFrameIndex + 1 : 0}/{sheetFrames.length}
+                  </strong>
+                  <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
+                  <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
+                </div>
                 <div className="timeline-rail">
                   {sheetFrames.map((frame, index) => (
                     <button
@@ -1151,7 +1240,7 @@ export function App() {
                       type="button"
                       className={index === selectedFrameIndex ? "active" : ""}
                       title={`${frame.name} ${frame.rect.w}x${frame.rect.h}`}
-                      onClick={() => setSelectedFrameIndex(index)}
+                      onClick={() => selectPlaybackFrame(index)}
                     >
                       <strong>{index + 1}</strong>
                       <span>{frame.rect.w}x{frame.rect.h}</span>
