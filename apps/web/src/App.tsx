@@ -755,6 +755,7 @@ export function App() {
       const nextHeight = Math.max(1, Math.round(next.targetHeight));
       setTargetWidth(nextWidth);
       setTargetHeight(nextHeight);
+      setCropToBounds(false);
       if (selectedAsset) {
         const scale = deriveGridScale(selectedAsset.image, { width: nextWidth, height: nextHeight });
         setGridScaleX(scale.scaleX);
@@ -1410,7 +1411,7 @@ export function App() {
               Lock aspect ratio
             </label>
             <p className="field-note">
-              Target size is the native game-art output. Editing it updates the source-pixels-per-output-pixel scale.
+              Target size is the native game-art output. Editing it disables auto crop so the requested dimensions are honored.
             </p>
           </>
         )}
