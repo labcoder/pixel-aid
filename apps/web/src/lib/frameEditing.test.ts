@@ -1,6 +1,11 @@
 import { describe, expect, test } from "vitest";
 import type { SpriteFrame } from "@pixelaid/shared";
-import { findFrameAtSourcePoint, moveFrameBySourceDelta } from "./frameEditing";
+import {
+  findFrameAtSourcePoint,
+  findFrameResizeHandleAtSourcePoint,
+  moveFrameBySourceDelta,
+  resizeFrameBySourceDelta
+} from "./frameEditing";
 
 const frame: SpriteFrame = {
   name: "row_1_000",
@@ -51,5 +56,52 @@ describe("frame editing", () => {
 
     expect(findFrameAtSourcePoint(frames, { x: 96, y: 40 })).toBe(1);
     expect(findFrameAtSourcePoint(frames, { x: 12, y: 12 })).toBe(-1);
+  });
+
+  test("hit-tests source-space resize handles before frame bodies", () => {
+    const frames: SpriteFrame[] = [
+      frame,
+      { ...frame, name: "row_1_001", sourceRect: { x: 90, y: 32, w: 64, h: 48 } }
+    ];
+
+    expect(findFrameResizeHandleAtSourcePoint(frames, { x: 151, y: 78 }, 5)).toEqual({ frameIndex: 1, handle: "se" });
+    expect(findFrameResizeHandleAtSourcePoint(frames, { x: 94, y: 36 }, 5)).toEqual({ frameIndex: 1, handle: "nw" });
+    expect(findFrameResizeHandleAtSourcePoint(frames, { x: 112, y: 48 }, 5)).toBeNull();
+  });
+
+  test("resizes a frame from a corner and updates native output rects", () => {
+    const resized = resizeFrameBySourceDelta({
+      frame,
+      handle: "se",
+      deltaX: 12,
+      deltaY: 8,
+      scaleX: 4,
+      scaleY: 4,
+      sourceSize: { width: 180, height: 140 },
+      outputSize: { width: 48, height: 36 }
+    });
+
+    expect(resized.sourceRect).toEqual({ x: 40, y: 32, w: 76, h: 56 });
+    expect(resized.rect).toEqual({ x: 10, y: 8, w: 19, h: 14 });
+    expect(resized.pivot).toEqual({ x: 8, y: 12 });
+    expect(resized.tags).toEqual(["row_1"]);
+  });
+
+  test("resizes a frame from the west edge without crossing the minimum output size", () => {
+    const resized = resizeFrameBySourceDelta({
+      frame,
+      handle: "w",
+      deltaX: 200,
+      deltaY: 0,
+      scaleX: 4,
+      scaleY: 4,
+      sourceSize: { width: 180, height: 140 },
+      outputSize: { width: 48, height: 36 },
+      minOutputSize: { width: 4, height: 4 }
+    });
+
+    expect(resized.sourceRect).toEqual({ x: 88, y: 32, w: 16, h: 48 });
+    expect(resized.rect).toEqual({ x: 22, y: 8, w: 4, h: 12 });
+    expect(resized.pivot).toEqual({ x: 4, y: 12 });
   });
 });
