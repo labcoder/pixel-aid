@@ -111,6 +111,7 @@ import {
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -325,6 +326,15 @@ export function App() {
   const framePreviewPlacement = useMemo(
     () => getFramePreviewPlacement(previewFrames, timelinePosition, normalizeTimelineFrames),
     [normalizeTimelineFrames, previewFrames, timelinePosition]
+  );
+  const fixedComparisonSourceRect = useMemo(
+    () =>
+      getFixedComparisonSourceRect({
+        mode,
+        fixedImage: fixResult?.image ?? null,
+        grid: fixResult?.grid
+      }),
+    [fixResult?.grid, fixResult?.image, mode]
   );
   const onionSkinPlacements = useMemo(
     () =>
@@ -1874,7 +1884,7 @@ export function App() {
         <ViewportCanvas
           sourceImage={selectedAsset?.image ?? null}
           fixedImage={fixResult?.image ?? null}
-          fixedSourceRect={fixResult?.grid.sourceRect}
+          fixedSourceRect={fixedComparisonSourceRect}
           viewMode={viewMode}
           zoom={zoom}
           showGrid={showGrid}
