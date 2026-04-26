@@ -59,7 +59,17 @@ Current signals:
 - Large landscape sources are scanned for repeated horizontal foreground bands against a sampled corner background. Three or more separated bands bias the mode toward sprite sheet because this matches common AI-generated animation sheets with one animation per row.
 - Balanced portrait or square sources without repeated bands remain single sprites unless tile-sheet divisibility is stronger.
 
-This is not yet automatic cell detection. It chooses the starting mode and control hierarchy. Frame width, rows, columns, margin, and spacing are still manual until a later detector produces editable frame boxes.
+For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, drops left-side label segments when a larger frame grid follows them, and returns:
+
+- Estimated frame width and height.
+- Row count and maximum column count.
+- Margin and spacing.
+- Explicit frame rectangles.
+- Per-row frame counts.
+- Initial row animation tags.
+- Confidence and warnings.
+
+This is still conservative. It does not OCR row labels, repair irregular gutters, normalize frame canvases, or provide drag handles. It gives the editor a useful starting point and preserves manual override.
 
 ## Palette
 
@@ -145,6 +155,6 @@ Remaining quality targets:
 
 The slicer also accepts an optional pivot. When present, that pivot is copied onto every generated frame in native frame pixels. When omitted, the default pivot remains bottom center: `floor(frameWidth / 2), frameHeight`.
 
-Current slicing is manual and rectangular. The web viewport can draw those frame rectangles on the source image before Fix by scaling frame metadata through the current grid scale, then draw the same logical frames on the fixed output after Fix.
+Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the same logical frames on the fixed output after Fix.
 
 The slicer does not yet detect irregular gutters, disconnected frame components, per-row animation names, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.

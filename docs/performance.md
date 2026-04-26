@@ -16,6 +16,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 
 - The core uses `Uint8ClampedArray` image buffers and index math.
 - Grid detection uses typed arrays for edge energy and run histograms; the foreground bounds pass scans the source once and avoids per-pixel object allocation.
+- Sheet layout detection uses row and column count buffers to find bands and frame segments without rendering frame candidates as React elements.
 - Import currently runs browser decode and first-pass suggestion analysis on the main thread, but the UI yields between phases and shows decode/analyze status so large sheets do not look stalled.
 - Heavy fix work runs in `packages/worker`.
 - The web app clones source buffers before transfer so the imported source remains available for preview.

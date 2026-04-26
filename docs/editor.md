@@ -25,6 +25,8 @@ Auto Suggest seeds controls from the current source. It should make a strong fir
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
 
+For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips such as `row_1` and `row_2` for the timeline player.
+
 Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
@@ -52,6 +54,8 @@ Crop to detected bounds keeps single-sprite output trimmed to the detected foreg
 Sprite sheet and tile sheet modes expose frame controls. Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
 
 Frame boxes and pivot markers are drawn on the Before view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
+
+When Auto Suggest detected explicit source frame rectangles, the Before view uses those exact source rectangles instead of estimating them from scale. Editing Frame W/H, Rows, Columns, Margin, Spacing, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
 
 Fit Rows / Columns calculates how many whole frames fit inside the current fixed image footprint using the configured frame size, margin, and spacing. It is a helper, not a detector: the user can still override the result manually.
 
@@ -101,6 +105,7 @@ The timeline and sprite player are enabled when a sheet-like mode has frame meta
 
 The current timeline player uses the generated sheet frames in row-major order. It can:
 
+- Switch between detected row clips or all rows when Auto Suggest found row animation metadata.
 - Play or pause frame advancement using `requestAnimationFrame`.
 - Step to the previous or next frame.
 - Scrub directly to any frame with the range control.
@@ -108,7 +113,7 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Toggle looping. With looping disabled, playback stops on the last frame.
 - Show the selected frame name, frame size, and frame duration.
 
-Clicking a frame, scrubbing, or stepping pauses playback and keeps the viewport highlight in sync. Animation tags, clip selection, isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
+Clicking a frame, scrubbing, stepping, or changing clips pauses playback and keeps the viewport highlight in sync. User-renamed animation tags, isolated frame preview, onion skin, ping-pong playback, and editable per-frame durations are future timeline work.
 
 # Metrics
 
