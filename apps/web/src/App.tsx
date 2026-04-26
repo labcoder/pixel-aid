@@ -95,6 +95,20 @@ import {
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
+import {
+  getSimpleAlphaChoice,
+  getSimpleDenoiseChoice,
+  getSimpleDenoiseStrength,
+  getSimpleOutlineChoice,
+  simpleAlphaChoices,
+  simpleColorChoices,
+  simpleDenoiseChoices,
+  simpleOutlineChoices,
+  simpleResizeChoices,
+  type SimpleAlphaChoice,
+  type SimpleDenoiseChoice,
+  type SimpleOutlineChoice
+} from "./lib/simpleSpriteControls";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 
@@ -767,6 +781,36 @@ export function App() {
     },
     [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
+
+  const applySimpleSpriteResize = useCallback(
+    (preset: number) => {
+      setAspectLocked(true);
+      commitTargetSize(
+        applyTargetSizePreset({
+          sourceWidth: selectedAsset?.image.width ?? targetWidth,
+          sourceHeight: selectedAsset?.image.height ?? targetHeight,
+          targetWidth,
+          targetHeight,
+          dimension: "width",
+          preset,
+          locked: true
+        })
+      );
+    },
+    [commitTargetSize, selectedAsset, targetHeight, targetWidth]
+  );
+
+  const applySimpleAlphaChoice = useCallback((choice: SimpleAlphaChoice) => {
+    setAlpha(choice === "remove" ? "backgroundFloodFill" : "preserve");
+  }, []);
+
+  const applySimpleDenoiseChoice = useCallback((choice: SimpleDenoiseChoice) => {
+    setDenoiseStrength(getSimpleDenoiseStrength(choice));
+  }, []);
+
+  const applySimpleOutlineChoice = useCallback((choice: SimpleOutlineChoice) => {
+    setOutlineMode(choice === "repair" ? "repairExisting" : choice === "add" ? "add" : "none");
+  }, []);
 
   const updateManualFrameWidth = useCallback(
     (value: number) => {
@@ -1734,6 +1778,22 @@ export function App() {
           selected={selectedAsset !== null}
           summary={guidedFixSummary}
           reason={suggestionReason}
+          simpleControls={
+            selectedAsset && mode === "single" ? (
+              <SimpleSpriteControls
+                targetWidth={targetWidth}
+                maxColors={maxColors}
+                alphaChoice={getSimpleAlphaChoice(alpha)}
+                denoiseChoice={getSimpleDenoiseChoice(denoiseStrength)}
+                outlineChoice={getSimpleOutlineChoice(outlineMode)}
+                onResize={applySimpleSpriteResize}
+                onAlphaChange={applySimpleAlphaChoice}
+                onDenoiseChange={applySimpleDenoiseChoice}
+                onOutlineChange={applySimpleOutlineChoice}
+                onMaxColorsChange={setMaxColors}
+              />
+            ) : null
+          }
           busy={isImporting || isAnalyzing || isFixing}
           canFix={selectedAsset !== null && !isImporting && !isAnalyzing && !isFixing}
           advancedOpen={showAdvancedControls}
@@ -2068,6 +2128,7 @@ function GuidedFixPanel({
   selected,
   summary,
   reason,
+  simpleControls,
   busy,
   canFix,
   advancedOpen,
@@ -2078,6 +2139,7 @@ function GuidedFixPanel({
   selected: boolean;
   summary: GuidedFixSummary;
   reason: string;
+  simpleControls?: ReactNode;
   busy: boolean;
   canFix: boolean;
   advancedOpen: boolean;
@@ -2099,6 +2161,7 @@ function GuidedFixPanel({
           ))}
         </div>
       ) : null}
+      {simpleControls}
       <p className="guided-reason">{reason}</p>
       <div className="guided-actions">
         <button type="button" className="guided-primary" disabled={!selected || busy} onClick={onAutoSuggest}>
@@ -2115,6 +2178,95 @@ function GuidedFixPanel({
         </button>
       </div>
     </section>
+  );
+}
+
+function SimpleSpriteControls({
+  targetWidth,
+  maxColors,
+  alphaChoice,
+  denoiseChoice,
+  outlineChoice,
+  onResize,
+  onAlphaChange,
+  onDenoiseChange,
+  onOutlineChange,
+  onMaxColorsChange
+}: {
+  targetWidth: number;
+  maxColors: number;
+  alphaChoice: SimpleAlphaChoice;
+  denoiseChoice: SimpleDenoiseChoice;
+  outlineChoice: SimpleOutlineChoice;
+  onResize: (value: number) => void;
+  onAlphaChange: (value: SimpleAlphaChoice) => void;
+  onDenoiseChange: (value: SimpleDenoiseChoice) => void;
+  onOutlineChange: (value: SimpleOutlineChoice) => void;
+  onMaxColorsChange: (value: number) => void;
+}) {
+  return (
+    <div className="simple-sprite-controls" aria-label="Simple sprite controls">
+      <SimpleButtonGroup
+        label="Resize"
+        options={simpleResizeChoices.map((size) => ({ id: String(size), label: String(size) }))}
+        value={String(targetWidth)}
+        onChange={(value) => onResize(Number(value))}
+      />
+      <SimpleButtonGroup
+        label="Background"
+        options={simpleAlphaChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
+        value={alphaChoice}
+        onChange={(value) => onAlphaChange(value as SimpleAlphaChoice)}
+      />
+      <SimpleButtonGroup
+        label="Noise"
+        options={simpleDenoiseChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
+        value={denoiseChoice}
+        onChange={(value) => onDenoiseChange(value as SimpleDenoiseChoice)}
+      />
+      <SimpleButtonGroup
+        label="Outline"
+        options={simpleOutlineChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
+        value={outlineChoice}
+        onChange={(value) => onOutlineChange(value as SimpleOutlineChoice)}
+      />
+      <SimpleButtonGroup
+        label="Colors"
+        options={simpleColorChoices.map((count) => ({ id: String(count), label: String(count) }))}
+        value={String(maxColors)}
+        onChange={(value) => onMaxColorsChange(Number(value))}
+      />
+    </div>
+  );
+}
+
+function SimpleButtonGroup({
+  label,
+  options,
+  value,
+  onChange
+}: {
+  label: string;
+  options: Array<{ id: string; label: string }>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="simple-choice-row">
+      <span>{label}</span>
+      <div>
+        {options.map((option) => (
+          <button
+            key={`${label}-${option.id}`}
+            type="button"
+            className={option.id === value ? "active" : ""}
+            onClick={() => onChange(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

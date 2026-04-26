@@ -1,0 +1,63 @@
+import type { AlphaMode, OutlineMode } from "@pixelaid/shared";
+
+export type SimpleAlphaChoice = "preserve" | "remove";
+export type SimpleDenoiseChoice = "off" | "light" | "medium" | "flat";
+export type SimpleOutlineChoice = "none" | "repair" | "add";
+
+const denoiseStrengthByChoice: Record<SimpleDenoiseChoice, number> = {
+  off: 0,
+  light: 20,
+  medium: 45,
+  flat: 80
+};
+
+export const simpleDenoiseChoices: Array<{ id: SimpleDenoiseChoice; label: string }> = [
+  { id: "off", label: "Off" },
+  { id: "light", label: "Light" },
+  { id: "medium", label: "Medium" },
+  { id: "flat", label: "Flat" }
+];
+
+export const simpleAlphaChoices: Array<{ id: SimpleAlphaChoice; label: string; alpha: AlphaMode }> = [
+  { id: "preserve", label: "Keep", alpha: "preserve" },
+  { id: "remove", label: "Remove", alpha: "backgroundFloodFill" }
+];
+
+export const simpleOutlineChoices: Array<{ id: SimpleOutlineChoice; label: string; outline: OutlineMode }> = [
+  { id: "none", label: "None", outline: "none" },
+  { id: "repair", label: "Repair", outline: "repairExisting" },
+  { id: "add", label: "Add", outline: "add" }
+];
+
+export const simpleColorChoices = [16, 24, 32, 64] as const;
+export const simpleResizeChoices = [32, 48, 64, 96, 128] as const;
+
+export function getSimpleDenoiseStrength(choice: SimpleDenoiseChoice): number {
+  return denoiseStrengthByChoice[choice];
+}
+
+export function getSimpleDenoiseChoice(strength: number): SimpleDenoiseChoice {
+  let best: SimpleDenoiseChoice = "off";
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const choice of simpleDenoiseChoices) {
+    const distance = Math.abs(denoiseStrengthByChoice[choice.id] - strength);
+    if (distance < bestDistance) {
+      best = choice.id;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+export function getSimpleAlphaChoice(alpha: AlphaMode): SimpleAlphaChoice {
+  return alpha === "backgroundFloodFill" ? "remove" : "preserve";
+}
+
+export function getSimpleOutlineChoice(outline: OutlineMode): SimpleOutlineChoice {
+  if (outline === "repairExisting") {
+    return "repair";
+  }
+  return outline === "add" ? "add" : "none";
+}

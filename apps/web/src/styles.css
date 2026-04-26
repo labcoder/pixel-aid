@@ -641,6 +641,53 @@ button:disabled {
   font-weight: 800;
 }
 
+.simple-sprite-controls {
+  display: grid;
+  gap: 0.48rem;
+  margin-top: 0.8rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #253130;
+}
+
+.simple-choice-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.simple-choice-row > span {
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+}
+
+.simple-choice-row > div {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.simple-choice-row button {
+  min-height: 24px;
+  padding: 0 0.36rem;
+  color: var(--muted);
+  background: #171b1b;
+  border-color: var(--line);
+  border-radius: 4px;
+  font-size: 0.67rem;
+}
+
+.simple-choice-row button.active {
+  color: #101112;
+  background: var(--cyan);
+  border-color: var(--cyan);
+  font-weight: 900;
+}
+
 .guided-reason {
   margin-top: 0.7rem;
   padding-top: 0.65rem;
