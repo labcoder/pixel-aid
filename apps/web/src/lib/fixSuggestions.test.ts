@@ -84,6 +84,7 @@ describe("fix setting suggestions", () => {
     const suggestion = suggestFixSettings(blankImage(32, 16));
 
     expect(suggestion.gridDetect).toBe("auto");
+    expect(suggestion.gridCandidates.length).toBeGreaterThan(0);
     expect(suggestion.targetWidth).toBeGreaterThan(0);
     expect(suggestion.targetHeight).toBeGreaterThan(0);
     expect(suggestion.gridScaleX).toBeGreaterThan(0);

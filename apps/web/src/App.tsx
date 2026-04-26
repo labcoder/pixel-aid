@@ -33,7 +33,7 @@ import type {
   SheetLayoutDiagnostics,
   SpriteFrame
 } from "@pixelaid/shared";
-import { detectGridCandidates, sliceSheetFrames } from "@pixelaid/core";
+import { sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
@@ -142,6 +142,7 @@ export function App() {
   const [logs, setLogs] = useState(defaultLogLines);
   const [isDropActive, setIsDropActive] = useState(false);
   const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
@@ -192,10 +193,12 @@ export function App() {
   const [denoiseStrength, setDenoiseStrength] = useState(defaultCleanupSettings.denoiseStrength);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
-  const [isFixing, setIsFixing] = useState(false);
+  const [fixStatus, setFixStatus] = useState<string | null>(null);
+  const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const activeJobRef = useRef<FixJob | null>(null);
+  const fixStartCancelledRef = useRef(false);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const playbackAccumulatorRef = useRef(0);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
@@ -204,12 +207,16 @@ export function App() {
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const isImporting = importStatus !== null;
+  const isAnalyzing = analysisStatus !== null;
+  const isFixing = fixStatus !== null;
+  const busyStatus = importStatus ?? analysisStatus ?? fixStatus;
+  const assetPanelStatus = importStatus ?? analysisStatus;
   const sourcePalette = useMemo(
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
     [selectedAsset]
   );
   const sourceColorCount = useMemo(() => (selectedAsset ? countVisibleColors(selectedAsset.image) : 0), [selectedAsset]);
-  const gridCandidates = useMemo(() => (selectedAsset ? detectGridCandidates(selectedAsset.image, { maxScale: 32 }) : []), [selectedAsset]);
+  const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
   const sheetPivot = useMemo(
@@ -485,6 +492,7 @@ export function App() {
             await waitForNextPaint();
 
             const suggestion = suggestFixSettings(asset.image);
+            setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             applyFixSuggestion(suggestion);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
@@ -558,49 +566,83 @@ export function App() {
     targetWidth
   ]);
 
-  const runFix = useCallback(() => {
-    if (!selectedAsset || isFixing) {
+  const runFix = useCallback(async () => {
+    if (!selectedAsset || isFixing || isImporting || isAnalyzing) {
       return;
     }
 
-    const options = buildFixOptions();
-    const job = startFixJob(selectedAsset.image, options);
-    activeJobRef.current = job;
-    setIsFixing(true);
-    appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
+    const frameCount = sheetMode ? sheetFrames.length : 1;
+    fixStartCancelledRef.current = false;
+    setFixStatus(sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
+    await waitForNextPaint();
+    if (fixStartCancelledRef.current) {
+      setFixStatus(null);
+      return;
+    }
 
-    void job.promise
-      .then((result) => {
-        setFixResult(result);
-        setViewMode("after");
-        appendLog(
-          `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
-        );
-      })
-      .catch((error) => {
-        appendLog(error instanceof Error ? error.message : "Fix failed");
-      })
-      .finally(() => {
-        if (activeJobRef.current?.requestId === job.requestId) {
-          activeJobRef.current = null;
-        }
-        setIsFixing(false);
-      });
-  }, [appendLog, buildFixOptions, isFixing, selectedAsset]);
+    try {
+      const options = buildFixOptions();
+      setFixStatus(sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...");
+      await waitForNextPaint();
+      if (fixStartCancelledRef.current) {
+        setFixStatus(null);
+        return;
+      }
+
+      const job = startFixJob(selectedAsset.image, options);
+      activeJobRef.current = job;
+      appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
+
+      void job.promise
+        .then((result) => {
+          setFixResult(result);
+          setViewMode("after");
+          appendLog(
+            `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
+          );
+        })
+        .catch((error) => {
+          appendLog(error instanceof Error ? error.message : "Fix failed");
+        })
+        .finally(() => {
+          if (activeJobRef.current?.requestId === job.requestId) {
+            activeJobRef.current = null;
+          }
+          setFixStatus(null);
+        });
+    } catch (error) {
+      appendLog(error instanceof Error ? error.message : "Fix failed to start");
+      setFixStatus(null);
+    }
+  }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, selectedAsset, sheetFrames.length, sheetMode]);
 
   const cancelFix = useCallback(() => {
+    if (!activeJobRef.current) {
+      fixStartCancelledRef.current = true;
+      setFixStatus(null);
+      return;
+    }
+    setFixStatus("Cancelling fix...");
     activeJobRef.current?.cancel();
   }, []);
 
-  const autoSuggest = useCallback(() => {
-    if (!selectedAsset) {
+  const autoSuggest = useCallback(async () => {
+    if (!selectedAsset || isImporting || isAnalyzing || isFixing) {
       return;
     }
 
-    const suggestion = suggestFixSettings(selectedAsset.image);
-    applyFixSuggestion(suggestion);
-    appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
-  }, [appendLog, applyFixSuggestion, selectedAsset]);
+    setAnalysisStatus(`Analyzing ${selectedAsset.name}...`);
+    await waitForNextPaint();
+
+    try {
+      const suggestion = suggestFixSettings(selectedAsset.image);
+      setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+      applyFixSuggestion(suggestion);
+      appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+    } finally {
+      setAnalysisStatus(null);
+    }
+  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -1011,6 +1053,11 @@ export function App() {
       if (assetId === selectedAsset?.id) {
         setFixResult(null);
       }
+      setGridCandidateCache((current) => {
+        const next = { ...current };
+        delete next[assetId];
+        return next;
+      });
       setAssetMenu(null);
       appendLog("Removed asset");
     },
@@ -1142,9 +1189,9 @@ export function App() {
   const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
     asset: (
       <>
-        <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={autoSuggest}>
+        <button type="button" className="wide-tool-button" disabled={!selectedAsset || isImporting || isAnalyzing || isFixing} onClick={autoSuggest}>
           <WandSparkles size={15} />
-          Auto Suggest
+          {isAnalyzing ? "Analyzing" : "Auto Suggest"}
         </button>
         <p className="control-hint">{suggestionReason}</p>
         <SelectField
@@ -1481,11 +1528,11 @@ export function App() {
           </div>
         </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button" disabled={isImporting} onClick={() => fileInputRef.current?.click()}>
+          <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={() => fileInputRef.current?.click()}>
             <Upload size={16} />
             {isImporting ? "Importing" : "Import"}
           </button>
-          <button type="button" disabled={!selectedAsset || isFixing || isImporting} onClick={runFix}>
+          <button type="button" disabled={!selectedAsset || isFixing || isImporting || isAnalyzing} onClick={runFix}>
             <WandSparkles size={16} />
             {isFixing ? "Fixing" : "Fix"}
           </button>
@@ -1504,10 +1551,10 @@ export function App() {
         <PanelHeader icon={<Layers size={16} />} title="Project" />
         <section className="panel-section">
           <SectionTitle title="Assets" docsId="assets" tooltip="Imported source files, dimensions, thumbnails, and removal controls." onDocs={openDocs} />
-          {importStatus ? (
+          {assetPanelStatus ? (
             <div className="import-status" role="status" aria-live="polite">
               <span className="activity-dot" />
-              <span>{importStatus}</span>
+              <span>{assetPanelStatus}</span>
             </div>
           ) : null}
           <ul className="asset-list">
@@ -1635,10 +1682,10 @@ export function App() {
           onSourceFrameMove={moveDetectedSourceFrame}
           onSourceFrameResize={resizeDetectedSourceFrame}
         />
-        {importStatus ? (
+        {busyStatus ? (
           <div className="viewport-empty-state viewport-busy-state" role="status" aria-live="polite">
             <span className="activity-dot" />
-            <span>{importStatus}</span>
+            <span>{busyStatus}</span>
           </div>
         ) : null}
       </section>

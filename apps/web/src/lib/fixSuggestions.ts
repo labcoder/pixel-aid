@@ -8,6 +8,7 @@ export type FixSettingSuggestion = {
   targetWidth: number;
   targetHeight: number;
   maxColors: number;
+  gridCandidates: GridCandidate[];
   gridDetect: "auto" | "manual";
   gridScaleX: number;
   gridScaleY: number;
@@ -45,6 +46,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
     maxColors: mode === "tileSheet" ? 16 : 24,
+    gridCandidates: candidates,
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
