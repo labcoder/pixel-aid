@@ -71,7 +71,7 @@ When Auto Suggest detected explicit source frame rectangles, the Input view uses
 
 Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, and warnings such as outlined-cell detection or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
 
-When detected row clips are available, the Frame / Cell section switches to per-animation cell controls. Changing a row's Cell W or Cell H updates every frame in that animation and repacks the output sheet by animation row. Different animations can use different cell sizes, so an idle row can be narrower than a shoot or death row. Margin and Spacing reflow detected rows without clearing the source boxes.
+When detected row clips are available, the Frame / Cell section switches to per-animation cell controls. Changing a row's Cell W or Cell H updates every frame in that animation and repacks the output sheet by animation row. Different animations can use different cell sizes, so an idle row can be narrower than a shoot or death row. When grid scale is available, the source sampling footprint expands around each frame center to match the requested native cell, which keeps the sprite inside the cell instead of stretching a tight source crop. Margin and Spacing reflow detected rows without clearing the source boxes.
 
 Editing manual Frame W/H, Rows, Columns, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
 
@@ -90,13 +90,15 @@ The bottom frame list shows each generated frame, its size, and pivot. Selecting
 The viewport renders images through Canvas2D with smoothing disabled.
 
 - Switching between Input, Output, and Compare auto-fits the active source/output footprint so a large import and a small fixed sprite appear at a comparable working distance by default.
+- Single-sprite mode exposes Input, Compare, and Output views. Sheet-like modes replace Compare with Timeline because frame/player inspection is more useful than a split-sheet overlay.
+- The native-size readout follows the active view: Input shows source dimensions, Output shows fixed output dimensions, and Compare shows both.
 - Mouse wheel zooms around the cursor.
 - Hold the left mouse button and drag to pan.
 - Double-click the viewport to recenter.
 - Rulers show native pixel positions and adapt their tick spacing as zoom changes.
-- Compare view shows source and fixed output with a draggable divider.
-- When the fixed output is cropped, Compare view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. It is not stretched to the full imported canvas.
-- Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix. In Compare view, each overlay is clipped to its own side of the divider.
+- Compare view shows single-sprite source and fixed output with a draggable divider.
+- When the fixed output is cropped, Compare view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. When crop is disabled, Compare uses the output dimensions and detected grid scale to synthesize a source-space footprint so the output and its ruler stay aligned without reintroducing crop metadata into exports.
+- Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix.
 
 # Cleanup
 
@@ -119,7 +121,7 @@ Cleanup controls run after block downsampling and alpha handling.
 
 # Timeline
 
-The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the timeline explains what is missing instead of pretending playback is available.
+The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the editor omits the player panel and gives the bottom area to logs and metrics.
 
 The current timeline player uses the generated sheet frames in row-major order. It can:
 
