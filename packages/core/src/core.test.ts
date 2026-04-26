@@ -55,6 +55,16 @@ function blockySource(): RGBAImage {
   ]);
 }
 
+function countVisibleNearWhitePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! >= 16 && image.data[offset]! > 240 && image.data[offset + 1]! > 240 && image.data[offset + 2]! > 240) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 const defaultOptions: FixOptions = {
   mode: "single",
   targetWidth: 2,
@@ -660,6 +670,36 @@ describe("fix pipeline", () => {
     expect(readPixel(result.image, 0, 0)).toEqual([68, 51, 34, 128]);
   });
 
+  test("passes halo removal through before palette extraction", () => {
+    const source = createImage(5, 5);
+    writePixel(source, 2, 2, 70, 140, 130, 255);
+    writePixel(source, 1, 2, 230, 240, 236, 96);
+
+    const result = fixImage(source, {
+      mode: "single",
+      targetWidth: 5,
+      targetHeight: 5,
+      maxColors: 2,
+      grid: {
+        detect: "manual",
+        scale: 1,
+        phaseX: 0,
+        phaseY: 0
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: true
+      }
+    });
+
+    expect(readPixel(result.image, 1, 2)).toEqual([70, 140, 130, 255]);
+    expect(result.palette).toEqual(["#468c82"]);
+  });
+
   test("adds native padding for outlines on auto-cropped preserved-alpha sprites", () => {
     const fixture = createSingleSpriteCleanupFixture();
 
@@ -696,6 +736,50 @@ describe("fix pipeline", () => {
       h: fixture.expected.foregroundBounds.h + fixture.expected.scale * 2
     });
     expect(readPixel(result.image, 47, 0)).toEqual([16, 17, 18, 255]);
+  });
+
+  test("golden single-sprite cleanup keeps crop diagnostics, halo cleanup, and outline padding stable", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+
+    const cleanupOptions: FixOptions = {
+      mode: "single",
+      targetWidth: fixture.expected.nativeWidth,
+      targetHeight: fixture.expected.nativeHeight,
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        scaleX: fixture.expected.scale,
+        scaleY: fixture.expected.scale
+      },
+      downscale: "dominant",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        removeHalos: true,
+        denoiseStrength: 20,
+        outlineMode: "add",
+        outlineSize: 1,
+        outlineColor: "#101112"
+      }
+    };
+
+    const result = fixImage(fixture.image, cleanupOptions);
+    const haloPixels = countVisibleNearWhitePixels(result.image);
+
+    expect(result.image.width).toBe(104);
+    expect(result.image.height).toBe(146);
+    expect(result.palette.length).toBeLessThanOrEqual(24);
+    expect(result.palette).toContain("#101112");
+    expect(result.grid.diagnostics).toMatchObject({
+      confidenceLabel: "high",
+      cropUsed: true
+    });
+    expect(result.grid.diagnostics!.notes).toContain("Foreground crop used");
+    expect(readPixel(result.image, 0, 0)[3]).toBe(0);
+    expect(readPixel(result.image, 47, 0)).toEqual([16, 17, 18, 255]);
+    expect(haloPixels).toBeLessThanOrEqual(32);
   });
 
   test("passes orphan and gap cleanup into the outline stage", () => {

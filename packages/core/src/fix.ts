@@ -207,6 +207,9 @@ function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
       if (closest.sourceRect) {
         targetCandidate.sourceRect = closest.sourceRect;
       }
+      if (closest.diagnostics) {
+        targetCandidate.diagnostics = closest.diagnostics;
+      }
       return targetCandidate;
     }
 

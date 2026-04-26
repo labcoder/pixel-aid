@@ -14,9 +14,11 @@ const autoCleanupOptions: FixOptions = {
   downscale: "adaptive",
   alpha: "backgroundFloodFill",
   cleanup: {
-    removeOrphans: false,
-    jaggyCleanup: false,
-    preserveSinglePixelDetails: true
+    removeOrphans: true,
+    jaggyCleanup: true,
+    preserveSinglePixelDetails: true,
+    removeHalos: true,
+    denoiseStrength: 20
   }
 };
 
