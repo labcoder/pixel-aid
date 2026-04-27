@@ -69,6 +69,7 @@ describe("fix setting suggestions", () => {
   test("suggests sprite sheet mode for wide sources", () => {
     const suggestion = suggestFixSettings(blankImage(256, 64));
 
+    expect(suggestion.assetType).toBe("spriteSheet");
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.reason).toContain("wide");
   });
@@ -76,8 +77,10 @@ describe("fix setting suggestions", () => {
   test("suggests tile sheet mode for evenly tiled square sources", () => {
     const suggestion = suggestFixSettings(blankImage(128, 128));
 
+    expect(suggestion.assetType).toBe("tileset");
     expect(suggestion.mode).toBe("tileSheet");
     expect(suggestion.maxColors).toBe(16);
+    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("tileset-seams-inspect-only");
   });
 
   test("uses grid detection candidate dimensions when available", () => {
@@ -94,9 +97,12 @@ describe("fix setting suggestions", () => {
   test("reports high single-sprite mode confidence for portrait character art", () => {
     const suggestion = suggestFixSettings(blankImage(706, 878));
 
+    expect(suggestion.assetType).toBe("portrait");
     expect(suggestion.mode).toBe("single");
-    expect(suggestion.downscale).toBe("dominant");
-    expect(suggestion.reason).toContain("dominant");
+    expect(suggestion.downscale).toBe("adaptive");
+    expect(suggestion.reason).toContain("adaptive");
+    expect(suggestion.categoryReason).toContain("portrait");
+    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("portrait-inspect-only");
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
     expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
     expect(suggestion.targetHeight).toBeLessThanOrEqual(220);
@@ -105,17 +111,40 @@ describe("fix setting suggestions", () => {
   test("suggests background flood-fill for single sprites on bright opaque backgrounds", () => {
     const suggestion = suggestFixSettings(singleSpriteOnBrightBackground());
 
+    expect(suggestion.assetType).toBe("sprite");
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
-    expect(suggestion.downscale).toBe("dominant");
+    expect(suggestion.downscale).toBe("adaptive");
   });
 
   test("suggests sprite sheet mode for large landscape animation sheets with rows", () => {
     const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
 
+    expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.categoryConfidence).toBeGreaterThan(0.75);
+    expect(suggestion.categoryReason).toMatch(/timeline|animation/i);
     expect(suggestion.modeConfidence).toBeGreaterThan(0.75);
     expect(suggestion.reason).toContain("multiple frames");
+  });
+
+  test("suggests icon defaults for small near-square sources", () => {
+    const suggestion = suggestFixSettings(blankImage(48, 48));
+
+    expect(suggestion.assetType).toBe("icon");
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.maxColors).toBe(16);
+  });
+
+  test("uses preservation defaults for large background-like sources", () => {
+    const suggestion = suggestFixSettings(blankImage(1280, 720));
+
+    expect(suggestion.assetType).toBe("background");
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("preserve");
+    expect(suggestion.maxColors).toBe(64);
+    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("background-inspect-only");
   });
 
   test("includes detected sheet controls for row-based animation sheets", () => {
