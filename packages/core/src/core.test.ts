@@ -677,6 +677,48 @@ describe("palette reduction", () => {
     expect(result.diagnostics.outputColorCount).toBe(2);
   });
 
+  test("palette drift: uses frequency strategy and reserved color budget for frame diagnostics", () => {
+    const source = imageFromPixels(6, [
+      rgba(20, 40, 60),
+      rgba(60, 100, 140),
+      rgba(180, 80, 80),
+      rgba(20, 40, 60),
+      rgba(60, 100, 140),
+      rgba(220, 180, 60)
+    ]);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 3, h: 1 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_001",
+        rect: { x: 3, y: 0, w: 3, h: 1 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      }
+    ];
+
+    const result = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "frequency", maxColors: 3, lockScope: "sheet", dithering: "none" },
+      fallbackMaxColors: 3,
+      reservedColors: ["#010203"],
+      frames
+    });
+
+    expect(result.palette).toEqual(["#010203", "#102838", "#386088"]);
+    expect(result.diagnostics.drift).toMatchObject({
+      frameCount: 2,
+      checkedFrameCount: 2,
+      maxFrameColorCount: 3,
+      maxFramePaletteDelta: 0,
+      warnings: []
+    });
+    expect(result.diagnostics.warnings).not.toContain(expect.stringContaining("Palette drift detected"));
+  });
+
   test("extracts frequent colors and remaps to the nearest palette entry", () => {
     const palette = extractPalette(blockySource(), 3);
     const remapped = remapToPalette(blockySource(), palette);

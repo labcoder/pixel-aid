@@ -32,5 +32,5 @@ export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup } from "./outline";
 export type { OutlineCleanupOptions } from "./outline";
 export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
-export type { ResolvedPalette, ResolvePaletteOptions } from "./palette";
+export type { AnalyzePaletteDriftOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
