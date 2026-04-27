@@ -14,6 +14,7 @@ describe("editor presets", () => {
   test("applies a preset without discarding unspecified current values", () => {
     const next = applyEditorPreset(
       {
+        assetType: "sprite",
         mode: "single",
         targetWidth: 32,
         targetHeight: 32,
@@ -28,6 +29,7 @@ describe("editor presets", () => {
     );
 
     expect(next).toMatchObject({
+      assetType: "sprite",
       mode: "single",
       targetWidth: 32,
       targetHeight: 32,
