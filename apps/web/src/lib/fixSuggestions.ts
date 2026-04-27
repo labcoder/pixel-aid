@@ -14,7 +14,7 @@ import type {
   SheetLayoutDetection,
   SpriteFrame
 } from "@pixelaid/shared";
-import { getAssetTypeCleanupPreset } from "./assetTypePresets";
+import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./assetTypePresets";
 
 const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 512] as const;
 
@@ -102,7 +102,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     modeConfidence,
     categoryConfidence: classification.confidence,
     categoryReason: classification.reason,
-    categoryWarnings: classification.warnings
+    categoryWarnings: getAssetTypeWarnings(classification.assetType)
   };
 }
 

@@ -165,6 +165,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.alphaSettings).toMatchObject({ decontaminateRgb: false });
     expect(suggestion.maxColors).toBe(64);
     expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("background-inspect-only");
+    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("preserve-intentional-soft-alpha");
   });
 
   test("includes detected sheet controls for row-based animation sheets", () => {

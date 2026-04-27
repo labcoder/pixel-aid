@@ -51,7 +51,7 @@ import {
 } from "./lib/animationTimeline";
 import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
 import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./lib/assets";
-import { getAssetTypeCleanupPreset } from "./lib/assetTypePresets";
+import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -569,7 +569,7 @@ export function App() {
     const resolvedMode = assetTypeToMode(resolvedAssetType);
     const preset = getAssetTypeCleanupPreset(resolvedAssetType);
     const definition = getAssetTypeDefinition(resolvedAssetType);
-    const resolvedWarnings = targetAssetSource === "manual" ? getWarningsForAssetType(resolvedAssetType) : suggestion.categoryWarnings;
+    const resolvedWarnings = targetAssetSource === "manual" ? getAssetTypeWarnings(resolvedAssetType) : suggestion.categoryWarnings;
     const resolvedCategoryReason =
       targetAssetSource === "manual"
         ? `Manual asset type: ${definition.label}. ${definition.description}`
@@ -868,7 +868,7 @@ export function App() {
           updateAssetTypeMetadata(current, selectedAsset.id, {
             assetType: next.assetType,
             assetTypeSource: "manual",
-            assetTypeWarnings: getWarningsForAssetType(next.assetType),
+            assetTypeWarnings: getAssetTypeWarnings(next.assetType),
             categoryReason: `Preset selected ${definition.label}. ${definition.description}`,
             categoryConfidence: 1
           })
@@ -904,7 +904,7 @@ export function App() {
       const nextMode = assetTypeToMode(nextAssetType);
       const wasSheetLike = isSheetLikeMode(mode);
       const nextSheetLike = isSheetLikeMode(nextMode);
-      const warnings = getWarningsForAssetType(nextAssetType);
+      const warnings = getAssetTypeWarnings(nextAssetType);
 
       setAssets((current) =>
         updateAssetTypeMetadata(current, selectedAsset.id, {
@@ -1577,8 +1577,10 @@ export function App() {
     setAlphaColorKey(rgbToHex(data[0]!, data[1]!, data[2]!));
   };
 
-  const showAlphaPreservationWarning =
-    alpha !== "preserve" && (assetType === "uiElement" || assetType === "background" || assetType === "portrait");
+  const alphaWarningMessages = getAssetTypeCleanupPreset(assetType).alphaWarningCodes
+    .map((code) => assetTypeWarnings.find((warning) => warning.code === code)?.message)
+    .filter((message): message is string => message !== undefined);
+  const showAlphaPreservationWarning = alpha !== "preserve" && alphaWarningMessages.length > 0;
 
   const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
     asset: (
@@ -1727,7 +1729,7 @@ export function App() {
           Decontaminate transparent RGB
         </label>
         {showAlphaPreservationWarning ? (
-          <p className="field-note">Alpha removal can flatten intentional soft edges on this asset type.</p>
+          <p className="field-note">{alphaWarningMessages.join(" ")}</p>
         ) : null}
         <SelectField
           label="Outline"
@@ -2860,35 +2862,6 @@ function formatSuggestionReason(
 ): string {
   const warningText = warnings.length > 0 ? ` ${warnings.map((warning) => warning.message).join(" ")}` : "";
   return `${categoryReason} Type ${Math.round(categoryConfidence * 100)}%. ${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.${warningText}`;
-}
-
-function getWarningsForAssetType(assetType: AssetType): AssetTypeWarning[] {
-  const definition = getAssetTypeDefinition(assetType);
-  const preset = getAssetTypeCleanupPreset(assetType);
-  const warnings = [...definition.defaultWarnings];
-  const knownCodes = new Set(warnings.map((warning) => warning.code));
-
-  for (const code of preset.warningCodes) {
-    if (!knownCodes.has(code)) {
-      warnings.push({
-        code,
-        severity: "info",
-        message: codeToAssetTypeWarningMessage(code)
-      });
-    }
-  }
-
-  return warnings;
-}
-
-function codeToAssetTypeWarningMessage(code: string): string {
-  if (code === "tilemap-future") {
-    return "Tilemap data import/export is not supported in 0.1.0.";
-  }
-  if (code === "tileset-seams-inspect-only") {
-    return "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0.";
-  }
-  return "This asset type uses a generic fix/export workflow in 0.1.0.";
 }
 
 function defaultAssetTypeForMode(mode: AssetMode): AssetType {
