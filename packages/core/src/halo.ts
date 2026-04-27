@@ -26,22 +26,21 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
   const solidAlphaThreshold = options.solidAlphaThreshold ?? 220;
   const backgroundToleranceSq = squareTolerance(options.backgroundTolerance ?? 18);
   const haloToleranceSq = squareTolerance(options.haloTolerance ?? 48);
-  const radius = Math.max(1, Math.min(3, Math.round(options.neighborRadius ?? 1)));
+  const radius = Math.max(1, Math.min(5, Math.round(options.neighborRadius ?? 4)));
   const background = estimateCornerBackground(image);
   const output = cloneImage(image);
+  const replacement = new Uint16Array(4);
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
       const index = y * image.width + x;
       const offset = index * 4;
-      if (
-        !isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq) ||
-        !hasOutsideNeighbor(image, x, y, background, alphaThreshold, backgroundToleranceSq)
-      ) {
+      if (!hasOutsideNeighbor(image, x, y, radius, background, alphaThreshold, backgroundToleranceSq)) {
         continue;
       }
 
-      const replacement = replacementFromSubjectNeighbors(
+      if (
+        !findReplacementFromSubjectNeighbors(
         image,
         x,
         y,
@@ -50,23 +49,44 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
         alphaThreshold,
         solidAlphaThreshold,
         backgroundToleranceSq,
-        haloToleranceSq
-      );
-      if (!replacement) {
+          haloToleranceSq,
+          replacement
+        )
+      ) {
+        if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
+          output.data[offset] = 0;
+          output.data[offset + 1] = 0;
+          output.data[offset + 2] = 0;
+          output.data[offset + 3] = 0;
+        }
         continue;
       }
 
-      output.data[offset] = replacement.r;
-      output.data[offset + 1] = replacement.g;
-      output.data[offset + 2] = replacement.b;
-      output.data[offset + 3] = Math.max(image.data[offset + 3]!, replacement.a);
+      const isKnownHalo = isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq);
+      if (isKnownHalo && isBorderPixel(image, x, y) && colorDistanceToBackgroundSq(image, offset, background) <= backgroundToleranceSq) {
+        continue;
+      }
+      if (!isKnownHalo && !isContrastingMattePixel(image, offset, replacement)) {
+        if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
+          output.data[offset] = 0;
+          output.data[offset + 1] = 0;
+          output.data[offset + 2] = 0;
+          output.data[offset + 3] = 0;
+        }
+        continue;
+      }
+
+      output.data[offset] = replacement[0]!;
+      output.data[offset + 1] = replacement[1]!;
+      output.data[offset + 2] = replacement[2]!;
+      output.data[offset + 3] = Math.max(image.data[offset + 3]!, replacement[3]!);
     }
   }
 
   return output;
 }
 
-function replacementFromSubjectNeighbors(
+function findReplacementFromSubjectNeighbors(
   image: RGBAImage,
   x: number,
   y: number,
@@ -75,8 +95,9 @@ function replacementFromSubjectNeighbors(
   alphaThreshold: number,
   solidAlphaThreshold: number,
   backgroundToleranceSq: number,
-  haloToleranceSq: number
-): { r: number; g: number; b: number; a: number } | null {
+  haloToleranceSq: number,
+  replacement: Uint16Array
+): boolean {
   let r = 0;
   let g = 0;
   let b = 0;
@@ -97,7 +118,8 @@ function replacementFromSubjectNeighbors(
       const offset = (ny * image.width + nx) * 4;
       if (
         isOutsidePixel(image, offset, background, alphaThreshold, backgroundToleranceSq) ||
-        isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq)
+        isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq) ||
+        isPaleNeutralPixel(image, offset)
       ) {
         continue;
       }
@@ -111,27 +133,27 @@ function replacementFromSubjectNeighbors(
   }
 
   if (count === 0) {
-    return null;
+    return false;
   }
 
-  return {
-    r: Math.round(r / count),
-    g: Math.round(g / count),
-    b: Math.round(b / count),
-    a: Math.round(a / count)
-  };
+  replacement[0] = Math.round(r / count);
+  replacement[1] = Math.round(g / count);
+  replacement[2] = Math.round(b / count);
+  replacement[3] = Math.round(a / count);
+  return true;
 }
 
 function hasOutsideNeighbor(
   image: RGBAImage,
   x: number,
   y: number,
+  radius: number,
   background: BackgroundSample,
   alphaThreshold: number,
   backgroundToleranceSq: number
 ): boolean {
-  for (let dy = -1; dy <= 1; dy += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
+  for (let dy = -radius; dy <= radius; dy += 1) {
+    for (let dx = -radius; dx <= radius; dx += 1) {
       if (dx === 0 && dy === 0) {
         continue;
       }
@@ -149,6 +171,10 @@ function hasOutsideNeighbor(
   return false;
 }
 
+function isBorderPixel(image: RGBAImage, x: number, y: number): boolean {
+  return x === 0 || y === 0 || x === image.width - 1 || y === image.height - 1;
+}
+
 function isHaloPixel(
   image: RGBAImage,
   offset: number,
@@ -162,10 +188,39 @@ function isHaloPixel(
     return false;
   }
   if (alpha < solidAlphaThreshold) {
-    return true;
+    return colorDistanceToBackgroundSq(image, offset, background) <= haloToleranceSq || isPaleNeutralPixel(image, offset);
   }
 
   return colorDistanceToBackgroundSq(image, offset, background) <= haloToleranceSq;
+}
+
+function isContrastingMattePixel(image: RGBAImage, offset: number, replacement: Uint16Array): boolean {
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const brightness = r + g + b;
+  const replacementBrightness = replacement[0]! + replacement[1]! + replacement[2]!;
+
+  return max - min <= 32 && brightness >= replacementBrightness + 96 && colorDistanceToReplacementSq(r, g, b, replacement) > squareTolerance(42);
+}
+
+function isPaleNeutralPixel(image: RGBAImage, offset: number): boolean {
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+
+  return max - min <= 36 && r + g + b >= 540;
+}
+
+function colorDistanceToReplacementSq(r: number, g: number, b: number, replacement: Uint16Array): number {
+  const dr = r - replacement[0]!;
+  const dg = g - replacement[1]!;
+  const db = b - replacement[2]!;
+  return dr * dr + dg * dg + db * db;
 }
 
 function isOutsidePixel(

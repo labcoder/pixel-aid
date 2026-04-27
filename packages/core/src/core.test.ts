@@ -720,6 +720,17 @@ describe("halo cleanup", () => {
     expect(readPixel(cleaned, 0, 2)).toEqual([255, 255, 255, 255]);
   });
 
+  test("remaps opaque gray haze pixels next to transparent matte", () => {
+    const source = createImage(5, 5, [0, 0, 0, 0]);
+    writePixel(source, 2, 2, 70, 126, 80, 255);
+    writePixel(source, 1, 2, 190, 198, 198, 255);
+
+    const cleaned = applyHaloRemoval(source, { enabled: true });
+
+    expect(readPixel(cleaned, 1, 2)).toEqual([70, 126, 80, 255]);
+    expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
+  });
+
   test("leaves image unchanged when disabled", () => {
     const source = createImage(3, 3);
     writePixel(source, 1, 1, 200, 220, 216, 96);
