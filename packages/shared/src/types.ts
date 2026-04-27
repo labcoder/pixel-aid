@@ -67,12 +67,17 @@ export type GridCandidateDiagnostics = {
 
 export type GridDriftDiagnostics = {
   localCorrectionUsed: boolean;
+  boundaryModel: "perCell" | "none";
   confidence: number;
   improvementScore: number;
   smoothnessPenalty: number;
   correctedBoundaryCount: number;
   maxOffsetPx: number;
   meanAbsOffsetPx: number;
+  xBoundaryStride?: number;
+  xBoundaryOffsets?: number[];
+  yBoundaryStride?: number;
+  yBoundaryOffsets?: number[];
   notes: string[];
 };
 

@@ -20,8 +20,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
   const localDriftBoundaries = localDrift?.used
     ? {
-        xBoundaries: localDrift.xBoundaries,
-        yBoundaries: localDrift.yBoundaries
+        xBoundaryRows: localDrift.xBoundaryRows,
+        yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
   const downsampled = downsampleBlocks(image, {

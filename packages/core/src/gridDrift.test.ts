@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
-import { createImage, writePixel } from "./image";
+import { downsampleBlocks } from "./downsample";
+import { createImage, readPixel, writePixel } from "./image";
 import { planLocalGridDrift } from "./gridDrift";
 
 function drawRect(
@@ -44,6 +45,22 @@ function driftedVerticalGridImage(): RGBAImage {
   return image;
 }
 
+function rowLocalDriftImage(): RGBAImage {
+  const image = createImage(12, 8, [0, 0, 0, 255]);
+  const red = [220, 20, 20, 255] as const;
+  const green = [20, 210, 70, 255] as const;
+  const blue = [40, 80, 230, 255] as const;
+
+  drawRect(image, 0, 0, 4, 4, red);
+  drawRect(image, 4, 0, 4, 4, green);
+  drawRect(image, 8, 0, 4, 4, blue);
+  drawRect(image, 0, 4, 6, 4, red);
+  drawRect(image, 6, 4, 2, 4, green);
+  drawRect(image, 8, 4, 4, 4, blue);
+
+  return image;
+}
+
 const candidate: GridCandidate = {
   outputWidth: 6,
   outputHeight: 4,
@@ -53,6 +70,17 @@ const candidate: GridCandidate = {
   phaseY: 0,
   confidence: 0.9,
   reason: "test grid"
+};
+
+const rowCandidate: GridCandidate = {
+  outputWidth: 3,
+  outputHeight: 2,
+  scaleX: 4,
+  scaleY: 4,
+  phaseX: 0,
+  phaseY: 0,
+  confidence: 0.9,
+  reason: "row-local test grid"
 };
 
 describe("local grid drift planning", () => {
@@ -92,5 +120,41 @@ describe("local grid drift planning", () => {
     expect(plan.diagnostics.localCorrectionUsed).toBe(true);
     expect(plan.diagnostics.correctedBoundaryCount).toBeGreaterThan(0);
     expect(plan.diagnostics.maxOffsetPx).toBeGreaterThanOrEqual(1);
+  });
+
+  test("uses row-local boundaries so shifted rows improve without changing clean rows", () => {
+    const plan = planLocalGridDrift(rowLocalDriftImage(), rowCandidate, {
+      maxOffsetPx: 3,
+      minImprovementScore: 0.02,
+      smoothnessWeight: 0.05
+    });
+
+    expect(plan.used).toBe(true);
+    expect(Array.from(plan.xBoundaryRows!.subarray(0, 4))).toEqual([0, 4, 8, 12]);
+    expect(plan.xBoundaryRows![5]).toBe(6);
+    expect(plan.diagnostics.boundaryModel).toBe("perCell");
+    expect(plan.diagnostics.xBoundaryStride).toBe(4);
+    expect(plan.diagnostics.xBoundaryOffsets).toHaveLength(8);
+    expect(plan.diagnostics.xBoundaryOffsets![5]).toBe(2);
+
+    const fixed = downsampleBlocks(rowLocalDriftImage(), {
+      outputWidth: rowCandidate.outputWidth,
+      outputHeight: rowCandidate.outputHeight,
+      scaleX: rowCandidate.scaleX,
+      scaleY: rowCandidate.scaleY,
+      phaseX: rowCandidate.phaseX,
+      phaseY: rowCandidate.phaseY,
+      xBoundaryRows: plan.xBoundaryRows,
+      yBoundaryColumns: plan.yBoundaryColumns,
+      method: "dominant",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(fixed, 0, 0)).toEqual([220, 20, 20, 255]);
+    expect(readPixel(fixed, 1, 0)).toEqual([20, 210, 70, 255]);
+    expect(readPixel(fixed, 2, 0)).toEqual([40, 80, 230, 255]);
+    expect(readPixel(fixed, 0, 1)).toEqual([220, 20, 20, 255]);
+    expect(readPixel(fixed, 1, 1)).toEqual([20, 210, 70, 255]);
+    expect(readPixel(fixed, 2, 1)).toEqual([40, 80, 230, 255]);
   });
 });

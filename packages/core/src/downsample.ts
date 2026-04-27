@@ -11,6 +11,8 @@ export type DownsampleOptions = {
   phaseY: number;
   xBoundaries?: Int32Array;
   yBoundaries?: Int32Array;
+  xBoundaryRows?: Int32Array;
+  yBoundaryColumns?: Int32Array;
   method: DownscaleMethod;
   alpha: AlphaMode;
   adaptiveCoverage?: number;
@@ -31,10 +33,11 @@ type ColorCluster = {
 
 export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions): RGBAImage {
   const output = createImage(options.outputWidth, options.outputHeight);
+  const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
 
   for (let y = 0; y < options.outputHeight; y += 1) {
     for (let x = 0; x < options.outputWidth; x += 1) {
-      const block = getBlockBounds(image, x, y, options);
+      setBlockBounds(block, image, x, y, options);
       const pixel =
         options.method === "median"
           ? medianBlock(image, block)
@@ -62,17 +65,37 @@ type BlockBounds = {
   endY: number;
 };
 
-function getBlockBounds(image: RGBAImage, x: number, y: number, options: DownsampleOptions): BlockBounds {
-  const rawStartX = options.xBoundaries ? options.xBoundaries[x]! : Math.floor(options.phaseX + x * options.scaleX);
-  const rawEndX = options.xBoundaries ? options.xBoundaries[x + 1]! : Math.floor(options.phaseX + (x + 1) * options.scaleX);
-  const rawStartY = options.yBoundaries ? options.yBoundaries[y]! : Math.floor(options.phaseY + y * options.scaleY);
-  const rawEndY = options.yBoundaries ? options.yBoundaries[y + 1]! : Math.floor(options.phaseY + (y + 1) * options.scaleY);
+function setBlockBounds(block: BlockBounds, image: RGBAImage, x: number, y: number, options: DownsampleOptions): void {
+  const rowStride = options.outputWidth + 1;
+  const columnStride = options.outputHeight + 1;
+  const rowOffset = y * rowStride;
+  const columnOffset = x * columnStride;
+  const rawStartX = options.xBoundaryRows
+    ? options.xBoundaryRows[rowOffset + x]!
+    : options.xBoundaries
+      ? options.xBoundaries[x]!
+      : Math.floor(options.phaseX + x * options.scaleX);
+  const rawEndX = options.xBoundaryRows
+    ? options.xBoundaryRows[rowOffset + x + 1]!
+    : options.xBoundaries
+      ? options.xBoundaries[x + 1]!
+      : Math.floor(options.phaseX + (x + 1) * options.scaleX);
+  const rawStartY = options.yBoundaryColumns
+    ? options.yBoundaryColumns[columnOffset + y]!
+    : options.yBoundaries
+      ? options.yBoundaries[y]!
+      : Math.floor(options.phaseY + y * options.scaleY);
+  const rawEndY = options.yBoundaryColumns
+    ? options.yBoundaryColumns[columnOffset + y + 1]!
+    : options.yBoundaries
+      ? options.yBoundaries[y + 1]!
+      : Math.floor(options.phaseY + (y + 1) * options.scaleY);
   const startX = Math.max(0, Math.min(image.width - 1, rawStartX));
   const startY = Math.max(0, Math.min(image.height - 1, rawStartY));
-  const endX = Math.max(startX + 1, Math.min(image.width, rawEndX));
-  const endY = Math.max(startY + 1, Math.min(image.height, rawEndY));
-
-  return { startX, endX, startY, endY };
+  block.startX = startX;
+  block.startY = startY;
+  block.endX = Math.max(startX + 1, Math.min(image.width, rawEndX));
+  block.endY = Math.max(startY + 1, Math.min(image.height, rawEndY));
 }
 
 function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, number, number, number]; dominant: DominantResult } {
