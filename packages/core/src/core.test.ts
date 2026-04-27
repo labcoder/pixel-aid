@@ -15,6 +15,7 @@ import {
   pixelOffset,
   readPixel,
   remapToPalette,
+  resolvePalette,
   sliceSheetFrames,
   writePixel
 } from "./index";
@@ -332,6 +333,21 @@ function countVisibleNearWhitePixels(image: RGBAImage): number {
   return count;
 }
 
+function visibleColors(image: RGBAImage): Set<string> {
+  const colors = new Set<string>();
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! < 16) {
+      continue;
+    }
+
+    const r = image.data[offset]!.toString(16).padStart(2, "0");
+    const g = image.data[offset + 1]!.toString(16).padStart(2, "0");
+    const b = image.data[offset + 2]!.toString(16).padStart(2, "0");
+    colors.add(`#${r}${g}${b}`);
+  }
+  return colors;
+}
+
 const defaultOptions: FixOptions = {
   mode: "single",
   assetType: "sprite",
@@ -529,6 +545,100 @@ describe("palette reduction", () => {
     const source = imageFromPixels(2, [rgba(10, 20, 30), rgba(0, 200, 240)]);
 
     expect(extractPalette(source, 4)).toEqual(["#0a141e", "#00c8f0"]);
+  });
+
+  test("extracts deterministic median-cut palettes within standard budgets", () => {
+    const source = imageFromPixels(8, [
+      rgba(10, 12, 16),
+      rgba(12, 14, 18),
+      rgba(80, 132, 120),
+      rgba(84, 136, 124),
+      rgba(150, 72, 88),
+      rgba(154, 76, 92),
+      rgba(230, 210, 120),
+      rgba(236, 216, 126)
+    ]);
+
+    const first = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "medianCut", maxColors: 4, dithering: "none" },
+      fallbackMaxColors: 4
+    });
+    const second = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "medianCut", maxColors: 4, dithering: "none" },
+      fallbackMaxColors: 4
+    });
+
+    expect(first.palette).toEqual(second.palette);
+    expect(first.palette).toHaveLength(4);
+    expect(new Set(first.palette).size).toBe(4);
+    expect(first.diagnostics.strategy).toBe("medianCut");
+    expect(first.diagnostics.maxColors).toBe(4);
+    expect(first.diagnostics.outputColorCount).toBe(4);
+  });
+
+  test("fixed palette mode remaps only to provided colors", () => {
+    const source = imageFromPixels(4, [
+      rgba(3, 4, 5),
+      rgba(248, 248, 248),
+      rgba(120, 180, 160),
+      rgba(130, 190, 170)
+    ]);
+    const result = resolvePalette(source, {
+      requested: { mode: "fixed", colors: ["#000000", "#ffffff"], dithering: "none" },
+      fallbackMaxColors: 8
+    });
+    const remapped = remapToPalette(source, result.palette);
+
+    expect(result.palette).toEqual(["#000000", "#ffffff"]);
+    expect(result.diagnostics).toMatchObject({
+      mode: "fixed",
+      fixedColorCount: 2,
+      dithering: "none"
+    });
+    expect(visibleColors(remapped)).toEqual(new Set(["#000000", "#ffffff"]));
+  });
+
+  test("preset palette mode returns safe preset metadata", () => {
+    const source = imageFromPixels(2, [rgba(10, 12, 16), rgba(236, 216, 126)]);
+
+    const result = resolvePalette(source, {
+      requested: { mode: "preset", preset: "pixelaid-mono-4", dithering: "none" },
+      fallbackMaxColors: 8
+    });
+
+    expect(result.palette).toEqual(["#0f172a", "#475569", "#cbd5e1", "#f8fafc"]);
+    expect(result.diagnostics).toMatchObject({
+      mode: "preset",
+      preset: "pixelaid-mono-4",
+      fixedColorCount: 4,
+      outputColorCount: 4
+    });
+  });
+
+  test("keeps frequency strategy compatible with legacy palette extraction", () => {
+    const source = blockySource();
+
+    const result = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "frequency", maxColors: 3, dithering: "none" },
+      fallbackMaxColors: 3
+    });
+
+    expect(result.palette).toEqual(extractPalette(source, 3));
+    expect(result.diagnostics.strategy).toBe("frequency");
+  });
+
+  test("reserves requested colors ahead of the auto palette budget", () => {
+    const source = imageFromPixels(4, [rgba(20, 40, 60), rgba(60, 100, 140), rgba(180, 80, 80), rgba(220, 180, 60)]);
+
+    const result = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "medianCut", maxColors: 2, dithering: "none" },
+      fallbackMaxColors: 2,
+      reservedColors: ["#443322"]
+    });
+
+    expect(result.palette[0]).toBe("#443322");
+    expect(result.palette).toHaveLength(2);
+    expect(result.diagnostics.outputColorCount).toBe(2);
   });
 
   test("extracts frequent colors and remaps to the nearest palette entry", () => {
