@@ -17,7 +17,7 @@ export function applyAlphaMode(image: RGBAImage, mode: AlphaMode, options: Alpha
     const output = cloneImage(image);
     const diagnostics = createDiagnostics(mode, threshold, tolerance, options.colorKey);
     if (decontaminateRgb) {
-      decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+      decontaminateTransparentRgb(output, transparentRgb, clampByte(options.threshold ?? 0), diagnostics);
     } else {
       collectAlphaDiagnostics(output, diagnostics);
     }
@@ -50,7 +50,7 @@ function applyBinaryAlpha(
   }
 
   if (decontaminateRgb) {
-    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+    decontaminateTransparentRgb(output, transparentRgb, threshold, diagnostics);
   } else {
     collectAlphaDiagnostics(output, diagnostics);
   }
@@ -86,7 +86,7 @@ function applyColorKey(
   }
 
   if (decontaminateRgb) {
-    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+    decontaminateTransparentRgb(output, transparentRgb, threshold, diagnostics);
   } else {
     collectAlphaDiagnostics(output, diagnostics);
   }
@@ -153,7 +153,7 @@ function backgroundFloodFill(
   }
 
   if (decontaminateRgb) {
-    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+    decontaminateTransparentRgb(output, transparentRgb, threshold, diagnostics);
   } else {
     collectAlphaDiagnostics(output, diagnostics);
   }
@@ -289,15 +289,24 @@ function collectAlphaDiagnostics(image: RGBAImage, diagnostics: AlphaCleanupDiag
   }
 }
 
-function decontaminateTransparentRgb(image: RGBAImage, transparentRgb: number, diagnostics: AlphaCleanupDiagnostics): void {
+function decontaminateTransparentRgb(
+  image: RGBAImage,
+  transparentRgb: number,
+  alphaThreshold: number,
+  diagnostics: AlphaCleanupDiagnostics
+): void {
   const r = (transparentRgb >> 16) & 0xff;
   const g = (transparentRgb >> 8) & 0xff;
   const b = transparentRgb & 0xff;
 
   for (let offset = 0; offset < image.data.length; offset += 4) {
     const alpha = image.data[offset + 3]!;
-    if (alpha === 0) {
-      diagnostics.transparentPixels += 1;
+    if (alpha === 0 || alpha < alphaThreshold) {
+      if (alpha === 0) {
+        diagnostics.transparentPixels += 1;
+      } else {
+        diagnostics.softAlphaPixels += 1;
+      }
       if (image.data[offset] !== r || image.data[offset + 1] !== g || image.data[offset + 2] !== b) {
         image.data[offset] = r;
         image.data[offset + 1] = g;
