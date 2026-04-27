@@ -1,6 +1,7 @@
 import type { RGBAImage } from "@pixelaid/shared";
+import { createDefaultAssetTypeMetadata, type AssetTypeMetadata } from "./assets";
 
-export type ImportedImageAsset = {
+export type ImportedImageAsset = AssetTypeMetadata & {
   id: string;
   name: string;
   image: RGBAImage;
@@ -35,7 +36,8 @@ export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
         height: bitmap.height,
         data: new Uint8ClampedArray(imageData.data)
       },
-      importedAt: new Date().toISOString()
+      importedAt: new Date().toISOString(),
+      ...createDefaultAssetTypeMetadata()
     };
   } finally {
     bitmap.close();
