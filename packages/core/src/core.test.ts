@@ -600,6 +600,25 @@ describe("alpha cleanup", () => {
     expect(readPixel(cleaned, 1, 0)).toEqual([20, 30, 40, 255]);
     expect(diagnostics.decontaminatedPixels).toBe(1);
   });
+
+  test("flood-fills off-white edge gradients without removing the subject", () => {
+    const source = createImage(5, 5);
+    for (let y = 0; y < 5; y += 1) {
+      for (let x = 0; x < 5; x += 1) {
+        writePixel(source, x, y, 246 + ((x + y) % 5), 246 + (x % 4), 244 + (y % 4), 255);
+      }
+    }
+    writePixel(source, 2, 2, 50, 90, 130, 255);
+
+    const { image: cleaned } = applyAlphaMode(source, "backgroundFloodFill", {
+      tolerance: 12,
+      decontaminateRgb: true
+    });
+
+    expect(readPixel(cleaned, 0, 0)).toEqual([0, 0, 0, 0]);
+    expect(readPixel(cleaned, 4, 4)).toEqual([0, 0, 0, 0]);
+    expect(readPixel(cleaned, 2, 2)).toEqual([50, 90, 130, 255]);
+  });
 });
 
 describe("denoise cleanup", () => {
