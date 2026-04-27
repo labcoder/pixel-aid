@@ -89,6 +89,14 @@ For detected sheet suggestions, source and output rectangles are deliberately di
 
 `extractPalette` preserves exact colors when the image is already within the color budget. When it exceeds the budget, it falls back to frequency-ranked 5-bit RGB buckets. `remapToPalette` maps visible pixels to the nearest palette color by RGB distance. This gives stable, deterministic first-milestone behavior and can be replaced by a stronger quantizer behind the same API.
 
+### Palette Workflows
+
+PixelAid supports auto, fixed, and safe in-repo preset palette modes. Auto mode defaults to deterministic median-cut quantization, with frequency ranking kept as a selectable fallback strategy for simpler assets or compatibility checks.
+
+Fixed and preset modes treat the active palette as a hard output contract: visible pixels are remapped only to colors in that palette. MIG-8 keeps dithering disabled because automatic ordered or error-diffusion patterns can introduce shimmer across animation frames.
+
+For sheet-like assets, palette locking can use the whole sheet or the first frame. The fix result stores palette settings plus diagnostics, including drift warnings when frame-local palettes differ from the active locked palette.
+
 ## Denoise
 
 `applyDenoise` is a native-resolution cleanup pass that runs after alpha cleanup and before outline cleanup and palette extraction.

@@ -210,6 +210,65 @@ describe("generic manifest export", () => {
     });
   });
 
+  test("preserves palette workflow settings and diagnostics in operation metadata", () => {
+    const driftWarning = "Palette drift detected across 4 frames; 3 frame colors remap outside the active palette.";
+    const paletteResult: PixelFixResult = {
+      ...result,
+      settings: {
+        ...settings,
+        paletteSettings: {
+          mode: "auto",
+          strategy: "medianCut",
+          lockScope: "sheet",
+          maxColors: 8,
+          dithering: "none"
+        }
+      },
+      diagnostics: {
+        palette: {
+          mode: "auto",
+          strategy: "medianCut",
+          lockScope: "sheet",
+          maxColors: 8,
+          inputColorCount: 120,
+          outputColorCount: 8,
+          palette: ["#000000", "#ffffff"],
+          dithering: "none",
+          warnings: [driftWarning],
+          drift: {
+            frameCount: 4,
+            checkedFrameCount: 4,
+            maxFrameColorCount: 12,
+            maxFramePaletteDelta: 3,
+            warnings: [driftWarning]
+          }
+        }
+      }
+    };
+
+    const manifest = createPixelAssetManifest({
+      result: paletteResult,
+      imageName: "hero_sheet.png"
+    });
+
+    expect(manifest.meta.operation.settings.paletteSettings).toMatchObject({
+      mode: "auto",
+      strategy: "medianCut",
+      lockScope: "sheet",
+      maxColors: 8,
+      dithering: "none"
+    });
+    expect(manifest.meta.operation.diagnostics?.palette).toMatchObject({
+      outputColorCount: 8,
+      lockScope: "sheet",
+      warnings: [driftWarning],
+      drift: {
+        maxFramePaletteDelta: 3,
+        warnings: [driftWarning]
+      }
+    });
+  });
+
   test("exports engine guidance placeholders for Godot and Unity", () => {
     expect(GODOT_IMPORT_GUIDANCE.join("\n")).toContain("nearest");
     expect(UNITY_IMPORT_GUIDANCE.join("\n")).toContain("Point");
