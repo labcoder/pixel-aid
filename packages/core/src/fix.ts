@@ -172,16 +172,37 @@ function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImage
   const alphaResult = applyAlphaMode(image, options.alpha, options.alphaSettings);
   const haloCleaned = applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
+  const outlined = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
+    color: options.cleanup.outlineColor,
+    alpha: options.cleanup.outlineAlpha,
+    size: options.cleanup.outlineSize,
+    removeOrphans: options.cleanup.removeOrphans,
+    closeGaps: options.cleanup.jaggyCleanup,
+    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
+  });
   return {
-    image: applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
-      color: options.cleanup.outlineColor,
-      alpha: options.cleanup.outlineAlpha,
-      size: options.cleanup.outlineSize,
-      removeOrphans: options.cleanup.removeOrphans,
-      closeGaps: options.cleanup.jaggyCleanup,
-      preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
-    }),
-    alpha: alphaResult.diagnostics
+    image: outlined,
+    alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined)
+  };
+}
+
+function refreshAlphaDiagnosticsFromImage(diagnostics: AlphaCleanupDiagnostics, image: RGBAImage): AlphaCleanupDiagnostics {
+  let transparentPixels = 0;
+  let softAlphaPixels = 0;
+
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha === 0) {
+      transparentPixels += 1;
+    } else if (alpha < 255) {
+      softAlphaPixels += 1;
+    }
+  }
+
+  return {
+    ...diagnostics,
+    transparentPixels,
+    softAlphaPixels
   };
 }
 
