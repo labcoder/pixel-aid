@@ -1,6 +1,8 @@
 export { createSingleSpriteCleanupFixture } from "./singleSprite";
 export type { SingleSpriteCleanupFixture } from "./singleSprite";
 export { benchmarkFixtureCatalog } from "./benchmarkFixtures";
+export { createGoldenSignature } from "./goldenSignature";
+export type { GoldenSignatureOptions } from "./goldenSignature";
 export { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";
 export { largeBackgroundFixtures } from "./largeBackgrounds";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
