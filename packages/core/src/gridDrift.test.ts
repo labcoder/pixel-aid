@@ -66,6 +66,20 @@ describe("local grid drift planning", () => {
     expect(plan.diagnostics.correctedBoundaryCount).toBe(0);
   });
 
+  test("rejects ambiguous low-signal grids and preserves nominal boundaries", () => {
+    const plan = planLocalGridDrift(createImage(24, 16, [120, 120, 120, 255]), candidate, {
+      maxOffsetPx: 3,
+      minImprovementScore: 0.02,
+      smoothnessWeight: 0.05
+    });
+
+    expect(plan.used).toBe(false);
+    expect(Array.from(plan.xBoundaries)).toEqual([0, 4, 8, 12, 16, 20, 24]);
+    expect(Array.from(plan.yBoundaries)).toEqual([0, 4, 8, 12, 16]);
+    expect(plan.diagnostics.localCorrectionUsed).toBe(false);
+    expect(plan.diagnostics.correctedBoundaryCount).toBe(0);
+  });
+
   test("corrects mild boundary drift when edge evidence improves", () => {
     const plan = planLocalGridDrift(driftedVerticalGridImage(), candidate, {
       maxOffsetPx: 3,
