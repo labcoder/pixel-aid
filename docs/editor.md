@@ -15,13 +15,26 @@ Assets are imported source images. Each item keeps the original filename, source
 
 # Fix Settings
 
-Mode describes the kind of source you are fixing.
+Asset type describes the user's product intent for the import. Processing mode describes the algorithm path PixelAid will use to fix it.
 
-- Single sprite: one sprite, prop, icon, character, or object.
-- Sprite sheet: multiple animation or pose frames arranged in rows or columns. Character sheets are treated as sprite sheets for now because they use the same frame, pivot, and timeline metadata.
-- Tile sheet: tiles or tilesets where frame dimensions and grid alignment matter.
+Supported asset types in 0.1.0:
+
+| Asset type | Processing mode | Support | Notes |
+| --- | --- | --- | --- |
+| Sprite | Single | Full | Standalone characters, props, and objects. |
+| Icon | Single | Full | Uses crisp alpha and tighter palette defaults. |
+| Sprite sheet | Sprite sheet | Full | Generic sheet/frame workflow. |
+| Animation sheet | Sprite sheet | Full | Animation is stored as frames and timeline clips, not a separate processing mode. |
+| Character sheet | Sprite sheet | Full | Character semantics stay in editable frame rows and clip metadata. |
+| Tileset | Tile sheet | Inspect-only | Existing grid/cell controls work; seam diagnostics and tile metadata are future work. |
+| Portrait | Single | Inspect-only | Uses generic PNG/manifest export with preservation-oriented cleanup. |
+| UI element | Single | Inspect-only | Uses conservative alpha/effect cleanup. |
+| Background | Single | Inspect-only | Uses a larger palette budget and avoids aggressive cleanup by default. |
+| Tilemap | Tile sheet | Future | Needs map-data import/export before it can be engine-ready. |
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
+
+Manual Asset type overrides are stored per imported asset. A character import can stay set to Sprite while another import stays set to Tileset, and switching between assets restores each asset's own classification.
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
 
@@ -41,7 +54,7 @@ These simple controls update the same settings shown in the advanced groups, so 
 
 Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
 
-In sprite sheet and tile sheet modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is shown as read-only Derived W and Derived H. Manual sheets derive that size from Frame W, Frame H, Rows, Columns, Margin, and Spacing. Detected animation sheets derive it from the detected row clips and their per-animation cell sizes.
+In sprite sheet and tile sheet processing modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is shown as read-only Derived W and Derived H. Manual sheets derive that size from Frame W, Frame H, Rows, Columns, Margin, and Spacing. Detected animation sheets derive it from the detected row clips and their per-animation cell sizes.
 
 # Grid
 
@@ -154,7 +167,7 @@ The bottom panel can be dragged upward from its top handle when logs, metrics, o
 The first export target is a generic engine-ready bundle.
 
 - Fixed PNG contains the native-size pixel-art output.
-- JSON manifest includes source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
+- JSON manifest includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
 - If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG and manifest frame rects use that packed layout.
 - Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting. If a detected clip is renamed, matching frame names and per-frame duration overrides are renamed with it before export.
