@@ -1073,6 +1073,60 @@ describe("fix pipeline", () => {
     expect(result.grid.confidence).toBeGreaterThan(0.82);
   });
 
+  test("leaves clean auto-grid fixture unchanged when local correction is disabled", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const options: FixOptions = {
+      mode: "single",
+      assetType: "sprite",
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        localCorrection: false
+      },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    };
+
+    const result = fixImage(fixture.image, options);
+
+    expect(result.grid.diagnostics?.drift).toBeUndefined();
+    expect(result.image.width).toBe(102);
+    expect(result.image.height).toBe(144);
+  });
+
+  test("reports local correction diagnostics when enabled", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const result = fixImage(fixture.image, {
+      mode: "single",
+      assetType: "sprite",
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        localCorrection: true
+      },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.grid.diagnostics?.drift).toEqual(
+      expect.objectContaining({
+        localCorrectionUsed: expect.any(Boolean),
+        confidence: expect.any(Number),
+        correctedBoundaryCount: expect.any(Number)
+      })
+    );
+  });
+
   test("keeps the background-aware crop when target dimensions are only an auto-grid hint", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const result = fixImage(fixture.image, {

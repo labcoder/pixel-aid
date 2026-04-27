@@ -22,6 +22,31 @@ describe("cleanup fixture suite", () => {
     expect(candidate!.confidence).toBeGreaterThanOrEqual(fixture.expected.grid!.minConfidence);
   });
 
+  test("keeps clean pseudo-pixel fixture stable with local correction enabled", () => {
+    const fixture = requiredFixture("single-robot-6x");
+    const withoutCorrection = fixImage(fixture.createImage(), {
+      mode: "single",
+      assetType: "sprite",
+      maxColors: 24,
+      grid: { detect: "auto", localCorrection: false },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+    const withCorrection = fixImage(fixture.createImage(), {
+      ...withoutCorrection.settings,
+      grid: { detect: "auto", localCorrection: true }
+    });
+
+    expect(withCorrection.image.width).toBe(withoutCorrection.image.width);
+    expect(withCorrection.image.height).toBe(withoutCorrection.image.height);
+    expect(Array.from(withCorrection.image.data)).toEqual(Array.from(withoutCorrection.image.data));
+  });
+
   test("cleans transparent halo fixtures into compact golden signatures", () => {
     const fixture = requiredFixture("halo-transparent-edge");
     const result = fixImage(fixture.createImage(), singleOptions("sprite", 64, 64, "binary", true));
