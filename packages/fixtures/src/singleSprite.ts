@@ -1,4 +1,6 @@
 import type { Rect, RGBAImage } from "@pixelaid/shared";
+import { addDeterministicWobble, blitNativeToFakePixel, fillEllipse as fillEllipsePrimitive, fillImage, fillRect as fillRectPrimitive } from "./imagePrimitives";
+import type { Color } from "./imagePrimitives";
 
 export type SingleSpriteCleanupFixture = {
   image: RGBAImage;
@@ -14,8 +16,6 @@ export type SingleSpriteCleanupFixture = {
     palette: string[];
   };
 };
-
-type Color = readonly [number, number, number, number];
 
 const WIDTH = 706;
 const HEIGHT = 878;
@@ -39,14 +39,35 @@ const VISOR = [30, 78, 78, 255] as const;
 
 export function createSingleSpriteCleanupFixture(): SingleSpriteCleanupFixture {
   const data = new Uint8ClampedArray(WIDTH * HEIGHT * 4);
-  fillWholeImage(data, BACKGROUND);
+  fillImage(data, BACKGROUND);
 
   const native = new Uint8ClampedArray(NATIVE_WIDTH * NATIVE_HEIGHT * 4);
-  fillWholeImage(native, [255, 255, 255, 255]);
+  fillImage(native, [255, 255, 255, 255]);
 
   drawNativeRobot(native);
-  blitFakePixelImage(native, data);
-  addLowAmplitudeAiNoise(data);
+  blitNativeToFakePixel({
+    native,
+    nativeWidth: NATIVE_WIDTH,
+    nativeHeight: NATIVE_HEIGHT,
+    target: data,
+    targetWidth: WIDTH,
+    scale: SCALE,
+    phaseX: PHASE_X,
+    phaseY: PHASE_Y
+  });
+  addDeterministicWobble({
+    data,
+    width: WIDTH,
+    x: PHASE_X,
+    y: PHASE_Y,
+    w: NATIVE_WIDTH * SCALE,
+    h: NATIVE_HEIGHT * SCALE,
+    scale: SCALE,
+    phaseX: PHASE_X,
+    phaseY: PHASE_Y,
+    amplitude: 2,
+    skipNearWhite: true
+  });
 
   return {
     image: {
@@ -160,94 +181,10 @@ function drawNativeRobot(data: Uint8ClampedArray): void {
   fillRect(data, 66, 27, 41, 3, SHADOW);
 }
 
-function fillWholeImage(data: Uint8ClampedArray, color: Color): void {
-  for (let i = 0; i < data.length; i += 4) {
-    data[i] = color[0];
-    data[i + 1] = color[1];
-    data[i + 2] = color[2];
-    data[i + 3] = color[3];
-  }
-}
-
 function fillRect(data: Uint8ClampedArray, x: number, y: number, w: number, h: number, color: Color): void {
-  const x0 = Math.max(0, x);
-  const y0 = Math.max(0, y);
-  const x1 = Math.min(NATIVE_WIDTH, x + w);
-  const y1 = Math.min(NATIVE_HEIGHT, y + h);
-
-  for (let yy = y0; yy < y1; yy += 1) {
-    let offset = (yy * NATIVE_WIDTH + x0) * 4;
-    for (let xx = x0; xx < x1; xx += 1) {
-      data[offset] = color[0];
-      data[offset + 1] = color[1];
-      data[offset + 2] = color[2];
-      data[offset + 3] = color[3];
-      offset += 4;
-    }
-  }
+  fillRectPrimitive(data, NATIVE_WIDTH, NATIVE_HEIGHT, x, y, w, h, color);
 }
 
 function fillEllipse(data: Uint8ClampedArray, centerX: number, centerY: number, radiusX: number, radiusY: number, color: Color): void {
-  const x0 = Math.max(0, Math.floor(centerX - radiusX));
-  const y0 = Math.max(0, Math.floor(centerY - radiusY));
-  const x1 = Math.min(NATIVE_WIDTH - 1, Math.ceil(centerX + radiusX));
-  const y1 = Math.min(NATIVE_HEIGHT - 1, Math.ceil(centerY + radiusY));
-  const rx2 = radiusX * radiusX;
-  const ry2 = radiusY * radiusY;
-
-  for (let y = y0; y <= y1; y += 1) {
-    for (let x = x0; x <= x1; x += 1) {
-      const dx = x - centerX;
-      const dy = y - centerY;
-      if ((dx * dx) / rx2 + (dy * dy) / ry2 <= 1) {
-        const offset = (y * NATIVE_WIDTH + x) * 4;
-        data[offset] = color[0];
-        data[offset + 1] = color[1];
-        data[offset + 2] = color[2];
-        data[offset + 3] = color[3];
-      }
-    }
-  }
-}
-
-function blitFakePixelImage(native: Uint8ClampedArray, target: Uint8ClampedArray): void {
-  for (let ny = 0; ny < NATIVE_HEIGHT; ny += 1) {
-    for (let nx = 0; nx < NATIVE_WIDTH; nx += 1) {
-      const nativeOffset = (ny * NATIVE_WIDTH + nx) * 4;
-      const sx0 = PHASE_X + nx * SCALE;
-      const sy0 = PHASE_Y + ny * SCALE;
-      for (let by = 0; by < SCALE; by += 1) {
-        let targetOffset = ((sy0 + by) * WIDTH + sx0) * 4;
-        for (let bx = 0; bx < SCALE; bx += 1) {
-          target[targetOffset] = native[nativeOffset]!;
-          target[targetOffset + 1] = native[nativeOffset + 1]!;
-          target[targetOffset + 2] = native[nativeOffset + 2]!;
-          target[targetOffset + 3] = native[nativeOffset + 3]!;
-          targetOffset += 4;
-        }
-      }
-    }
-  }
-}
-
-function addLowAmplitudeAiNoise(data: Uint8ClampedArray): void {
-  for (let y = PHASE_Y; y < PHASE_Y + NATIVE_HEIGHT * SCALE; y += 1) {
-    for (let x = PHASE_X; x < PHASE_X + NATIVE_WIDTH * SCALE; x += 1) {
-      const offset = (y * WIDTH + x) * 4;
-      if (data[offset]! > 245 && data[offset + 1]! > 245 && data[offset + 2]! > 245) {
-        continue;
-      }
-
-      const blockX = Math.floor((x - PHASE_X) / SCALE);
-      const blockY = Math.floor((y - PHASE_Y) / SCALE);
-      const wobble = ((x * 17 + y * 31 + blockX * 7 + blockY * 11) % 5) - 2;
-      data[offset] = clampByte(data[offset]! + wobble);
-      data[offset + 1] = clampByte(data[offset + 1]! + wobble);
-      data[offset + 2] = clampByte(data[offset + 2]! + wobble);
-    }
-  }
-}
-
-function clampByte(value: number): number {
-  return Math.max(0, Math.min(255, value));
+  fillEllipsePrimitive(data, NATIVE_WIDTH, NATIVE_HEIGHT, centerX, centerY, radiusX, radiusY, color);
 }

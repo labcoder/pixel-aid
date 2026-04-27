@@ -26,6 +26,7 @@ Useful scoped commands:
 
 ```sh
 npm run test -w @pixelaid/core
+npm run test -w @pixelaid/fixtures
 npm run benchmark -w @pixelaid/core
 npm run test -w @pixelaid/web
 ```
@@ -42,11 +43,13 @@ packages/fixtures     Generated benchmark fixtures and expected metadata
 docs                  Architecture, algorithms, performance, and licensing notes
 ```
 
+See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
+
 ## Current Workflow
 
 1. Import an image through the toolbar, drag/drop, file picker, or paste. Large imports show decode and analysis status while the app prepares the asset.
 2. Select the asset from the Assets panel. The editor keeps the source image immutable.
-3. Use the guided recommendation card for a first pass. For single sprites, simple choices resize, clean background, reduce noise, change palette count, and add/repair outlines while updating the advanced settings underneath. Auto Suggest shows analysis status and caches the grid candidates used by the preview cards.
+3. Use the guided recommendation card for a first pass. Auto Suggest classifies the selected asset type, shows confidence and support warnings, and caches the grid candidates used by the preview cards. The manual Asset type selector is stored per imported asset.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Inspect the result in mode-specific views. Single sprites use Input, Compare, and Output; sheet-like modes use Input, Output, and Timeline. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
 6. Export a ZIP containing the fixed PNG and generic JSON manifest.
@@ -59,6 +62,7 @@ Editor:
 - Drag/drop, file picker, and paste image import.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
+- Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.
 - Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, and palette count.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
 - Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, active-view native size readouts, and draggable single-sprite split comparison.
@@ -80,15 +84,15 @@ Processing:
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Frame-aware sheet fixing: sprite sheets and tile sheets send the current frame metadata to the worker, fix each cell from its own source rectangle, then apply a shared palette to the packed sheet. Detected sheets preserve source rectangles for sampling but pack generated output rectangles into clean native cells with no imported label/gutter margin.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
-- Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
+- Fixture-driven cleanup catalog and benchmarks for pseudo-pixel sprites, alpha halos, palette drift animation frames, uneven sheets, tilesets, large backgrounds, and large generated sources.
 - Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.
 - Edge halo removal for semi-transparent or background-colored fringes before outline and palette extraction.
-- Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity, favoring dominant color when blocks are already crisp.
+- Auto Suggest classifies asset type, derives the processing mode, applies type-specific cleanup defaults, and chooses the downscale method from sampled pseudo-pixel block purity where appropriate.
 - Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the overall aspect ratio is not extremely wide.
 - Core sheet layout detection finds row bands, regular frame groups, outlined cell separators, first-pass content-centered uneven gutters, and conservative disconnected-component frame groups against a sampled background. It can classify common blocky left-side row labels, aligns drifted rows to a shared column grid, and returns frames, row counts, row animations, row-label metadata, row/column confidence diagnostics, and warnings.
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
-- ZIP bundle export containing PNG and JSON manifest files. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects.
+- ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 ## Known Limitations
@@ -98,6 +102,7 @@ Processing:
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
+- Tilesets are inspect-only until seam diagnostics and tile-engine metadata exist. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 
 ## Prioritized Roadmap
@@ -106,7 +111,7 @@ Processing:
 2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
 3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
-5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts.
+5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts, including tileset seam diagnostics and tilemap metadata when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
 7. CLI/API/MCP: expose the deterministic core through batch commands, a local API, and MCP tools after the main cleanup and sheet workflows stabilize.
 8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.

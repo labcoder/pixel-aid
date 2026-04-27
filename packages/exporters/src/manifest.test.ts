@@ -15,6 +15,7 @@ const image: RGBAImage = {
 
 const settings: FixOptions = {
   mode: "spriteSheet",
+  assetType: "animationSheet",
   targetWidth: 32,
   targetHeight: 16,
   maxColors: 4,
@@ -78,6 +79,7 @@ describe("generic manifest export", () => {
       app: "PixelAid",
       version: "0.1.0",
       image: "hero_sheet.png",
+      assetType: "animationSheet",
       generatedAt: "2026-04-24T16:00:00.000Z",
       palette: ["#000000", "#ffffff"],
       source: {
@@ -86,6 +88,7 @@ describe("generic manifest export", () => {
         originalFilename: "hero_ai.png"
       }
     });
+    expect(manifest.meta.operation.settings.assetType).toBe("animationSheet");
     expect(manifest.sheet).toEqual({
       width: 32,
       height: 16,

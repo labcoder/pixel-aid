@@ -50,6 +50,7 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
       app: PIXELAID_APP_NAME,
       version: PIXELAID_VERSION,
       image: options.imageName,
+      assetType: options.result.settings.assetType,
       ...(options.generatedAt ? { generatedAt: options.generatedAt } : {}),
       palette: options.result.palette,
       source,

@@ -7,6 +7,7 @@ const fixture = createSingleSpriteCleanupFixture();
 
 const autoCleanupOptions: FixOptions = {
   mode: "single",
+  assetType: "sprite",
   maxColors: 24,
   grid: {
     detect: "auto"
