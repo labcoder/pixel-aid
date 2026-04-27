@@ -26,6 +26,7 @@ Useful scoped commands:
 
 ```sh
 npm run test -w @pixelaid/core
+npm run test -w @pixelaid/fixtures
 npm run benchmark -w @pixelaid/core
 npm run test -w @pixelaid/web
 ```
@@ -41,6 +42,8 @@ packages/shared       Shared types, constants, and manifest contracts
 packages/fixtures     Generated benchmark fixtures and expected metadata
 docs                  Architecture, algorithms, performance, and licensing notes
 ```
+
+See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 
 ## Current Workflow
 
@@ -81,7 +84,7 @@ Processing:
 - Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Frame-aware sheet fixing: sprite sheets and tile sheets send the current frame metadata to the worker, fix each cell from its own source rectangle, then apply a shared palette to the packed sheet. Detected sheets preserve source rectangles for sampling but pack generated output rectangles into clean native cells with no imported label/gutter margin.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
-- Fixture-driven single-sprite cleanup benchmark for grid detection and full adaptive cleanup.
+- Fixture-driven cleanup catalog and benchmarks for pseudo-pixel sprites, alpha halos, palette drift animation frames, uneven sheets, tilesets, large backgrounds, and large generated sources.
 - Pixel-art-safe denoise strength control for reducing local AI color speckle before palette reduction.
 - Edge halo removal for semi-transparent or background-colored fringes before outline and palette extraction.
 - Auto Suggest classifies asset type, derives the processing mode, applies type-specific cleanup defaults, and chooses the downscale method from sampled pseudo-pixel block purity where appropriate.

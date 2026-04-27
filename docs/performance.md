@@ -45,11 +45,11 @@ The metrics panel shows:
 
 Grid candidates may also include a source crop rectangle. This is useful when a high-resolution single sprite sits on a bright background because the output dimensions and palette pass then reflect the sprite asset instead of the full image canvas. If an outline is active on an auto-cropped single sprite, the output can be padded by the outline size so the new edge pixels have room to render.
 
-## Current Benchmark
+## Current Benchmarks
 
-The core package includes a fixture-driven benchmark for single-sprite cleanup. It exercises the generated high-resolution robot-like source, background-aware grid detection, adaptive downsampling, palette reduction, and cleanup pipeline.
+The core package includes fixture-driven benchmarks for single-sprite cleanup and large generated sources. They exercise the generated high-resolution robot-like source, 720p and 1080p fake-pixel sources, a large frame-aware sheet, background-aware grid detection, adaptive downsampling, palette reduction, and cleanup pipeline.
 
-Run it with:
+Run them with:
 
 ```sh
 npm run benchmark -w @pixelaid/core
@@ -57,13 +57,11 @@ npm run benchmark -w @pixelaid/core
 
 ## Future Benchmarks
 
-Add fixtures and budget checks for:
+Current large-source benchmark metadata is report-only. Future work can add budget checks for:
 
-- 720p fake-pixel sprite.
-- 1080p fake-pixel sprite.
-- Large multi-frame sprite sheet.
 - Transparent sprite with halos.
 - Uneven AI-generated sheet with inconsistent gutters.
+- Mobile or low-power hardware profiles.
 
 Run all available benchmarks with:
 
