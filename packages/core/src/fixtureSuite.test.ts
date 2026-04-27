@@ -54,7 +54,29 @@ describe("cleanup fixture suite", () => {
 
     expect(signature.transparentPixels).toBeGreaterThanOrEqual(fixture.expected.alpha!.transparentPixelsAtLeast!);
     expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
-    expect(signature.checksum).toBe("31c28e6c");
+    expect(countTransparentPixelsWithUnsafeRgb(result.image.data, [0, 0, 0])).toBe(0);
+    expect(signature.checksum).toBe("ad336804");
+  });
+
+  test("removes baked checkerboard matte backgrounds with safe transparent RGB", () => {
+    const fixture = requiredFixture("checkerboard-baked-alpha-matte");
+    const result = fixImage(fixture.createImage(), {
+      ...singleOptions("icon", 64, 64, "backgroundFloodFill", true),
+      alphaSettings: {
+        tolerance: 18,
+        decontaminateRgb: true,
+        transparentRgb: "#000000"
+      }
+    });
+    const signature = createGoldenSignature(result.image, {
+      samplePoints: fixture.expected.alpha!.sampleTransparentPixels,
+      maxPalette: 8
+    });
+
+    expect(signature.samplePixels["0,0"]).toEqual([0, 0, 0, 0]);
+    expect(signature.samplePixels["63,63"]).toEqual([0, 0, 0, 0]);
+    expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
+    expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
   });
 
   test("keeps palette-drift animation sheets on one shared palette", () => {
@@ -154,6 +176,19 @@ function countVisibleNearWhitePixels(data: Uint8ClampedArray): number {
   let count = 0;
   for (let offset = 0; offset < data.length; offset += 4) {
     if (data[offset + 3]! >= 16 && data[offset]! > 220 && data[offset + 1]! > 220 && data[offset + 2]! > 220) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countTransparentPixelsWithUnsafeRgb(data: Uint8ClampedArray, safeRgb: readonly [number, number, number]): number {
+  let count = 0;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    if (
+      data[offset + 3] === 0 &&
+      (data[offset] !== safeRgb[0] || data[offset + 1] !== safeRgb[1] || data[offset + 2] !== safeRgb[2])
+    ) {
       count += 1;
     }
   }

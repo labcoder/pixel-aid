@@ -105,7 +105,7 @@ function backgroundFloodFill(
   const output = cloneImage(image);
   const visited = new Uint8Array(image.width * image.height);
   const queue = new Int32Array(image.width * image.height);
-  const background = 0;
+  const background = estimateBackgroundModel(image);
   const toleranceSq = tolerance * tolerance * 3;
   const diagnostics = createDiagnostics("backgroundFloodFill", threshold, tolerance, colorKey);
   let read = 0;
@@ -122,7 +122,7 @@ function backgroundFloodFill(
     }
 
     const offset = index * 4;
-    if (!matchesBackground(image.data, background, offset, toleranceSq)) {
+    if (!matchesBackgroundModel(image.data, offset, background, toleranceSq)) {
       return;
     }
 
@@ -161,11 +161,108 @@ function backgroundFloodFill(
   return { image: output, diagnostics };
 }
 
-function matchesBackground(data: Uint8ClampedArray, backgroundOffset: number, offset: number, toleranceSq: number): boolean {
-  const dr = data[offset]! - data[backgroundOffset]!;
-  const dg = data[offset + 1]! - data[backgroundOffset + 1]!;
-  const db = data[offset + 2]! - data[backgroundOffset + 2]!;
-  return dr * dr + dg * dg + db * db <= toleranceSq;
+type BackgroundModel = {
+  colors: Uint8Array;
+  count: number;
+};
+
+function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
+  const bucketCounts = new Uint16Array(4096);
+  const bucketR = new Uint32Array(4096);
+  const bucketG = new Uint32Array(4096);
+  const bucketB = new Uint32Array(4096);
+  const step = Math.max(1, Math.floor(Math.min(image.width, image.height) / 32));
+
+  const sample = (x: number, y: number): void => {
+    const offset = (y * image.width + x) * 4;
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    bucketCounts[bucket] = bucketCounts[bucket]! + 1;
+    bucketR[bucket] = bucketR[bucket]! + r;
+    bucketG[bucket] = bucketG[bucket]! + g;
+    bucketB[bucket] = bucketB[bucket]! + b;
+  };
+
+  for (let x = 0; x < image.width; x += step) {
+    sample(x, 0);
+    sample(x, image.height - 1);
+  }
+  for (let y = 0; y < image.height; y += step) {
+    sample(0, y);
+    sample(image.width - 1, y);
+  }
+
+  let first = 0;
+  let second = 0;
+  for (let bucket = 0; bucket < bucketCounts.length; bucket += 1) {
+    if (bucketCounts[bucket]! > bucketCounts[first]!) {
+      second = first;
+      first = bucket;
+    } else if (bucket !== first && bucketCounts[bucket]! > bucketCounts[second]!) {
+      second = bucket;
+    }
+  }
+
+  const colors = new Uint8Array(6);
+  const firstCount = bucketCounts[first]!;
+  if (firstCount === 0) {
+    colors[0] = image.data[0]!;
+    colors[1] = image.data[1]!;
+    colors[2] = image.data[2]!;
+    return { colors, count: 1 };
+  }
+
+  colors[0] = Math.round(bucketR[first]! / firstCount);
+  colors[1] = Math.round(bucketG[first]! / firstCount);
+  colors[2] = Math.round(bucketB[first]! / firstCount);
+  let count = 1;
+
+  const secondCount = bucketCounts[second]!;
+  if (shouldIncludeSecondBackground(colors, secondCount, firstCount, bucketR[second]!, bucketG[second]!, bucketB[second]!)) {
+    colors[3] = Math.round(bucketR[second]! / secondCount);
+    colors[4] = Math.round(bucketG[second]! / secondCount);
+    colors[5] = Math.round(bucketB[second]! / secondCount);
+    count = 2;
+  }
+
+  return { colors, count };
+}
+
+function shouldIncludeSecondBackground(
+  colors: Uint8Array,
+  secondCount: number,
+  firstCount: number,
+  secondR: number,
+  secondG: number,
+  secondB: number
+): boolean {
+  if (secondCount === 0 || secondCount < firstCount * 0.2) {
+    return false;
+  }
+
+  const r = Math.round(secondR / secondCount);
+  const g = Math.round(secondG / secondCount);
+  const b = Math.round(secondB / secondCount);
+  const firstBrightness = colors[0]! + colors[1]! + colors[2]!;
+  const secondBrightness = r + g + b;
+
+  return firstBrightness > 540 && secondBrightness > 540 && Math.abs(firstBrightness - secondBrightness) <= 96;
+}
+
+function matchesBackgroundModel(data: Uint8ClampedArray, offset: number, model: BackgroundModel, toleranceSq: number): boolean {
+  for (let i = 0; i < model.count; i += 1) {
+    const colorOffset = i * 3;
+    const dr = data[offset]! - model.colors[colorOffset]!;
+    const dg = data[offset + 1]! - model.colors[colorOffset + 1]!;
+    const db = data[offset + 2]! - model.colors[colorOffset + 2]!;
+    if (dr * dr + dg * dg + db * db <= toleranceSq) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 function createDiagnostics(mode: AlphaMode, threshold: number, tolerance: number, colorKey: string | undefined): AlphaCleanupDiagnostics {

@@ -37,6 +37,25 @@ export const transparentMatteHaloSprites: CleanupFixture[] = [
         sampleTransparentPixels: ["0,0", "63,63"]
       }
     }
+  },
+  {
+    id: "checkerboard-baked-alpha-matte",
+    title: "Baked checkerboard alpha matte",
+    category: "transparentMatteHaloSprite",
+    assetType: "icon",
+    description: "Opaque icon baked onto alternating light checkerboard cells with a near-white matte fringe.",
+    catches: ["checkerboard matte removal", "multi-color background flood-fill", "transparent RGB decontamination"],
+    createImage: createCheckerboardMatteImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 8 },
+      alpha: {
+        transparentPixelsAtLeast: 2_800,
+        visibleNearWhitePixelsAtMost: 18,
+        sampleTransparentPixels: ["0,0", "63,63"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
   }
 ];
 
@@ -55,5 +74,27 @@ function createOpaqueMatteImage() {
   fillEllipse(image.data, image.width, image.height, 32, 35, 16, 18, [80, 92, 168, 255]);
   fillRect(image.data, image.width, image.height, 24, 19, 16, 10, [28, 30, 58, 255]);
   fillRect(image.data, image.width, image.height, 29, 22, 7, 3, [230, 190, 92, 255]);
+  return image;
+}
+
+function createCheckerboardMatteImage() {
+  const image = createImage(64, 64, [248, 248, 248, 255]);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const darkCell = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 1;
+      const offset = (y * image.width + x) * 4;
+      if (darkCell) {
+        image.data[offset] = 224;
+        image.data[offset + 1] = 228;
+        image.data[offset + 2] = 232;
+      }
+      image.data[offset + 3] = 255;
+    }
+  }
+
+  fillEllipse(image.data, image.width, image.height, 32, 34, 21, 23, [236, 238, 238, 255]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 16, 18, [88, 72, 150, 255]);
+  fillRect(image.data, image.width, image.height, 25, 19, 14, 10, [34, 26, 60, 255]);
+  fillRect(image.data, image.width, image.height, 29, 22, 7, 3, [226, 188, 90, 255]);
   return image;
 }

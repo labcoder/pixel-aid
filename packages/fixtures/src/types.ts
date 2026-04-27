@@ -43,6 +43,7 @@ export type CleanupFixtureExpected = {
     transparentPixelsAtLeast?: number;
     visibleNearWhitePixelsAtMost?: number;
     sampleTransparentPixels?: readonly string[];
+    transparentRgb?: readonly [number, number, number];
   };
   sheet?: {
     options: SheetSliceOptions;
