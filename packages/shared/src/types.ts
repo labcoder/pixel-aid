@@ -6,6 +6,33 @@ export type RGBAImage = {
 
 export type AssetMode = "single" | "spriteSheet" | "characterSheet" | "tileSheet";
 
+export type AssetType =
+  | "sprite"
+  | "spriteSheet"
+  | "animationSheet"
+  | "characterSheet"
+  | "tileset"
+  | "tilemap"
+  | "portrait"
+  | "icon"
+  | "uiElement"
+  | "background";
+
+export type AssetTypeSupport = "full" | "inspectOnly" | "future";
+
+export type AssetTypeWarning = {
+  code: string;
+  severity: "info" | "warning";
+  message: string;
+};
+
+export type AssetTypeClassification = {
+  assetType: AssetType;
+  confidence: number;
+  reason: string;
+  warnings: AssetTypeWarning[];
+};
+
 export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette";
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill";
@@ -39,6 +66,7 @@ export type GridCandidateDiagnostics = {
 
 export type FixOptions = {
   mode: AssetMode;
+  assetType: AssetType;
   targetWidth?: number;
   targetHeight?: number;
   maxColors: number;
@@ -185,6 +213,7 @@ export type PixelAssetManifest = {
     app: string;
     version: string;
     image: string;
+    assetType: AssetType;
     generatedAt?: string;
     palette: string[];
     source: {

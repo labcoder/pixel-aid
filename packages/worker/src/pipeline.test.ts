@@ -5,6 +5,7 @@ import type { WorkerRequest } from "./index";
 
 const options: FixOptions = {
   mode: "single",
+  assetType: "sprite",
   targetWidth: 1,
   targetHeight: 1,
   maxColors: 1,
@@ -89,6 +90,7 @@ describe("worker fix pipeline", () => {
       options: {
         ...options,
         mode: "spriteSheet",
+        assetType: "animationSheet",
         targetWidth: 4,
         targetHeight: 2,
         maxColors: 4,
