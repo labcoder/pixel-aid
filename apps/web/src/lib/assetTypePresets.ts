@@ -1,4 +1,5 @@
-import type { AlphaCleanupSettings, AlphaMode, AssetType, DownscaleMethod } from "@pixelaid/shared";
+import { getAssetTypeDefinition } from "@pixelaid/shared";
+import type { AlphaCleanupSettings, AlphaMode, AssetType, AssetTypeWarning, DownscaleMethod } from "@pixelaid/shared";
 
 export type AssetTypeCleanupPreset = {
   maxColors: number;
@@ -133,4 +134,37 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         warningCodes: [`${assetType}-inspect-only`]
       };
   }
+}
+
+export function getAssetTypeWarnings(assetType: AssetType): AssetTypeWarning[] {
+  const definition = getAssetTypeDefinition(assetType);
+  const preset = getAssetTypeCleanupPreset(assetType);
+  const warnings = [...definition.defaultWarnings];
+  const knownCodes = new Set(warnings.map((warning) => warning.code));
+
+  for (const code of [...preset.warningCodes, ...preset.alphaWarningCodes]) {
+    if (!knownCodes.has(code)) {
+      warnings.push({
+        code,
+        severity: code === "preserve-intentional-soft-alpha" ? "warning" : "info",
+        message: codeToAssetTypeWarningMessage(code)
+      });
+      knownCodes.add(code);
+    }
+  }
+
+  return warnings;
+}
+
+function codeToAssetTypeWarningMessage(code: string): string {
+  if (code === "tilemap-future") {
+    return "Tilemap data import/export is not supported in 0.1.0.";
+  }
+  if (code === "tileset-seams-inspect-only") {
+    return "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0.";
+  }
+  if (code === "preserve-intentional-soft-alpha") {
+    return "This preset preserves intentional soft alpha; destructive alpha cleanup can flatten glow, effects, and soft edges.";
+  }
+  return "This asset type uses a generic fix/export workflow in 0.1.0.";
 }

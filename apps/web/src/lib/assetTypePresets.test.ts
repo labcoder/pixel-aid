@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getAssetTypeCleanupPreset } from "./assetTypePresets";
+import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./assetTypePresets";
 
 describe("asset type cleanup presets", () => {
   test("uses binary alpha for sprite and icon cleanup", () => {
@@ -50,5 +50,13 @@ describe("asset type cleanup presets", () => {
       expect(preset.alphaSettings).toMatchObject({ decontaminateRgb: false });
       expect(preset.alphaWarningCodes).toContain("preserve-intentional-soft-alpha");
     }
+  });
+
+  test("includes alpha warning metadata in asset type warnings", () => {
+    const warnings = getAssetTypeWarnings("background");
+
+    expect(warnings.map((warning) => warning.code)).toContain("background-inspect-only");
+    expect(warnings.map((warning) => warning.code)).toContain("preserve-intentional-soft-alpha");
+    expect(warnings.find((warning) => warning.code === "preserve-intentional-soft-alpha")?.message).toContain("soft alpha");
   });
 });
