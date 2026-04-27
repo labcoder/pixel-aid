@@ -16,6 +16,8 @@ export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
+export { planLocalGridDrift } from "./gridDrift";
+export type { LocalGridDriftOptions, LocalGridDriftPlan } from "./gridDrift";
 export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
 export { applyHaloRemoval } from "./halo";
