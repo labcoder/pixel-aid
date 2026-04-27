@@ -21,6 +21,7 @@ import {
 import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AlphaCleanupSettings,
   AlphaMode,
   AnimationTag,
   AssetMode,
@@ -211,6 +212,10 @@ export function App() {
   const [showOnionSkin, setShowOnionSkin] = useState(false);
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
+  const [alphaThreshold, setAlphaThreshold] = useState(128);
+  const [alphaTolerance, setAlphaTolerance] = useState(18);
+  const [alphaColorKey, setAlphaColorKey] = useState("#ffffff");
+  const [decontaminateRgb, setDecontaminateRgb] = useState(true);
   const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
   const [outlineSize, setOutlineSize] = useState(1);
   const [outlineColor, setOutlineColor] = useState("#101112");
@@ -550,6 +555,13 @@ export function App() {
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
+  const applyAlphaSettings = useCallback((settings: AlphaCleanupSettings | undefined) => {
+    setAlphaThreshold(settings?.threshold ?? 128);
+    setAlphaTolerance(settings?.tolerance ?? 18);
+    setAlphaColorKey(settings?.colorKey ?? "#ffffff");
+    setDecontaminateRgb(settings?.decontaminateRgb ?? true);
+  }, []);
+
   const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion, targetAsset: ImportedImageAsset | null = selectedAsset) => {
     const targetAssetType = targetAsset?.assetType ?? suggestion.assetType;
     const targetAssetSource = targetAsset?.assetTypeSource ?? "auto";
@@ -566,6 +578,10 @@ export function App() {
     const layout = resolvedMode === "spriteSheet" && suggestion.mode === "spriteSheet" ? suggestion.sheetLayout : undefined;
     const resolvedAlpha =
       targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon" ? preset.alpha : suggestion.alpha;
+    const resolvedAlphaSettings =
+      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon"
+        ? preset.alphaSettings
+        : suggestion.alphaSettings;
 
     if (targetAsset) {
       setAssets((current) =>
@@ -607,6 +623,7 @@ export function App() {
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
     setDownscale(targetAssetSource === "manual" ? preset.downscale : suggestion.downscale);
     setAlpha(resolvedAlpha);
+    applyAlphaSettings(resolvedAlphaSettings);
     setMaxColors(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
     setRemoveOrphans(preset.removeOrphans);
     setJaggyCleanup(preset.jaggyCleanup);
@@ -624,7 +641,7 @@ export function App() {
         resolvedWarnings
       )
     );
-  }, [selectedAsset]);
+  }, [applyAlphaSettings, selectedAsset]);
 
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -690,6 +707,13 @@ export function App() {
       },
       downscale,
       alpha,
+      alphaSettings: {
+        threshold: alphaThreshold,
+        tolerance: alphaTolerance,
+        colorKey: alphaColorKey,
+        decontaminateRgb,
+        transparentRgb: "#000000"
+      },
       cleanup: {
         removeOrphans,
         jaggyCleanup,
@@ -707,7 +731,11 @@ export function App() {
     return options;
   }, [
     alpha,
+    alphaColorKey,
+    alphaThreshold,
+    alphaTolerance,
     assetType,
+    decontaminateRgb,
     denoiseStrength,
     downscale,
     gridDetect,
@@ -858,10 +886,11 @@ export function App() {
       setCropToBounds(next.mode === "single");
       setDownscale(next.downscale);
       setAlpha(next.alpha);
+      applyAlphaSettings(getAssetTypeCleanupPreset(next.assetType).alphaSettings);
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
+    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
   );
 
   const changeAssetType = useCallback(
@@ -902,6 +931,7 @@ export function App() {
       setMaxColors(preset.maxColors);
       setDownscale(preset.downscale);
       setAlpha(preset.alpha);
+      applyAlphaSettings(preset.alphaSettings);
       setRemoveOrphans(preset.removeOrphans);
       setJaggyCleanup(preset.jaggyCleanup);
       setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
@@ -919,7 +949,7 @@ export function App() {
       );
       appendLog(`Asset type set: ${definition.label}`);
     },
-    [appendLog, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset]
+    [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset]
   );
 
   const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
@@ -994,9 +1024,13 @@ export function App() {
     [commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
 
-  const applySimpleAlphaChoice = useCallback((choice: SimpleAlphaChoice) => {
-    setAlpha(choice === "remove" ? "backgroundFloodFill" : "preserve");
-  }, []);
+  const applySimpleAlphaChoice = useCallback(
+    (choice: SimpleAlphaChoice) => {
+      setAlpha(choice === "remove" ? "backgroundFloodFill" : "preserve");
+      applyAlphaSettings(choice === "remove" ? { tolerance: 18, decontaminateRgb: true, transparentRgb: "#000000" } : { decontaminateRgb: false });
+    },
+    [applyAlphaSettings]
+  );
 
   const applySimpleDenoiseChoice = useCallback((choice: SimpleDenoiseChoice) => {
     setDenoiseStrength(getSimpleDenoiseStrength(choice));
@@ -1534,6 +1568,18 @@ export function App() {
     }
   };
 
+  const sampleAlphaCorner = () => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    const data = selectedAsset.image.data;
+    setAlphaColorKey(rgbToHex(data[0]!, data[1]!, data[2]!));
+  };
+
+  const showAlphaPreservationWarning =
+    alpha !== "preserve" && (assetType === "uiElement" || assetType === "background" || assetType === "portrait");
+
   const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
     asset: (
       <>
@@ -1649,10 +1695,40 @@ export function App() {
           options={[
             ["preserve", "Preserve"],
             ["binary", "Binary"],
-            ["backgroundFloodFill", "Flood fill"]
+            ["backgroundFloodFill", "Flood fill"],
+            ["colorKey", "Color key"]
           ]}
           onChange={(value) => setAlpha(value as AlphaMode)}
         />
+        {alpha === "binary" ? (
+          <NumberField label="Threshold" value={alphaThreshold} min={0} max={255} onChange={(value) => setAlphaThreshold(clampAlpha(value))} />
+        ) : null}
+        {alpha === "backgroundFloodFill" || alpha === "colorKey" ? (
+          <NumberField label="Tolerance" value={alphaTolerance} min={0} max={96} onChange={(value) => setAlphaTolerance(Math.max(0, Math.round(value)))} />
+        ) : null}
+        {alpha === "colorKey" ? (
+          <label className="field-row">
+            <span>Color key</span>
+            <span className="field-action-row">
+              <input
+                type="color"
+                value={alphaColorKey}
+                aria-label="Alpha color key"
+                onChange={(event) => setAlphaColorKey(event.currentTarget.value)}
+              />
+              <button type="button" onClick={sampleAlphaCorner} disabled={!selectedAsset}>
+                Sample corner
+              </button>
+            </span>
+          </label>
+        ) : null}
+        <label className="toggle-row">
+          <input type="checkbox" checked={decontaminateRgb} onChange={(event) => setDecontaminateRgb(event.currentTarget.checked)} />
+          Decontaminate transparent RGB
+        </label>
+        {showAlphaPreservationWarning ? (
+          <p className="field-note">Alpha removal can flatten intentional soft edges on this asset type.</p>
+        ) : null}
         <SelectField
           label="Outline"
           value={outlineMode}
@@ -3219,6 +3295,12 @@ function hexToRgb(value: string): [number, number, number] {
     Number.parseInt(normalized.slice(3, 5), 16),
     Number.parseInt(normalized.slice(5, 7), 16)
   ];
+}
+
+function rgbToHex(r: number, g: number, b: number): string {
+  return `#${clampAlpha(r).toString(16).padStart(2, "0")}${clampAlpha(g).toString(16).padStart(2, "0")}${clampAlpha(b)
+    .toString(16)
+    .padStart(2, "0")}`;
 }
 
 function clampAlpha(value: number): number {
