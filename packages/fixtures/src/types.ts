@@ -41,7 +41,9 @@ export type CleanupFixtureExpected = {
   };
   alpha?: {
     transparentPixelsAtLeast?: number;
+    softAlphaPixelsAtLeast?: number;
     visibleNearWhitePixelsAtMost?: number;
+    previewFringePixelsAtMost?: number;
     sampleTransparentPixels?: readonly string[];
     transparentRgb?: readonly [number, number, number];
   };

@@ -5,6 +5,11 @@ import type { FixOptions } from "@pixelaid/shared";
 import { detectGridCandidates, detectSheetLayout, fixImage, sliceSheetFrames } from "./index";
 
 const fixtureById = new Map(cleanupFixtureCatalog.map((fixture) => [fixture.id, fixture]));
+const previewBackgrounds = [
+  [255, 255, 255, 255],
+  [0, 0, 0, 255],
+  [70, 126, 80, 255]
+] as const;
 
 describe("cleanup fixture suite", () => {
   test("detects grid and crop metadata for the high-resolution robot fixture", () => {
@@ -55,7 +60,7 @@ describe("cleanup fixture suite", () => {
     expect(signature.transparentPixels).toBeGreaterThanOrEqual(fixture.expected.alpha!.transparentPixelsAtLeast!);
     expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, [0, 0, 0])).toBe(0);
-    expect(signature.checksum).toBe("ad336804");
+    expect(signature.checksum).toBe("9d703840");
   });
 
   test("removes baked checkerboard matte backgrounds with safe transparent RGB", () => {
@@ -77,6 +82,39 @@ describe("cleanup fixture suite", () => {
     expect(signature.samplePixels["63,63"]).toEqual([0, 0, 0, 0]);
     expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
+  });
+
+  test("cleans gray haze matte edges across preview backgrounds", () => {
+    const fixture = requiredFixture("gray-haze-matte-edge");
+    const result = fixImage(fixture.createImage(), {
+      ...singleOptions("sprite", 64, 64, "backgroundFloodFill", true),
+      alphaSettings: {
+        tolerance: 18,
+        decontaminateRgb: true,
+        transparentRgb: "#000000"
+      }
+    });
+
+    for (const background of previewBackgrounds) {
+      expect(countPreviewFringePixels(result.image.data, background), `preview background ${background.join(",")}`).toBeLessThanOrEqual(
+        fixture.expected.alpha!.previewFringePixelsAtMost!
+      );
+    }
+  });
+
+  test("preserves colored semi-transparent glow without pale preview fringes", () => {
+    const fixture = requiredFixture("semi-transparent-glow-effect");
+    const result = fixImage(fixture.createImage(), {
+      ...singleOptions("sprite", 64, 64, "preserve", true),
+      maxColors: fixture.expected.palette!.maxColors
+    });
+
+    for (const background of previewBackgrounds) {
+      expect(countPreviewFringePixels(result.image.data, background), `preview background ${background.join(",")}`).toBeLessThanOrEqual(
+        fixture.expected.alpha!.previewFringePixelsAtMost!
+      );
+    }
+    expect(countSoftAlphaPixels(result.image.data)).toBeGreaterThanOrEqual(fixture.expected.alpha!.softAlphaPixelsAtLeast!);
   });
 
   test("keeps palette-drift animation sheets on one shared palette", () => {
@@ -189,6 +227,40 @@ function countTransparentPixelsWithUnsafeRgb(data: Uint8ClampedArray, safeRgb: r
       data[offset + 3] === 0 &&
       (data[offset] !== safeRgb[0] || data[offset + 1] !== safeRgb[1] || data[offset + 2] !== safeRgb[2])
     ) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countPreviewFringePixels(data: Uint8ClampedArray, background: readonly [number, number, number, number]): number {
+  let count = 0;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const alpha = data[offset + 3]!;
+    if (alpha < 16) {
+      continue;
+    }
+
+    const inverseAlpha = 255 - alpha;
+    const r = Math.round((data[offset]! * alpha + background[0] * inverseAlpha) / 255);
+    const g = Math.round((data[offset + 1]! * alpha + background[1] * inverseAlpha) / 255);
+    const b = Math.round((data[offset + 2]! * alpha + background[2] * inverseAlpha) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const brightness = r + g + b;
+
+    if (max - min <= 24 && brightness >= 420) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countSoftAlphaPixels(data: Uint8ClampedArray): number {
+  let count = 0;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const alpha = data[offset + 3]!;
+    if (alpha > 0 && alpha < 255) {
       count += 1;
     }
   }

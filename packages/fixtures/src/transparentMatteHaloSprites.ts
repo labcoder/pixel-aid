@@ -56,6 +56,45 @@ export const transparentMatteHaloSprites: CleanupFixture[] = [
         transparentRgb: [0, 0, 0]
       }
     }
+  },
+  {
+    id: "gray-haze-matte-edge",
+    title: "Gray haze matte edge",
+    category: "transparentMatteHaloSprite",
+    assetType: "sprite",
+    description: "Opaque gray matte haze around a sprite that remains visible after background flood-fill.",
+    catches: ["gray matte halo removal", "preview background fringe", "subject-neighbor halo replacement"],
+    createImage: createGrayHazeMatteImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 8 },
+      alpha: {
+        transparentPixelsAtLeast: 2_600,
+        previewFringePixelsAtMost: 28,
+        sampleTransparentPixels: ["0,0", "63,63"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
+  },
+  {
+    id: "semi-transparent-glow-effect",
+    title: "Semi-transparent colored glow effect",
+    category: "transparentMatteHaloSprite",
+    assetType: "sprite",
+    description: "Colored soft-alpha glow that should not be treated as a pale matte halo.",
+    catches: ["intentional glow preservation", "halo cleanup selectivity", "preview background safety"],
+    createImage: createSemiTransparentGlowImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 12 },
+      alpha: {
+        transparentPixelsAtLeast: 2_400,
+        softAlphaPixelsAtLeast: 500,
+        previewFringePixelsAtMost: 8,
+        sampleTransparentPixels: ["0,0", "63,63"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
   }
 ];
 
@@ -96,5 +135,25 @@ function createCheckerboardMatteImage() {
   fillEllipse(image.data, image.width, image.height, 32, 34, 16, 18, [88, 72, 150, 255]);
   fillRect(image.data, image.width, image.height, 25, 19, 14, 10, [34, 26, 60, 255]);
   fillRect(image.data, image.width, image.height, 29, 22, 7, 3, [226, 188, 90, 255]);
+  return image;
+}
+
+function createGrayHazeMatteImage() {
+  const image = createImage(64, 64, [214, 216, 216, 255]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 22, 24, [196, 202, 202, 255]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 18, 20, [184, 190, 190, 255]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 14, 16, [70, 126, 80, 255]);
+  fillRect(image.data, image.width, image.height, 25, 19, 14, 10, [24, 44, 34, 255]);
+  fillRect(image.data, image.width, image.height, 29, 22, 7, 3, [160, 220, 132, 255]);
+  return image;
+}
+
+function createSemiTransparentGlowImage() {
+  const image = createImage(64, 64, [0, 0, 0, 0]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 23, 25, [80, 190, 255, 72]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 19, 21, [60, 168, 236, 112]);
+  fillEllipse(image.data, image.width, image.height, 32, 34, 13, 15, [78, 80, 180, 255]);
+  fillRect(image.data, image.width, image.height, 26, 20, 13, 9, [30, 28, 70, 255]);
+  fillRect(image.data, image.width, image.height, 30, 23, 6, 3, [148, 236, 255, 255]);
   return image;
 }
