@@ -104,19 +104,32 @@ Strength is a 0-100 value. `0` clones the image unchanged. Low values remove mil
 
 `applyHaloRemoval` is an optional native-resolution edge cleanup pass that runs after alpha cleanup and before denoise, outline cleanup, and palette extraction.
 
-The pass estimates corner background color, finds visible edge pixels adjacent to transparent or background-like outside space, and treats semi-transparent or background-colored edge pixels as halos. Those pixels are remapped to the average color of nearby solid subject neighbors. The pass reads from the source image and writes to a cloned output buffer, so corrected halo pixels do not cascade into later replacements during the same pass.
+The pass estimates corner background color, finds visible edge pixels adjacent to transparent or background-like outside space, and treats pale neutral semi-transparent pixels, background-colored opaque edge pixels, and outside-connected gray matte haze as halos. When nearby solid subject pixels exist, halo RGB is replaced with the average color of those subject neighbors. When the source already has a transparent outside model and a pale matte pixel has no reliable subject neighbor, the pass clears it to transparent instead of inventing a subject color.
 
-This is intentionally conservative. It targets pale transparent fringes and opaque white-background fringes first; broader matting and color-decontamination controls can be added later.
+The pass reads from the source image and writes to a cloned output buffer, so corrected halo pixels do not cascade into later replacements during the same pass. It avoids using pale neutral matte pixels as replacement colors, preserves colored soft-alpha glow by requiring semi-transparent halo candidates to be background-like or pale/neutral, and keeps true border background pixels from being recolored.
 
 ## Alpha Cleanup
 
 Implemented modes:
 
-- `preserve`: clone alpha unchanged.
-- `binary`: threshold alpha to 0 or 255.
-- `backgroundFloodFill`: flood-fill connected edge/corner background color to transparency.
+- `preserve`: clone alpha unchanged. This is the default for UI, portraits, backgrounds, and effect-heavy assets because intentional soft alpha and glow should not be flattened.
+- `binary`: threshold alpha to 0 or 255. This is useful for sprites and icons that need crisp engine masks.
+- `backgroundFloodFill`: estimate one or two dominant edge/corner matte colors and flood-fill connected background from all image edges to transparency. This handles off-white gradients and baked checkerboard mattes better than comparing every pixel to only the top-left sample.
+- `colorKey`: remove pixels whose RGB is within tolerance of a configured color key, then apply the selected threshold behavior to remaining visible pixels.
 
-For opaque AI-image backgrounds, `backgroundFloodFill` is the preferred cleanup mode because it converts connected corner background pixels to transparency before outline and palette work. `preserve` is useful when the source already has meaningful alpha or when the user intentionally wants to keep the imported canvas footprint.
+Alpha settings are serializable in `FixOptions.alphaSettings`:
+
+- `threshold`: alpha cutoff used by binary-style modes.
+- `tolerance`: RGB distance tolerance for flood-fill and color-key matching.
+- `colorKey`: explicit `#rrggbb` key for `colorKey` mode.
+- `decontaminateRgb`: when true, fully transparent pixels are rewritten to safe RGB.
+- `transparentRgb`: the safe hidden RGB value, currently defaulting to black.
+
+The fix result stores `diagnostics.alpha` with the resolved mode, threshold, tolerance, optional color key, transparent pixel count, soft-alpha pixel count, decontaminated pixel count, and warnings. Export manifests copy these diagnostics into `meta.operation` so alpha cleanup is reproducible alongside grid and palette settings.
+
+Hidden RGB decontamination matters for engines that sample transparent texels during filtering, atlas padding, mip generation, or compression. Fully transparent pixels that still contain white matte RGB can bleed as halos even when alpha is zero. PixelAid defaults sprite/icon cleanup toward decontamination, while preservation-oriented asset types default it off and warn when destructive alpha cleanup is selected.
+
+Fixture coverage now includes white matte, gray haze matte, baked checkerboard matte, and semi-transparent colored glow cases. The fixture suite checks multiple preview backgrounds, visible fringe counts, transparent RGB safety, and soft-alpha preservation for glow assets.
 
 ## Outline Cleanup
 
@@ -158,10 +171,9 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 
 Remaining quality targets:
 
-- Add halo removal around semi-transparent or background-colored edges.
 - Tune connected-component thresholds against more real samples.
 - Add golden image comparisons for fixture output, not only structural assertions.
-- Record crop and cleanup metadata so the UI can explain why output dimensions changed.
+- Expand diagnostics so the UI can explain exact matte/halo removal counts, not only alpha cleanup counts.
 
 ## Sheet Slicing
 
