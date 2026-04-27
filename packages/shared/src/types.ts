@@ -56,8 +56,50 @@ export type AlphaCleanupDiagnostics = {
   warnings: string[];
 };
 
+export type PaletteMode = "auto" | "fixed" | "preset";
+
+export type PaletteStrategy = "medianCut" | "frequency";
+
+export type PaletteLockScope = "single" | "firstFrame" | "sheet" | "project";
+
+export type PaletteDitheringMode = "none";
+
+export type PaletteSettings = {
+  mode?: PaletteMode;
+  strategy?: PaletteStrategy;
+  maxColors?: number;
+  colors?: string[];
+  preset?: string;
+  lockScope?: PaletteLockScope;
+  dithering?: PaletteDitheringMode;
+};
+
+export type PaletteDriftDiagnostics = {
+  frameCount: number;
+  checkedFrameCount: number;
+  maxFrameColorCount: number;
+  maxFramePaletteDelta: number;
+  warnings: string[];
+};
+
+export type PaletteDiagnostics = {
+  mode: PaletteMode;
+  strategy: PaletteStrategy;
+  lockScope: PaletteLockScope;
+  maxColors: number;
+  inputColorCount: number;
+  outputColorCount: number;
+  palette: string[];
+  fixedColorCount?: number;
+  preset?: string;
+  dithering: PaletteDitheringMode;
+  drift?: PaletteDriftDiagnostics;
+  warnings: string[];
+};
+
 export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
+  palette?: PaletteDiagnostics;
 };
 
 export type OutlineMode = "none" | "repairExisting" | "add";
@@ -111,6 +153,7 @@ export type FixOptions = {
   targetHeight?: number;
   maxColors: number;
   palette?: string[];
+  paletteSettings?: PaletteSettings;
   grid: {
     detect: "auto" | "manual";
     scale?: number;
