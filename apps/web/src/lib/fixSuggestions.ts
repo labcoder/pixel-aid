@@ -2,6 +2,7 @@ import { detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
 import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type {
   AlphaMode,
+  AlphaCleanupSettings,
   AssetMode,
   AssetType,
   AssetTypeClassification,
@@ -32,6 +33,7 @@ export type FixSettingSuggestion = {
   localCorrection: boolean;
   downscale: DownscaleMethod;
   alpha: AlphaMode;
+  alphaSettings: AlphaCleanupSettings;
   sheetLayout?: SheetLayoutDetection;
   reason: string;
   confidence: number;
@@ -67,6 +69,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
   const downscale = preset.downscale;
+  const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
@@ -91,7 +94,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       (candidate?.scaleX ?? 1) >= 4 &&
       (candidate?.confidence ?? 0) >= 0.55,
     downscale,
-    alpha: suggestAlphaMode(image, mode, classification.assetType, preset.alpha),
+    alpha: suggestedAlpha,
+    alphaSettings: { ...preset.alphaSettings },
     ...(sheetLayout ? { sheetLayout } : {}),
     reason: suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore),
     confidence: candidate?.confidence ?? 0.25,

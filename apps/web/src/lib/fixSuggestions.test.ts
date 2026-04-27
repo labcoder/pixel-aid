@@ -115,6 +115,11 @@ describe("fix setting suggestions", () => {
     expect(suggestion.assetType).toBe("sprite");
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.alphaSettings).toMatchObject({
+      tolerance: 18,
+      decontaminateRgb: true,
+      transparentRgb: "#000000"
+    });
     expect(suggestion.downscale).toBe("adaptive");
   });
 
@@ -144,6 +149,10 @@ describe("fix setting suggestions", () => {
     expect(suggestion.assetType).toBe("icon");
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.alphaSettings).toMatchObject({
+      threshold: 144,
+      decontaminateRgb: true
+    });
     expect(suggestion.maxColors).toBe(16);
   });
 
@@ -153,6 +162,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.assetType).toBe("background");
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("preserve");
+    expect(suggestion.alphaSettings).toMatchObject({ decontaminateRgb: false });
     expect(suggestion.maxColors).toBe(64);
     expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("background-inspect-only");
   });

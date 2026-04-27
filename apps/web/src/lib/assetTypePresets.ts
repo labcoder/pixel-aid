@@ -1,9 +1,11 @@
-import type { AlphaMode, AssetType, DownscaleMethod } from "@pixelaid/shared";
+import type { AlphaCleanupSettings, AlphaMode, AssetType, DownscaleMethod } from "@pixelaid/shared";
 
 export type AssetTypeCleanupPreset = {
   maxColors: number;
   downscale: DownscaleMethod;
   alpha: AlphaMode;
+  alphaSettings: AlphaCleanupSettings;
+  alphaWarningCodes: string[];
   removeOrphans: boolean;
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
@@ -13,6 +15,27 @@ export type AssetTypeCleanupPreset = {
   warningCodes: string[];
 };
 
+const strictSpriteAlpha: AlphaCleanupSettings = {
+  threshold: 128,
+  tolerance: 18,
+  decontaminateRgb: true,
+  transparentRgb: "#000000"
+};
+
+const strictIconAlpha: AlphaCleanupSettings = {
+  threshold: 144,
+  tolerance: 18,
+  decontaminateRgb: true,
+  transparentRgb: "#000000"
+};
+
+const preserveSoftAlpha: AlphaCleanupSettings = {
+  threshold: 128,
+  tolerance: 18,
+  decontaminateRgb: false,
+  transparentRgb: "#000000"
+};
+
 export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanupPreset {
   switch (assetType) {
     case "icon":
@@ -20,6 +43,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: 16,
         downscale: "dominant",
         alpha: "binary",
+        alphaSettings: strictIconAlpha,
+        alphaWarningCodes: [],
         removeOrphans: true,
         jaggyCleanup: true,
         preserveSinglePixelDetails: true,
@@ -33,6 +58,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: 24,
         downscale: "adaptive",
         alpha: "binary",
+        alphaSettings: strictSpriteAlpha,
+        alphaWarningCodes: [],
         removeOrphans: true,
         jaggyCleanup: true,
         preserveSinglePixelDetails: true,
@@ -48,6 +75,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: 32,
         downscale: "dominant",
         alpha: "preserve",
+        alphaSettings: preserveSoftAlpha,
+        alphaWarningCodes: ["preserve-intentional-soft-alpha"],
         removeOrphans: true,
         jaggyCleanup: true,
         preserveSinglePixelDetails: true,
@@ -61,6 +90,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: 16,
         downscale: "dominant",
         alpha: "preserve",
+        alphaSettings: preserveSoftAlpha,
+        alphaWarningCodes: [],
         removeOrphans: false,
         jaggyCleanup: false,
         preserveSinglePixelDetails: true,
@@ -74,6 +105,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: 32,
         downscale: "dominant",
         alpha: "preserve",
+        alphaSettings: preserveSoftAlpha,
+        alphaWarningCodes: [],
         removeOrphans: false,
         jaggyCleanup: false,
         preserveSinglePixelDetails: true,
@@ -89,6 +122,8 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         maxColors: assetType === "background" ? 64 : 32,
         downscale: "adaptive",
         alpha: "preserve",
+        alphaSettings: preserveSoftAlpha,
+        alphaWarningCodes: ["preserve-intentional-soft-alpha"],
         removeOrphans: false,
         jaggyCleanup: false,
         preserveSinglePixelDetails: true,
