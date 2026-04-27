@@ -35,7 +35,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     method: options.downscale,
     alpha: options.alpha
   });
-  const alphaCleaned = applyAlphaMode(downsampled, options.alpha, options.alphaSettings).image;
+  const alphaResult = applyAlphaMode(downsampled, options.alpha, options.alphaSettings);
+  const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
   const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
@@ -66,7 +67,10 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
       paletteCount: palette.length,
       gridConfidence: resultGrid.confidence
     },
-    settings: options
+    settings: options,
+    diagnostics: {
+      alpha: alphaResult.diagnostics
+    }
   };
 }
 

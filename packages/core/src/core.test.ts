@@ -1020,6 +1020,40 @@ describe("sheet slicing", () => {
 });
 
 describe("fix pipeline", () => {
+  test("passes alpha cleanup settings through the full fix pipeline", () => {
+    const source = createImage(3, 1, [248, 248, 248, 255]);
+    writePixel(source, 1, 0, 120, 40, 80, 255);
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "icon",
+      targetWidth: 3,
+      targetHeight: 1,
+      maxColors: 4,
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "colorKey",
+      alphaSettings: {
+        colorKey: "#f8f8f8",
+        tolerance: 4,
+        threshold: 128,
+        decontaminateRgb: true
+      },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(readPixel(result.image, 0, 0)).toEqual([0, 0, 0, 0]);
+    expect(result.diagnostics?.alpha).toMatchObject({
+      mode: "colorKey",
+      tolerance: 4,
+      colorKey: "#f8f8f8"
+    });
+  });
+
   test("fixes sprite sheet frames from their source cells instead of the full sheet canvas", () => {
     const source = createImage(12, 4, [8, 10, 10, 255]);
     drawBlock(source, 0, 0, 2, 4, 0, 240, 240, 255);
