@@ -3,6 +3,7 @@ import { applyAlphaMode } from "./alpha";
 import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
+import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval } from "./halo";
 import { createImage } from "./image";
@@ -15,18 +16,22 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   }
 
   const grid = resolveGrid(image, options);
+  const localDrift = options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
+  const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
   const downsampled = downsampleBlocks(image, {
-    outputWidth: grid.outputWidth,
-    outputHeight: grid.outputHeight,
-    scaleX: grid.scaleX,
-    scaleY: grid.scaleY,
-    phaseX: grid.sourceRect?.x ?? grid.phaseX,
-    phaseY: grid.sourceRect?.y ?? grid.phaseY,
+    outputWidth: gridWithDrift.outputWidth,
+    outputHeight: gridWithDrift.outputHeight,
+    scaleX: gridWithDrift.scaleX,
+    scaleY: gridWithDrift.scaleY,
+    phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
+    phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
+    xBoundaries: localDrift?.used ? localDrift.xBoundaries : undefined,
+    yBoundaries: localDrift?.used ? localDrift.yBoundaries : undefined,
     method: options.downscale,
     alpha: options.alpha
   });
   const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
-  const outlinePadding = getAutoCroppedOutlinePadding(options, grid);
+  const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
   const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
@@ -41,7 +46,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const reservedPalette = reservedOutlinePalette(options);
   const palette = options.palette ?? extractPaletteWithReservedColors(outlineCleaned, options.maxColors, reservedPalette);
   const remapped = remapToPalette(outlineCleaned, palette);
-  const resultGrid = outlinePadding > 0 ? padGridForOutline(grid, outlinePadding) : grid;
+  const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
 
   return {
     image: remapped,
@@ -57,6 +62,26 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
       gridConfidence: resultGrid.confidence
     },
     settings: options
+  };
+}
+
+function attachDriftDiagnostics(grid: GridCandidate, drift: NonNullable<GridCandidate["diagnostics"]>["drift"]): GridCandidate {
+  return {
+    ...grid,
+    diagnostics: {
+      ...(grid.diagnostics ?? {
+        edgeScore: 0,
+        runScore: 0,
+        sizeScore: 0,
+        scaleScore: 0,
+        divisibilityScore: 0,
+        cropUsed: grid.sourceRect !== undefined,
+        sourceCoverage: 1,
+        confidenceLabel: grid.confidence >= 0.8 ? "high" : grid.confidence >= 0.55 ? "medium" : "low",
+        notes: [grid.reason]
+      }),
+      drift
+    }
   };
 }
 
