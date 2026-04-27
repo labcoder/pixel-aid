@@ -3,5 +3,6 @@ dist/
 coverage/
 .vite/
 .playwright-cli/
+.worktrees/
 *.local
 *.log
