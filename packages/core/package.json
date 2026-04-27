@@ -10,7 +10,7 @@
     }
   },
   "scripts": {
-    "benchmark": "vitest bench --run",
+    "benchmark": "vitest bench --run src/fixtureSuite.bench.ts src/singleSpriteCleanup.bench.ts",
     "build": "tsc -p tsconfig.json",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
