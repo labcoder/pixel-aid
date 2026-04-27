@@ -33,7 +33,13 @@ When a meaningful background crop is found, candidates include a grid-aligned `s
 
 Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a crop-used flag; source coverage; a low/medium/high label; and short notes. The editor uses these diagnostics to explain confidence without parsing prose.
 
-The next detector upgrades should add stronger edge-period analysis and local drift correction for uneven AI-generated grids.
+### Local Drift Correction
+
+`grid.localCorrection` enables an opt-in pass for mildly uneven AI-generated pseudo-pixel grids. The global grid candidate still owns the reproducible scale, phase, crop, and target size. Local correction only searches a small pixel radius around the candidate's interior block boundaries and returns corrected absolute source-boundary arrays for `downsampleBlocks`.
+
+The drift planner scores nearby vertical and horizontal boundary positions with edge energy, anchors the first and last boundaries to the global source bounds, and applies a smoothness penalty so high-frequency warping is rejected. If the improvement score is below the threshold, the pass returns diagnostics but the fix pipeline keeps the nominal global boundaries.
+
+Drift diagnostics are attached to grid diagnostics and report whether local correction was used, confidence, improvement score, smoothness penalty, corrected boundary count, maximum offset, mean absolute offset, and short UI notes. MIG-7 applies this pass only to the single-image fix path. Sheet-frame correction remains a separate sheet-specific problem because frame normalization, shared palettes, and animation stability need their own metadata-aware drift model.
 
 ## Block Downsampling
 
