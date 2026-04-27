@@ -1,5 +1,7 @@
 export type {
   AlphaMode,
+  AlphaCleanupDiagnostics,
+  AlphaCleanupSettings,
   DownscaleMethod,
   FixOptions,
   GridCandidate,
@@ -11,7 +13,7 @@ export type {
 } from "@pixelaid/shared";
 
 export { applyAlphaMode } from "./alpha";
-export type { AlphaOptions } from "./alpha";
+export type { AlphaCleanupResult } from "./alpha";
 export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";

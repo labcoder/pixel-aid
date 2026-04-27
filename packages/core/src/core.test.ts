@@ -546,7 +546,7 @@ describe("alpha cleanup", () => {
   test("converts alpha to binary using the configured threshold", () => {
     const source = imageFromPixels(2, [rgba(1, 2, 3, 127), rgba(4, 5, 6, 128)]);
 
-    const cleaned = applyAlphaMode(source, "binary", { threshold: 128 });
+    const { image: cleaned } = applyAlphaMode(source, "binary", { threshold: 128 });
 
     expect(readPixel(cleaned, 0, 0)[3]).toBe(0);
     expect(readPixel(cleaned, 1, 0)[3]).toBe(255);
@@ -565,10 +565,40 @@ describe("alpha cleanup", () => {
       rgba(10, 10, 10)
     ]);
 
-    const cleaned = applyAlphaMode(source, "backgroundFloodFill", { tolerance: 0 });
+    const { image: cleaned } = applyAlphaMode(source, "backgroundFloodFill", { tolerance: 0 });
 
     expect(readPixel(cleaned, 0, 0)[3]).toBe(0);
     expect(readPixel(cleaned, 1, 1)).toEqual([200, 20, 20, 255]);
+  });
+
+  test("removes pixels matching a configured color key", () => {
+    const source = imageFromPixels(3, [rgba(248, 248, 248), rgba(120, 40, 80), rgba(250, 250, 250)]);
+
+    const { image: cleaned, diagnostics } = applyAlphaMode(source, "colorKey", {
+      colorKey: "#f8f8f8",
+      tolerance: 4,
+      decontaminateRgb: true
+    });
+
+    expect(readPixel(cleaned, 0, 0)).toEqual([0, 0, 0, 0]);
+    expect(readPixel(cleaned, 1, 0)).toEqual([120, 40, 80, 255]);
+    expect(readPixel(cleaned, 2, 0)[3]).toBe(0);
+    expect(diagnostics.mode).toBe("colorKey");
+    expect(diagnostics.transparentPixels).toBe(2);
+  });
+
+  test("decontaminates hidden RGB in transparent binary-alpha pixels", () => {
+    const source = imageFromPixels(2, [rgba(255, 255, 255, 12), rgba(20, 30, 40, 200)]);
+
+    const { image: cleaned, diagnostics } = applyAlphaMode(source, "binary", {
+      threshold: 128,
+      decontaminateRgb: true,
+      transparentRgb: "#000000"
+    });
+
+    expect(readPixel(cleaned, 0, 0)).toEqual([0, 0, 0, 0]);
+    expect(readPixel(cleaned, 1, 0)).toEqual([20, 30, 40, 255]);
+    expect(diagnostics.decontaminatedPixels).toBe(1);
   });
 });
 

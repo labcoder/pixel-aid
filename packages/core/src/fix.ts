@@ -35,7 +35,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     method: options.downscale,
     alpha: options.alpha
   });
-  const alphaCleaned = applyAlphaMode(downsampled, options.alpha);
+  const alphaCleaned = applyAlphaMode(downsampled, options.alpha, options.alphaSettings).image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
   const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
@@ -157,7 +157,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
 }
 
 function cleanFixedImage(image: RGBAImage, options: FixOptions): RGBAImage {
-  const alphaCleaned = applyAlphaMode(image, options.alpha);
+  const alphaCleaned = applyAlphaMode(image, options.alpha, options.alphaSettings).image;
   const haloCleaned = applyHaloRemoval(alphaCleaned, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
   return applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {

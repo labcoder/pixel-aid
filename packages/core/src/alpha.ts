@@ -1,38 +1,113 @@
-import type { AlphaMode, RGBAImage } from "@pixelaid/shared";
+import type { AlphaCleanupDiagnostics, AlphaCleanupSettings, AlphaMode, RGBAImage } from "@pixelaid/shared";
+import { clampByte, parseHexColor } from "./color";
 import { cloneImage } from "./image";
 
-export type AlphaOptions = {
-  threshold?: number;
-  tolerance?: number;
+export type AlphaCleanupResult = {
+  image: RGBAImage;
+  diagnostics: AlphaCleanupDiagnostics;
 };
 
-export function applyAlphaMode(image: RGBAImage, mode: AlphaMode, options: AlphaOptions = {}): RGBAImage {
+export function applyAlphaMode(image: RGBAImage, mode: AlphaMode, options: AlphaCleanupSettings = {}): AlphaCleanupResult {
+  const threshold = clampByte(options.threshold ?? 128);
+  const tolerance = Math.max(0, Math.round(options.tolerance ?? 18));
+  const decontaminateRgb = options.decontaminateRgb ?? mode !== "preserve";
+  const transparentRgb = parseHexColor(options.transparentRgb ?? "#000000");
+
   if (mode === "preserve") {
-    return cloneImage(image);
+    const output = cloneImage(image);
+    const diagnostics = createDiagnostics(mode, threshold, tolerance, options.colorKey);
+    if (decontaminateRgb) {
+      decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+    } else {
+      collectAlphaDiagnostics(output, diagnostics);
+    }
+    return { image: output, diagnostics };
   }
 
   if (mode === "binary") {
-    return applyBinaryAlpha(image, options.threshold ?? 128);
+    return applyBinaryAlpha(image, threshold, tolerance, options.colorKey, decontaminateRgb, transparentRgb);
   }
 
-  return backgroundFloodFill(image, options.tolerance ?? 18);
+  if (mode === "colorKey") {
+    return applyColorKey(image, threshold, tolerance, options.colorKey, decontaminateRgb, transparentRgb);
+  }
+
+  return backgroundFloodFill(image, threshold, tolerance, options.colorKey, decontaminateRgb, transparentRgb);
 }
 
-function applyBinaryAlpha(image: RGBAImage, threshold: number): RGBAImage {
+function applyBinaryAlpha(
+  image: RGBAImage,
+  threshold: number,
+  tolerance: number,
+  colorKey: string | undefined,
+  decontaminateRgb: boolean,
+  transparentRgb: number
+): AlphaCleanupResult {
   const output = cloneImage(image);
+  const diagnostics = createDiagnostics("binary", threshold, tolerance, colorKey);
   for (let offset = 0; offset < output.data.length; offset += 4) {
     output.data[offset + 3] = output.data[offset + 3]! >= threshold ? 255 : 0;
   }
 
-  return output;
+  if (decontaminateRgb) {
+    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+  } else {
+    collectAlphaDiagnostics(output, diagnostics);
+  }
+
+  return { image: output, diagnostics };
 }
 
-function backgroundFloodFill(image: RGBAImage, tolerance: number): RGBAImage {
+function applyColorKey(
+  image: RGBAImage,
+  threshold: number,
+  tolerance: number,
+  colorKey: string | undefined,
+  decontaminateRgb: boolean,
+  transparentRgb: number
+): AlphaCleanupResult {
+  const output = cloneImage(image);
+  const diagnostics = createDiagnostics("colorKey", threshold, tolerance, colorKey);
+  const keyColor = parseHexColor(colorKey ?? "#ffffff");
+  const keyR = (keyColor >> 16) & 0xff;
+  const keyG = (keyColor >> 8) & 0xff;
+  const keyB = keyColor & 0xff;
+  const toleranceSq = tolerance * tolerance * 3;
+
+  for (let offset = 0; offset < output.data.length; offset += 4) {
+    const dr = output.data[offset]! - keyR;
+    const dg = output.data[offset + 1]! - keyG;
+    const db = output.data[offset + 2]! - keyB;
+    if (dr * dr + dg * dg + db * db <= toleranceSq) {
+      output.data[offset + 3] = 0;
+    } else if (output.data[offset + 3]! > 0) {
+      output.data[offset + 3] = output.data[offset + 3]! >= threshold ? 255 : 0;
+    }
+  }
+
+  if (decontaminateRgb) {
+    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+  } else {
+    collectAlphaDiagnostics(output, diagnostics);
+  }
+
+  return { image: output, diagnostics };
+}
+
+function backgroundFloodFill(
+  image: RGBAImage,
+  threshold: number,
+  tolerance: number,
+  colorKey: string | undefined,
+  decontaminateRgb: boolean,
+  transparentRgb: number
+): AlphaCleanupResult {
   const output = cloneImage(image);
   const visited = new Uint8Array(image.width * image.height);
   const queue = new Int32Array(image.width * image.height);
   const background = 0;
   const toleranceSq = tolerance * tolerance * 3;
+  const diagnostics = createDiagnostics("backgroundFloodFill", threshold, tolerance, colorKey);
   let read = 0;
   let write = 0;
 
@@ -77,7 +152,13 @@ function backgroundFloodFill(image: RGBAImage, tolerance: number): RGBAImage {
     enqueue(x, y - 1);
   }
 
-  return output;
+  if (decontaminateRgb) {
+    decontaminateTransparentRgb(output, transparentRgb, diagnostics);
+  } else {
+    collectAlphaDiagnostics(output, diagnostics);
+  }
+
+  return { image: output, diagnostics };
 }
 
 function matchesBackground(data: Uint8ClampedArray, backgroundOffset: number, offset: number, toleranceSq: number): boolean {
@@ -85,4 +166,49 @@ function matchesBackground(data: Uint8ClampedArray, backgroundOffset: number, of
   const dg = data[offset + 1]! - data[backgroundOffset + 1]!;
   const db = data[offset + 2]! - data[backgroundOffset + 2]!;
   return dr * dr + dg * dg + db * db <= toleranceSq;
+}
+
+function createDiagnostics(mode: AlphaMode, threshold: number, tolerance: number, colorKey: string | undefined): AlphaCleanupDiagnostics {
+  return {
+    mode,
+    threshold,
+    tolerance,
+    ...(colorKey ? { colorKey } : {}),
+    decontaminatedPixels: 0,
+    transparentPixels: 0,
+    softAlphaPixels: 0,
+    warnings: []
+  };
+}
+
+function collectAlphaDiagnostics(image: RGBAImage, diagnostics: AlphaCleanupDiagnostics): void {
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha === 0) {
+      diagnostics.transparentPixels += 1;
+    } else if (alpha < 255) {
+      diagnostics.softAlphaPixels += 1;
+    }
+  }
+}
+
+function decontaminateTransparentRgb(image: RGBAImage, transparentRgb: number, diagnostics: AlphaCleanupDiagnostics): void {
+  const r = (transparentRgb >> 16) & 0xff;
+  const g = (transparentRgb >> 8) & 0xff;
+  const b = transparentRgb & 0xff;
+
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha === 0) {
+      diagnostics.transparentPixels += 1;
+      if (image.data[offset] !== r || image.data[offset + 1] !== g || image.data[offset + 2] !== b) {
+        image.data[offset] = r;
+        image.data[offset + 1] = g;
+        image.data[offset + 2] = b;
+        diagnostics.decontaminatedPixels += 1;
+      }
+    } else if (alpha < 255) {
+      diagnostics.softAlphaPixels += 1;
+    }
+  }
 }
