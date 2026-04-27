@@ -752,6 +752,7 @@ export function App() {
     (preset: EditorPreset) => {
       const next = applyEditorPreset(
         {
+          assetType: mode === "tileSheet" ? "tileset" : mode === "characterSheet" ? "characterSheet" : mode === "spriteSheet" ? "spriteSheet" : "sprite",
           mode,
           targetWidth,
           targetHeight,
