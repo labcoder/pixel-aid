@@ -613,6 +613,7 @@ export function App() {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
     const options: FixOptions = {
       mode,
+      assetType: mode === "tileSheet" ? "tileset" : mode === "characterSheet" ? "characterSheet" : mode === "spriteSheet" ? "spriteSheet" : "sprite",
       targetWidth: effectiveTargetWidth,
       targetHeight: effectiveTargetHeight,
       maxColors,
