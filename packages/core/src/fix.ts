@@ -1,4 +1,4 @@
-import type { FixOptions, GridCandidate, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, GridDriftDiagnostics, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { applyDenoise } from "./denoise";
@@ -16,8 +16,14 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   }
 
   const grid = resolveGrid(image, options);
-  const localDrift = options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
+  const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
+  const localDriftBoundaries = localDrift?.used
+    ? {
+        xBoundaries: localDrift.xBoundaries,
+        yBoundaries: localDrift.yBoundaries
+      }
+    : {};
   const downsampled = downsampleBlocks(image, {
     outputWidth: gridWithDrift.outputWidth,
     outputHeight: gridWithDrift.outputHeight,
@@ -25,8 +31,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     scaleY: gridWithDrift.scaleY,
     phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
     phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
-    xBoundaries: localDrift?.used ? localDrift.xBoundaries : undefined,
-    yBoundaries: localDrift?.used ? localDrift.yBoundaries : undefined,
+    ...localDriftBoundaries,
     method: options.downscale,
     alpha: options.alpha
   });
@@ -65,7 +70,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   };
 }
 
-function attachDriftDiagnostics(grid: GridCandidate, drift: NonNullable<GridCandidate["diagnostics"]>["drift"]): GridCandidate {
+function attachDriftDiagnostics(grid: GridCandidate, drift: GridDriftDiagnostics): GridCandidate {
   return {
     ...grid,
     diagnostics: {
