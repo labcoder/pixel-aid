@@ -180,6 +180,8 @@ export function App() {
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
   const [gridScaleX, setGridScaleX] = useState(8);
   const [gridScaleY, setGridScaleY] = useState(8);
+  const [gridPhaseX, setGridPhaseX] = useState(0);
+  const [gridPhaseY, setGridPhaseY] = useState(0);
   const [cropToBounds, setCropToBounds] = useState(true);
   const [localCorrection, setLocalCorrection] = useState(false);
   const [aspectLocked, setAspectLocked] = useState(true);
@@ -598,6 +600,8 @@ export function App() {
     setCustomPivotY(layout?.frameHeight ?? suggestion.targetHeight);
     setGridScaleX(suggestion.gridScaleX);
     setGridScaleY(suggestion.gridScaleY);
+    setGridPhaseX(suggestion.gridPhaseX);
+    setGridPhaseY(suggestion.gridPhaseY);
     setGridDetect(suggestion.gridDetect);
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
@@ -681,8 +685,8 @@ export function App() {
         scaleY: gridScaleY,
         cropToBounds: mode === "single" && cropToBounds,
         localCorrection: mode === "single" && localCorrection,
-        phaseX: 0,
-        phaseY: 0
+        phaseX: gridPhaseX,
+        phaseY: gridPhaseY
       },
       downscale,
       alpha,
@@ -707,6 +711,8 @@ export function App() {
     denoiseStrength,
     downscale,
     gridDetect,
+    gridPhaseX,
+    gridPhaseY,
     gridScaleX,
     gridScaleY,
     effectiveTargetHeight,
@@ -847,13 +853,15 @@ export function App() {
       setGridDetect(next.gridDetect);
       setGridScaleX(next.gridScaleX);
       setGridScaleY(next.gridScaleY);
+      setGridPhaseX(0);
+      setGridPhaseY(0);
       setCropToBounds(next.mode === "single");
       setDownscale(next.downscale);
       setAlpha(next.alpha);
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
+    [alpha, appendLog, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
   );
 
   const changeAssetType = useCallback(
@@ -1348,6 +1356,8 @@ export function App() {
       setTargetHeight(candidate.outputHeight);
       setGridScaleX(candidate.scaleX);
       setGridScaleY(candidate.scaleY);
+      setGridPhaseX(candidate.phaseX);
+      setGridPhaseY(candidate.phaseY);
       setCropToBounds(mode === "single" && candidate.sourceRect !== undefined);
       setSuggestionReason(
         `Candidate ${candidate.outputWidth}x${candidate.outputHeight}: ${candidate.diagnostics?.notes.slice(0, 2).join(". ") ?? candidate.reason}.`
@@ -1697,7 +1707,7 @@ export function App() {
         <GridCandidateList
           image={selectedAsset?.image ?? null}
           candidates={gridCandidates}
-          activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY }}
+          activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY, phaseX: gridPhaseX, phaseY: gridPhaseY }}
           onApply={applyGridCandidate}
         />
         <SelectField
@@ -1734,8 +1744,28 @@ export function App() {
             setGridScaleY(value);
           }}
         />
-        <ReadonlyField label="Phase X" value="0" disabled={gridDetect === "auto"} />
-        <ReadonlyField label="Phase Y" value="0" disabled={gridDetect === "auto"} />
+        <NumberField
+          label="Phase X"
+          value={Number(gridPhaseX.toFixed(3))}
+          min={0}
+          step={0.01}
+          disabled={gridDetect === "auto"}
+          onChange={(value) => {
+            clearDetectedSheetLayout();
+            setGridPhaseX(value);
+          }}
+        />
+        <NumberField
+          label="Phase Y"
+          value={Number(gridPhaseY.toFixed(3))}
+          min={0}
+          step={0.01}
+          disabled={gridDetect === "auto"}
+          onChange={(value) => {
+            clearDetectedSheetLayout();
+            setGridPhaseY(value);
+          }}
+        />
         <label className="toggle-row">
           <input
             type="checkbox"
@@ -2640,7 +2670,7 @@ function GridCandidateList({
 }: {
   image: RGBAImage | null;
   candidates: GridCandidate[];
-  activeSettings: { targetWidth: number; targetHeight: number; scaleX: number; scaleY: number };
+  activeSettings: { targetWidth: number; targetHeight: number; scaleX: number; scaleY: number; phaseX: number; phaseY: number };
   onApply: (candidate: GridCandidate) => void;
 }) {
   if (!image || candidates.length === 0) {

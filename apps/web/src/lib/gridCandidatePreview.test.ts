@@ -47,6 +47,7 @@ describe("grid candidate preview helpers", () => {
           ...candidate.diagnostics!,
           drift: {
             localCorrectionUsed: true,
+            boundaryModel: "perCell",
             confidence: 0.78,
             improvementScore: 0.42,
             smoothnessPenalty: 0.08,
@@ -71,7 +72,9 @@ describe("grid candidate preview helpers", () => {
         targetWidth: 102,
         targetHeight: 144,
         scaleX: 6.0001,
-        scaleY: 5.9999
+        scaleY: 5.9999,
+        phaseX: 2,
+        phaseY: 1
       })
     ).toBe(true);
 
@@ -80,7 +83,20 @@ describe("grid candidate preview helpers", () => {
         targetWidth: 117,
         targetHeight: 146,
         scaleX: 6,
-        scaleY: 6
+        scaleY: 6,
+        phaseX: 2,
+        phaseY: 1
+      })
+    ).toBe(false);
+
+    expect(
+      candidateMatchesSettings(candidate, {
+        targetWidth: 102,
+        targetHeight: 144,
+        scaleX: 6,
+        scaleY: 6,
+        phaseX: 0,
+        phaseY: 1
       })
     ).toBe(false);
   });
