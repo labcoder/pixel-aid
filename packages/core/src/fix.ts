@@ -60,7 +60,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
   });
   const reservedPalette = reservedOutlinePalette(options);
-  const paletteSettings = resolvePaletteSettings(options);
+  const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(outlineCleaned, {
     ...(paletteSettings ? { requested: paletteSettings } : {}),
     fallbackMaxColors: options.maxColors,
@@ -144,7 +144,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
   }
 
   const reservedPalette = reservedOutlinePalette(options);
-  const paletteSettings = resolvePaletteSettings(options);
+  const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(packed, {
     ...(paletteSettings ? { requested: paletteSettings } : {}),
     fallbackMaxColors: options.maxColors,
@@ -188,20 +188,56 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
   };
 }
 
-function resolvePaletteSettings(options: FixOptions): PaletteSettings | undefined {
+function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {
   if (options.paletteSettings) {
     return options.paletteSettings;
   }
   if (options.palette) {
+    const reservedColorCount = countReservedColorsOutsidePalette(options.palette, reservedColors);
     return {
       mode: "fixed",
       colors: options.palette,
-      maxColors: Math.max(options.maxColors, options.palette.length),
+      maxColors: Math.max(options.maxColors, options.palette.length + reservedColorCount),
       lockScope: "single",
       dithering: "none"
     };
   }
   return undefined;
+}
+
+function countReservedColorsOutsidePalette(palette: readonly string[], reservedColors: readonly string[]): number {
+  if (reservedColors.length === 0) {
+    return 0;
+  }
+
+  const paletteColors = new Set<string>();
+  for (const color of palette) {
+    const normalized = tryNormalizeHexColor(color);
+    if (normalized) {
+      paletteColors.add(normalized);
+    }
+  }
+
+  let count = 0;
+  for (const color of reservedColors) {
+    const normalized = tryNormalizeHexColor(color);
+    if (!normalized || paletteColors.has(normalized)) {
+      continue;
+    }
+
+    paletteColors.add(normalized);
+    count += 1;
+  }
+
+  return count;
+}
+
+function tryNormalizeHexColor(color: string): string | null {
+  try {
+    return rgbToHex(parseHexColor(color));
+  } catch {
+    return null;
+  }
 }
 
 type CleanFixedImageResult = {
