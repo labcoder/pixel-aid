@@ -165,6 +165,51 @@ describe("generic manifest export", () => {
     ]);
   });
 
+  test("preserves alpha cleanup settings and diagnostics in operation metadata", () => {
+    const alphaResult: PixelFixResult = {
+      ...result,
+      settings: {
+        ...settings,
+        alpha: "colorKey",
+        alphaSettings: {
+          threshold: 144,
+          tolerance: 22,
+          colorKey: "#f8f8f8",
+          decontaminateRgb: true,
+          transparentRgb: "#000000"
+        }
+      },
+      diagnostics: {
+        alpha: {
+          mode: "colorKey",
+          threshold: 144,
+          tolerance: 22,
+          colorKey: "#f8f8f8",
+          decontaminatedPixels: 12,
+          transparentPixels: 100,
+          softAlphaPixels: 0,
+          warnings: []
+        }
+      }
+    };
+
+    const manifest = createPixelAssetManifest({
+      result: alphaResult,
+      imageName: "icon.png"
+    });
+
+    expect(manifest.meta.operation.settings.alpha).toBe("colorKey");
+    expect(manifest.meta.operation.settings.alphaSettings).toMatchObject({
+      threshold: 144,
+      tolerance: 22,
+      colorKey: "#f8f8f8"
+    });
+    expect(manifest.meta.operation.diagnostics?.alpha).toMatchObject({
+      mode: "colorKey",
+      decontaminatedPixels: 12
+    });
+  });
+
   test("exports engine guidance placeholders for Godot and Unity", () => {
     expect(GODOT_IMPORT_GUIDANCE.join("\n")).toContain("nearest");
     expect(UNITY_IMPORT_GUIDANCE.join("\n")).toContain("Point");
