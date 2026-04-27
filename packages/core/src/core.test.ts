@@ -1313,6 +1313,38 @@ describe("fix pipeline", () => {
     });
   });
 
+  test("legacy palette option keeps supplied colors beyond maxColors", () => {
+    const source = imageFromPixels(3, [rgba(2, 2, 2), rgba(126, 128, 126), rgba(248, 252, 248)]);
+    const legacyPalette = ["#000000", "#444444", "#888888", "#ffffff"];
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 3,
+      targetHeight: 1,
+      maxColors: 2,
+      palette: legacyPalette,
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.palette).toEqual(legacyPalette);
+    expect(readPixel(result.image, 1, 0)).toEqual([136, 136, 136, 255]);
+    expect(readPixel(result.image, 2, 0)).toEqual([255, 255, 255, 255]);
+    expect(result.metrics.paletteCount).toBe(4);
+    expect(result.diagnostics?.palette).toMatchObject({
+      mode: "fixed",
+      maxColors: 4,
+      outputColorCount: 4
+    });
+  });
+
   test("fixes sprite sheet frames from their source cells instead of the full sheet canvas", () => {
     const source = createImage(12, 4, [8, 10, 10, 255]);
     drawBlock(source, 0, 0, 2, 4, 0, 240, 240, 255);
