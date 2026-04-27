@@ -9,6 +9,8 @@ export type DownsampleOptions = {
   scaleY: number;
   phaseX: number;
   phaseY: number;
+  xBoundaries?: Int32Array;
+  yBoundaries?: Int32Array;
   method: DownscaleMethod;
   alpha: AlphaMode;
   adaptiveCoverage?: number;
@@ -61,10 +63,14 @@ type BlockBounds = {
 };
 
 function getBlockBounds(image: RGBAImage, x: number, y: number, options: DownsampleOptions): BlockBounds {
-  const startX = Math.max(0, Math.min(image.width - 1, Math.floor(options.phaseX + x * options.scaleX)));
-  const startY = Math.max(0, Math.min(image.height - 1, Math.floor(options.phaseY + y * options.scaleY)));
-  const endX = Math.max(startX + 1, Math.min(image.width, Math.floor(options.phaseX + (x + 1) * options.scaleX)));
-  const endY = Math.max(startY + 1, Math.min(image.height, Math.floor(options.phaseY + (y + 1) * options.scaleY)));
+  const rawStartX = options.xBoundaries ? options.xBoundaries[x]! : Math.floor(options.phaseX + x * options.scaleX);
+  const rawEndX = options.xBoundaries ? options.xBoundaries[x + 1]! : Math.floor(options.phaseX + (x + 1) * options.scaleX);
+  const rawStartY = options.yBoundaries ? options.yBoundaries[y]! : Math.floor(options.phaseY + y * options.scaleY);
+  const rawEndY = options.yBoundaries ? options.yBoundaries[y + 1]! : Math.floor(options.phaseY + (y + 1) * options.scaleY);
+  const startX = Math.max(0, Math.min(image.width - 1, rawStartX));
+  const startY = Math.max(0, Math.min(image.height - 1, rawStartY));
+  const endX = Math.max(startX + 1, Math.min(image.width, rawEndX));
+  const endY = Math.max(startY + 1, Math.min(image.height, rawEndY));
 
   return { startX, endX, startY, endY };
 }

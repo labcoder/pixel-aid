@@ -454,6 +454,42 @@ describe("block downsampling", () => {
     expect(readPixel(fixed, 1, 1)).toEqual([253, 252, 1, 255]);
   });
 
+  test("uses corrected block boundaries when local drift supplies them", () => {
+    const source = imageFromPixels(7, [
+      rgba(12, 12, 12),
+      rgba(255, 0, 0),
+      rgba(255, 0, 0),
+      rgba(0, 255, 0),
+      rgba(0, 255, 0),
+      rgba(0, 0, 255),
+      rgba(0, 0, 255),
+      rgba(12, 12, 12),
+      rgba(255, 0, 0),
+      rgba(255, 0, 0),
+      rgba(0, 255, 0),
+      rgba(0, 255, 0),
+      rgba(0, 0, 255),
+      rgba(0, 0, 255)
+    ]);
+
+    const fixed = downsampleBlocks(source, {
+      outputWidth: 3,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      xBoundaries: new Int32Array([1, 3, 5, 7]),
+      yBoundaries: new Int32Array([0, 2]),
+      method: "dominant",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(fixed, 0, 0)).toEqual([255, 0, 0, 255]);
+    expect(readPixel(fixed, 1, 0)).toEqual([0, 255, 0, 255]);
+    expect(readPixel(fixed, 2, 0)).toEqual([0, 0, 255, 255]);
+  });
+
   test("uses median channel values for noisy mixed blocks", () => {
     const source = imageFromPixels(2, [
       rgba(10, 20, 30),
