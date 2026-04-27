@@ -50,3 +50,5 @@ Build/test/dev:
 - `@types/react-dom` 19.2.3, MIT: React DOM type definitions.
 
 No image quantization, Three.js, desktop, AI SDK, native, or WASM dependency has been added in this milestone.
+
+MIG-8 palette workflows add no new runtime or build dependency. The quantizer and safe palette presets are implemented in-repo to avoid GPL/AGPL/LGPL, commercial licensing, attribution, and bundle-size risk. Third-party named palettes should be added only after license/attribution review.
