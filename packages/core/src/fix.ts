@@ -193,7 +193,13 @@ function resolvePaletteSettings(options: FixOptions): PaletteSettings | undefine
     return options.paletteSettings;
   }
   if (options.palette) {
-    return { mode: "fixed", colors: options.palette, lockScope: "single", dithering: "none" };
+    return {
+      mode: "fixed",
+      colors: options.palette,
+      maxColors: Math.max(options.maxColors, options.palette.length),
+      lockScope: "single",
+      dithering: "none"
+    };
   }
   return undefined;
 }
