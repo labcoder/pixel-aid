@@ -56,6 +56,17 @@ function blockySource(): RGBAImage {
   ]);
 }
 
+function rowLocalDriftSource(): RGBAImage {
+  const image = createImage(12, 8, [0, 0, 0, 255]);
+  drawBlock(image, 0, 0, 4, 4, 220, 20, 20, 255);
+  drawBlock(image, 4, 0, 4, 4, 20, 210, 70, 255);
+  drawBlock(image, 8, 0, 4, 4, 40, 80, 230, 255);
+  drawBlock(image, 0, 4, 6, 4, 220, 20, 20, 255);
+  drawBlock(image, 6, 4, 2, 4, 20, 210, 70, 255);
+  drawBlock(image, 8, 4, 4, 4, 40, 80, 230, 255);
+  return image;
+}
+
 function sheetLikeSource(): RGBAImage {
   const image = createImage(420, 280);
   for (let y = 0; y < image.height; y += 1) {
@@ -1125,6 +1136,41 @@ describe("fix pipeline", () => {
         correctedBoundaryCount: expect.any(Number)
       })
     );
+  });
+
+  test("returns serializable local correction boundary offsets when correction is used", () => {
+    const result = fixImage(rowLocalDriftSource(), {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 3,
+      targetHeight: 2,
+      maxColors: 8,
+      grid: {
+        detect: "manual",
+        scale: 4,
+        phaseX: 0,
+        phaseY: 0,
+        localCorrection: true
+      },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.grid.diagnostics?.drift).toMatchObject({
+      localCorrectionUsed: true,
+      boundaryModel: "perCell",
+      xBoundaryStride: 4,
+      yBoundaryStride: 3
+    });
+    expect(result.grid.diagnostics!.drift!.xBoundaryOffsets).toHaveLength(8);
+    expect(result.grid.diagnostics!.drift!.xBoundaryOffsets![5]).toBe(2);
+    expect(result.grid.diagnostics!.drift!.yBoundaryOffsets).toHaveLength(9);
+    expect(readPixel(result.image, 1, 1)).toEqual([20, 210, 70, 255]);
   });
 
   test("keeps the background-aware crop when target dimensions are only an auto-grid hint", () => {
