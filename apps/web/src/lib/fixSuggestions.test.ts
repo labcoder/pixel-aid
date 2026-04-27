@@ -123,6 +123,8 @@ describe("fix setting suggestions", () => {
     const suggestion = suggestFixSettings(fixture.image);
 
     expect(suggestion.localCorrection).toBe(true);
+    expect(suggestion.gridPhaseX).toBe(fixture.expected.phaseX);
+    expect(suggestion.gridPhaseY).toBe(fixture.expected.phaseY);
   });
 
   test("suggests sprite sheet mode for large landscape animation sheets with rows", () => {

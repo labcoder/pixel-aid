@@ -16,6 +16,8 @@ export type GridCandidateSettings = {
   targetHeight: number;
   scaleX: number;
   scaleY: number;
+  phaseX: number;
+  phaseY: number;
 };
 
 export function formatGridCandidatePreview(candidate: GridCandidate, index: number): GridCandidatePreview {
@@ -56,7 +58,9 @@ export function candidateMatchesSettings(candidate: GridCandidate, settings: Gri
     candidate.outputWidth === settings.targetWidth &&
     candidate.outputHeight === settings.targetHeight &&
     Math.abs(candidate.scaleX - settings.scaleX) <= 0.01 &&
-    Math.abs(candidate.scaleY - settings.scaleY) <= 0.01
+    Math.abs(candidate.scaleY - settings.scaleY) <= 0.01 &&
+    Math.abs(candidate.phaseX - settings.phaseX) <= 0.01 &&
+    Math.abs(candidate.phaseY - settings.phaseY) <= 0.01
   );
 }
 
