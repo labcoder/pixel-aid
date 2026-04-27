@@ -41,7 +41,7 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
         continue;
       }
 
-      if (isOpaquePaleDetail(image, offset, solidAlphaThreshold)) {
+      if (isOpaquePaleDetail(image, x, y, offset, background, alphaThreshold, solidAlphaThreshold)) {
         continue;
       }
 
@@ -229,7 +229,15 @@ function isPaleNeutralPixel(image: RGBAImage, offset: number): boolean {
   return max - min <= 36 && r + g + b >= 540;
 }
 
-function isOpaquePaleDetail(image: RGBAImage, offset: number, solidAlphaThreshold: number): boolean {
+function isOpaquePaleDetail(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  offset: number,
+  background: BackgroundSample,
+  alphaThreshold: number,
+  solidAlphaThreshold: number
+): boolean {
   const alpha = image.data[offset + 3]!;
   if (alpha < solidAlphaThreshold) {
     return false;
@@ -241,7 +249,38 @@ function isOpaquePaleDetail(image: RGBAImage, offset: number, solidAlphaThreshol
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
 
-  return max - min <= 18 && r + g + b >= 735;
+  if (background.a <= alphaThreshold) {
+    return max - min <= 40 && r + g + b >= 620 && !hasOpaquePaleMatteEvidence(image, x, y, solidAlphaThreshold);
+  }
+
+  return max - min <= 18 && r + g + b >= 735 && colorDistanceToBackgroundSq(image, offset, background) > squareTolerance(18);
+}
+
+function hasOpaquePaleMatteEvidence(image: RGBAImage, x: number, y: number, solidAlphaThreshold: number): boolean {
+  let paleNeighborCount = 0;
+
+  for (let dy = -2; dy <= 2; dy += 1) {
+    for (let dx = -2; dx <= 2; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const neighborOffset = (ny * image.width + nx) * 4;
+      if (image.data[neighborOffset + 3]! >= solidAlphaThreshold && isPaleNeutralPixel(image, neighborOffset)) {
+        paleNeighborCount += 1;
+        if (paleNeighborCount >= 2) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 function shouldUseExtendedMatteRadius(

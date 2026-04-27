@@ -601,6 +601,21 @@ describe("alpha cleanup", () => {
     expect(diagnostics.decontaminatedPixels).toBe(1);
   });
 
+  test("decontaminates preserve-mode RGB below the configured near-transparent threshold", () => {
+    const source = imageFromPixels(2, [rgba(255, 255, 255, 12), rgba(80, 190, 255, 72)]);
+
+    const { image: cleaned, diagnostics } = applyAlphaMode(source, "preserve", {
+      threshold: 16,
+      decontaminateRgb: true,
+      transparentRgb: "#000000"
+    });
+
+    expect(readPixel(cleaned, 0, 0)).toEqual([0, 0, 0, 12]);
+    expect(readPixel(cleaned, 1, 0)).toEqual([80, 190, 255, 72]);
+    expect(diagnostics.decontaminatedPixels).toBe(1);
+    expect(diagnostics.softAlphaPixels).toBe(2);
+  });
+
   test("flood-fills off-white edge gradients without removing the subject", () => {
     const source = createImage(5, 5);
     for (let y = 0; y < 5; y += 1) {
@@ -731,14 +746,18 @@ describe("halo cleanup", () => {
     expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
   });
 
-  test("preserves opaque pale details near transparent subject edges", () => {
+  test.each([
+    ["pure white", rgba(255, 255, 255)],
+    ["pale neutral", rgba(220, 224, 220)],
+    ["warm pale", rgba(230, 220, 196)]
+  ])("preserves opaque %s details near transparent subject edges", (_label, highlight) => {
     const source = createImage(5, 5, [0, 0, 0, 0]);
     writePixel(source, 2, 2, 70, 126, 80, 255);
-    writePixel(source, 1, 2, 255, 255, 255, 255);
+    writePixel(source, 1, 2, highlight[0], highlight[1], highlight[2], highlight[3]);
 
     const cleaned = applyHaloRemoval(source, { enabled: true });
 
-    expect(readPixel(cleaned, 1, 2)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(cleaned, 1, 2)).toEqual([...highlight]);
     expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
   });
 
