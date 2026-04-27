@@ -1,6 +1,7 @@
-import type { AlphaMode, AssetMode, DownscaleMethod } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, AssetType, DownscaleMethod } from "@pixelaid/shared";
 
 export type EditorSettingsState = {
+  assetType: AssetType;
   mode: AssetMode;
   targetWidth: number;
   targetHeight: number;
@@ -25,6 +26,7 @@ export const editorPresets: EditorPreset[] = [
     label: "Single sprite clean",
     description: "Auto grid, adaptive blocks, 32-color cap.",
     settings: {
+      assetType: "sprite",
       mode: "single",
       gridDetect: "auto",
       maxColors: 32,
@@ -37,6 +39,7 @@ export const editorPresets: EditorPreset[] = [
     label: "Crisp icon",
     description: "Dominant blocks with a tighter 16-color palette.",
     settings: {
+      assetType: "icon",
       mode: "single",
       gridDetect: "auto",
       maxColors: 16,
@@ -49,6 +52,7 @@ export const editorPresets: EditorPreset[] = [
     label: "Transparent sprite",
     description: "Single sprite cleanup with background flood-fill alpha.",
     settings: {
+      assetType: "sprite",
       mode: "single",
       gridDetect: "auto",
       maxColors: 32,
@@ -61,6 +65,7 @@ export const editorPresets: EditorPreset[] = [
     label: "Manual sheet setup",
     description: "Sheet mode with manual target controls enabled.",
     settings: {
+      assetType: "spriteSheet",
       mode: "spriteSheet",
       gridDetect: "manual",
       targetWidth: 128,

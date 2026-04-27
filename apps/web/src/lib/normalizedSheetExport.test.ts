@@ -13,6 +13,7 @@ writePixel(image, 3, 1, 0, 0, 255, 255);
 
 const settings: FixOptions = {
   mode: "spriteSheet",
+  assetType: "animationSheet",
   targetWidth: 6,
   targetHeight: 4,
   maxColors: 4,

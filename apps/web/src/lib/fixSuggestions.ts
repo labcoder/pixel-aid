@@ -1,9 +1,24 @@
 import { detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
-import type { AlphaMode, AssetMode, DownscaleMethod, GridCandidate, Rect, RGBAImage, SheetLayoutDetection, SpriteFrame } from "@pixelaid/shared";
+import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
+import type {
+  AlphaMode,
+  AssetMode,
+  AssetType,
+  AssetTypeClassification,
+  AssetTypeWarning,
+  DownscaleMethod,
+  GridCandidate,
+  Rect,
+  RGBAImage,
+  SheetLayoutDetection,
+  SpriteFrame
+} from "@pixelaid/shared";
+import { getAssetTypeCleanupPreset } from "./assetTypePresets";
 
 const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 512] as const;
 
 export type FixSettingSuggestion = {
+  assetType: AssetType;
   mode: AssetMode;
   targetWidth: number;
   targetHeight: number;
@@ -18,6 +33,9 @@ export type FixSettingSuggestion = {
   reason: string;
   confidence: number;
   modeConfidence: number;
+  categoryConfidence: number;
+  categoryReason: string;
+  categoryWarnings: AssetTypeWarning[];
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
@@ -32,9 +50,20 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const outputWidth = candidate?.outputWidth ?? image.width;
   const outputHeight = candidate?.outputHeight ?? image.height;
   const sourceRatio = image.width / image.height;
-  const mode = classifyMode(image.width, image.height, outputWidth, outputHeight, sheetLayoutScore);
+  const classifiedMode = classifyMode(image.width, image.height, outputWidth, outputHeight, sheetLayoutScore);
+  const classification = classifyAssetType({
+    mode: classifiedMode,
+    width: image.width,
+    height: image.height,
+    outputWidth,
+    outputHeight,
+    sheetLayoutScore,
+    sheetLayout: detectedSheetLayout
+  });
+  const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
-  const downscale = suggestDownscaleMethod(image, candidate, mode, sourceRatio);
+  const preset = getAssetTypeCleanupPreset(classification.assetType);
+  const downscale = preset.downscale;
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
@@ -42,20 +71,82 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
 
   return {
+    assetType: classification.assetType,
     mode,
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
-    maxColors: mode === "tileSheet" ? 16 : 24,
+    maxColors: preset.maxColors,
     gridCandidates: candidates,
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
     downscale,
-    alpha: suggestAlphaMode(image, mode),
+    alpha: suggestAlphaMode(image, mode, classification.assetType, preset.alpha),
     ...(sheetLayout ? { sheetLayout } : {}),
     reason: suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore),
     confidence: candidate?.confidence ?? 0.25,
-    modeConfidence
+    modeConfidence,
+    categoryConfidence: classification.confidence,
+    categoryReason: classification.reason,
+    categoryWarnings: classification.warnings
+  };
+}
+
+function classifyAssetType(input: {
+  mode: AssetMode;
+  width: number;
+  height: number;
+  outputWidth: number;
+  outputHeight: number;
+  sheetLayoutScore: number;
+  sheetLayout?: SheetLayoutDetection;
+}): AssetTypeClassification {
+  const sourceRatio = input.width / input.height;
+  const outputRatio = input.outputWidth / input.outputHeight;
+  const sourceMax = Math.max(input.width, input.height);
+  const outputMax = Math.max(input.outputWidth, input.outputHeight);
+  let assetType: AssetType = "sprite";
+  let confidence = 0.72;
+  let reason = "Source proportions look like a standalone sprite or prop.";
+
+  if (input.mode === "tileSheet") {
+    assetType = "tileset";
+    confidence = 0.78;
+    reason = "Square, evenly divisible source looks like a tileset; seam diagnostics are inspect-only in 0.1.0.";
+  } else if (input.mode === "spriteSheet") {
+    if (input.sheetLayoutScore >= 0.55 || (input.sheetLayout?.rowAnimations.length ?? 0) >= 2) {
+      assetType = "animationSheet";
+      confidence = Math.min(0.95, Math.max(0.78, input.sheetLayoutScore));
+      reason = "Detected repeated frame rows, so animation is represented as sheet frames plus timeline metadata.";
+    } else {
+      assetType = "spriteSheet";
+      confidence = 0.74;
+      reason = "Wide or tall source looks like a sprite sheet with multiple frame cells.";
+    }
+  } else if (sourceMax >= 512 && sourceRatio >= 1.45) {
+    assetType = "background";
+    confidence = 0.76;
+    reason = "Large landscape single-image proportions look like a background or scene backdrop.";
+  } else if (sourceMax >= 512 && input.height / input.width >= 1.15) {
+    assetType = "portrait";
+    confidence = 0.74;
+    reason = "Tall single-image proportions look like a portrait.";
+  } else if (outputMax <= 64 && outputRatio >= 0.75 && outputRatio <= 1.35 && (sourceMax <= 128 || (sourceRatio >= 0.9 && sourceRatio <= 1.1))) {
+    assetType = "icon";
+    confidence = 0.72;
+    reason = "Small near-square native output looks like an icon.";
+  } else if (sourceRatio >= 2.25 || sourceRatio <= 0.45) {
+    assetType = "uiElement";
+    confidence = 0.62;
+    reason = "Wide or short single-image proportions look like a UI element.";
+  }
+
+  const definition = getAssetTypeDefinition(assetType);
+  return {
+    assetType,
+    confidence,
+    reason,
+    warnings: [...definition.defaultWarnings]
   };
 }
 
@@ -171,7 +262,7 @@ export function chooseSuggestionGrid(
   return candidate;
 }
 
-function suggestAlphaMode(image: RGBAImage, mode: AssetMode): AlphaMode {
+function suggestAlphaMode(image: RGBAImage, mode: AssetMode, assetType: AssetType, fallback: AlphaMode): AlphaMode {
   if (mode !== "single") {
     return "preserve";
   }
@@ -200,29 +291,8 @@ function suggestAlphaMode(image: RGBAImage, mode: AssetMode): AlphaMode {
 
   const brightness = (r + g + b) / (count * 3);
   const alpha = a / count;
-  return alpha > 240 && brightness > 220 ? "backgroundFloodFill" : "preserve";
-}
-
-function suggestDownscaleMethod(
-  image: RGBAImage,
-  candidate: GridCandidate | undefined,
-  mode: AssetMode,
-  sourceRatio: number
-): DownscaleMethod {
-  const purity = estimateBlockPurity(image, candidate);
-  if (purity >= 0.68) {
-    return "dominant";
-  }
-
-  if (mode === "single" && purity >= 0.52) {
-    return "dominant";
-  }
-
-  if (sourceRatio > 2 || sourceRatio < 0.5 || purity >= 0.38) {
-    return "adaptive";
-  }
-
-  return "median";
+  const canFloodFillBackground = assetType === "sprite" || assetType === "icon";
+  return canFloodFillBackground && alpha > 240 && brightness > 220 ? "backgroundFloodFill" : fallback;
 }
 
 function estimateBlockPurity(image: RGBAImage, candidate: GridCandidate | undefined): number {

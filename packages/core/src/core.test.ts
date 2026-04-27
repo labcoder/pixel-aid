@@ -323,6 +323,7 @@ function countVisibleNearWhitePixels(image: RGBAImage): number {
 
 const defaultOptions: FixOptions = {
   mode: "single",
+  assetType: "sprite",
   targetWidth: 2,
   targetHeight: 2,
   maxColors: 4,
@@ -938,6 +939,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(source, {
       mode: "spriteSheet",
+      assetType: "animationSheet",
       targetWidth: 4,
       targetHeight: 2,
       maxColors: 4,
@@ -1012,6 +1014,7 @@ describe("fix pipeline", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const result = fixImage(fixture.image, {
       mode: "single",
+      assetType: "sprite",
       maxColors: 24,
       grid: {
         detect: "auto"
@@ -1038,6 +1041,7 @@ describe("fix pipeline", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const result = fixImage(fixture.image, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: fixture.expected.nativeWidth,
       targetHeight: fixture.expected.nativeHeight,
       maxColors: 24,
@@ -1064,6 +1068,7 @@ describe("fix pipeline", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const result = fixImage(fixture.image, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: fixture.expected.nativeWidth,
       targetHeight: fixture.expected.nativeHeight,
       maxColors: 24,
@@ -1098,6 +1103,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(source, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: 9,
       targetHeight: 9,
       maxColors: 2,
@@ -1128,6 +1134,7 @@ describe("fix pipeline", () => {
     writePixel(source, 1, 1, 120, 200, 180, 255);
     const options = {
       mode: "single",
+      assetType: "sprite",
       targetWidth: 3,
       targetHeight: 3,
       maxColors: 2,
@@ -1162,6 +1169,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(source, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: 5,
       targetHeight: 5,
       maxColors: 2,
@@ -1190,6 +1198,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(fixture.image, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: fixture.expected.nativeWidth,
       targetHeight: fixture.expected.nativeHeight,
       maxColors: 24,
@@ -1228,6 +1237,7 @@ describe("fix pipeline", () => {
 
     const cleanupOptions: FixOptions = {
       mode: "single",
+      assetType: "sprite",
       targetWidth: fixture.expected.nativeWidth,
       targetHeight: fixture.expected.nativeHeight,
       maxColors: 24,
@@ -1281,6 +1291,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(source, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: 7,
       targetHeight: 5,
       maxColors: 3,
@@ -1317,6 +1328,7 @@ describe("fix pipeline", () => {
 
     const result = fixImage(source, {
       mode: "single",
+      assetType: "sprite",
       targetWidth: 3,
       targetHeight: 3,
       maxColors: 8,

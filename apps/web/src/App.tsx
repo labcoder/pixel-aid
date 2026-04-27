@@ -24,6 +24,8 @@ import type {
   AlphaMode,
   AnimationTag,
   AssetMode,
+  AssetType,
+  AssetTypeWarning,
   DownscaleMethod,
   FixOptions,
   GridCandidate,
@@ -33,6 +35,7 @@ import type {
   SheetLayoutDiagnostics,
   SpriteFrame
 } from "@pixelaid/shared";
+import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import { sliceSheetFrames } from "@pixelaid/core";
 import { createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
@@ -46,7 +49,8 @@ import {
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
 import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
-import { removeAssetAndSelectNext } from "./lib/assets";
+import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./lib/assets";
+import { getAssetTypeCleanupPreset } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import { createAssetBundleZip } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -231,6 +235,12 @@ export function App() {
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+  const assetType = selectedAsset?.assetType ?? "sprite";
+  const assetTypeSource = selectedAsset?.assetTypeSource ?? "auto";
+  const assetTypeWarnings = selectedAsset?.assetTypeWarnings ?? [];
+  const categoryReason = selectedAsset?.categoryReason ?? "Auto Suggest will classify the imported asset type.";
+  const categoryConfidence = selectedAsset?.categoryConfidence ?? 0;
+  const assetTypeDefinition = getAssetTypeDefinition(assetType);
   const isImporting = importStatus !== null;
   const isAnalyzing = analysisStatus !== null;
   const isFixing = fixStatus !== null;
@@ -387,6 +397,7 @@ export function App() {
   const guidedFixSummary = useMemo(
     () =>
       getGuidedFixSummary({
+        assetType,
         mode,
         targetWidth: effectiveTargetWidth,
         targetHeight: effectiveTargetHeight,
@@ -394,12 +405,17 @@ export function App() {
         downscale,
         alpha,
         confidence: fixResult?.grid.confidence ?? recommendationConfidence,
+        categoryConfidence,
+        warnings: assetTypeWarnings,
         frameCount: sheetMode ? sheetFrames.length : 1,
         rows: sheetMode ? plannedSheetLayout.rowCount : sheetRows,
         columns: sheetMode ? plannedSheetLayout.maxColumns : sheetColumns
       }),
     [
       alpha,
+      assetType,
+      assetTypeWarnings,
+      categoryConfidence,
       downscale,
       effectiveTargetHeight,
       effectiveTargetWidth,
@@ -531,16 +547,42 @@ export function App() {
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
-  const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion) => {
-    const layout = suggestion.mode === "spriteSheet" ? suggestion.sheetLayout : undefined;
+  const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion, targetAsset: ImportedImageAsset | null = selectedAsset) => {
+    const targetAssetType = targetAsset?.assetType ?? suggestion.assetType;
+    const targetAssetSource = targetAsset?.assetTypeSource ?? "auto";
+    const resolvedAssetType = targetAssetSource === "manual" ? targetAssetType : suggestion.assetType;
+    const resolvedMode = assetTypeToMode(resolvedAssetType);
+    const preset = getAssetTypeCleanupPreset(resolvedAssetType);
+    const definition = getAssetTypeDefinition(resolvedAssetType);
+    const resolvedWarnings = targetAssetSource === "manual" ? getWarningsForAssetType(resolvedAssetType) : suggestion.categoryWarnings;
+    const resolvedCategoryReason =
+      targetAssetSource === "manual"
+        ? `Manual asset type: ${definition.label}. ${definition.description}`
+        : suggestion.categoryReason;
+    const resolvedCategoryConfidence = targetAssetSource === "manual" ? 1 : suggestion.categoryConfidence;
+    const layout = resolvedMode === "spriteSheet" && suggestion.mode === "spriteSheet" ? suggestion.sheetLayout : undefined;
+    const resolvedAlpha =
+      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon" ? preset.alpha : suggestion.alpha;
 
-    setMode(suggestion.mode);
+    if (targetAsset) {
+      setAssets((current) =>
+        updateAssetTypeMetadata(current, targetAsset.id, {
+          assetType: resolvedAssetType,
+          assetTypeSource: targetAssetSource,
+          assetTypeWarnings: resolvedWarnings,
+          categoryReason: resolvedCategoryReason,
+          categoryConfidence: resolvedCategoryConfidence
+        })
+      );
+    }
+
+    setMode(resolvedMode);
     setTargetWidth(suggestion.targetWidth);
     setTargetHeight(suggestion.targetHeight);
     setFrameWidth(layout?.frameWidth ?? suggestion.targetWidth);
     setFrameHeight(layout?.frameHeight ?? suggestion.targetHeight);
     setSheetRows(layout?.rows ?? 1);
-    setSheetColumns(layout?.columns ?? (suggestion.mode === "spriteSheet" ? 2 : 1));
+    setSheetColumns(layout?.columns ?? (resolvedMode === "spriteSheet" ? 2 : 1));
     setSheetMargin(layout?.margin ?? 0);
     setSheetSpacing(layout?.spacing ?? 0);
     setDetectedSheetFrames(layout?.frames ?? []);
@@ -556,13 +598,27 @@ export function App() {
     setGridScaleX(suggestion.gridScaleX);
     setGridScaleY(suggestion.gridScaleY);
     setGridDetect(suggestion.gridDetect);
-    setCropToBounds(suggestion.mode === "single");
-    setDownscale(suggestion.downscale);
-    setAlpha(suggestion.alpha);
-    setMaxColors(suggestion.maxColors);
+    setCropToBounds(resolvedMode === "single");
+    setDownscale(targetAssetSource === "manual" ? preset.downscale : suggestion.downscale);
+    setAlpha(resolvedAlpha);
+    setMaxColors(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
+    setRemoveOrphans(preset.removeOrphans);
+    setJaggyCleanup(preset.jaggyCleanup);
+    setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
+    setRemoveHalos(preset.removeHalos);
+    setDenoiseStrength(preset.denoiseStrength);
     setRecommendationConfidence(suggestion.confidence);
-    setSuggestionReason(formatSuggestionReason(suggestion.reason, suggestion.modeConfidence, suggestion.confidence));
-  }, []);
+    setSuggestionReason(
+      formatSuggestionReason(
+        suggestion.reason,
+        suggestion.modeConfidence,
+        suggestion.confidence,
+        resolvedCategoryReason,
+        resolvedCategoryConfidence,
+        resolvedWarnings
+      )
+    );
+  }, [selectedAsset]);
 
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -596,7 +652,7 @@ export function App() {
 
             const suggestion = suggestFixSettings(asset.image);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
-            applyFixSuggestion(suggestion);
+            applyFixSuggestion(suggestion, asset);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
             appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
@@ -613,6 +669,7 @@ export function App() {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
     const options: FixOptions = {
       mode,
+      assetType,
       targetWidth: effectiveTargetWidth,
       targetHeight: effectiveTargetHeight,
       maxColors,
@@ -643,6 +700,7 @@ export function App() {
     return options;
   }, [
     alpha,
+    assetType,
     denoiseStrength,
     downscale,
     gridDetect,
@@ -740,8 +798,8 @@ export function App() {
     try {
       const suggestion = suggestFixSettings(selectedAsset.image);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
-      applyFixSuggestion(suggestion);
-      appendLog(`Auto suggested ${suggestion.mode} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+      applyFixSuggestion(suggestion, selectedAsset);
+      appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
     } finally {
       setAnalysisStatus(null);
     }
@@ -751,6 +809,7 @@ export function App() {
     (preset: EditorPreset) => {
       const next = applyEditorPreset(
         {
+          assetType,
           mode,
           targetWidth,
           targetHeight,
@@ -765,6 +824,18 @@ export function App() {
       );
 
       clearDetectedSheetLayout();
+      if (selectedAsset && next.assetType !== assetType) {
+        const definition = getAssetTypeDefinition(next.assetType);
+        setAssets((current) =>
+          updateAssetTypeMetadata(current, selectedAsset.id, {
+            assetType: next.assetType,
+            assetTypeSource: "manual",
+            assetTypeWarnings: getWarningsForAssetType(next.assetType),
+            categoryReason: `Preset selected ${definition.label}. ${definition.description}`,
+            categoryConfidence: 1
+          })
+        );
+      }
       setMode(next.mode);
       setTargetWidth(next.targetWidth);
       setTargetHeight(next.targetHeight);
@@ -778,7 +849,65 @@ export function App() {
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, clearDetectedSheetLayout, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
+    [alpha, appendLog, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
+  );
+
+  const changeAssetType = useCallback(
+    (nextAssetType: AssetType) => {
+      if (!selectedAsset) {
+        return;
+      }
+
+      const definition = getAssetTypeDefinition(nextAssetType);
+      const preset = getAssetTypeCleanupPreset(nextAssetType);
+      const nextMode = assetTypeToMode(nextAssetType);
+      const wasSheetLike = isSheetLikeMode(mode);
+      const nextSheetLike = isSheetLikeMode(nextMode);
+      const warnings = getWarningsForAssetType(nextAssetType);
+
+      setAssets((current) =>
+        updateAssetTypeMetadata(current, selectedAsset.id, {
+          assetType: nextAssetType,
+          assetTypeSource: "manual",
+          assetTypeWarnings: warnings,
+          categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
+          categoryConfidence: 1
+        })
+      );
+
+      setMode(nextMode);
+      if (wasSheetLike !== nextSheetLike) {
+        clearDetectedSheetLayout();
+      }
+      if (!nextSheetLike) {
+        setSheetRows(1);
+        setSheetColumns(1);
+      } else if (!wasSheetLike) {
+        setSheetRows(1);
+        setSheetColumns(2);
+      }
+      setCropToBounds(nextMode === "single");
+      setMaxColors(preset.maxColors);
+      setDownscale(preset.downscale);
+      setAlpha(preset.alpha);
+      setRemoveOrphans(preset.removeOrphans);
+      setJaggyCleanup(preset.jaggyCleanup);
+      setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
+      setRemoveHalos(preset.removeHalos);
+      setDenoiseStrength(preset.denoiseStrength);
+      setSuggestionReason(
+        formatSuggestionReason(
+          "Manual asset type override applied.",
+          1,
+          recommendationConfidence,
+          `Manual asset type: ${definition.label}. ${definition.description}`,
+          1,
+          warnings
+        )
+      );
+      appendLog(`Asset type set: ${definition.label}`);
+    },
+    [appendLog, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset]
   );
 
   const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
@@ -1227,19 +1356,31 @@ export function App() {
 
   const selectAsset = useCallback(
     (assetId: string) => {
+      const nextAsset = assets.find((asset) => asset.id === assetId);
       if (assetId !== selectedAsset?.id) {
         setFixResult(null);
+      }
+      if (nextAsset) {
+        const nextMode = assetTypeToMode(nextAsset.assetType);
+        setMode(nextMode);
+        setCropToBounds(nextMode === "single");
       }
       setSelectedAssetId(assetId);
       setAssetMenu(null);
     },
-    [selectedAsset?.id]
+    [assets, selectedAsset?.id]
   );
 
   const removeAsset = useCallback(
     (assetId: string) => {
       setAssets((current) => {
         const result = removeAssetAndSelectNext(current, assetId, selectedAsset?.id ?? null);
+        const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
+        if (nextSelectedAsset) {
+          const nextMode = assetTypeToMode(nextSelectedAsset.assetType);
+          setMode(nextMode);
+          setCropToBounds(nextMode === "single");
+        }
         setSelectedAssetId(result.selectedAssetId);
         return result.assets;
       });
@@ -1388,7 +1529,23 @@ export function App() {
         </button>
         <p className="control-hint">{suggestionReason}</p>
         <SelectField
-          label="Mode"
+          label="Asset type"
+          value={assetType}
+          options={assetTypeDefinitions.map((definition) => [definition.type, definition.label])}
+          onChange={(value) => changeAssetType(value as AssetType)}
+        />
+        <p className="field-note">
+          {assetTypeDefinition.shortLabel} classification is {assetTypeSource}; {categoryReason}
+        </p>
+        {assetTypeWarnings.length > 0 ? (
+          <div className="asset-type-warning-list" aria-label="Asset type warnings">
+            {assetTypeWarnings.map((warning) => (
+              <p key={warning.code}>{warning.message}</p>
+            ))}
+          </div>
+        ) : null}
+        <SelectField
+          label="Processing mode"
           value={mode}
           options={[
             ["single", "Single sprite"],
@@ -1397,11 +1554,7 @@ export function App() {
           ]}
           onChange={(value) => {
             const nextMode = value as AssetMode;
-            setMode(nextMode);
-            clearDetectedSheetLayout();
-            if (nextMode !== "single") {
-              setCropToBounds(false);
-            }
+            changeAssetType(defaultAssetTypeForMode(nextMode));
           }}
         />
         {sheetMode ? (
@@ -1823,7 +1976,7 @@ export function App() {
                     <span className="asset-meta">
                       <strong>{asset.name}</strong>
                       <small>
-                        Source {asset.image.width}x{asset.image.height}
+                        {getAssetTypeDefinition(asset.assetType).shortLabel} · Source {asset.image.width}x{asset.image.height}
                       </small>
                     </span>
                     <span
@@ -2244,6 +2397,7 @@ export function App() {
                 metrics={[
                   ["Size", selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"],
                   ["Colors", selectedAsset ? String(sourceColorCount) : "--"],
+                  ["Type", selectedAsset ? assetTypeDefinition.shortLabel : "--"],
                   ["Mode", mode],
                   ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
                 ]}
@@ -2577,8 +2731,55 @@ function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate
   return <canvas className="grid-candidate-thumb" ref={canvasRef} aria-hidden="true" />;
 }
 
-function formatSuggestionReason(reason: string, modeConfidence: number, gridConfidence: number): string {
-  return `${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.`;
+function formatSuggestionReason(
+  reason: string,
+  modeConfidence: number,
+  gridConfidence: number,
+  categoryReason: string,
+  categoryConfidence: number,
+  warnings: readonly AssetTypeWarning[] = []
+): string {
+  const warningText = warnings.length > 0 ? ` ${warnings.map((warning) => warning.message).join(" ")}` : "";
+  return `${categoryReason} Type ${Math.round(categoryConfidence * 100)}%. ${reason} Mode ${Math.round(modeConfidence * 100)}%. Grid ${Math.round(gridConfidence * 100)}%.${warningText}`;
+}
+
+function getWarningsForAssetType(assetType: AssetType): AssetTypeWarning[] {
+  const definition = getAssetTypeDefinition(assetType);
+  const preset = getAssetTypeCleanupPreset(assetType);
+  const warnings = [...definition.defaultWarnings];
+  const knownCodes = new Set(warnings.map((warning) => warning.code));
+
+  for (const code of preset.warningCodes) {
+    if (!knownCodes.has(code)) {
+      warnings.push({
+        code,
+        severity: "info",
+        message: codeToAssetTypeWarningMessage(code)
+      });
+    }
+  }
+
+  return warnings;
+}
+
+function codeToAssetTypeWarningMessage(code: string): string {
+  if (code === "tilemap-future") {
+    return "Tilemap data import/export is not supported in 0.1.0.";
+  }
+  if (code === "tileset-seams-inspect-only") {
+    return "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0.";
+  }
+  return "This asset type uses a generic fix/export workflow in 0.1.0.";
+}
+
+function defaultAssetTypeForMode(mode: AssetMode): AssetType {
+  if (mode === "spriteSheet" || mode === "characterSheet") {
+    return "spriteSheet";
+  }
+  if (mode === "tileSheet") {
+    return "tileset";
+  }
+  return "sprite";
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
