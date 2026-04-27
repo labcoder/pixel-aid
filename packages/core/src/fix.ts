@@ -18,7 +18,7 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
   const grid = resolveGrid(image, options);
   const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
-  const localDriftBoundaries = localDrift?.used
+  const localDriftBoundaries = localDrift?.used && localDrift.xBoundaryRows && localDrift.yBoundaryColumns
     ? {
         xBoundaryRows: localDrift.xBoundaryRows,
         yBoundaryColumns: localDrift.yBoundaryColumns
