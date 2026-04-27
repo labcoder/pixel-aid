@@ -59,6 +59,11 @@ export type ResolvedPalette = {
   diagnostics: PaletteDiagnostics;
 };
 
+export type AnalyzePaletteDriftOptions = {
+  strategy?: PaletteStrategy;
+  reservedColors?: readonly string[];
+};
+
 const SAFE_PALETTE_PRESETS: Record<string, string[]> = {
   "pixelaid-mono-4": ["#0f172a", "#475569", "#cbd5e1", "#f8fafc"],
   "pixelaid-arcade-8": ["#101112", "#2f3742", "#48636f", "#5c8d78", "#9bb66f", "#d6c86e", "#d98b5f", "#f4efe4"],
@@ -98,7 +103,10 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
 
   const drift =
     options.frames && options.frames.length > 0
-      ? analyzePaletteDrift(image, options.frames, outputPalette, maxColors)
+      ? analyzePaletteDrift(image, options.frames, outputPalette, maxColors, {
+          strategy: settings.strategy,
+          reservedColors: reserved
+        })
       : undefined;
   if (drift && drift.warnings.length > 0) {
     warnings.push(...drift.warnings);
@@ -524,7 +532,8 @@ export function analyzePaletteDrift(
   image: RGBAImage,
   frames: readonly SpriteFrame[],
   activePalette: readonly string[],
-  maxColors: number
+  maxColors: number,
+  options: AnalyzePaletteDriftOptions = {}
 ): PaletteDriftDiagnostics {
   const activeColors = new Set<number>();
   for (const color of activePalette) {
@@ -535,6 +544,8 @@ export function analyzePaletteDrift(
   }
 
   const frameBudget = normalizeMaxColors(maxColors);
+  const strategy = options.strategy ?? "medianCut";
+  const reservedColors = options.reservedColors ?? [];
   let checkedFrameCount = 0;
   let maxFrameColorCount = 0;
   let maxFramePaletteDelta = 0;
@@ -548,7 +559,7 @@ export function analyzePaletteDrift(
     checkedFrameCount += 1;
     maxFrameColorCount = Math.max(maxFrameColorCount, countVisibleExactColors(frameImage));
 
-    const framePalette = extractAutoPalette(frameImage, frameBudget);
+    const framePalette = extractAutoPalette(frameImage, frameBudget, strategy, reservedColors);
     const frameColors = new Set<number>();
     for (const color of framePalette) {
       const normalized = normalizeColorForDrift(color);
