@@ -1,6 +1,7 @@
 import type {
   PaletteDiagnostics,
   PaletteDitheringMode,
+  PaletteDriftDiagnostics,
   PaletteLockScope,
   PaletteMode,
   PaletteSettings,
@@ -76,19 +77,31 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
   const presetColors = settings.mode === "preset" ? getPalettePresetColors(settings.preset, warnings) : [];
   const fixedColors = settings.mode === "fixed" ? requestedColors : presetColors;
   const maxColors = settings.maxColors;
+  const hasFixedPalette = fixedColors.length > 0;
 
   if (settings.mode === "fixed" && requestedColors.length === 0) {
     warnings.push("Fixed palette mode did not include valid colors; auto palette extraction was used.");
   }
 
+  const paletteSource = hasFixedPalette
+    ? image
+    : selectPaletteSource(image, settings.lockScope, options.frames, options.lockSourceFrame, warnings);
   const palette =
-    fixedColors.length > 0
+    hasFixedPalette
       ? fixedColors
-      : extractAutoPalette(selectPaletteSource(image), maxColors, settings.strategy, reserved);
+      : extractAutoPalette(paletteSource, maxColors, settings.strategy, reserved);
   const outputPalette = mergeReservedPalette(palette, reserved, maxColors);
 
   if (palette.length + reserved.length > outputPalette.length) {
     warnings.push(`Palette was limited to ${outputPalette.length} colors by the active maxColors budget.`);
+  }
+
+  const drift =
+    options.frames && options.frames.length > 0
+      ? analyzePaletteDrift(image, options.frames, outputPalette, maxColors)
+      : undefined;
+  if (drift && drift.warnings.length > 0) {
+    warnings.push(...drift.warnings);
   }
 
   return {
@@ -104,6 +117,7 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
       ...(fixedColors.length > 0 ? { fixedColorCount: fixedColors.length } : {}),
       ...(settings.preset ? { preset: settings.preset } : {}),
       dithering: settings.dithering,
+      ...(drift ? { drift } : {}),
       warnings
     }
   };
@@ -472,8 +486,138 @@ function countVisibleExactColors(image: RGBAImage): number {
   return colors.size;
 }
 
-function selectPaletteSource(image: RGBAImage): RGBAImage {
+function selectPaletteSource(
+  image: RGBAImage,
+  lockScope: PaletteLockScope,
+  frames: readonly SpriteFrame[] | undefined,
+  lockSourceFrame: SpriteFrame | undefined,
+  warnings: string[]
+): RGBAImage {
+  if (lockScope === "firstFrame") {
+    const firstFrame = lockSourceFrame ?? frames?.[0];
+    if (!firstFrame) {
+      warnings.push("First-frame palette lock requested without frame metadata; full image palette extraction was used.");
+      return image;
+    }
+
+    const cropped = cropImageToRect(image, firstFrame.rect);
+    if (!cropped) {
+      warnings.push("First-frame palette lock could not use the first frame rect; full image palette extraction was used.");
+      return image;
+    }
+
+    return cropped;
+  }
+
+  if (lockScope === "project") {
+    warnings.push(
+      frames && frames.length > 0
+        ? "Project palette lock did not include fixed colors; sheet palette extraction was used."
+        : "Project palette lock did not include fixed colors; single image palette extraction was used."
+    );
+  }
+
   return image;
+}
+
+export function analyzePaletteDrift(
+  image: RGBAImage,
+  frames: readonly SpriteFrame[],
+  activePalette: readonly string[],
+  maxColors: number
+): PaletteDriftDiagnostics {
+  const activeColors = new Set<number>();
+  for (const color of activePalette) {
+    const normalized = normalizeColorForDrift(color);
+    if (normalized !== null) {
+      activeColors.add(normalized);
+    }
+  }
+
+  const frameBudget = normalizeMaxColors(maxColors);
+  let checkedFrameCount = 0;
+  let maxFrameColorCount = 0;
+  let maxFramePaletteDelta = 0;
+
+  for (const frame of frames) {
+    const frameImage = cropImageToRect(image, frame.rect);
+    if (!frameImage) {
+      continue;
+    }
+
+    checkedFrameCount += 1;
+    maxFrameColorCount = Math.max(maxFrameColorCount, countVisibleExactColors(frameImage));
+
+    const framePalette = extractAutoPalette(frameImage, frameBudget);
+    const frameColors = new Set<number>();
+    for (const color of framePalette) {
+      const normalized = normalizeColorForDrift(color);
+      if (normalized !== null) {
+        frameColors.add(normalized);
+      }
+    }
+
+    let frameDelta = 0;
+    for (const color of frameColors) {
+      if (!activeColors.has(color)) {
+        frameDelta += 1;
+      }
+    }
+    maxFramePaletteDelta = Math.max(maxFramePaletteDelta, frameDelta);
+  }
+
+  const warnings: string[] = [];
+  if (frames.length > 0 && checkedFrameCount === 0) {
+    warnings.push("Palette drift diagnostics did not find any frame rects within the image bounds.");
+  }
+  if (maxFramePaletteDelta > 0) {
+    warnings.push(
+      `Palette drift detected across ${checkedFrameCount} frames; ${maxFramePaletteDelta} frame colors remap outside the active palette.`
+    );
+  }
+
+  return {
+    frameCount: frames.length,
+    checkedFrameCount,
+    maxFrameColorCount,
+    maxFramePaletteDelta,
+    warnings
+  };
+}
+
+function cropImageToRect(image: RGBAImage, rect: SpriteFrame["rect"]): RGBAImage | null {
+  const x = clampInteger(rect.x, 0, image.width);
+  const y = clampInteger(rect.y, 0, image.height);
+  const right = clampInteger(rect.x + rect.w, 0, image.width);
+  const bottom = clampInteger(rect.y + rect.h, 0, image.height);
+  const width = Math.max(0, right - x);
+  const height = Math.max(0, bottom - y);
+
+  if (width === 0 || height === 0) {
+    return null;
+  }
+
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let row = 0; row < height; row += 1) {
+    const sourceOffset = ((y + row) * image.width + x) * 4;
+    const targetOffset = row * width * 4;
+    data.set(image.data.subarray(sourceOffset, sourceOffset + width * 4), targetOffset);
+  }
+
+  return { width, height, data };
+}
+
+function clampInteger(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
+}
+
+function normalizeColorForDrift(color: string): number | null {
+  try {
+    const [r, g, b] = unpackRgb(parseHexColor(color));
+    return packQuantizedRgb(r, g, b);
+  } catch {
+    return null;
+  }
 }
 
 function quantizedHexColor(hex: string): string {

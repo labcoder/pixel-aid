@@ -31,6 +31,6 @@ export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./i
 export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup } from "./outline";
 export type { OutlineCleanupOptions } from "./outline";
-export { extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
+export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
 export type { ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
