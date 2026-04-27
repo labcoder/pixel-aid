@@ -1,6 +1,16 @@
-import type { AlphaCleanupDiagnostics, FixOptions, GridCandidate, GridDriftDiagnostics, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
+import type {
+  AlphaCleanupDiagnostics,
+  FixOptions,
+  GridCandidate,
+  GridDriftDiagnostics,
+  PaletteSettings,
+  PixelFixResult,
+  Rect,
+  RGBAImage,
+  SpriteFrame
+} from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
-import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
+import { parseHexColor, rgbToHex } from "./color";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { planLocalGridDrift } from "./gridDrift";
@@ -8,7 +18,7 @@ import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval } from "./halo";
 import { createImage } from "./image";
 import { applyOutlineCleanup } from "./outline";
-import { extractPalette, remapToPalette } from "./palette";
+import { remapToPalette, resolvePalette } from "./palette";
 
 export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult {
   if (isSheetFrameFix(options)) {
@@ -50,13 +60,18 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
   });
   const reservedPalette = reservedOutlinePalette(options);
-  const palette = options.palette ?? extractPaletteWithReservedColors(outlineCleaned, options.maxColors, reservedPalette);
-  const remapped = remapToPalette(outlineCleaned, palette);
+  const paletteSettings = resolvePaletteSettings(options);
+  const paletteResult = resolvePalette(outlineCleaned, {
+    ...(paletteSettings ? { requested: paletteSettings } : {}),
+    fallbackMaxColors: options.maxColors,
+    reservedColors: reservedPalette
+  });
+  const remapped = remapToPalette(outlineCleaned, paletteResult.palette);
   const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
 
   return {
     image: remapped,
-    palette,
+    palette: paletteResult.palette,
     grid: resultGrid,
     metrics: {
       durationMs: 0,
@@ -64,12 +79,13 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
       sourceHeight: image.height,
       outputWidth: remapped.width,
       outputHeight: remapped.height,
-      paletteCount: palette.length,
+      paletteCount: paletteResult.palette.length,
       gridConfidence: resultGrid.confidence
     },
     settings: options,
     diagnostics: {
-      alpha: alphaResult.diagnostics
+      alpha: alphaResult.diagnostics,
+      palette: paletteResult.diagnostics
     }
   };
 }
@@ -128,8 +144,14 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
   }
 
   const reservedPalette = reservedOutlinePalette(options);
-  const palette = options.palette ?? extractPaletteWithReservedColors(packed, options.maxColors, reservedPalette);
-  const remapped = remapToPalette(packed, palette);
+  const paletteSettings = resolvePaletteSettings(options);
+  const paletteResult = resolvePalette(packed, {
+    ...(paletteSettings ? { requested: paletteSettings } : {}),
+    fallbackMaxColors: options.maxColors,
+    reservedColors: reservedPalette,
+    frames
+  });
+  const remapped = remapToPalette(packed, paletteResult.palette);
   const sourceRect = unionRects(sourceRects);
   const grid: GridCandidate = {
     outputWidth: remapped.width,
@@ -147,7 +169,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
 
   return {
     image: remapped,
-    palette,
+    palette: paletteResult.palette,
     grid,
     metrics: {
       durationMs: 0,
@@ -155,12 +177,25 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
       sourceHeight: image.height,
       outputWidth: remapped.width,
       outputHeight: remapped.height,
-      paletteCount: palette.length,
+      paletteCount: paletteResult.palette.length,
       gridConfidence: grid.confidence
     },
     settings: options,
-    ...(alphaDiagnostics ? { diagnostics: { alpha: alphaDiagnostics } } : {})
+    diagnostics: {
+      ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
+      palette: paletteResult.diagnostics
+    }
   };
+}
+
+function resolvePaletteSettings(options: FixOptions): PaletteSettings | undefined {
+  if (options.paletteSettings) {
+    return options.paletteSettings;
+  }
+  if (options.palette) {
+    return { mode: "fixed", colors: options.palette, lockScope: "single", dithering: "none" };
+  }
+  return undefined;
 }
 
 type CleanFixedImageResult = {
@@ -407,27 +442,6 @@ function reservedOutlinePalette(options: FixOptions): string[] {
   }
 
   return [rgbToHex(parseHexColor(options.cleanup.outlineColor))];
-}
-
-function extractPaletteWithReservedColors(image: RGBAImage, maxColors: number, reservedColors: string[]): string[] {
-  if (reservedColors.length === 0) {
-    return extractPalette(image, maxColors);
-  }
-
-  const uniqueReserved = [...new Set(reservedColors)];
-  const reservedQuantized = new Set(uniqueReserved.map(quantizedHexColor));
-  const remainingBudget = Math.max(0, maxColors - uniqueReserved.length);
-  const extracted = remainingBudget > 0 ? extractPalette(image, remainingBudget) : [];
-
-  return [
-    ...uniqueReserved,
-    ...extracted.filter((color) => !uniqueReserved.includes(color) && !reservedQuantized.has(color))
-  ].slice(0, Math.max(1, maxColors));
-}
-
-function quantizedHexColor(hex: string): string {
-  const [r, g, b] = unpackRgb(parseHexColor(hex));
-  return rgbToHex(packQuantizedRgb(r, g, b));
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
