@@ -1039,15 +1039,33 @@ button:disabled {
 }
 
 .field-row input,
-.field-row select {
+.field-row select,
+.field-row textarea {
   width: 100%;
   min-width: 0;
-  height: 30px;
   color: var(--text);
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 5px;
   padding: 0 0.5rem;
+}
+
+.field-row input,
+.field-row select {
+  height: 30px;
+}
+
+.field-row textarea {
+  min-height: 84px;
+  padding: 0.45rem 0.5rem;
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  resize: vertical;
+}
+
+.field-row-stack {
+  align-items: start;
 }
 
 .field-row input:disabled,

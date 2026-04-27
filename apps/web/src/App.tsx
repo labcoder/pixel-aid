@@ -31,6 +31,9 @@ import type {
   FixOptions,
   GridCandidate,
   OutlineMode,
+  PaletteLockScope,
+  PaletteMode,
+  PaletteStrategy,
   PixelFixResult,
   RGBAImage,
   SheetLayoutDiagnostics,
@@ -78,6 +81,7 @@ import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } fr
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
+import { normalizePaletteBudget, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import {
   clampFps,
@@ -124,6 +128,11 @@ import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type Edito
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
+const palettePresetOptions = [
+  ["pixelaid-mono-4", "PixelAid Mono 4"],
+  ["pixelaid-arcade-8", "PixelAid Arcade 8"],
+  ["pixelaid-ui-8", "PixelAid UI 8"]
+] as const;
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -178,6 +187,11 @@ export function App() {
   const [targetWidth, setTargetWidth] = useState(64);
   const [targetHeight, setTargetHeight] = useState(64);
   const [maxColors, setMaxColors] = useState(16);
+  const [paletteMode, setPaletteMode] = useState<PaletteMode>("auto");
+  const [paletteStrategy, setPaletteStrategy] = useState<PaletteStrategy>("medianCut");
+  const [paletteLockScope, setPaletteLockScope] = useState<PaletteLockScope>("sheet");
+  const [palettePreset, setPalettePreset] = useState("pixelaid-arcade-8");
+  const [customPaletteText, setCustomPaletteText] = useState("");
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
   const [gridScaleX, setGridScaleX] = useState(8);
   const [gridScaleY, setGridScaleY] = useState(8);
@@ -242,6 +256,10 @@ export function App() {
   const playbackLastTimeRef = useRef<number | null>(null);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
+  const setPaletteBudget = useCallback((value: number) => {
+    setMaxColors(normalizePaletteBudget(value));
+  }, []);
+
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const assetType = selectedAsset?.assetType ?? "sprite";
   const assetTypeSource = selectedAsset?.assetTypeSource ?? "auto";
@@ -262,6 +280,12 @@ export function App() {
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
+  const activePaletteLockScope: PaletteLockScope = sheetMode ? (paletteLockScope === "single" ? "sheet" : paletteLockScope) : "single";
+  const fixedPaletteColors = useMemo(() => parsePaletteText(customPaletteText), [customPaletteText]);
+  const paletteDiagnostics = fixResult?.diagnostics?.palette;
+  const paletteWarningMessages = summarizePaletteWarnings(paletteDiagnostics);
+  const outputPalettePreview = outputPalette.slice(0, Math.min(outputPalette.length, 16));
+  const outputPaletteLabel = paletteDiagnostics ? `Output (${paletteDiagnostics.mode})` : "Output";
   const sheetPivot = useMemo(
     () => getPivotForPreset(pivotPreset, frameWidth, frameHeight, { x: customPivotX, y: customPivotY }),
     [customPivotX, customPivotY, frameHeight, frameWidth, pivotPreset]
@@ -624,7 +648,7 @@ export function App() {
     setDownscale(targetAssetSource === "manual" ? preset.downscale : suggestion.downscale);
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
-    setMaxColors(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
+    setPaletteBudget(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
     setRemoveOrphans(preset.removeOrphans);
     setJaggyCleanup(preset.jaggyCleanup);
     setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
@@ -641,7 +665,7 @@ export function App() {
         resolvedWarnings
       )
     );
-  }, [applyAlphaSettings, selectedAsset]);
+  }, [applyAlphaSettings, selectedAsset, setPaletteBudget]);
 
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -696,6 +720,15 @@ export function App() {
       targetWidth: effectiveTargetWidth,
       targetHeight: effectiveTargetHeight,
       maxColors,
+      paletteSettings: {
+        mode: paletteMode,
+        strategy: paletteStrategy,
+        maxColors,
+        lockScope: activePaletteLockScope,
+        dithering: "none",
+        ...(paletteMode === "fixed" ? { colors: fixedPaletteColors } : {}),
+        ...(paletteMode === "preset" ? { preset: palettePreset } : {})
+      },
       grid: {
         detect: gridDetect,
         scaleX: gridScaleX,
@@ -730,6 +763,7 @@ export function App() {
 
     return options;
   }, [
+    activePaletteLockScope,
     alpha,
     alphaColorKey,
     alphaThreshold,
@@ -746,6 +780,7 @@ export function App() {
     effectiveTargetHeight,
     effectiveTargetWidth,
     cropToBounds,
+    fixedPaletteColors,
     jaggyCleanup,
     localCorrection,
     maxColors,
@@ -755,6 +790,9 @@ export function App() {
     outlineColorEdited,
     outlineMode,
     outlineSize,
+    paletteMode,
+    palettePreset,
+    paletteStrategy,
     preserveSinglePixelDetails,
     removeHalos,
     removeOrphans,
@@ -877,7 +915,7 @@ export function App() {
       setMode(next.mode);
       setTargetWidth(next.targetWidth);
       setTargetHeight(next.targetHeight);
-      setMaxColors(next.maxColors);
+      setPaletteBudget(next.maxColors);
       setGridDetect(next.gridDetect);
       setGridScaleX(next.gridScaleX);
       setGridScaleY(next.gridScaleY);
@@ -890,7 +928,7 @@ export function App() {
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, targetHeight, targetWidth]
+    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
   );
 
   const changeAssetType = useCallback(
@@ -928,7 +966,7 @@ export function App() {
         setSheetColumns(2);
       }
       setCropToBounds(nextMode === "single");
-      setMaxColors(preset.maxColors);
+      setPaletteBudget(preset.maxColors);
       setDownscale(preset.downscale);
       setAlpha(preset.alpha);
       applyAlphaSettings(preset.alphaSettings);
@@ -949,7 +987,7 @@ export function App() {
       );
       appendLog(`Asset type set: ${definition.label}`);
     },
-    [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset]
+    [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset, setPaletteBudget]
   );
 
   const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
@@ -1673,7 +1711,69 @@ export function App() {
     ),
     cleanup: (
       <>
-        <NumberField label="Max colors" value={maxColors} min={1} max={64} onChange={setMaxColors} />
+        <SelectField
+          label="Max colors"
+          value={String(maxColors)}
+          options={paletteBudgets.map((budget) => [String(budget), String(budget)] as const)}
+          onChange={(value) => setPaletteBudget(Number(value))}
+        />
+        <SelectField
+          label="Palette"
+          value={paletteMode}
+          options={[
+            ["auto", "Auto"],
+            ["fixed", "Fixed"],
+            ["preset", "Preset"]
+          ]}
+          onChange={(value) => setPaletteMode(value as PaletteMode)}
+        />
+        <SelectField
+          label="Quantizer"
+          value={paletteStrategy}
+          options={[
+            ["medianCut", "Median cut"],
+            ["frequency", "Frequency"]
+          ]}
+          disabled={paletteMode !== "auto"}
+          onChange={(value) => setPaletteStrategy(value as PaletteStrategy)}
+        />
+        {sheetMode ? (
+          <SelectField
+            label="Lock"
+            value={activePaletteLockScope}
+            options={[
+              ["sheet", "Sheet"],
+              ["firstFrame", "First frame"],
+              ["project", "Project"]
+            ]}
+            onChange={(value) => setPaletteLockScope(value as PaletteLockScope)}
+          />
+        ) : null}
+        {paletteMode === "preset" ? (
+          <SelectField label="Preset" value={palettePreset} options={palettePresetOptions} onChange={setPalettePreset} />
+        ) : null}
+        {paletteMode === "fixed" ? (
+          <>
+            <label className="field-row field-row-stack">
+              <span>Fixed colors</span>
+              <textarea
+                className="palette-textarea"
+                value={customPaletteText}
+                spellCheck={false}
+                aria-label="Fixed palette colors"
+                onChange={(event) => setCustomPaletteText(event.currentTarget.value)}
+              />
+            </label>
+            <p className="field-note">{fixedPaletteColors.length} fixed colors parsed.</p>
+          </>
+        ) : null}
+        {paletteWarningMessages.length > 0 ? (
+          <div className="asset-type-warning-list" aria-label="Palette warnings">
+            {paletteWarningMessages.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        ) : null}
         <StrengthField
           label="Denoise"
           value={denoiseStrength}
@@ -2139,8 +2239,13 @@ export function App() {
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
-          <PaletteSwatches label="Source" colors={sourcePalette} emptyText="Import an asset" />
-          <PaletteSwatches label="Output" colors={outputPalette.slice(0, 8)} emptyText="Run Fix" />
+          <PaletteSwatches label="Source" colors={sourcePalette} totalColors={sourceColorCount} emptyText="Import an asset" />
+          <PaletteSwatches
+            label={outputPaletteLabel}
+            colors={outputPalettePreview}
+            totalColors={paletteDiagnostics?.outputColorCount ?? outputPalette.length}
+            emptyText="Run Fix"
+          />
         </section>
         <section className="panel-section">
           <h2>Presets</h2>
@@ -2225,7 +2330,7 @@ export function App() {
                 onAlphaChange={applySimpleAlphaChoice}
                 onDenoiseChange={applySimpleDenoiseChoice}
                 onOutlineChange={applySimpleOutlineChoice}
-                onMaxColorsChange={setMaxColors}
+                onMaxColorsChange={setPaletteBudget}
               />
             ) : null
           }
@@ -2528,6 +2633,7 @@ export function App() {
                 metrics={[
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${effectiveTargetWidth}x${effectiveTargetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
+                  ["Palette", paletteDiagnostics ? `${paletteDiagnostics.mode} / ${paletteDiagnostics.lockScope}` : `${paletteMode} / ${activePaletteLockScope}`],
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
                   ["Halos", removeHalos ? "remove" : "keep"],
@@ -2546,12 +2652,24 @@ export function App() {
   );
 }
 
-function PaletteSwatches({ label, colors, emptyText }: { label: string; colors: string[]; emptyText: string }) {
+function PaletteSwatches({
+  label,
+  colors,
+  totalColors = colors.length,
+  emptyText
+}: {
+  label: string;
+  colors: readonly string[];
+  totalColors?: number;
+  emptyText: string;
+}) {
+  const shownText = totalColors > colors.length ? `${colors.length} of ${totalColors}` : `${colors.length}`;
+
   return (
     <div className="palette-preview">
       <div className="mini-label">
         <span>{label}</span>
-        <small>{colors.length > 0 ? `${colors.length} shown` : emptyText}</small>
+        <small>{colors.length > 0 ? `${shownText} shown` : emptyText}</small>
       </div>
       <div className="swatch-row" aria-label={`${label} palette preview`}>
         {colors.length > 0 ? (
@@ -3006,17 +3124,19 @@ function SelectField({
   label,
   value,
   options,
+  disabled,
   onChange
 }: {
   label: string;
   value: string;
-  options: Array<[string, string]>;
+  options: ReadonlyArray<readonly [string, string]>;
+  disabled?: boolean;
   onChange: (value: string) => void;
 }) {
   return (
     <label className="field-row">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.currentTarget.value)}>
+      <select value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)}>
         {options.map(([optionValue, labelText]) => (
           <option key={optionValue} value={optionValue}>
             {labelText}
