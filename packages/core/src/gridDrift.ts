@@ -113,7 +113,6 @@ function buildAxisBoundaries(
     const nominalPosition = nominal[i]!;
     const nominalScore = scoreBoundary(nominalPosition);
     let bestPosition = nominalPosition;
-    let bestOffset = 0;
     let bestRawScore = nominalScore;
     let bestAdjustedScore = nominalScore;
 
@@ -130,7 +129,6 @@ function buildAxisBoundaries(
       const adjustedScore = rawScore + tieShift - penalty;
       if (adjustedScore > bestAdjustedScore) {
         bestPosition = position;
-        bestOffset = offset;
         bestRawScore = rawScore + tieShift;
         bestAdjustedScore = adjustedScore;
       }
