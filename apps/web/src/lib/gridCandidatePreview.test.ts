@@ -39,6 +39,32 @@ describe("grid candidate preview helpers", () => {
     expect(preview.scoreRows).toContainEqual(["Run", "83%"]);
   });
 
+  test("formats local drift diagnostics for the UI", () => {
+    const preview = formatGridCandidatePreview(
+      {
+        ...candidate,
+        diagnostics: {
+          ...candidate.diagnostics!,
+          drift: {
+            localCorrectionUsed: true,
+            confidence: 0.78,
+            improvementScore: 0.42,
+            smoothnessPenalty: 0.08,
+            correctedBoundaryCount: 9,
+            maxOffsetPx: 2,
+            meanAbsOffsetPx: 0.73,
+            notes: ["Local drift correction used", "9 corrected boundaries"]
+          }
+        }
+      },
+      0
+    );
+
+    expect(preview.badges).toContain("drift");
+    expect(preview.notes).toContain("Local drift correction used");
+    expect(preview.scoreRows).toContainEqual(["Drift", "78%"]);
+  });
+
   test("matches active grid settings with small floating point tolerance", () => {
     expect(
       candidateMatchesSettings(candidate, {
