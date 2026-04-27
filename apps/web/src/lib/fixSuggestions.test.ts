@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import { chooseSuggestionGrid, suggestFixSettings } from "./fixSuggestions";
 import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
 
@@ -115,6 +116,13 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
     expect(suggestion.downscale).toBe("adaptive");
+  });
+
+  test("suggests local correction for high-resolution single sprites", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const suggestion = suggestFixSettings(fixture.image);
+
+    expect(suggestion.localCorrection).toBe(true);
   });
 
   test("suggests sprite sheet mode for large landscape animation sheets with rows", () => {

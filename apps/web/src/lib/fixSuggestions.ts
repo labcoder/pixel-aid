@@ -27,6 +27,7 @@ export type FixSettingSuggestion = {
   gridDetect: "auto" | "manual";
   gridScaleX: number;
   gridScaleY: number;
+  localCorrection: boolean;
   downscale: DownscaleMethod;
   alpha: AlphaMode;
   sheetLayout?: SheetLayoutDetection;
@@ -80,6 +81,11 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
     gridScaleY: candidate?.scaleY ?? image.height / outputHeight,
+    localCorrection:
+      mode === "single" &&
+      classification.assetType !== "background" &&
+      (candidate?.scaleX ?? 1) >= 4 &&
+      (candidate?.confidence ?? 0) >= 0.55,
     downscale,
     alpha: suggestAlphaMode(image, mode, classification.assetType, preset.alpha),
     ...(sheetLayout ? { sheetLayout } : {}),

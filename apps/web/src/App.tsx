@@ -181,6 +181,7 @@ export function App() {
   const [gridScaleX, setGridScaleX] = useState(8);
   const [gridScaleY, setGridScaleY] = useState(8);
   const [cropToBounds, setCropToBounds] = useState(true);
+  const [localCorrection, setLocalCorrection] = useState(false);
   const [aspectLocked, setAspectLocked] = useState(true);
   const [frameWidth, setFrameWidth] = useState(32);
   const [frameHeight, setFrameHeight] = useState(32);
@@ -599,6 +600,7 @@ export function App() {
     setGridScaleY(suggestion.gridScaleY);
     setGridDetect(suggestion.gridDetect);
     setCropToBounds(resolvedMode === "single");
+    setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
     setDownscale(targetAssetSource === "manual" ? preset.downscale : suggestion.downscale);
     setAlpha(resolvedAlpha);
     setMaxColors(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
@@ -678,6 +680,7 @@ export function App() {
         scaleX: gridScaleX,
         scaleY: gridScaleY,
         cropToBounds: mode === "single" && cropToBounds,
+        localCorrection: mode === "single" && localCorrection,
         phaseX: 0,
         phaseY: 0
       },
@@ -710,6 +713,7 @@ export function App() {
     effectiveTargetWidth,
     cropToBounds,
     jaggyCleanup,
+    localCorrection,
     maxColors,
     mode,
     outlineColor,
@@ -1740,6 +1744,15 @@ export function App() {
             onChange={(event) => setCropToBounds(event.currentTarget.checked)}
           />
           Crop to detected bounds
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={mode === "single" && localCorrection}
+            disabled={mode !== "single"}
+            onChange={(event) => setLocalCorrection(event.currentTarget.checked)}
+          />
+          Correct local drift
         </label>
         <p className="field-note">
           Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while target size still guides the grid.
