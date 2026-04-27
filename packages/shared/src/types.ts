@@ -35,7 +35,30 @@ export type AssetTypeClassification = {
 
 export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette";
 
-export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill";
+export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill" | "colorKey";
+
+export type AlphaCleanupSettings = {
+  threshold?: number;
+  tolerance?: number;
+  colorKey?: string;
+  decontaminateRgb?: boolean;
+  transparentRgb?: string;
+};
+
+export type AlphaCleanupDiagnostics = {
+  mode: AlphaMode;
+  threshold: number;
+  tolerance: number;
+  colorKey?: string;
+  decontaminatedPixels: number;
+  transparentPixels: number;
+  softAlphaPixels: number;
+  warnings: string[];
+};
+
+export type PixelFixDiagnostics = {
+  alpha?: AlphaCleanupDiagnostics;
+};
 
 export type OutlineMode = "none" | "repairExisting" | "add";
 
@@ -100,6 +123,7 @@ export type FixOptions = {
   };
   downscale: DownscaleMethod;
   alpha: AlphaMode;
+  alphaSettings?: AlphaCleanupSettings;
   cleanup: {
     removeOrphans: boolean;
     jaggyCleanup: boolean;
@@ -131,6 +155,7 @@ export type PixelFixResult = {
   grid: GridCandidate;
   metrics: FixMetrics;
   settings: FixOptions;
+  diagnostics?: PixelFixDiagnostics;
 };
 
 export type Rect = {
@@ -242,6 +267,7 @@ export type PixelAssetManifest = {
       settings: FixOptions;
       grid: GridCandidate;
       durationMs: number;
+      diagnostics?: PixelFixDiagnostics;
     };
   };
   sheet: {

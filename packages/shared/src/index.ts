@@ -3,6 +3,8 @@ export const PIXELAID_VERSION = "0.1.0";
 
 export type {
   AlphaMode,
+  AlphaCleanupDiagnostics,
+  AlphaCleanupSettings,
   AnimationTag,
   AssetMode,
   AssetType,
@@ -18,6 +20,7 @@ export type {
   OutlineMode,
   Pivot,
   PixelAssetManifest,
+  PixelFixDiagnostics,
   PixelFixResult,
   Rect,
   RGBAImage,

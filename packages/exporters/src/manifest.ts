@@ -57,7 +57,8 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
       operation: {
         settings: operationSettings,
         grid: options.result.grid,
-        durationMs: options.result.metrics.durationMs
+        durationMs: options.result.metrics.durationMs,
+        ...(options.result.diagnostics ? { diagnostics: options.result.diagnostics } : {})
       }
     },
     sheet,
