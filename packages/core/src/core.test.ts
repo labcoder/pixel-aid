@@ -1345,6 +1345,41 @@ describe("fix pipeline", () => {
     });
   });
 
+  test("legacy palette option keeps supplied colors when outline reserves an extra color", () => {
+    const source = createImage(5, 3);
+    writePixel(source, 2, 1, 248, 252, 248, 255);
+    const legacyPalette = ["#000000", "#444444", "#888888", "#ffffff"];
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 5,
+      targetHeight: 3,
+      maxColors: 2,
+      palette: legacyPalette,
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        outlineMode: "add",
+        outlineColor: "#112233"
+      }
+    });
+
+    expect(result.palette).toEqual(["#112233", ...legacyPalette]);
+    expect(readPixel(result.image, 2, 1)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(result.image, 1, 1)).toEqual([17, 34, 51, 255]);
+    expect(result.metrics.paletteCount).toBe(5);
+    expect(result.diagnostics?.palette).toMatchObject({
+      mode: "fixed",
+      maxColors: 5,
+      outputColorCount: 5
+    });
+  });
+
   test("fixes sprite sheet frames from their source cells instead of the full sheet canvas", () => {
     const source = createImage(12, 4, [8, 10, 10, 255]);
     drawBlock(source, 0, 0, 2, 4, 0, 240, 240, 255);
