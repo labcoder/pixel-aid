@@ -1,4 +1,4 @@
-import type { FixOptions, GridCandidate, GridDriftDiagnostics, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
+import type { AlphaCleanupDiagnostics, FixOptions, GridCandidate, GridDriftDiagnostics, PixelFixResult, Rect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { applyDenoise } from "./denoise";
@@ -107,6 +107,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
   const gridScaleY = options.grid.scaleY ?? options.grid.scale ?? gridScaleX;
   const phaseX = options.grid.phaseX ?? 0;
   const phaseY = options.grid.phaseY ?? 0;
+  let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
 
   for (const frame of frames) {
     const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
@@ -122,7 +123,8 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
       alpha: options.alpha
     });
     const cleanedFrame = cleanFixedImage(fixedFrame, options);
-    pasteImage(cleanedFrame, packed, frame.rect);
+    alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
+    pasteImage(cleanedFrame.image, packed, frame.rect);
   }
 
   const reservedPalette = reservedOutlinePalette(options);
@@ -156,22 +158,51 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
       paletteCount: palette.length,
       gridConfidence: grid.confidence
     },
-    settings: options
+    settings: options,
+    ...(alphaDiagnostics ? { diagnostics: { alpha: alphaDiagnostics } } : {})
   };
 }
 
-function cleanFixedImage(image: RGBAImage, options: FixOptions): RGBAImage {
-  const alphaCleaned = applyAlphaMode(image, options.alpha, options.alphaSettings).image;
-  const haloCleaned = applyHaloRemoval(alphaCleaned, { enabled: options.cleanup.removeHalos ?? false });
+type CleanFixedImageResult = {
+  image: RGBAImage;
+  alpha: AlphaCleanupDiagnostics;
+};
+
+function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImageResult {
+  const alphaResult = applyAlphaMode(image, options.alpha, options.alphaSettings);
+  const haloCleaned = applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
-  return applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
-    color: options.cleanup.outlineColor,
-    alpha: options.cleanup.outlineAlpha,
-    size: options.cleanup.outlineSize,
-    removeOrphans: options.cleanup.removeOrphans,
-    closeGaps: options.cleanup.jaggyCleanup,
-    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
-  });
+  return {
+    image: applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
+      color: options.cleanup.outlineColor,
+      alpha: options.cleanup.outlineAlpha,
+      size: options.cleanup.outlineSize,
+      removeOrphans: options.cleanup.removeOrphans,
+      closeGaps: options.cleanup.jaggyCleanup,
+      preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
+    }),
+    alpha: alphaResult.diagnostics
+  };
+}
+
+function mergeAlphaDiagnostics(
+  current: AlphaCleanupDiagnostics | undefined,
+  next: AlphaCleanupDiagnostics
+): AlphaCleanupDiagnostics {
+  if (!current) {
+    return {
+      ...next,
+      warnings: [...next.warnings]
+    };
+  }
+
+  return {
+    ...current,
+    decontaminatedPixels: current.decontaminatedPixels + next.decontaminatedPixels,
+    transparentPixels: current.transparentPixels + next.transparentPixels,
+    softAlphaPixels: current.softAlphaPixels + next.softAlphaPixels,
+    warnings: [...new Set([...current.warnings, ...next.warnings])]
+  };
 }
 
 function getSheetOutputSize(options: FixOptions, frames: readonly SpriteFrame[]): { width: number; height: number } {

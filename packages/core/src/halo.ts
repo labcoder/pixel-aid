@@ -26,8 +26,9 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
   const solidAlphaThreshold = options.solidAlphaThreshold ?? 220;
   const backgroundToleranceSq = squareTolerance(options.backgroundTolerance ?? 18);
   const haloToleranceSq = squareTolerance(options.haloTolerance ?? 48);
-  const radius = Math.max(1, Math.min(5, Math.round(options.neighborRadius ?? 4)));
+  const radius = Math.max(1, Math.min(5, Math.round(options.neighborRadius ?? 1)));
   const background = estimateCornerBackground(image);
+  const extendedMatteRadius = options.neighborRadius === undefined && background.a <= alphaThreshold ? 4 : radius;
   const output = cloneImage(image);
   const replacement = new Uint16Array(4);
 
@@ -35,7 +36,19 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
     for (let x = 0; x < image.width; x += 1) {
       const index = y * image.width + x;
       const offset = index * 4;
-      if (!hasOutsideNeighbor(image, x, y, radius, background, alphaThreshold, backgroundToleranceSq)) {
+      const alpha = image.data[offset + 3]!;
+      if (alpha <= alphaThreshold) {
+        continue;
+      }
+
+      if (isOpaquePaleDetail(image, offset, solidAlphaThreshold)) {
+        continue;
+      }
+
+      const searchRadius = shouldUseExtendedMatteRadius(image, offset, background, alphaThreshold, solidAlphaThreshold)
+        ? extendedMatteRadius
+        : radius;
+      if (!hasOutsideNeighbor(image, x, y, searchRadius, background, alphaThreshold, backgroundToleranceSq)) {
         continue;
       }
 
@@ -44,7 +57,7 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
         image,
         x,
         y,
-        radius,
+        searchRadius,
         background,
         alphaThreshold,
         solidAlphaThreshold,
@@ -214,6 +227,31 @@ function isPaleNeutralPixel(image: RGBAImage, offset: number): boolean {
   const min = Math.min(r, g, b);
 
   return max - min <= 36 && r + g + b >= 540;
+}
+
+function isOpaquePaleDetail(image: RGBAImage, offset: number, solidAlphaThreshold: number): boolean {
+  const alpha = image.data[offset + 3]!;
+  if (alpha < solidAlphaThreshold) {
+    return false;
+  }
+
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+
+  return max - min <= 18 && r + g + b >= 735;
+}
+
+function shouldUseExtendedMatteRadius(
+  image: RGBAImage,
+  offset: number,
+  background: BackgroundSample,
+  alphaThreshold: number,
+  solidAlphaThreshold: number
+): boolean {
+  return background.a <= alphaThreshold && image.data[offset + 3]! >= solidAlphaThreshold && isPaleNeutralPixel(image, offset);
 }
 
 function colorDistanceToReplacementSq(r: number, g: number, b: number, replacement: Uint16Array): number {
