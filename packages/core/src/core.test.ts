@@ -1209,6 +1209,110 @@ describe("fix pipeline", () => {
     });
   });
 
+  test("fixed palette mode maps output only to configured colors", () => {
+    const source = imageFromPixels(4, [
+      rgba(3, 4, 5),
+      rgba(248, 248, 248),
+      rgba(120, 180, 160),
+      rgba(130, 190, 170)
+    ]);
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 4,
+      targetHeight: 1,
+      maxColors: 8,
+      paletteSettings: { mode: "fixed", colors: ["#000000", "#ffffff"], dithering: "none" },
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.palette).toEqual(["#000000", "#ffffff"]);
+    expect(visibleColors(result.image)).toEqual(new Set(["#000000", "#ffffff"]));
+    expect(result.metrics.paletteCount).toBe(2);
+    expect(result.diagnostics?.palette).toMatchObject({
+      mode: "fixed",
+      fixedColorCount: 2,
+      outputColorCount: 2
+    });
+  });
+
+  test("preset palette mode records preset metadata for sheet fixes", () => {
+    const source = imageFromPixels(2, [rgba(10, 12, 16), rgba(236, 216, 126)]);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 2, h: 1 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 1 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      }
+    ];
+
+    const result = fixImage(source, {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 2,
+      targetHeight: 1,
+      maxColors: 8,
+      paletteSettings: { mode: "preset", preset: "pixelaid-mono-4", dithering: "none" },
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      },
+      sheetFrames: frames
+    });
+
+    expect(result.palette).toEqual(["#0f172a", "#475569", "#cbd5e1", "#f8fafc"]);
+    expect(result.diagnostics?.alpha).toBeDefined();
+    expect(result.diagnostics?.palette).toMatchObject({
+      mode: "preset",
+      preset: "pixelaid-mono-4",
+      fixedColorCount: 4,
+      outputColorCount: 4
+    });
+  });
+
+  test("legacy palette option behaves as fixed palette metadata", () => {
+    const source = imageFromPixels(3, [rgba(3, 4, 5), rgba(248, 248, 248), rgba(120, 180, 160)]);
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 3,
+      targetHeight: 1,
+      maxColors: 8,
+      palette: ["#000000", "#ffffff"],
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      }
+    });
+
+    expect(result.palette).toEqual(["#000000", "#ffffff"]);
+    expect(visibleColors(result.image)).toEqual(new Set(["#000000", "#ffffff"]));
+    expect(result.diagnostics?.palette).toMatchObject({
+      mode: "fixed",
+      lockScope: "single",
+      fixedColorCount: 2
+    });
+  });
+
   test("fixes sprite sheet frames from their source cells instead of the full sheet canvas", () => {
     const source = createImage(12, 4, [8, 10, 10, 255]);
     drawBlock(source, 0, 0, 2, 4, 0, 240, 240, 255);
