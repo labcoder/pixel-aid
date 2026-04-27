@@ -731,6 +731,17 @@ describe("halo cleanup", () => {
     expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
   });
 
+  test("preserves opaque pale details near transparent subject edges", () => {
+    const source = createImage(5, 5, [0, 0, 0, 0]);
+    writePixel(source, 2, 2, 70, 126, 80, 255);
+    writePixel(source, 1, 2, 255, 255, 255, 255);
+
+    const cleaned = applyHaloRemoval(source, { enabled: true });
+
+    expect(readPixel(cleaned, 1, 2)).toEqual([255, 255, 255, 255]);
+    expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
+  });
+
   test("leaves image unchanged when disabled", () => {
     const source = createImage(3, 3);
     writePixel(source, 1, 1, 200, 220, 216, 96);
@@ -1119,6 +1130,58 @@ describe("fix pipeline", () => {
     expect(readPixel(result.image, 3, 1)).toEqual([0, 0, 255, 255]);
     expect(result.palette).toEqual(["#ff0000", "#0000ff"]);
     expect(result.grid.sourceRect).toEqual({ x: 4, y: 0, w: 8, h: 4 });
+  });
+
+  test("aggregates alpha cleanup diagnostics for sheet frame fixes", () => {
+    const source = createImage(4, 2, [248, 248, 248, 255]);
+    writePixel(source, 1, 0, 120, 40, 80, 255);
+    writePixel(source, 3, 1, 20, 30, 40, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 2, h: 1 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 1 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_001",
+        rect: { x: 0, y: 1, w: 2, h: 1 },
+        sourceRect: { x: 2, y: 1, w: 2, h: 1 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      }
+    ];
+
+    const result = fixImage(source, {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 2,
+      targetHeight: 2,
+      maxColors: 4,
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "colorKey",
+      alphaSettings: {
+        colorKey: "#f8f8f8",
+        tolerance: 4,
+        threshold: 128,
+        decontaminateRgb: true
+      },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      },
+      sheetFrames: frames
+    });
+
+    expect(result.diagnostics?.alpha).toMatchObject({
+      mode: "colorKey",
+      colorKey: "#f8f8f8",
+      transparentPixels: 2,
+      decontaminatedPixels: 2
+    });
   });
 
   test("downsamples remaps palette and returns reproducible metadata", () => {

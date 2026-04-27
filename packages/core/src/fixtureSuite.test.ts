@@ -60,7 +60,7 @@ describe("cleanup fixture suite", () => {
     expect(signature.transparentPixels).toBeGreaterThanOrEqual(fixture.expected.alpha!.transparentPixelsAtLeast!);
     expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, [0, 0, 0])).toBe(0);
-    expect(signature.checksum).toBe("9d703840");
+    expect(signature.checksum).toBe("ad336804");
   });
 
   test("removes baked checkerboard matte backgrounds with safe transparent RGB", () => {
@@ -84,6 +84,28 @@ describe("cleanup fixture suite", () => {
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
   });
 
+  test("cleans opaque white matte fixture into transparent edges", () => {
+    const fixture = requiredFixture("matte-opaque-white-edge");
+    const result = fixImage(fixture.createImage(), {
+      ...singleOptions("sprite", 64, 64, "backgroundFloodFill", true),
+      alphaSettings: {
+        tolerance: 18,
+        decontaminateRgb: true,
+        transparentRgb: "#000000"
+      }
+    });
+    const signature = createGoldenSignature(result.image, {
+      samplePoints: fixture.expected.alpha!.sampleTransparentPixels,
+      maxPalette: 8
+    });
+
+    expect(signature.transparentPixels).toBeGreaterThanOrEqual(fixture.expected.alpha!.transparentPixelsAtLeast!);
+    expect(signature.samplePixels["0,0"]).toEqual([0, 0, 0, 0]);
+    expect(signature.samplePixels["63,63"]).toEqual([0, 0, 0, 0]);
+    expect(countVisibleNearWhitePixels(result.image.data)).toBeLessThanOrEqual(fixture.expected.alpha!.visibleNearWhitePixelsAtMost!);
+    expect(countTransparentPixelsWithUnsafeRgb(result.image.data, [0, 0, 0])).toBe(0);
+  });
+
   test("cleans gray haze matte edges across preview backgrounds", () => {
     const fixture = requiredFixture("gray-haze-matte-edge");
     const result = fixImage(fixture.createImage(), {
@@ -100,6 +122,9 @@ describe("cleanup fixture suite", () => {
         fixture.expected.alpha!.previewFringePixelsAtMost!
       );
     }
+    expect(countPreviewFringePixelsOnCheckerboard(result.image.data), "checkerboard preview background").toBeLessThanOrEqual(
+      fixture.expected.alpha!.previewFringePixelsAtMost!
+    );
   });
 
   test("preserves colored semi-transparent glow without pale preview fringes", () => {
@@ -114,6 +139,9 @@ describe("cleanup fixture suite", () => {
         fixture.expected.alpha!.previewFringePixelsAtMost!
       );
     }
+    expect(countPreviewFringePixelsOnCheckerboard(result.image.data), "checkerboard preview background").toBeLessThanOrEqual(
+      fixture.expected.alpha!.previewFringePixelsAtMost!
+    );
     expect(countSoftAlphaPixels(result.image.data)).toBeGreaterThanOrEqual(fixture.expected.alpha!.softAlphaPixelsAtLeast!);
   });
 
@@ -245,6 +273,34 @@ function countPreviewFringePixels(data: Uint8ClampedArray, background: readonly 
     const r = Math.round((data[offset]! * alpha + background[0] * inverseAlpha) / 255);
     const g = Math.round((data[offset + 1]! * alpha + background[1] * inverseAlpha) / 255);
     const b = Math.round((data[offset + 2]! * alpha + background[2] * inverseAlpha) / 255);
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const brightness = r + g + b;
+
+    if (max - min <= 24 && brightness >= 420) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countPreviewFringePixelsOnCheckerboard(data: Uint8ClampedArray): number {
+  let count = 0;
+  const width = Math.sqrt(data.length / 4);
+  for (let offset = 0; offset < data.length; offset += 4) {
+    const pixel = offset / 4;
+    const x = pixel % width;
+    const y = Math.floor(pixel / width);
+    const checker = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 0 ? 238 : 64;
+    const alpha = data[offset + 3]!;
+    if (alpha < 16) {
+      continue;
+    }
+
+    const inverseAlpha = 255 - alpha;
+    const r = Math.round((data[offset]! * alpha + checker * inverseAlpha) / 255);
+    const g = Math.round((data[offset + 1]! * alpha + checker * inverseAlpha) / 255);
+    const b = Math.round((data[offset + 2]! * alpha + checker * inverseAlpha) / 255);
     const max = Math.max(r, g, b);
     const min = Math.min(r, g, b);
     const brightness = r + g + b;
