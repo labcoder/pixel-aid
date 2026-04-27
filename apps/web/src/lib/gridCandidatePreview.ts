@@ -27,6 +27,12 @@ export function formatGridCandidatePreview(candidate: GridCandidate, index: numb
   if (candidate.scaleX !== candidate.scaleY) {
     badges.push("non-square");
   }
+  if (diagnostics?.drift?.localCorrectionUsed) {
+    badges.push("drift");
+  }
+  const notes = [...(diagnostics?.notes ?? [candidate.reason]), ...(diagnostics?.drift?.notes ?? [])]
+    .filter((note) => !note.includes("confidence"))
+    .slice(0, 3);
 
   return {
     title: `Candidate ${index + 1}`,
@@ -35,11 +41,12 @@ export function formatGridCandidatePreview(candidate: GridCandidate, index: numb
     confidence: `${Math.round(candidate.confidence * 100)}%`,
     confidenceLabel: titleCase(diagnostics?.confidenceLabel ?? confidenceLabel(candidate.confidence)),
     badges,
-    notes: (diagnostics?.notes ?? [candidate.reason]).filter((note) => !note.includes("confidence")).slice(0, 3),
+    notes,
     scoreRows: [
       ["Edge", formatPercent(diagnostics?.edgeScore ?? 0)],
       ["Run", formatPercent(diagnostics?.runScore ?? 0)],
-      ["Size", formatPercent(diagnostics?.sizeScore ?? 0)]
+      ["Size", formatPercent(diagnostics?.sizeScore ?? 0)],
+      ...(diagnostics?.drift ? ([["Drift", formatPercent(diagnostics.drift.confidence)]] as Array<[string, string]>) : [])
     ]
   };
 }

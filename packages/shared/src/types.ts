@@ -62,6 +62,18 @@ export type GridCandidateDiagnostics = {
   sourceCoverage: number;
   confidenceLabel: "low" | "medium" | "high";
   notes: string[];
+  drift?: GridDriftDiagnostics;
+};
+
+export type GridDriftDiagnostics = {
+  localCorrectionUsed: boolean;
+  confidence: number;
+  improvementScore: number;
+  smoothnessPenalty: number;
+  correctedBoundaryCount: number;
+  maxOffsetPx: number;
+  meanAbsOffsetPx: number;
+  notes: string[];
 };
 
 export type FixOptions = {
