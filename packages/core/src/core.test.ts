@@ -761,6 +761,21 @@ describe("halo cleanup", () => {
     expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
   });
 
+  test("preserves clustered opaque pale highlights near transparent subject edges", () => {
+    const source = createImage(5, 5, [0, 0, 0, 0]);
+    writePixel(source, 2, 2, 70, 126, 80, 255);
+    writePixel(source, 1, 1, 220, 224, 220, 255);
+    writePixel(source, 1, 2, 230, 220, 196, 255);
+    writePixel(source, 2, 1, 220, 224, 220, 255);
+
+    const cleaned = applyHaloRemoval(source, { enabled: true });
+
+    expect(readPixel(cleaned, 1, 1)).toEqual([220, 224, 220, 255]);
+    expect(readPixel(cleaned, 1, 2)).toEqual([230, 220, 196, 255]);
+    expect(readPixel(cleaned, 2, 1)).toEqual([220, 224, 220, 255]);
+    expect(readPixel(cleaned, 2, 2)).toEqual([70, 126, 80, 255]);
+  });
+
   test("leaves image unchanged when disabled", () => {
     const source = createImage(3, 3);
     writePixel(source, 1, 1, 200, 220, 216, 96);
@@ -1201,6 +1216,41 @@ describe("fix pipeline", () => {
       transparentPixels: 2,
       decontaminatedPixels: 2
     });
+  });
+
+  test("refreshes sheet alpha diagnostics after halo cleanup changes transparency", () => {
+    const source = createImage(3, 3, [0, 0, 0, 0]);
+    writePixel(source, 1, 1, 190, 198, 198, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 3, h: 3 },
+        sourceRect: { x: 0, y: 0, w: 3, h: 3 },
+        pivot: { x: 1, y: 1 },
+        durationMs: 120
+      }
+    ];
+
+    const result = fixImage(source, {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 3,
+      targetHeight: 3,
+      maxColors: 4,
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeHalos: true,
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      },
+      sheetFrames: frames
+    });
+
+    expect(readPixel(result.image, 1, 1)).toEqual([0, 0, 0, 0]);
+    expect(result.diagnostics?.alpha.transparentPixels).toBe(9);
   });
 
   test("downsamples remaps palette and returns reproducible metadata", () => {
