@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vitest";
-import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
+import { createSingleSpriteCleanupFixture, paletteDriftAnimationFixtures } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
   applyDenoise,
   applyHaloRemoval,
   applyOutlineCleanup,
+  analyzePaletteDrift,
   createImage,
   detectSheetLayout,
   detectSpriteBounds,
@@ -19,7 +20,7 @@ import {
   sliceSheetFrames,
   writePixel
 } from "./index";
-import type { FixOptions, RGBAImage, SpriteFrame } from "@pixelaid/shared";
+import type { FixOptions, PaletteLockScope, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 const rgba = (r: number, g: number, b: number, a = 255) => [r, g, b, a] as const;
 
@@ -348,6 +349,41 @@ function visibleColors(image: RGBAImage): Set<string> {
   return colors;
 }
 
+function paletteDriftFixtureOptions(lockScope: PaletteLockScope, maxColors: number): FixOptions {
+  const fixture = paletteDriftAnimationFixtures[0]!;
+  const sheet = fixture.expected.sheet!;
+
+  return {
+    mode: "spriteSheet",
+    assetType: fixture.assetType,
+    targetWidth: sheet.options.frameWidth * sheet.options.columns,
+    targetHeight: sheet.options.frameHeight * sheet.options.rows,
+    maxColors,
+    paletteSettings: {
+      mode: "auto",
+      strategy: "medianCut",
+      maxColors,
+      lockScope,
+      dithering: "none"
+    },
+    grid: {
+      detect: "manual",
+      scale: 1,
+      phaseX: 0,
+      phaseY: 0
+    },
+    downscale: "dominant",
+    alpha: "preserve",
+    cleanup: {
+      removeOrphans: false,
+      jaggyCleanup: false,
+      preserveSinglePixelDetails: true
+    },
+    sheet: sheet.options,
+    sheetFrames: sheet.frames
+  };
+}
+
 const defaultOptions: FixOptions = {
   mode: "single",
   assetType: "sprite",
@@ -649,6 +685,41 @@ describe("palette reduction", () => {
     expect(new Set(palette).size).toBe(3);
     expect(palette).toContain("#f80000");
     expect(readPixel(remapped, 0, 0)).toEqual([248, 0, 0, 255]);
+  });
+
+  test("palette lock: locks animation sheet output to one shared palette", () => {
+    const fixture = paletteDriftAnimationFixtures[0]!;
+    const result = fixImage(fixture.createImage(), paletteDriftFixtureOptions("sheet", 8));
+    const driftWarnings = result.diagnostics?.palette?.drift?.warnings ?? [];
+
+    expect(visibleColors(result.image).size).toBeLessThanOrEqual(8);
+    expect(result.diagnostics?.palette?.lockScope).toBe("sheet");
+    expect(driftWarnings.some((warning) => warning.includes("Palette drift detected across 4 frames"))).toBe(true);
+    expect(result.diagnostics?.palette?.warnings.some((warning) => warning.includes("Palette drift detected"))).toBe(true);
+  });
+
+  test("palette lock: first-frame palette lock reuses first frame colors across the sheet", () => {
+    const fixture = paletteDriftAnimationFixtures[0]!;
+    const result = fixImage(fixture.createImage(), paletteDriftFixtureOptions("firstFrame", 6));
+
+    expect(result.diagnostics?.palette?.lockScope).toBe("firstFrame");
+    expect(result.palette).toEqual(["#4c8e7e", "#242a30", "#20343c"]);
+    expect(result.palette.length).toBeLessThanOrEqual(6);
+  });
+
+  test("palette drift: reports deterministic frame palette deltas", () => {
+    const fixture = paletteDriftAnimationFixtures[0]!;
+    const frames = fixture.expected.sheet!.frames!;
+
+    const drift = analyzePaletteDrift(fixture.createImage(), frames, ["#242a30", "#4c8e7e", "#20343c"], 6);
+
+    expect(drift).toEqual({
+      frameCount: 4,
+      checkedFrameCount: 4,
+      maxFrameColorCount: 3,
+      maxFramePaletteDelta: 3,
+      warnings: ["Palette drift detected across 4 frames; 3 frame colors remap outside the active palette."]
+    });
   });
 });
 
