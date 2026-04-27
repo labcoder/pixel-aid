@@ -823,6 +823,19 @@ button:disabled {
   font-size: 0.72rem;
 }
 
+.asset-type-warning-list {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.45rem 0 0;
+}
+
+.asset-type-warning-list p {
+  margin: 0;
+  color: var(--amber);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .sheet-fit-summary {
   display: grid;
   gap: 0.15rem;
