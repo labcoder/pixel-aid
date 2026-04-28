@@ -40,8 +40,9 @@ export function reportProgress(
     return;
   }
 
-  const roundedPercent = Number.isFinite(percent) ? Math.round(percent) : 0;
-  const clampedPercent = Math.min(100, Math.max(0, roundedPercent));
+  const rawPercent = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const roundedPercent = Math.round(rawPercent);
+  const clampedPercent = rawPercent < 100 && roundedPercent === 100 ? 99 : roundedPercent;
   const event: FixProgressEvent = { stage, percent: clampedPercent };
 
   if (message !== undefined) {
