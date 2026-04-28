@@ -45,6 +45,10 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
       }
 
       if (event.data.type === "progress") {
+        if (cancellationRequested && event.data.stage !== "cancelled") {
+          return;
+        }
+
         jobOptions.onProgress?.(event.data);
         return;
       }
