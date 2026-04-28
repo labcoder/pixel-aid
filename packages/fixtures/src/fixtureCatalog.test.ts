@@ -44,10 +44,18 @@ describe("cleanup fixture catalog", () => {
         "drifted-effect-sheet",
         "baseline-drift-animation-sheet",
         "tileset-seams-4x4-16",
+        "tileset-broken-seams-2x2-16",
         "large-landscape-bands",
         "large-non-sprite-background"
       ])
     );
+  });
+
+  test("includes both seamless and broken tileset seam fixtures", () => {
+    const ids = cleanupFixtureCatalog.filter((fixture) => fixture.category === "tilesetSeams").map((fixture) => fixture.id);
+
+    expect(ids).toContain("tileset-seams-4x4-16");
+    expect(ids).toContain("tileset-broken-seams-2x2-16");
   });
 
   test("includes unstable animation sheet warning metadata", () => {

@@ -545,7 +545,7 @@ git commit -m "feat(core): add scene asset diagnostics"
 - Modify: `packages/fixtures/src/fixtureCatalog.test.ts`
 - Modify: `packages/fixtures/src/types.ts` only if tests require new expected metadata
 
-- [ ] **Step 1: Add failing fixture catalog test**
+- [x] **Step 1: Add failing fixture catalog test**
 
 In `packages/fixtures/src/fixtureCatalog.test.ts`, add:
 
@@ -558,7 +558,7 @@ test("includes both seamless and broken tileset seam fixtures", () => {
 });
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run:
 
@@ -568,7 +568,7 @@ npm run test -w @pixelaid/fixtures -- fixtureCatalog
 
 Expected red: missing `tileset-broken-seams-2x2-16`.
 
-- [ ] **Step 3: Add broken seam fixture**
+- [x] **Step 3: Add broken seam fixture**
 
 In `packages/fixtures/src/tilesetSeams.ts`, append a second fixture:
 
@@ -595,7 +595,7 @@ In `packages/fixtures/src/tilesetSeams.ts`, append a second fixture:
 
 Add `createBrokenTilesetImage()` using `createImage` and `fillRect`. Keep it small and deterministic.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
