@@ -7,7 +7,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 - `apps/web`: owns React state, editor panels, browser image decode/encode, downloads, and canvas rendering.
 - `packages/core`: owns deterministic image algorithms. It has no React or DOM dependency.
 - `packages/worker`: owns worker protocol and orchestration around core algorithms.
-- `packages/exporters`: owns generic asset manifests and validation.
+- `packages/exporters`: owns the generic manifest, validation, and engine adapter files for Godot, Unity, and Phaser. Engine adapters never replace the generic manifest; they emit deterministic sidecars and warnings for unsupported target fields.
 - `packages/shared`: owns shared serializable contracts and app constants.
 - `packages/fixtures`: owns generated benchmark fixtures and expected metadata used by tests.
 
@@ -30,6 +30,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 15. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
 16. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop/direction metadata. Selected frames can also receive explicit `durationMs` overrides, which take priority over clip FPS. Web-side normalization helpers preview frames in a shared pivot-aligned canvas and compute preview-only onion-skin neighbors.
 17. Export passes the selected asset type, current frame metadata, per-frame durations, playback direction, and detected row animations to `packages/exporters`. Manifests include both `meta.assetType` and `meta.operation.settings.assetType`. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
+18. Selected engine adapters generate Godot, Unity, and Phaser sidecar files from the same manifest. Adapter warnings are folded into the export validation report so unsupported fields are visible without blocking generic exports.
 
 ## Documentation Flow
 

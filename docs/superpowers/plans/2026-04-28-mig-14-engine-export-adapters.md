@@ -1506,7 +1506,7 @@ git commit -m "feat(web): include selected engine export files"
 - Modify: `docs/licensing.md`
 - Modify: `docs/superpowers/plans/2026-04-28-mig-14-engine-export-adapters.md`
 
-- [ ] **Step 1: Update editor docs**
+- [x] **Step 1: Update editor docs**
 
 In `docs/editor.md`, update Export docs with:
 
@@ -1514,7 +1514,7 @@ In `docs/editor.md`, update Export docs with:
 Engine export targets can be selected in the Export inspector. When enabled, the ZIP includes Godot, Unity, and/or Phaser folders beside the generic PixelAid manifest. The generic manifest remains the source of truth; engine files are adapters, helper scripts, or import instructions generated from that manifest.
 ```
 
-- [ ] **Step 2: Update architecture docs**
+- [x] **Step 2: Update architecture docs**
 
 In `docs/architecture.md`, update the exporter boundary:
 
@@ -1522,7 +1522,7 @@ In `docs/architecture.md`, update the exporter boundary:
 `packages/exporters` owns the generic manifest, validation, and engine adapter files for Godot, Unity, and Phaser. Engine adapters never replace the generic manifest; they emit deterministic sidecars and warnings for unsupported target fields.
 ```
 
-- [ ] **Step 3: Update licensing docs**
+- [x] **Step 3: Update licensing docs**
 
 In `docs/licensing.md`, add:
 
@@ -1530,7 +1530,7 @@ In `docs/licensing.md`, add:
 MIG-14 engine adapters add no dependencies. Godot, Unity, and Phaser files are generated text/JSON helpers maintained in-repo.
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
