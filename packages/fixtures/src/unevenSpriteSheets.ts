@@ -1,6 +1,33 @@
 import type { CleanupFixture } from "./types";
 import { createImage, fillRect } from "./imagePrimitives";
 
+const baselineDriftSourceOffsets = [
+  { x: 8, y: 5, w: 17, h: 25, pivotY: 29 },
+  { x: 10, y: 8, w: 15, h: 22, pivotY: 26 },
+  { x: 7, y: 4, w: 18, h: 26, pivotY: 30 },
+  { x: 11, y: 7, w: 14, h: 23, pivotY: 27 }
+];
+
+const baselineDriftColors = [
+  [58, 72, 94, 255],
+  [74, 156, 136, 255],
+  [212, 180, 98, 255]
+] as const;
+
+const baselineDriftFrames = Array.from({ length: 4 }, (_, index) => {
+  const frameX = 2 + index * 38;
+  const source = baselineDriftSourceOffsets[index]!;
+
+  return {
+    name: `walk_down_${index.toString().padStart(3, "0")}`,
+    rect: { x: frameX, y: 2, w: 32, h: 32 },
+    sourceRect: { x: frameX + source.x, y: 2 + source.y, w: source.w, h: source.h },
+    pivot: { x: 16, y: source.pivotY },
+    durationMs: 120,
+    tags: ["walk_down"]
+  };
+});
+
 export const unevenSpriteSheetFixtures: CleanupFixture[] = [
   {
     id: "uneven-gutter-labeled-sheet",
@@ -40,8 +67,42 @@ export const unevenSpriteSheetFixtures: CleanupFixture[] = [
         ]
       }
     }
+  },
+  {
+    id: "baseline-drift-animation-sheet",
+    title: "Baseline drift animation sheet",
+    category: "unevenSpriteSheet",
+    assetType: "animationSheet",
+    description: "Synthetic walk cycle with stable cell dimensions but inconsistent pivots and content centers.",
+    catches: ["baseline drift warnings", "content-center drift warnings", "stable frame cell sizing"],
+    createImage: createBaselineDriftAnimationImage,
+    expected: {
+      mode: "spriteSheet",
+      sheet: {
+        options: { frameWidth: 32, frameHeight: 32, rows: 1, columns: 4, margin: 2, spacing: 6, extrude: 0, pivot: { x: 16, y: 28 } },
+        frames: baselineDriftFrames,
+        rowFrameCounts: [4],
+        animationNames: ["walk_down"],
+        expectedWarnings: ["baseline-drift", "content-center-drift"]
+      }
+    }
   }
 ];
+
+function createBaselineDriftAnimationImage() {
+  const image = createImage(160, 40, [0, 0, 0, 0]);
+
+  for (let frame = 0; frame < baselineDriftFrames.length; frame += 1) {
+    const sourceRect = baselineDriftFrames[frame]!.sourceRect!;
+
+    fillRect(image.data, image.width, image.height, sourceRect.x + 5, sourceRect.y, 7, 6, baselineDriftColors[2]);
+    fillRect(image.data, image.width, image.height, sourceRect.x + 3, sourceRect.y + 6, 11, 12, baselineDriftColors[1]);
+    fillRect(image.data, image.width, image.height, sourceRect.x + 1, sourceRect.y + 18, 5, 7, baselineDriftColors[0]);
+    fillRect(image.data, image.width, image.height, sourceRect.x + 10, sourceRect.y + 18, 5, 7, baselineDriftColors[0]);
+  }
+
+  return image;
+}
 
 function createLabeledSheetImage(effectHeavy: boolean) {
   const image = createImage(640, 360, [12, 14, 18, 255]);
