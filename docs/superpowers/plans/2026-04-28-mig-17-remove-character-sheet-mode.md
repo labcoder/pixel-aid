@@ -183,7 +183,7 @@ git commit -m "refactor(web): remove character sheet mode branches"
 - Modify: `docs/architecture.md`
 - Modify: `docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md`
 
-- [ ] **Step 1: Update editor docs**
+- [x] **Step 1: Update editor docs**
 
 In `docs/editor.md`, make the asset taxonomy section explicit:
 
@@ -191,11 +191,11 @@ In `docs/editor.md`, make the asset taxonomy section explicit:
 Character sheet remains a user-facing asset type, but it uses sprite-sheet processing. Character-specific meaning lives in editable frame rows, timeline clips, pivots, animation names, and manifest `assetType` metadata rather than a separate low-level algorithm mode.
 ```
 
-- [ ] **Step 2: Update architecture docs**
+- [x] **Step 2: Update architecture docs**
 
 In `docs/architecture.md`, update the data-flow text so it says character sheets derive `spriteSheet` processing from `AssetType.characterSheet`.
 
-- [ ] **Step 3: Verify docs commit**
+- [x] **Step 3: Verify docs commit**
 
 Run:
 
@@ -207,7 +207,7 @@ npm run build
 
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```powershell
 git add docs/editor.md docs/architecture.md docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md
