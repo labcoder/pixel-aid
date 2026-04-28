@@ -26,3 +26,10 @@ export type {
   EngineExportTarget,
   EngineExportWarning
 } from "./engineTypes";
+export { createPhaserAtlasExport } from "./phaser";
+export type { PhaserAtlas } from "./phaser";
+export { createGodotImportExport } from "./godot";
+export { createUnityExport, createUnityImportExport, createUnityImporterScript, toUnityPivot } from "./unity";
+export type { UnityExportOptions, UnityImportExportOptions } from "./unity";
+export { createEngineExportBundle } from "./engineBundle";
+export type { CreateEngineExportBundleOptions } from "./engineBundle";
