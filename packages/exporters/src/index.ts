@@ -5,5 +5,7 @@ export {
   validateManifest
 } from "./manifest";
 export type { CreateManifestOptions } from "./manifest";
+export { analyzeFrameStability } from "./frameStability";
+export type { AnalyzeFrameStabilityOptions } from "./frameStability";
 export { createNormalizedSheetPacking } from "./normalizedSheet";
 export type { NormalizedSheetPacking, NormalizedSheetPlacement } from "./normalizedSheet";

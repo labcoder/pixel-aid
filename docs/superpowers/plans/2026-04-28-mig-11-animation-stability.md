@@ -133,7 +133,7 @@ git commit -m "feat(shared): add frame stability diagnostic types"
 - Create: `packages/exporters/src/frameStability.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Implement metadata-first frame analysis**
+- [x] **Step 1: Implement metadata-first frame analysis**
 
 Create `packages/exporters/src/frameStability.ts`:
 
@@ -298,7 +298,7 @@ function maxDelta(deltas: readonly Array<Record<DeltaKey, number>>, key: DeltaKe
 }
 ```
 
-- [ ] **Step 2: Add tests**
+- [x] **Step 2: Add tests**
 
 Create `packages/exporters/src/frameStability.test.ts` with coverage for:
 
@@ -343,7 +343,7 @@ describe("frame stability diagnostics", () => {
 });
 ```
 
-- [ ] **Step 3: Export the analyzer**
+- [x] **Step 3: Export the analyzer**
 
 Modify `packages/exporters/src/index.ts`:
 
@@ -352,7 +352,7 @@ export { analyzeFrameStability } from "./frameStability";
 export type { AnalyzeFrameStabilityOptions } from "./frameStability";
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
