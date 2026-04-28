@@ -52,7 +52,7 @@
 - Modify: `packages/shared/src/types.ts`
 - Test: `packages/shared/src/shared.test.ts` only if runtime constants are added
 
-- [ ] **Step 1: Add diagnostic severity and issue contracts**
+- [x] **Step 1: Add diagnostic severity and issue contracts**
 
 In `packages/shared/src/types.ts`, add these types after `AnimationTag`:
 
@@ -76,7 +76,7 @@ export type FrameStabilityIssue = {
 };
 ```
 
-- [ ] **Step 2: Add metric and diagnostics contracts**
+- [x] **Step 2: Add metric and diagnostics contracts**
 
 Continue in `packages/shared/src/types.ts`:
 
@@ -106,7 +106,7 @@ export type FrameStabilityDiagnostics = {
 };
 ```
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
