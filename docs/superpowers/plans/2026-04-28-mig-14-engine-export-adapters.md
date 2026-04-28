@@ -1557,7 +1557,7 @@ git commit -m "docs(exporters): document engine export adapters"
 - No planned code changes except fixes discovered during verification.
 - Modify: `docs/superpowers/plans/2026-04-28-mig-14-engine-export-adapters.md` for final checklist completion.
 
-- [ ] **Step 1: Full verification**
+- [x] **Step 1: Full verification**
 
 Run:
 
@@ -1569,7 +1569,7 @@ npm run build
 
 Expected: all pass.
 
-- [ ] **Step 2: Local server smoke**
+- [x] **Step 2: Local server smoke**
 
 Start a local dev server on port `5177` or the next free port:
 
@@ -1585,7 +1585,7 @@ Invoke-WebRequest -Uri http://127.0.0.1:5177 -UseBasicParsing
 
 Expected: HTTP `200`, PixelAid app loads. Capture a screenshot if browser tooling is available.
 
-- [ ] **Step 3: Update Linear**
+- [x] **Step 3: Update Linear**
 
 Add a completion comment to `MIG-14` with:
 
@@ -1596,7 +1596,7 @@ Add a completion comment to `MIG-14` with:
 
 Then move `MIG-14` to `Done`.
 
-- [ ] **Step 4: Foundation handoff**
+- [x] **Step 4: Foundation handoff**
 
 Verify the MIG worktree is clean:
 
