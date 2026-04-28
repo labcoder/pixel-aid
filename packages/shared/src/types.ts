@@ -4,7 +4,7 @@ export type RGBAImage = {
   data: Uint8ClampedArray;
 };
 
-export type AssetMode = "single" | "spriteSheet" | "characterSheet" | "tileSheet";
+export type AssetMode = "single" | "spriteSheet" | "tileSheet";
 
 export type AssetType =
   | "sprite"

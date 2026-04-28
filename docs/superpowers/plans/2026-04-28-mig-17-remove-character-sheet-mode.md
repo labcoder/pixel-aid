@@ -26,7 +26,7 @@
 - Modify: `packages/shared/src/types.ts`
 - Modify: `packages/shared/src/assetTypes.test.ts`
 
-- [ ] **Step 1: Add failing type-level test**
+- [x] **Step 1: Add failing type-level test**
 
 Add `expectTypeOf` to the Vitest import in `packages/shared/src/assetTypes.test.ts`:
 
@@ -49,7 +49,7 @@ Add this test:
   });
 ```
 
-- [ ] **Step 2: Run red typecheck**
+- [x] **Step 2: Run red typecheck**
 
 Run:
 
@@ -59,7 +59,7 @@ npm run typecheck -w @pixelaid/shared
 
 Expected: fail because `AssetMode` still includes `"characterSheet"`.
 
-- [ ] **Step 3: Remove `characterSheet` from `AssetMode`**
+- [x] **Step 3: Remove `characterSheet` from `AssetMode`**
 
 Update `packages/shared/src/types.ts`:
 
@@ -67,7 +67,7 @@ Update `packages/shared/src/types.ts`:
 export type AssetMode = "single" | "spriteSheet" | "tileSheet";
 ```
 
-- [ ] **Step 4: Verify shared package**
+- [x] **Step 4: Verify shared package**
 
 Run:
 
@@ -78,7 +78,7 @@ npm run test -w @pixelaid/shared
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add packages/shared/src/types.ts packages/shared/src/assetTypes.test.ts docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md
@@ -256,4 +256,3 @@ Verify the MIG worktree is clean, then fast-forward `codex/pixelaid-roadmap-foun
 git add docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md
 git commit -m "docs(shared): complete MIG-17 execution checklist"
 ```
-
