@@ -26,6 +26,14 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - The web app clones source buffers before transfer so the imported source remains available for preview.
 - The worker transfers the fixed output buffer back to the main thread.
 
+## Progress And Cancellation
+
+Worker fix jobs emit coarse progress stages for preparation and decode-prep, grid detection, frame slicing, downsampling, alpha cleanup, palette remap, export preparation, completion, and cancellation. Progress is intentionally stage-based instead of per-pixel so long image operations do not flood the UI thread or trigger excessive React state updates.
+
+Core fix functions accept optional runtime hooks for progress and cooperative cancellation. The worker checks those hooks between processing phases and frame-sized chunks, which keeps cancellation deterministic without adding allocation-heavy checks inside every pixel loop.
+
+The browser client asks the worker to cancel gracefully first. If the worker is inside a synchronous phase that cannot process messages immediately, the client terminates the worker as a fallback. Results and progress that arrive after cancellation are ignored or suppressed with request id checks, settled-state guards, and cancellation guards so stale events cannot update the active job UI.
+
 ## Current Metrics
 
 The metrics panel shows:
