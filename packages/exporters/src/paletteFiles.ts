@@ -32,14 +32,16 @@ export function createHexPaletteFile(colors: readonly string[]): string {
 
 export function createGplPaletteFile(colors: readonly string[], options: { name?: string } = {}): string {
   const normalized = normalizePaletteColors(colors);
-  const name = options.name ?? PIXELAID_APP_NAME;
-  const lines = ["GIMP Palette", `Name: ${name}`, "Columns: 0", "#"];
+  const name = options.name?.trim() || "PixelAid Palette";
+  const lines = ["GIMP Palette", `Name: ${name}`, "Columns: 8", "#"];
 
   for (const color of normalized) {
     const red = Number.parseInt(color.slice(1, 3), 16);
     const green = Number.parseInt(color.slice(3, 5), 16);
     const blue = Number.parseInt(color.slice(5, 7), 16);
-    lines.push(`${red} ${green} ${blue}\t${color}`);
+    lines.push(
+      `${red.toString().padStart(3, " ")} ${green.toString().padStart(3, " ")} ${blue.toString().padStart(3, " ")} ${color}`
+    );
   }
 
   return `${lines.join("\n")}\n`;
