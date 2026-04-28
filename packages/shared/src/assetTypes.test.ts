@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "./assetTypes";
-import type { AssetType } from "./types";
+import type { AssetType, SceneAssetDiagnostics, TilesetSeamDiagnostics } from "./types";
 
 const assetTypes: AssetType[] = [
   "sprite",
@@ -39,7 +39,46 @@ describe("asset type taxonomy", () => {
     expect(getAssetTypeDefinition("spriteSheet").support).toBe("full");
     expect(getAssetTypeDefinition("animationSheet").support).toBe("full");
     expect(getAssetTypeDefinition("characterSheet").support).toBe("full");
-    expect(getAssetTypeDefinition("tileset").support).toBe("inspectOnly");
-    expect(getAssetTypeDefinition("tilemap").support).toBe("future");
+    expect(getAssetTypeDefinition("tileset").support).toBe("full");
+    expect(getAssetTypeDefinition("tilemap").support).toBe("inspectOnly");
+  });
+
+  it("marks 0.2 tileset diagnostics as supported while keeping tilemaps inspect-first", () => {
+    expect(getAssetTypeDefinition("tileset").support).toBe("full");
+    expect(getAssetTypeDefinition("tileset").defaultWarnings.map((warning) => warning.code)).toContain(
+      "tileset-engine-metadata-next"
+    );
+    expect(getAssetTypeDefinition("tilemap").support).toBe("inspectOnly");
+    expect(getAssetTypeDefinition("tilemap").defaultWarnings.map((warning) => warning.code)).toContain(
+      "tilemap-inspect-only"
+    );
+    expect(getAssetTypeDefinition("background").support).toBe("inspectOnly");
+  });
+
+  it("has serializable diagnostics contracts for tile and scene inspection", () => {
+    const tileDiagnostics: TilesetSeamDiagnostics = {
+      tileWidth: 16,
+      tileHeight: 16,
+      rows: 2,
+      columns: 2,
+      checkedSeams: 4,
+      averageEdgeDelta: 0,
+      maxEdgeDelta: 0,
+      seamRiskScore: 0,
+      lightingRiskScore: 0,
+      issues: []
+    };
+    const sceneDiagnostics: SceneAssetDiagnostics = {
+      assetType: "background",
+      sampledPixelCount: 100,
+      colorBinCount: 12,
+      detailDensity: 0.12,
+      detailDensityLabel: "medium",
+      paletteRiskScore: 0.2,
+      warnings: []
+    };
+
+    expect(tileDiagnostics.issues).toEqual([]);
+    expect(sceneDiagnostics.detailDensityLabel).toBe("medium");
   });
 });

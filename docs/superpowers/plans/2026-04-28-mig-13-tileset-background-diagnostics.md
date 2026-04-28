@@ -68,7 +68,7 @@
 - Modify: `packages/shared/src/assetTypes.ts`
 - Modify: `packages/shared/src/assetTypes.test.ts`
 
-- [ ] **Step 1: Add failing shared tests**
+- [x] **Step 1: Add failing shared tests**
 
 Update `packages/shared/src/assetTypes.test.ts` with expectations:
 
@@ -119,7 +119,7 @@ it("has serializable diagnostics contracts for tile and scene inspection", () =>
 });
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run:
 
@@ -129,7 +129,7 @@ npm run test -w @pixelaid/shared -- assetTypes
 
 Expected red: tileset/tilemap support expectations and missing diagnostic type exports fail.
 
-- [ ] **Step 3: Add diagnostic types**
+- [x] **Step 3: Add diagnostic types**
 
 In `packages/shared/src/types.ts`, add after `AssetTypeClassification`:
 
@@ -188,7 +188,7 @@ In `packages/shared/src/index.ts`, add the new types to the type export block:
   TilesetSeamIssueCode,
 ```
 
-- [ ] **Step 4: Update asset type definitions**
+- [x] **Step 4: Update asset type definitions**
 
 In `packages/shared/src/assetTypes.ts`:
 
@@ -220,7 +220,7 @@ description: "Tile images where grid alignment, repeat preview, and seam diagnos
 }
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 

@@ -51,14 +51,14 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
     type: "tileset",
     label: "Tileset",
     shortLabel: "Tileset",
-    support: "inspectOnly",
+    support: "full",
     processingMode: "tileSheet",
-    description: "Tile images where grid alignment matters; seam diagnostics are a future milestone.",
+    description: "Tile images where grid alignment, repeat preview, and seam diagnostics matter.",
     defaultWarnings: [
       {
-        code: "tileset-seams-inspect-only",
+        code: "tileset-engine-metadata-next",
         severity: "info",
-        message: "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0."
+        message: "Tileset seam diagnostics are available; engine-specific tileset metadata arrives with export adapters."
       }
     ]
   },
@@ -66,14 +66,14 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
     type: "tilemap",
     label: "Tilemap",
     shortLabel: "Tilemap",
-    support: "future",
+    support: "inspectOnly",
     processingMode: "tileSheet",
     description: "Placed map data or map screenshots that need map-aware import before export.",
     defaultWarnings: [
       {
-        code: "tilemap-future",
+        code: "tilemap-inspect-only",
         severity: "warning",
-        message: "Tilemap data import/export is not supported in 0.1.0."
+        message: "Tilemap data import/export is inspect-only until map metadata support is scoped."
       }
     ]
   },

@@ -33,6 +33,45 @@ export type AssetTypeClassification = {
   warnings: AssetTypeWarning[];
 };
 
+export type DiagnosticSeverity = "info" | "warning" | "error";
+
+export type TilesetSeamEdge = "right-left" | "bottom-top";
+
+export type TilesetSeamIssueCode = "edge-mismatch" | "lighting-discontinuity" | "cross-boundary-detail";
+
+export type TilesetSeamIssue = {
+  code: TilesetSeamIssueCode;
+  severity: DiagnosticSeverity;
+  message: string;
+  edge: TilesetSeamEdge;
+  tileA: { row: number; column: number };
+  tileB: { row: number; column: number };
+  score: number;
+};
+
+export type TilesetSeamDiagnostics = {
+  tileWidth: number;
+  tileHeight: number;
+  rows: number;
+  columns: number;
+  checkedSeams: number;
+  averageEdgeDelta: number;
+  maxEdgeDelta: number;
+  seamRiskScore: number;
+  lightingRiskScore: number;
+  issues: TilesetSeamIssue[];
+};
+
+export type SceneAssetDiagnostics = {
+  assetType: Extract<AssetType, "background" | "tilemap">;
+  sampledPixelCount: number;
+  colorBinCount: number;
+  detailDensity: number;
+  detailDensityLabel: "low" | "medium" | "high";
+  paletteRiskScore: number;
+  warnings: AssetTypeWarning[];
+};
+
 export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette";
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill" | "colorKey";
