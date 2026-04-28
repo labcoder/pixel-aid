@@ -242,6 +242,48 @@ export type AnimationTag = {
   direction?: "forward" | "reverse" | "ping-pong";
 };
 
+export type FrameStabilitySeverity = "info" | "warning" | "error";
+
+export type FrameStabilityIssueCode =
+  | "baseline-drift"
+  | "pivot-drift"
+  | "frame-size-variance"
+  | "content-center-drift"
+  | "duration-variance";
+
+export type FrameStabilityIssue = {
+  code: FrameStabilityIssueCode;
+  severity: FrameStabilitySeverity;
+  message: string;
+  affectedFrameNames: string[];
+  maxDelta: number;
+  unit: "px" | "ms";
+};
+
+export type FrameStabilityMetric = {
+  frameName: string;
+  baselineY: number;
+  pivotX: number;
+  pivotY: number;
+  frameWidth: number;
+  frameHeight: number;
+  contentCenterX: number;
+  contentCenterY: number;
+  durationMs: number;
+};
+
+export type FrameStabilityDiagnostics = {
+  frameCount: number;
+  stableFrameCount: number;
+  maxBaselineDeltaPx: number;
+  maxPivotDeltaPx: number;
+  maxFrameSizeDeltaPx: number;
+  maxContentCenterDeltaPx: number;
+  maxDurationDeltaMs: number;
+  metrics: FrameStabilityMetric[];
+  issues: FrameStabilityIssue[];
+};
+
 export type SheetLayoutDetection = {
   frameWidth: number;
   frameHeight: number;
