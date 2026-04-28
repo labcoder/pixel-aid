@@ -202,3 +202,15 @@ Current slicing supports manual rectangular metadata and detected explicit frame
 When Fix runs in a sheet-like mode, the core does not downsample the whole imported canvas as one image. It uses the current frame metadata as a fix plan: each frame is sampled from its own source rectangle, downsampled to its native frame rectangle, cleaned, and pasted into the output sheet. Palette extraction/remapping happens once after all frames are packed so animation colors stay stable across rows.
 
 The slicer can consume explicit detected frame metadata, including first-pass content-centered gutter normalization, mild drift fitting, conservative disconnected-component grouping, and common row-label names from sheet detection. It does not yet detect fully irregular gutters, arbitrary source text, or per-frame trim bounds. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.
+
+## Generic Export Bundle
+
+The manifest is the canonical export contract. Bundle assembly does not infer new frame, pivot, palette, or animation metadata; it serializes the current manifest plus derivative files that are easier for tools and artists to consume.
+
+The generic ZIP writer sorts file paths before compression so repeated exports produce stable entry ordering. Browser-only PNG encoding stays in the web app, while pure format helpers live in `packages/exporters`.
+
+Palette sidecar files derive from the fixed result palette. `.hex` writes one normalized lowercase `#rrggbb` color per line, `.gpl` writes a deterministic GIMP palette, and `.palette.json` includes app/version, image name, color count, and colors.
+
+The validation report combines `validateManifest` errors with operation diagnostics copied into the manifest. It warns about missing animation metadata for multi-frame exports, alpha cleanup warnings, remaining soft alpha after non-preserve alpha modes, palette warnings, palette drift warnings, and missing frame-sequence PNGs.
+
+Frame sequence PNGs are cropped from the exported image using manifest frame rectangles. If a frame rectangle reaches outside the image bounds, the crop keeps the requested frame dimensions and pads out-of-bounds pixels as transparent instead of throwing. This keeps the exported sequence aligned with the manifest and lets validation report the metadata issue separately.

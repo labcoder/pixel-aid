@@ -8,6 +8,16 @@
 
 **Tech Stack:** TypeScript, Vite/React, Canvas2D PNG encoding, `fflate`, Vitest, existing npm workspaces. No new dependencies.
 
+## Implementation Notes
+
+- Task 1 shipped in `0e2153b` with follow-up `.gpl` format alignment in `69b2d4e`.
+- Task 2 shipped in `2922f96`.
+- Task 3 shipped in `1bbfa13`.
+- Task 4 shipped in `9cfbb0e`.
+- Task 5 shipped in `83e73a3`.
+- The implemented bundle layout matches the plan: `images/`, `manifest/`, `palettes/`, `reports/`, and sheet-only `frames/`.
+- The web export path uses the MIG-11 corrected frame list for normalized sheet exports, then derives sidecar files from the canonical manifest and fixed result.
+
 ---
 
 ## Current State
@@ -663,4 +673,3 @@ After user approval, fast-forward `codex/pixelaid-roadmap-foundation` to include
 - Frame sequence images match manifest frame rect dimensions.
 - Export inspector/logs surface validation summary.
 - `npm run test` and `npm run build` pass.
-
