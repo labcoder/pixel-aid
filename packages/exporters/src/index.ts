@@ -16,3 +16,5 @@ export {
   normalizePaletteColors
 } from "./paletteFiles";
 export type { PaletteJsonFile } from "./paletteFiles";
+export { createExportValidationReport } from "./exportValidation";
+export type { ExportValidationIssue, ExportValidationReport, ExportValidationSeverity } from "./exportValidation";
