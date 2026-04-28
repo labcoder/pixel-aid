@@ -29,6 +29,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   }
 
   reportProgress(runtime, "grid-detection", 5, "Resolving pixel grid");
+  assertNotCancelled(runtime?.signal);
   const grid = resolveGrid(image, options);
   const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
@@ -40,6 +41,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       }
     : {};
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
+  assertNotCancelled(runtime?.signal);
   const downsampled = downsampleBlocks(
     image,
     {
@@ -62,6 +64,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   );
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
+  assertNotCancelled(runtime?.signal);
   const alphaResult = applyAlphaMode(downsampled, options.alpha, options.alphaSettings);
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
@@ -79,6 +82,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   reportProgress(runtime, "alpha-cleanup", 65, "Alpha cleanup complete");
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 70, "Resolving palette");
+  assertNotCancelled(runtime?.signal);
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(outlineCleaned, {
@@ -94,6 +98,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
+  assertNotCancelled(runtime?.signal);
   const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
 
   const result = {
@@ -116,6 +121,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     }
   };
   reportProgress(runtime, "complete", 100);
+  assertNotCancelled(runtime?.signal);
   return result;
 }
 
@@ -145,6 +151,7 @@ function isSheetFrameFix(options: FixOptions): boolean {
 
 function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
   reportProgress(runtime, "frame-slicing", 5, "Preparing sheet frames");
+  assertNotCancelled(runtime?.signal);
   const frames = options.sheetFrames ?? [];
   const outputSize = getSheetOutputSize(options, frames);
   const packed = createImage(outputSize.width, outputSize.height);
@@ -156,6 +163,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
 
   reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
+  assertNotCancelled(runtime?.signal);
   for (let index = 0; index < frames.length; index += 1) {
     assertNotCancelled(runtime?.signal);
     const frame = frames[index]!;
@@ -186,12 +194,14 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
     pasteImage(cleanedFrame.image, packed, frame.rect);
     reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
+    assertNotCancelled(runtime?.signal);
   }
 
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 70, "Alpha cleanup complete");
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 75, "Resolving sheet palette");
+  assertNotCancelled(runtime?.signal);
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(packed, {
@@ -208,6 +218,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
+  assertNotCancelled(runtime?.signal);
   const sourceRect = unionRects(sourceRects);
   const grid: GridCandidate = {
     outputWidth: remapped.width,
@@ -243,6 +254,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     }
   };
   reportProgress(runtime, "complete", 100);
+  assertNotCancelled(runtime?.signal);
   return result;
 }
 
