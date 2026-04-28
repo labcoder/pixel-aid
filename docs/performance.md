@@ -28,7 +28,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 
 ## Progress And Cancellation
 
-Worker fix jobs emit coarse progress stages for preparation and decode-prep, grid detection, frame slicing, downsampling, alpha cleanup, palette remap, export preparation, completion, and cancellation. Progress is intentionally stage-based instead of per-pixel so long image operations do not flood the UI thread or trigger excessive React state updates.
+The browser client reports `decode-prep` before the worker job starts. Worker and core fix jobs emit coarse progress stages for `grid-detection`, `frame-slicing`, `downsampling`, `alpha-cleanup`, `palette-remap`, `export-prep`, `complete`, and `cancelled`. Progress is intentionally stage-based instead of per-pixel so long image operations do not flood the UI thread or trigger excessive React state updates.
 
 Core fix functions accept optional runtime hooks for progress and cooperative cancellation. The worker checks those hooks between processing phases and frame-sized chunks, which keeps cancellation deterministic without adding allocation-heavy checks inside every pixel loop.
 
