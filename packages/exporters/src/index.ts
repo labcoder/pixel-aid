@@ -18,3 +18,11 @@ export {
 export type { PaletteJsonFile } from "./paletteFiles";
 export { createExportValidationReport } from "./exportValidation";
 export type { ExportValidationIssue, ExportValidationReport, ExportValidationSeverity } from "./exportValidation";
+export { collectCommonEngineWarnings } from "./engineWarnings";
+export type {
+  EngineExportBundle,
+  EngineExportFile,
+  EngineExportSeverity,
+  EngineExportTarget,
+  EngineExportWarning
+} from "./engineTypes";

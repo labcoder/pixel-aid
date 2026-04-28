@@ -75,7 +75,7 @@
 - Modify: `packages/exporters/src/exportValidation.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Add failing validation tests**
+- [x] **Step 1: Add failing validation tests**
 
 Add this test to `packages/exporters/src/exportValidation.test.ts`:
 
@@ -151,7 +151,7 @@ function createTestManifest(): PixelAssetManifest {
 }
 ```
 
-- [ ] **Step 2: Run red validation test**
+- [x] **Step 2: Run red validation test**
 
 Run:
 
@@ -161,7 +161,7 @@ npm run test -w @pixelaid/exporters -- exportValidation
 
 Expected red: `extraIssues` is not accepted by `createExportValidationReport`.
 
-- [ ] **Step 3: Add shared engine contracts**
+- [x] **Step 3: Add shared engine contracts**
 
 Create `packages/exporters/src/engineTypes.ts`:
 
@@ -230,7 +230,7 @@ export function collectCommonEngineWarnings(
 }
 ```
 
-- [ ] **Step 4: Accept extra validation issues**
+- [x] **Step 4: Accept extra validation issues**
 
 Update `packages/exporters/src/exportValidation.ts`:
 
@@ -272,7 +272,7 @@ export function createExportValidationReport({
 
 Do not remove existing validation behavior. Only add the `extraIssues` parameter and include those issues before summary counts are computed.
 
-- [ ] **Step 5: Export shared contracts**
+- [x] **Step 5: Export shared contracts**
 
 Update `packages/exporters/src/index.ts`:
 
@@ -287,7 +287,7 @@ export type {
 export { collectCommonEngineWarnings } from "./engineWarnings";
 ```
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 

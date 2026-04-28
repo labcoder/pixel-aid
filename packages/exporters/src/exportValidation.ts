@@ -26,17 +26,22 @@ export type ExportValidationReport = {
 export function createExportValidationReport({
   manifest,
   files,
-  frameSequenceNames = []
+  frameSequenceNames = [],
+  extraIssues = []
 }: {
   manifest: PixelAssetManifest;
   files: readonly string[];
   frameSequenceNames?: readonly string[];
+  extraIssues?: readonly ExportValidationIssue[];
 }): ExportValidationReport {
-  const issues: ExportValidationIssue[] = validateManifest(manifest).map((message) => ({
-    code: "manifest",
-    severity: "error",
-    message
-  }));
+  const issues: ExportValidationIssue[] = [
+    ...validateManifest(manifest).map((message) => ({
+      code: "manifest" as const,
+      severity: "error" as const,
+      message
+    })),
+    ...extraIssues
+  ];
 
   const animationCount = Object.keys(manifest.animations).length;
   if (manifest.frames.length > 1 && animationCount === 0) {

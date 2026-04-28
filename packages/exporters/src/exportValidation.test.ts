@@ -268,6 +268,28 @@ describe("export validation report", () => {
     });
   });
 
+  test("includes engine adapter warnings in export validation reports", () => {
+    const report = createExportValidationReport({
+      manifest: baseManifest,
+      files: ["images/hero.png", "manifest/hero.json", "unity/PixelAidUnityImporter.cs"],
+      extraIssues: [
+        {
+          code: "engine-unity-animation-direction",
+          severity: "warning",
+          message: "Unity helper imports frames and pivots; ping-pong playback still needs clip setup."
+        }
+      ]
+    });
+
+    expect(report.summary.warningCount).toBeGreaterThanOrEqual(1);
+    expect(report.issues).toContainEqual(
+      expect.objectContaining({
+        code: "engine-unity-animation-direction",
+        severity: "warning"
+      })
+    );
+  });
+
   test("sorts files and includes deterministic summary counts", () => {
     const report = createExportValidationReport({
       manifest: baseManifest,
