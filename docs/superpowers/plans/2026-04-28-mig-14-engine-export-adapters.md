@@ -1310,7 +1310,7 @@ git commit -m "feat(exporters): bundle selected engine adapters"
 - Modify: `apps/web/src/App.tsx`
 - Modify: `apps/web/src/styles.css`
 
-- [ ] **Step 1: Add failing web conversion tests**
+- [x] **Step 1: Add failing web conversion tests**
 
 Create `apps/web/src/lib/engineExportFiles.test.ts`:
 
@@ -1341,7 +1341,7 @@ describe("engine export bundle file conversion", () => {
 });
 ```
 
-- [ ] **Step 2: Run red web conversion test**
+- [x] **Step 2: Run red web conversion test**
 
 Run:
 
@@ -1351,7 +1351,7 @@ npm run test -w @pixelaid/web -- engineExportFiles
 
 Expected red: missing `./engineExportFiles`.
 
-- [ ] **Step 3: Implement web conversion helper**
+- [x] **Step 3: Implement web conversion helper**
 
 Create `apps/web/src/lib/engineExportFiles.ts`:
 
@@ -1375,7 +1375,7 @@ export function engineWarningsToValidationIssues(warnings: readonly EngineExport
 }
 ```
 
-- [ ] **Step 4: Add engine target selection in `App.tsx`**
+- [x] **Step 4: Add engine target selection in `App.tsx`**
 
 Import:
 
@@ -1435,7 +1435,7 @@ Update `bundleFiles` to include:
 
 Add `engineExportTargets` to the export callback dependencies.
 
-- [ ] **Step 5: Add export inspector checkboxes**
+- [x] **Step 5: Add export inspector checkboxes**
 
 In the `export` inspector group in `apps/web/src/App.tsx`, add a compact target selector after the validation readout:
 
@@ -1477,7 +1477,7 @@ Only add CSS if spacing is cramped:
 }
 ```
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 

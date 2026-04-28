@@ -45,11 +45,13 @@ import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@
 import { analyzeSceneAssetDiagnostics, analyzeTilesetSeams, sliceSheetFrames } from "@pixelaid/core";
 import {
   analyzeFrameStability,
+  createEngineExportBundle,
   createExportValidationReport,
   createGplPaletteFile,
   createHexPaletteFile,
   createPaletteJsonFile,
-  createPixelAssetManifest
+  createPixelAssetManifest,
+  type EngineExportTarget
 } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
@@ -66,6 +68,7 @@ import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOve
 import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
+import { engineExportFileToBundleFile, engineWarningsToValidationIssues } from "./lib/engineExportFiles";
 import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleFile } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import {
@@ -273,6 +276,7 @@ export function App() {
     warningCount: number;
     errorCount: number;
   } | null>(null);
+  const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(["godot", "unity", "phaser"]);
   const [fixStatus, setFixStatus] = useState<string | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
@@ -292,6 +296,12 @@ export function App() {
     setMaxColors(normalizePaletteBudget(value));
   }, []);
 
+  const toggleEngineExportTarget = useCallback((target: EngineExportTarget) => {
+    setEngineExportTargets((current) =>
+      current.includes(target) ? current.filter((item) => item !== target) : [...current, target]
+    );
+  }, []);
+
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const assetType = selectedAsset?.assetType ?? "sprite";
   const assetTypeSource = selectedAsset?.assetTypeSource ?? "auto";
@@ -306,7 +316,7 @@ export function App() {
   const assetPanelStatus = importStatus ?? analysisStatus;
   useEffect(() => {
     setLastExportValidation(null);
-  }, [fixResult, selectedAsset?.id]);
+  }, [engineExportTargets, fixResult, selectedAsset?.id]);
   const sourcePalette = useMemo(
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
     [selectedAsset]
@@ -1693,6 +1703,10 @@ export function App() {
       generatedAt: new Date().toISOString(),
       ...(sheetMode ? { sheet: exportSheet, frames: exportFrames, ...(animations ? { animations } : {}) } : {})
     });
+    const engineBundle = createEngineExportBundle({
+      manifest,
+      targets: engineExportTargets
+    });
 
     void (async () => {
       const frameSequence = sheetMode && exportFrames.length > 0 ? createFrameSequenceImages({ image: exportResult.image, frames: exportFrames }) : [];
@@ -1713,12 +1727,14 @@ export function App() {
         `palettes/${baseName}.gpl`,
         `palettes/${baseName}.palette.json`,
         `reports/${baseName}_validation.json`,
+        ...engineBundle.files.map((file) => file.path),
         ...framePngFiles.map((file) => file.path)
       ];
       const validation = createExportValidationReport({
         manifest,
         files: filePaths,
-        frameSequenceNames: frameSequence.map((frame) => frame.frameName)
+        frameSequenceNames: frameSequence.map((frame) => frame.frameName),
+        extraIssues: engineWarningsToValidationIssues(engineBundle.warnings)
       });
       const fixedPng = await rgbaImageToPngBlob(exportResult.image);
       const bundleFiles: AssetBundleFile[] = [
@@ -1731,6 +1747,7 @@ export function App() {
         textBundleFile(`palettes/${baseName}.gpl`, createGplPaletteFile(exportResult.palette, { name: baseName })),
         jsonBundleFile(`palettes/${baseName}.palette.json`, createPaletteJsonFile(exportResult.palette, { image: imageName })),
         jsonBundleFile(`reports/${baseName}_validation.json`, validation),
+        ...engineBundle.files.map(engineExportFileToBundleFile),
         ...framePngFiles
       ];
       const bundle = createAssetBundleZip({ files: bundleFiles });
@@ -1751,6 +1768,7 @@ export function App() {
   }, [
     appendLog,
     detectedRowAnimations,
+    engineExportTargets,
     fixResult,
     normalizeTimelineFrames,
     playbackDirection,
@@ -2334,6 +2352,18 @@ export function App() {
           }
           text
         />
+        <div className="engine-export-targets" aria-label="Engine export targets">
+          {(["godot", "unity", "phaser"] as const).map((target) => (
+            <label key={target} className="toggle-row">
+              <input
+                type="checkbox"
+                checked={engineExportTargets.includes(target)}
+                onChange={() => toggleEngineExportTarget(target)}
+              />
+              {targetLabel(target)}
+            </label>
+          ))}
+        </div>
         <ReadonlyField
           label="Sheet PNG"
           value={sheetMode ? (normalizeTimelineFrames ? "Normalized" : "Current") : "Single"}
@@ -3316,6 +3346,16 @@ function defaultAssetTypeForMode(mode: AssetMode): AssetType {
     return "tileset";
   }
   return "sprite";
+}
+
+function targetLabel(target: EngineExportTarget): string {
+  if (target === "godot") {
+    return "Godot";
+  }
+  if (target === "unity") {
+    return "Unity";
+  }
+  return "Phaser";
 }
 
 function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
