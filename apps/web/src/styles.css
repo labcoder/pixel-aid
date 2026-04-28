@@ -1300,12 +1300,49 @@ button:disabled {
   grid-template-columns: 1fr 0.9fr;
 }
 
+.bottom-content.with-tile-preview {
+  grid-template-columns: 1fr 1fr 0.9fr;
+}
+
 .bottom-content section {
   min-width: 0;
   min-height: 0;
   padding: 12px;
   background: var(--surface-1);
   overflow: auto;
+}
+
+.tile-preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tile-preview-heading span {
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.tile-preview-panel {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(132px, 1fr) minmax(0, 0.9fr);
+  gap: 0.65rem;
+  align-items: stretch;
+  margin-top: 0.65rem;
+}
+
+.tile-repeat-preview-canvas {
+  width: 100%;
+  min-width: 132px;
+  height: 112px;
+  display: block;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 5px;
 }
 
 .player-controls {

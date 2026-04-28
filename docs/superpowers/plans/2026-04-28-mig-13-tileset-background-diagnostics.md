@@ -920,7 +920,7 @@ git commit -m "feat(web): format tile and scene diagnostics"
 - Modify: `apps/web/src/lib/guidedFix.ts`
 - Modify: `apps/web/src/lib/guidedFix.test.ts`
 
-- [ ] **Step 1: Update preset and suggestion tests**
+- [x] **Step 1: Update preset and suggestion tests**
 
 Update `apps/web/src/lib/assetTypePresets.test.ts`:
 
@@ -952,7 +952,7 @@ test("keeps tilemap-like manual assets preservation-oriented", () => {
 });
 ```
 
-- [ ] **Step 2: Run red tests**
+- [x] **Step 2: Run red tests**
 
 Run:
 
@@ -962,7 +962,7 @@ npm run test -w @pixelaid/web -- assetTypePresets fixSuggestions guidedFix
 
 Expected red: warning code/support wording is still old.
 
-- [ ] **Step 3: Update web presets and suggestion copy**
+- [x] **Step 3: Update web presets and suggestion copy**
 
 In `apps/web/src/lib/assetTypePresets.ts`:
 
@@ -984,7 +984,7 @@ intent: input.assetType === "tileset"
   : "Start by checking cell size, palette limits, and transparent background handling before export.",
 ```
 
-- [ ] **Step 4: Integrate diagnostics in `App.tsx`**
+- [x] **Step 4: Integrate diagnostics in `App.tsx`**
 
 In `apps/web/src/App.tsx`, import:
 
@@ -1068,7 +1068,7 @@ Add a bottom panel section where existing timeline/logs/metrics sections are ren
 
 Use existing local class conventions; do not nest UI cards.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 

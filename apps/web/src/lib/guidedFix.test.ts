@@ -64,7 +64,7 @@ describe("guided fix summary", () => {
     expect(summary.metrics).toContain("6x9 cells");
   });
 
-  test("summarizes inspect-only tileset warnings", () => {
+  test("summarizes tileset repeat preview diagnostics", () => {
     const summary = getGuidedFixSummary({
       assetType: "tileset",
       mode: "tileSheet",
@@ -77,9 +77,9 @@ describe("guided fix summary", () => {
       categoryConfidence: 0.78,
       warnings: [
         {
-          code: "tileset-seams-inspect-only",
+          code: "tileset-engine-metadata-next",
           severity: "info",
-          message: "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0."
+          message: "Tileset seam diagnostics are available; engine-specific tileset metadata arrives with export adapters."
         }
       ],
       frameCount: 64,
@@ -88,6 +88,8 @@ describe("guided fix summary", () => {
     });
 
     expect(summary.title).toBe("Looks like a tileset");
-    expect(summary.metrics).toContain("Inspect-only");
+    expect(summary.intent).toContain("repeat preview");
+    expect(summary.intent).toContain("seam risk");
+    expect(summary.metrics).not.toContain("Inspect-only");
   });
 });

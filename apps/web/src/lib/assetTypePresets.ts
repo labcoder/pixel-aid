@@ -99,7 +99,7 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         removeHalos: false,
         denoiseStrength: 10,
         lockPaletteAcrossFrames: true,
-        warningCodes: ["tileset-seams-inspect-only"]
+        warningCodes: ["tileset-engine-metadata-next"]
       };
     case "tilemap":
       return {
@@ -114,7 +114,7 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         removeHalos: false,
         denoiseStrength: 0,
         lockPaletteAcrossFrames: true,
-        warningCodes: ["tilemap-future"]
+        warningCodes: ["tilemap-inspect-only"]
       };
     case "portrait":
     case "uiElement":
@@ -157,11 +157,11 @@ export function getAssetTypeWarnings(assetType: AssetType): AssetTypeWarning[] {
 }
 
 function codeToAssetTypeWarningMessage(code: string): string {
-  if (code === "tilemap-future") {
-    return "Tilemap data import/export is not supported in 0.1.0.";
+  if (code === "tilemap-inspect-only") {
+    return "Tilemap data import/export is inspect-only until map metadata support is scoped.";
   }
-  if (code === "tileset-seams-inspect-only") {
-    return "Tileset seam diagnostics and tile-engine metadata are not fully supported in 0.1.0.";
+  if (code === "tileset-engine-metadata-next") {
+    return "Tileset seam diagnostics are available; engine-specific tileset metadata arrives with export adapters.";
   }
   if (code === "preserve-intentional-soft-alpha") {
     return "This preset preserves intentional soft alpha; destructive alpha cleanup can flatten glow, effects, and soft edges.";
