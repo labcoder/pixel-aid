@@ -586,7 +586,7 @@ git commit -m "test(fixtures): add unstable animation sheet fixture"
 - Modify: `apps/web/src/lib/normalizedSheetExport.ts`
 - Modify or create: `apps/web/src/lib/normalizedSheetExport.test.ts`
 
-- [ ] **Step 1: Add preview diagnostics helper**
+- [x] **Step 1: Add preview diagnostics helper**
 
 In `apps/web/src/lib/frameNormalization.ts`, import `analyzeFrameStability` from `@pixelaid/exporters` and expose a tiny web helper:
 
@@ -601,7 +601,7 @@ export function getFramePreviewDiagnostics(frames: readonly SpriteFrame[]): Fram
 
 If the current import list already includes `SpriteFrame`, merge the type import rather than creating a duplicate import.
 
-- [ ] **Step 2: Preserve diagnostics-sensitive metadata in tests**
+- [x] **Step 2: Preserve diagnostics-sensitive metadata in tests**
 
 Add tests to `apps/web/src/lib/frameNormalization.test.ts`:
 
@@ -617,7 +617,7 @@ test("reports timeline frame stability diagnostics", () => {
 });
 ```
 
-- [ ] **Step 3: Add normalized export diagnostics test**
+- [x] **Step 3: Add normalized export diagnostics test**
 
 Create or extend `apps/web/src/lib/normalizedSheetExport.test.ts` so a normalized export using corrected pivots:
 
@@ -627,7 +627,7 @@ Create or extend `apps/web/src/lib/normalizedSheetExport.test.ts` so a normalize
 - updates `result.settings.sheet`
 - updates `result.metrics.outputWidth` and `result.metrics.outputHeight`
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 

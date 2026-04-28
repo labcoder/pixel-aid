@@ -1,6 +1,6 @@
 import type { SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { getFramePreviewPlacement, getOnionSkinPlacements, normalizeFramePlacements } from "./frameNormalization";
+import { getFramePreviewDiagnostics, getFramePreviewPlacement, getOnionSkinPlacements, normalizeFramePlacements } from "./frameNormalization";
 
 const frames: SpriteFrame[] = [
   {
@@ -113,5 +113,15 @@ describe("frame normalization", () => {
     expect(onion.current?.frame.name).toBe("idle_000");
     expect(onion.next?.frame.name).toBe("idle_001");
     expect(onion.previous?.canvas).toEqual({ width: 20, height: 34 });
+  });
+
+  test("reports timeline frame stability diagnostics", () => {
+    const diagnostics = getFramePreviewDiagnostics([
+      frames[0]!,
+      { ...frames[1]!, pivot: { x: 18, y: 34 } }
+    ]);
+
+    expect(diagnostics.issues.map((issue) => issue.code)).toContain("baseline-drift");
+    expect(diagnostics.issues.map((issue) => issue.code)).toContain("pivot-drift");
   });
 });
