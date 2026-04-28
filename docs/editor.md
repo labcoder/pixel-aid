@@ -148,13 +148,15 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Toggle looping. With looping disabled, playback stops on the last frame.
 - Toggle Normalize to preview and export each frame inside a shared pivot-aligned canvas. This keeps characters from visually wobbling when detected frame bounds differ.
 - Toggle Onion to draw the previous and next frame behind the selected frame at low opacity. Onion skin is preview-only and does not change exported PNGs or manifests.
+- Review the stability summary for baseline, pivot, and content-center drift across the selected clip. Affected frames are marked in the timeline rail and highlighted in the frame preview.
+- Edit the selected frame pivot directly from the player, reset a frame pivot override, apply the current pivot to the selected clip, or reset the selected clip pivot override.
 - Rename detected row clips in the clip editor. The edited clip name becomes the manifest animation key and the frame-name prefix for that row.
 - Edit per-clip FPS, direction, and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
-The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, marks the pivot, and can overlay previous/next onion frames. Looping forward/reverse clips can wrap onion neighbors; ping-pong clips do not wrap onion neighbors at the ends, so the preview does not imply a jump from first to last frame.
+The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, marks the pivot, and can overlay previous/next onion frames. When the selected frame participates in a stability warning, the preview draws a warning outline around the normalized canvas. Looping forward/reverse clips can wrap onion neighbors; ping-pong clips do not wrap onion neighbors at the ends, so the preview does not imply a jump from first to last frame.
 
-Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion opacity/range controls, imported timesheet editing, and per-engine normalized atlas options are future timeline work.
+Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing pivots, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion opacity/range controls, imported timesheet editing, automatic pivot suggestions, and per-engine normalized atlas options are future timeline work.
 
 # Metrics
 
@@ -170,5 +172,6 @@ The first export target is a generic engine-ready bundle.
 - JSON manifest includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
 - If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG and manifest frame rects use that packed layout.
+- Pivot overrides from the Sprite Player are applied before normalized export, so corrected baseline/pivot decisions are reflected in the exported PNG and manifest.
 - Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting. If a detected clip is renamed, matching frame names and per-frame duration overrides are renamed with it before export.
 - ZIP export packages the PNG and manifest together.
