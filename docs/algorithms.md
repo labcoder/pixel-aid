@@ -83,6 +83,14 @@ Detected frames can be manually nudged or resized in the web viewport. Move and 
 
 Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
 
+### Animation Stability Diagnostics
+
+PixelAid performs metadata-first stability checks for sprite sheets. It compares baseline, pivot, frame size, content center, and duration across the selected clip. These diagnostics are intentionally inspect-first: they warn about likely wobble or drift without rewriting pixels automatically.
+
+The first pass uses existing frame metadata rather than image-content foot detection. Baseline and pivot checks read each frame pivot in native frame pixels. Content-center checks compare frame-local centers from `sourceRect` when available, or from `rect` when no source crop exists, so adjacent sheet cells are not mistaken for movement. Duration variance is reported in milliseconds while spatial drift is reported in pixels.
+
+Manual pivot overrides are applied after frame-duration overrides and before normalized preview/export. Frame-level overrides take priority over clip-level overrides. Renaming a detected clip also renames matching pivot override keys, keeping diagnostics, timeline controls, and manifest animation IDs aligned.
+
 For detected sheet suggestions, source and output rectangles are deliberately different. Each frame keeps a source-space `sourceRect` for sampling the imported sheet, but its native `rect` is repacked into a clean animation-row output sheet with zero source label/gutter margin. Frame width and height are snapped toward common native sprite sizes when the detected grid lands close to values such as 32, 48, or 64 pixels. In the editor, each detected animation row can then have its own cell width and height; changing a row size repacks all output frame rects while preserving the source rectangles. This prevents source labels, decorative gutters, loose AI canvas spacing, and empty cells from becoming part of the fixed export.
 
 ## Palette

@@ -938,7 +938,7 @@ git commit -m "feat(web): surface animation stability controls"
 - Modify: `docs/algorithms.md`
 - Modify: `docs/performance.md` only if there are new performance notes
 
-- [ ] **Step 1: Document the stability model**
+- [x] **Step 1: Document the stability model**
 
 In `docs/algorithms.md`, add a short section under sheet normalization:
 
@@ -948,7 +948,7 @@ In `docs/algorithms.md`, add a short section under sheet normalization:
 PixelAid currently performs metadata-first stability checks for sprite sheets. It compares baseline, pivot, frame size, content center, and duration across the selected clip. These diagnostics are intentionally inspect-first: they warn about likely wobble or drift without rewriting pixels automatically.
 ```
 
-- [ ] **Step 2: Document UI controls**
+- [x] **Step 2: Document UI controls**
 
 In `docs/editor.md`, update the timeline/sprite player section with:
 
@@ -958,7 +958,7 @@ In `docs/editor.md`, update the timeline/sprite player section with:
 - apply pivot to clip
 - normalized export uses corrected frame pivots
 
-- [ ] **Step 3: Add MIG-12 handoff note**
+- [x] **Step 3: Add MIG-12 handoff note**
 
 Add a short note to the plan or final implementation summary:
 
@@ -966,7 +966,7 @@ Add a short note to the plan or final implementation summary:
 - Any future generic bundle manifest diagnostics should include or reference `FrameStabilityDiagnostics`.
 - Palette `.hex`, `.gpl`, JSON, PNG frame sequence, and ZIP bundle expansion remain in MIG-12.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
