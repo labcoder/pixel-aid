@@ -1153,7 +1153,7 @@ git commit -m "docs(web): document tile and scene diagnostics"
 **Files:**
 - No planned file changes except fixes discovered during verification.
 
-- [ ] **Step 1: Full verification**
+- [x] **Step 1: Full verification**
 
 Run:
 
@@ -1165,7 +1165,7 @@ npm run build
 
 Expected: pass.
 
-- [ ] **Step 2: Local server smoke**
+- [x] **Step 2: Local server smoke**
 
 Start the app from `apps/web` on a free port:
 
@@ -1189,14 +1189,14 @@ If browser automation is available, also verify:
 - Seam risk readout appears.
 - Background asset still defaults to preserve alpha and no denoise.
 
-- [ ] **Step 3: Update Linear**
+- [x] **Step 3: Update Linear**
 
 After user confirmation for the Linear write:
 
 - Add a completion comment to `MIG-13` with implementation summary and verification commands.
 - Move `MIG-13` to Done.
 
-- [ ] **Step 4: Foundation handoff**
+- [x] **Step 4: Foundation handoff**
 
 After user approval, fast-forward `codex/pixelaid-roadmap-foundation` to include `codex/mig-13-tileset-background-diagnostics`.
 
