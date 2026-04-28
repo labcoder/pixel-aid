@@ -316,7 +316,7 @@ git commit -m "feat(exporters): add engine export contracts"
 - Create: `packages/exporters/src/phaser.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Add failing Phaser adapter tests**
+- [x] **Step 1: Add failing Phaser adapter tests**
 
 Create `packages/exporters/src/phaser.test.ts`:
 
@@ -435,7 +435,7 @@ function createManifest(): PixelAssetManifest {
 }
 ```
 
-- [ ] **Step 2: Run red Phaser test**
+- [x] **Step 2: Run red Phaser test**
 
 Run:
 
@@ -445,7 +445,7 @@ npm run test -w @pixelaid/exporters -- phaser
 
 Expected red: missing `./phaser`.
 
-- [ ] **Step 3: Implement Phaser adapter**
+- [x] **Step 3: Implement Phaser adapter**
 
 Create `packages/exporters/src/phaser.ts`:
 
@@ -551,7 +551,7 @@ function roundRatio(value: number, size: number): number {
 }
 ```
 
-- [ ] **Step 4: Export Phaser API**
+- [x] **Step 4: Export Phaser API**
 
 Update `packages/exporters/src/index.ts`:
 
@@ -560,7 +560,7 @@ export { createPhaserAnimations, createPhaserAtlas, createPhaserExport } from ".
 export type { PhaserExportOptions } from "./phaser";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -589,7 +589,7 @@ git commit -m "feat(exporters): add Phaser export adapter"
 - Create: `packages/exporters/src/godot.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Add failing Godot adapter tests**
+- [x] **Step 1: Add failing Godot adapter tests**
 
 Create `packages/exporters/src/godot.test.ts`:
 
@@ -678,7 +678,7 @@ function createManifest(): PixelAssetManifest {
 }
 ```
 
-- [ ] **Step 2: Run red Godot test**
+- [x] **Step 2: Run red Godot test**
 
 Run:
 
@@ -688,7 +688,7 @@ npm run test -w @pixelaid/exporters -- godot
 
 Expected red: missing `./godot`.
 
-- [ ] **Step 3: Implement Godot adapter**
+- [x] **Step 3: Implement Godot adapter**
 
 Create `packages/exporters/src/godot.ts`:
 
@@ -807,7 +807,7 @@ function collectGodotWarnings(manifest: PixelAssetManifest): EngineExportWarning
 }
 ```
 
-- [ ] **Step 4: Export Godot API**
+- [x] **Step 4: Export Godot API**
 
 Update `packages/exporters/src/index.ts`:
 
@@ -816,7 +816,7 @@ export { createGodotExport, createGodotImportReadme, createGodotImporterScript }
 export type { GodotExportOptions } from "./godot";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -845,7 +845,7 @@ git commit -m "feat(exporters): add Godot export helper"
 - Create: `packages/exporters/src/unity.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Add failing Unity adapter tests**
+- [x] **Step 1: Add failing Unity adapter tests**
 
 Create `packages/exporters/src/unity.test.ts`:
 
@@ -933,7 +933,7 @@ function createManifest(): PixelAssetManifest {
 }
 ```
 
-- [ ] **Step 2: Run red Unity test**
+- [x] **Step 2: Run red Unity test**
 
 Run:
 
@@ -943,7 +943,7 @@ npm run test -w @pixelaid/exporters -- unity
 
 Expected red: missing `./unity`.
 
-- [ ] **Step 3: Implement Unity adapter**
+- [x] **Step 3: Implement Unity adapter**
 
 Create `packages/exporters/src/unity.ts`:
 
@@ -1077,7 +1077,7 @@ function roundRatio(value: number, size: number): number {
 }
 ```
 
-- [ ] **Step 4: Export Unity API**
+- [x] **Step 4: Export Unity API**
 
 Update `packages/exporters/src/index.ts`:
 
@@ -1086,7 +1086,7 @@ export { createUnityExport, createUnityImportReadme, createUnityImporterScript, 
 export type { UnityExportOptions } from "./unity";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -1115,7 +1115,7 @@ git commit -m "feat(exporters): add Unity export helper"
 - Create: `packages/exporters/src/engineBundle.test.ts`
 - Modify: `packages/exporters/src/index.ts`
 
-- [ ] **Step 1: Add failing engine bundle tests**
+- [x] **Step 1: Add failing engine bundle tests**
 
 Create `packages/exporters/src/engineBundle.test.ts`:
 
@@ -1195,7 +1195,7 @@ function createManifest(): PixelAssetManifest {
 }
 ```
 
-- [ ] **Step 2: Run red bundle test**
+- [x] **Step 2: Run red bundle test**
 
 Run:
 
@@ -1205,7 +1205,7 @@ npm run test -w @pixelaid/exporters -- engineBundle
 
 Expected red: missing `./engineBundle`.
 
-- [ ] **Step 3: Implement bundle coordinator**
+- [x] **Step 3: Implement bundle coordinator**
 
 Create `packages/exporters/src/engineBundle.ts`:
 
@@ -1271,7 +1271,7 @@ function createEngineReadme(targets: readonly EngineExportTarget[]): string {
 }
 ```
 
-- [ ] **Step 4: Export bundle API**
+- [x] **Step 4: Export bundle API**
 
 Update `packages/exporters/src/index.ts`:
 
@@ -1280,7 +1280,7 @@ export { createEngineExportBundle } from "./engineBundle";
 export type { CreateEngineExportBundleOptions } from "./engineBundle";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
