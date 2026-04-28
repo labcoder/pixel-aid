@@ -40,3 +40,5 @@ export type { FixCancellationSignal, FixProgressEvent, FixRuntimeOptions } from 
 export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";
 export type { SceneAssetDiagnosticsOptions } from "./sceneDiagnostics";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
+export { analyzeTilesetSeams } from "./tileDiagnostics";
+export type { TilesetSeamAnalysisOptions } from "./tileDiagnostics";
