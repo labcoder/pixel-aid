@@ -431,10 +431,14 @@ describe("fix runtime hooks", () => {
 
     reportProgress({ onProgress: (event) => events.push(event) }, "downsampling", -12.2, "Starting rows");
     reportProgress({ onProgress: (event) => events.push(event) }, "palette-remap", 130.7);
+    reportProgress({ onProgress: (event) => events.push(event) }, "complete", 99.6);
+    reportProgress({ onProgress: (event) => events.push(event) }, "complete", 100);
 
     expect(events).toEqual([
       { stage: "downsampling", percent: 0, message: "Starting rows" },
-      { stage: "palette-remap", percent: 100 }
+      { stage: "palette-remap", percent: 100 },
+      { stage: "complete", percent: 99 },
+      { stage: "complete", percent: 100 }
     ]);
   });
 });
