@@ -381,7 +381,7 @@ git commit -m "feat(exporters): add frame stability diagnostics"
 - Create: `apps/web/src/lib/pivotOverrides.test.ts`
 - Modify later in main task: `apps/web/src/App.tsx`
 
-- [ ] **Step 1: Add serializable override state**
+- [x] **Step 1: Add serializable override state**
 
 Create `apps/web/src/lib/pivotOverrides.ts`:
 
@@ -399,7 +399,7 @@ export const emptyPivotOverrides: PivotOverrideState = {
 };
 ```
 
-- [ ] **Step 2: Add override application helpers**
+- [x] **Step 2: Add override application helpers**
 
 Continue in `apps/web/src/lib/pivotOverrides.ts`:
 
@@ -491,7 +491,7 @@ function clampPivot(pivot: Pivot): Pivot {
 }
 ```
 
-- [ ] **Step 3: Add tests**
+- [x] **Step 3: Add tests**
 
 Create `apps/web/src/lib/pivotOverrides.test.ts` covering:
 
@@ -501,7 +501,7 @@ Create `apps/web/src/lib/pivotOverrides.test.ts` covering:
 - clearing frame and animation overrides removes them
 - rename helper preserves overrides across clip/frame renames
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
@@ -529,7 +529,7 @@ git commit -m "feat(web): add pivot override model"
 - Modify: `packages/fixtures/src/unevenSpriteSheets.ts`
 - Modify or create fixture tests if the package already has a matching test file
 
-- [ ] **Step 1: Add a baseline drift fixture**
+- [x] **Step 1: Add a baseline drift fixture**
 
 Add a fixture such as `baseline-drift-animation-sheet`:
 
@@ -554,11 +554,11 @@ Add a fixture such as `baseline-drift-animation-sheet`:
 
 If the fixture generator requires pixel drawing data, draw the same small silhouette at different vertical offsets while keeping the cell size constant.
 
-- [ ] **Step 2: Add fixture test coverage**
+- [x] **Step 2: Add fixture test coverage**
 
 If there is an existing fixtures test, extend it so the new fixture appears in the exported fixture catalog and includes `expectedWarnings`.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -655,7 +655,7 @@ git commit -m "feat(web): expose timeline stability diagnostics"
 - Modify: `apps/web/src/styles.css`
 - Modify: `apps/web/src/lib/pivotOverrides.ts` only if integration reveals missing helper
 
-- [ ] **Step 1: Add state and computed corrected frames**
+- [x] **Step 1: Add state and computed corrected frames**
 
 In `apps/web/src/App.tsx`, import:
 
@@ -706,7 +706,7 @@ const sheetFrames = useMemo(
 );
 ```
 
-- [ ] **Step 2: Reset and rename overrides with asset/frame lifecycle**
+- [x] **Step 2: Reset and rename overrides with asset/frame lifecycle**
 
 In `resetSheetState`, add:
 
@@ -728,7 +728,7 @@ setPivotOverrides((current) =>
 );
 ```
 
-- [ ] **Step 3: Compute diagnostics and affected frame lookup**
+- [x] **Step 3: Compute diagnostics and affected frame lookup**
 
 Near timeline state:
 
@@ -747,7 +747,7 @@ const currentFrameIssues = useMemo(
 );
 ```
 
-- [ ] **Step 4: Add manual pivot correction callbacks**
+- [x] **Step 4: Add manual pivot correction callbacks**
 
 Add callbacks near other timeline callbacks:
 
@@ -783,7 +783,7 @@ const updateSelectedAnimationPivot = useCallback(
 
 Also add reset callbacks using `clearFramePivotOverride` and `clearAnimationPivotOverride`.
 
-- [ ] **Step 5: Show stability summary and pivot controls**
+- [x] **Step 5: Show stability summary and pivot controls**
 
 In the timeline panel near `.player-readout` / `.frame-preview-meta`, add a compact stability block:
 
@@ -819,7 +819,7 @@ Add pivot controls for selected frame:
 
 If this creates visual density issues, place the controls in the existing frame preview meta area rather than adding a new panel.
 
-- [ ] **Step 6: Mark affected timeline frames**
+- [x] **Step 6: Mark affected timeline frames**
 
 Change the timeline rail button class from:
 
@@ -844,7 +844,7 @@ title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.duratio
 }`}
 ```
 
-- [ ] **Step 7: Draw warning overlay in frame preview**
+- [x] **Step 7: Draw warning overlay in frame preview**
 
 In `apps/web/src/components/FramePreviewCanvas.tsx`, add optional prop:
 
@@ -869,7 +869,7 @@ Pass it from `App.tsx`:
 stabilityWarning={currentFrameIssues.length > 0}
 ```
 
-- [ ] **Step 8: Add CSS**
+- [x] **Step 8: Add CSS**
 
 Add styles to `apps/web/src/styles.css`:
 
@@ -911,7 +911,7 @@ Add styles to `apps/web/src/styles.css`:
 }
 ```
 
-- [ ] **Step 9: Verify and commit**
+- [x] **Step 9: Verify and commit**
 
 Run:
 

@@ -6,12 +6,14 @@ export function FramePreviewCanvas({
   image,
   placement,
   previousPlacement,
-  nextPlacement
+  nextPlacement,
+  stabilityWarning = false
 }: {
   image: RGBAImage | null;
   placement: FramePreviewPlacement | null;
   previousPlacement?: FramePreviewPlacement | null;
   nextPlacement?: FramePreviewPlacement | null;
+  stabilityWarning?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -63,6 +65,12 @@ export function FramePreviewCanvas({
     context.strokeStyle = "#35c6b6";
     context.lineWidth = 1;
     context.strokeRect(startX + 0.5, startY + 0.5, drawWidth - 1, drawHeight - 1);
+    if (stabilityWarning) {
+      context.strokeStyle = "#f1c75b";
+      context.setLineDash([4, 3]);
+      context.strokeRect(startX + 2.5, startY + 2.5, drawWidth - 5, drawHeight - 5);
+      context.setLineDash([]);
+    }
     context.strokeStyle = "#f1c75b";
     const pivotX = startX + placement.normalizedPivot.x * scale;
     const pivotY = startY + placement.normalizedPivot.y * scale;
@@ -77,7 +85,7 @@ export function FramePreviewCanvas({
     context.font = "10px Consolas, monospace";
     context.textBaseline = "top";
     context.fillText(`${placement.canvas.width}x${placement.canvas.height}`, startX, Math.max(2, startY - 14));
-  }, [image, nextPlacement, placement, previousPlacement]);
+  }, [image, nextPlacement, placement, previousPlacement, stabilityWarning]);
 
   return <canvas ref={canvasRef} className="frame-preview-canvas" aria-label="Normalized frame preview" />;
 }
