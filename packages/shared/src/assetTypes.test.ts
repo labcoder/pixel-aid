@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "./assetTypes";
-import type { AssetType, SceneAssetDiagnostics, TilesetSeamDiagnostics } from "./types";
+import type { AssetMode, AssetType, SceneAssetDiagnostics, TilesetSeamDiagnostics } from "./types";
 
 const assetTypes: AssetType[] = [
   "sprite",
@@ -31,6 +31,11 @@ describe("asset type taxonomy", () => {
     expect(assetTypeToMode("characterSheet")).toBe("spriteSheet");
     expect(assetTypeToMode("tileset")).toBe("tileSheet");
     expect(assetTypeToMode("tilemap")).toBe("tileSheet");
+  });
+
+  it("keeps asset modes limited to actual algorithm paths", () => {
+    expectTypeOf<AssetMode>().toEqualTypeOf<"single" | "spriteSheet" | "tileSheet">();
+    expect(assetTypeToMode("characterSheet")).toBe("spriteSheet");
   });
 
   it("marks full, inspect-only, and future support levels", () => {
