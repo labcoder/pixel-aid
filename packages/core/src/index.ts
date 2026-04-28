@@ -2,12 +2,14 @@ export type {
   AlphaMode,
   AlphaCleanupDiagnostics,
   AlphaCleanupSettings,
+  AssetTypeWarning,
   DownscaleMethod,
   FixOptions,
   GridCandidate,
   OutlineMode,
   PixelFixResult,
   RGBAImage,
+  SceneAssetDiagnostics,
   SheetLayoutDetection,
   SheetSliceOptions
 } from "@pixelaid/shared";
@@ -35,4 +37,6 @@ export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette
 export type { AnalyzePaletteDriftOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export { assertNotCancelled, FixCancelledError, phasePercent, reportProgress, shouldReportRow } from "./runtime";
 export type { FixCancellationSignal, FixProgressEvent, FixRuntimeOptions } from "./runtime";
+export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";
+export type { SceneAssetDiagnosticsOptions } from "./sceneDiagnostics";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
