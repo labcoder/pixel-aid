@@ -43,7 +43,7 @@ import type {
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import { sliceSheetFrames } from "@pixelaid/core";
-import { createPixelAssetManifest } from "@pixelaid/exporters";
+import { analyzeFrameStability, createPixelAssetManifest } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
@@ -98,6 +98,16 @@ import {
   type PlaybackStepDirection
 } from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
+import {
+  applyPivotOverrides,
+  clearAnimationPivotOverride,
+  clearFramePivotOverride,
+  emptyPivotOverrides,
+  renamePivotOverrides,
+  setAnimationPivotOverride,
+  setFramePivotOverride,
+  type PivotOverrideState
+} from "./lib/pivotOverrides";
 import {
   clampSelectedFrameIndex,
   clampSheetInteger,
@@ -219,6 +229,7 @@ export function App() {
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
   const [detectedSheetDiagnostics, setDetectedSheetDiagnostics] = useState<SheetLayoutDiagnostics | undefined>(undefined);
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
+  const [pivotOverrides, setPivotOverrides] = useState<PivotOverrideState>(emptyPivotOverrides);
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -310,9 +321,18 @@ export function App() {
   );
   const manualSheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
   const baseSheetFrames = sheetMode && detectedSheetFrames.length > 0 ? detectedSheetFrames : manualSheetFrames;
-  const sheetFrames = useMemo(
+  const timedSheetFrames = useMemo(
     () => applyFrameDurationOverrides(baseSheetFrames, frameDurationOverrides),
     [baseSheetFrames, frameDurationOverrides]
+  );
+  const sheetFrames = useMemo(
+    () =>
+      applyPivotOverrides({
+        frames: timedSheetFrames,
+        animations: detectedRowAnimations,
+        overrides: pivotOverrides
+      }),
+    [detectedRowAnimations, pivotOverrides, timedSheetFrames]
   );
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
   const plannedSheetLayout = useMemo(
@@ -367,6 +387,18 @@ export function App() {
     [detectedRowAnimations, selectedAnimationName, sheetFrames]
   );
   const timelineFrames = useMemo(() => animationFrameIndexes.map((index) => sheetFrames[index]!).filter(Boolean), [animationFrameIndexes, sheetFrames]);
+  const timelineStabilityDiagnostics = useMemo(
+    () => (timelineFrames.length > 0 ? analyzeFrameStability(timelineFrames) : null),
+    [timelineFrames]
+  );
+  const affectedTimelineFrameNames = useMemo(
+    () => new Set(timelineStabilityDiagnostics?.issues.flatMap((issue) => issue.affectedFrameNames) ?? []),
+    [timelineStabilityDiagnostics]
+  );
+  const currentFrameIssues = useMemo(
+    () => timelineStabilityDiagnostics?.issues.filter((issue) => (currentFrame ? issue.affectedFrameNames.includes(currentFrame.name) : false)) ?? [],
+    [currentFrame, timelineStabilityDiagnostics]
+  );
   const sourceTimelineFrames = useMemo(
     () => animationFrameIndexes.map((index) => sourceSheetFrames[index]!).filter(Boolean),
     [animationFrameIndexes, sourceSheetFrames]
@@ -581,6 +613,7 @@ export function App() {
     setDetectedSheetWarnings([]);
     setDetectedSheetDiagnostics(undefined);
     setFrameDurationOverrides({});
+    setPivotOverrides(emptyPivotOverrides);
     setSelectedAnimationName(ALL_ANIMATIONS);
   }, []);
 
@@ -638,6 +671,7 @@ export function App() {
     setDetectedSheetWarnings(layout?.warnings ?? []);
     setDetectedSheetDiagnostics(layout?.diagnostics);
     setFrameDurationOverrides({});
+    setPivotOverrides(emptyPivotOverrides);
     setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
     setIsPlaying(false);
     setPivotPreset("bottomCenter");
@@ -1318,10 +1352,64 @@ export function App() {
       setDetectedRowAnimations(result.animations);
       setDetectedSheetFrames(result.frames);
       setFrameDurationOverrides((current) => renameFrameDurationOverrides({ overrides: current, frameNames: result.frameNameMap }));
+      setPivotOverrides((current) =>
+        renamePivotOverrides({
+          overrides: current,
+          frameNames: result.frameNameMap,
+          animationNames: new Map([[fromName, result.selectedAnimationName]])
+        })
+      );
       setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
     },
     [detectedRowAnimations, detectedSheetFrames]
   );
+
+  const updateCurrentFramePivot = useCallback(
+    (axis: "x" | "y", value: number) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      const nextPivot = {
+        x: axis === "x" ? value : currentFrame.pivot.x,
+        y: axis === "y" ? value : currentFrame.pivot.y
+      };
+      setPivotOverrides((current) => setFramePivotOverride(current, currentFrame.name, nextPivot));
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+    },
+    [currentFrame]
+  );
+
+  const resetCurrentFramePivot = useCallback(() => {
+    if (!currentFrame) {
+      return;
+    }
+
+    setPivotOverrides((current) => clearFramePivotOverride(current, currentFrame.name));
+    setIsPlaying(false);
+    playbackAccumulatorRef.current = 0;
+  }, [currentFrame]);
+
+  const applyCurrentPivotToSelectedAnimation = useCallback(() => {
+    if (!currentFrame || selectedAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    setPivotOverrides((current) => setAnimationPivotOverride(current, selectedAnimationName, currentFrame.pivot));
+    setIsPlaying(false);
+    playbackAccumulatorRef.current = 0;
+  }, [currentFrame, selectedAnimationName]);
+
+  const resetSelectedAnimationPivot = useCallback(() => {
+    if (selectedAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    setPivotOverrides((current) => clearAnimationPivotOverride(current, selectedAnimationName));
+    setIsPlaying(false);
+    playbackAccumulatorRef.current = 0;
+  }, [selectedAnimationName]);
 
   const updateDetectedAnimationTiming = useCallback(
     (name: string, timing: { fps?: number; loop?: boolean; direction?: PlaybackDirection }) => {
@@ -2527,6 +2615,7 @@ export function App() {
                     placement={framePreviewPlacement}
                     previousPlacement={showOnionSkin ? onionSkinPlacements.previous : null}
                     nextPlacement={showOnionSkin ? onionSkinPlacements.next : null}
+                    stabilityWarning={currentFrameIssues.length > 0}
                   />
                   <div className="frame-preview-meta">
                     <strong>{framePreviewPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
@@ -2539,6 +2628,51 @@ export function App() {
                       {fixResult ? "Previewing fixed output" : "Previewing source frame bounds"}
                       {showOnionSkin ? " with onion skin" : ""}
                     </small>
+                    {timelineStabilityDiagnostics ? (
+                      <div className={`stability-summary ${timelineStabilityDiagnostics.issues.length > 0 ? "is-warning" : "is-stable"}`}>
+                        <strong>{timelineStabilityDiagnostics.issues.length > 0 ? "Stability warnings" : "Stable clip"}</strong>
+                        <span>
+                          Baseline {timelineStabilityDiagnostics.maxBaselineDeltaPx}px / Pivot {timelineStabilityDiagnostics.maxPivotDeltaPx}px / Center{" "}
+                          {timelineStabilityDiagnostics.maxContentCenterDeltaPx}px
+                        </span>
+                        {timelineStabilityDiagnostics.issues.slice(0, 3).map((issue) => (
+                          <small key={issue.code}>
+                            {issue.message} {issue.affectedFrameNames.join(", ")}
+                          </small>
+                        ))}
+                      </div>
+                    ) : null}
+                    {currentFrame ? (
+                      <div className="pivot-correction-controls" aria-label="Pivot correction">
+                        <NumberField
+                          label="Pivot X"
+                          value={currentFrame.pivot.x}
+                          min={0}
+                          max={Math.max(currentFrame.rect.w, currentFrame.pivot.x)}
+                          onChange={(value) => updateCurrentFramePivot("x", value)}
+                        />
+                        <NumberField
+                          label="Pivot Y"
+                          value={currentFrame.pivot.y}
+                          min={0}
+                          max={Math.max(currentFrame.rect.h, currentFrame.pivot.y)}
+                          onChange={(value) => updateCurrentFramePivot("y", value)}
+                        />
+                        <button type="button" onClick={resetCurrentFramePivot}>
+                          Reset frame
+                        </button>
+                        {selectedAnimationName !== ALL_ANIMATIONS ? (
+                          <>
+                            <button type="button" onClick={applyCurrentPivotToSelectedAnimation}>
+                              Apply to clip
+                            </button>
+                            <button type="button" onClick={resetSelectedAnimationPivot}>
+                              Reset clip
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 {detectedRowAnimations.length > 0 ? (
@@ -2612,8 +2746,15 @@ export function App() {
                     <button
                       key={frame.name}
                       type="button"
-                      className={globalFrameIndex === selectedFrameIndex ? "active" : ""}
-                      title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.durationMs)}ms`}
+                      className={[
+                        globalFrameIndex === selectedFrameIndex ? "active" : "",
+                        affectedTimelineFrameNames.has(frame.name) ? "has-stability-warning" : ""
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.durationMs)}ms${
+                        affectedTimelineFrameNames.has(frame.name) ? " stability warning" : ""
+                      }`}
                       onClick={() => selectPlaybackFrame(index)}
                     >
                       <strong>{index + 1}</strong>
