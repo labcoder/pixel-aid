@@ -569,12 +569,6 @@ export function App() {
   }, [frameHeight, frameWidth]);
 
   useEffect(() => {
-    if (mode === "characterSheet") {
-      setMode("spriteSheet");
-    }
-  }, [mode]);
-
-  useEffect(() => {
     setViewMode((current) => coerceEditorViewMode(mode, current));
   }, [mode]);
 
@@ -3339,7 +3333,7 @@ function formatSuggestionReason(
 }
 
 function defaultAssetTypeForMode(mode: AssetMode): AssetType {
-  if (mode === "spriteSheet" || mode === "characterSheet") {
+  if (mode === "spriteSheet") {
     return "spriteSheet";
   }
   if (mode === "tileSheet") {

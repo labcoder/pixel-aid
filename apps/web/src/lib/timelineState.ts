@@ -6,7 +6,7 @@ export type TimelineState = {
 };
 
 export function isSheetLikeMode(mode: AssetMode): boolean {
-  return mode === "spriteSheet" || mode === "characterSheet" || mode === "tileSheet";
+  return mode === "spriteSheet" || mode === "tileSheet";
 }
 
 export function getTimelineState(mode: AssetMode, frameCount: number): TimelineState {
