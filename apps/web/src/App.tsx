@@ -37,7 +37,9 @@ import type {
   PixelFixResult,
   RGBAImage,
   SheetLayoutDiagnostics,
-  SpriteFrame
+  SpriteFrame,
+  WorkerProgress,
+  WorkerProgressStage
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import { sliceSheetFrames } from "@pixelaid/core";
@@ -66,6 +68,7 @@ import {
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
+import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
@@ -244,12 +247,14 @@ export function App() {
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [fixStatus, setFixStatus] = useState<string | null>(null);
+  const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const activeJobRef = useRef<FixJob | null>(null);
   const fixStartCancelledRef = useRef(false);
+  const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const playbackAccumulatorRef = useRef(0);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
@@ -269,8 +274,8 @@ export function App() {
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
   const isImporting = importStatus !== null;
   const isAnalyzing = analysisStatus !== null;
-  const isFixing = fixStatus !== null;
-  const busyStatus = importStatus ?? analysisStatus ?? fixStatus;
+  const isFixing = fixStatus !== null || fixProgress !== null;
+  const busyStatus = importStatus ?? analysisStatus ?? (fixProgress ? formatFixProgress(fixProgress) : fixStatus);
   const assetPanelStatus = importStatus ?? analysisStatus;
   const sourcePalette = useMemo(
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
@@ -810,10 +815,13 @@ export function App() {
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
     fixStartCancelledRef.current = false;
+    lastLoggedFixStageRef.current = undefined;
     setFixStatus(sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
+    setFixProgress({ requestId: "pending", stage: "decode-prep", percent: 0 });
     await waitForNextPaint();
     if (fixStartCancelledRef.current) {
       setFixStatus(null);
+      setFixProgress(null);
       return;
     }
 
@@ -823,10 +831,19 @@ export function App() {
       await waitForNextPaint();
       if (fixStartCancelledRef.current) {
         setFixStatus(null);
+        setFixProgress(null);
         return;
       }
 
-      const job = startFixJob(selectedAsset.image, options);
+      const job = startFixJob(selectedAsset.image, options, {
+        onProgress: (progress) => {
+          setFixProgress(progress);
+          if (shouldLogProgressStage(lastLoggedFixStageRef.current, progress.stage)) {
+            lastLoggedFixStageRef.current = progress.stage;
+            appendLog(`Fix progress: ${formatFixProgress(progress)}`);
+          }
+        }
+      });
       activeJobRef.current = job;
       appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
 
@@ -846,10 +863,12 @@ export function App() {
             activeJobRef.current = null;
           }
           setFixStatus(null);
+          setFixProgress(null);
         });
     } catch (error) {
       appendLog(error instanceof Error ? error.message : "Fix failed to start");
       setFixStatus(null);
+      setFixProgress(null);
     }
   }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, selectedAsset, sheetFrames.length, sheetMode]);
 
@@ -857,9 +876,18 @@ export function App() {
     if (!activeJobRef.current) {
       fixStartCancelledRef.current = true;
       setFixStatus(null);
+      setFixProgress((progress) =>
+        progress ? { ...progress, stage: "cancelled", percent: 100, message: "Cancelling" } : { requestId: "pending", stage: "cancelled", percent: 100, message: "Cancelling" }
+      );
       return;
     }
     setFixStatus("Cancelling fix...");
+    setFixProgress((progress) => ({
+      requestId: activeJobRef.current?.requestId ?? progress?.requestId ?? "pending",
+      stage: "cancelled",
+      percent: 100,
+      message: "Cancelling"
+    }));
     activeJobRef.current?.cancel();
   }, []);
 
@@ -2637,6 +2665,7 @@ export function App() {
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
                   ["Halos", removeHalos ? "remove" : "keep"],
+                  ["Progress", fixProgress ? formatFixProgress(fixProgress) : fixStatus ?? "--"],
                   [
                     "Outline",
                     outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
