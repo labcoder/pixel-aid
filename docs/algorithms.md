@@ -83,6 +83,18 @@ Detected frames can be manually nudged or resized in the web viewport. Move and 
 
 Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
 
+## Tileset Seam Diagnostics
+
+`analyzeTilesetSeams` compares adjacent tile edges in native pixel space using the current frame/cell layout. It checks each right-left neighbor pair and each bottom-top neighbor pair. RGB edge distance is normalized against the maximum RGB distance, and alpha mismatches contribute seam risk when one edge is visible and the other is transparent.
+
+Diagnostics report checked seam count, average and maximum edge delta, seam risk, lighting risk, and issue records for edge mismatch or lighting discontinuity. The pass is inspect-first: it warns and powers the repeat preview, but it does not rewrite tile pixels or invent tile metadata. Engine-specific tileset metadata remains an exporter concern.
+
+## Scene Diagnostics
+
+`analyzeSceneAssetDiagnostics` is used for backgrounds and tilemaps. It samples large images with a bounded deterministic stride, counts coarse 5-bit RGB bins, and estimates detail density from local luminance differences. The result tells the UI when an asset has broad palette density or dense scene detail that would be harmed by sprite-style cleanup.
+
+Background diagnostics always bias toward preservation-first cleanup. Tilemap diagnostics add an inspect-only warning because PixelAid can inspect a map-like image today but does not yet import or export structured map data.
+
 ### Animation Stability Diagnostics
 
 PixelAid performs metadata-first stability checks for sprite sheets. It compares baseline, pivot, frame size, content center, and duration across the selected clip. These diagnostics are intentionally inspect-first: they warn about likely wobble or drift without rewriting pixels automatically.

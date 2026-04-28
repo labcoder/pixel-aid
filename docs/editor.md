@@ -26,17 +26,19 @@ Supported asset types in 0.1.0:
 | Sprite sheet | Sprite sheet | Full | Generic sheet/frame workflow. |
 | Animation sheet | Sprite sheet | Full | Animation is stored as frames and timeline clips, not a separate processing mode. |
 | Character sheet | Sprite sheet | Full | Character semantics stay in editable frame rows and clip metadata. |
-| Tileset | Tile sheet | Inspect-only | Existing grid/cell controls work; seam diagnostics and tile metadata are future work. |
+| Tileset | Tile sheet | Full | Existing grid/cell controls work; repeat preview and seam diagnostics are available. Engine-specific tile metadata is future export work. |
 | Portrait | Single | Inspect-only | Uses generic PNG/manifest export with preservation-oriented cleanup. |
 | UI element | Single | Inspect-only | Uses conservative alpha/effect cleanup. |
 | Background | Single | Inspect-only | Uses a larger palette budget and avoids aggressive cleanup by default. |
-| Tilemap | Tile sheet | Future | Needs map-data import/export before it can be engine-ready. |
+| Tilemap | Tile sheet | Inspect-only | Map-data import/export is not scoped yet, so PixelAid preserves layout and reports map-aware warnings. |
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
 
 Manual Asset type overrides are stored per imported asset. A character import can stay set to Sprite while another import stays set to Tileset, and switching between assets restores each asset's own classification.
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
+
+Tilesets use conservative cleanup defaults because a clean repeated tile matters more than removing every small mark. The Asset inspector reports seam risk and lighting risk from adjacent tile edges. Backgrounds and tilemaps get scene diagnostics for coarse color-bin count, detail density, and preservation warnings so sprite-style crop, binary alpha, and denoise choices are easier to review before Fix.
 
 For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips for the timeline player. It can split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, merge nearby disconnected body/effect components when mild drift still points to a shared column grid, and name row clips from confident blocky left-side labels such as `idle`, `walk`, or `jump`.
 
@@ -75,6 +77,8 @@ Crop to detected bounds keeps single-sprite output trimmed to the detected foreg
 # Frame / Cell
 
 Sprite sheet and tile sheet modes expose frame controls. In manual rectangular mode, Frame W and Frame H are the size of each output tile inside the larger fixed image. Rows, columns, margin, and spacing describe how those tiles are laid out for slicing and export metadata.
+
+For tilesets, the same Frame W/H, Rows, Columns, Margin, and Spacing values also feed seam analysis. PixelAid compares neighboring tile edges using the current cell layout and reports edge mismatch and lighting discontinuity without rewriting tile pixels.
 
 Frame boxes and pivot markers are drawn on the Input view before Fix using the current grid scale. This lets margin, spacing, rows, columns, and frame size be adjusted against the imported source instead of waiting until after the image has been downsampled.
 
@@ -136,6 +140,8 @@ Cleanup controls run after block downsampling and alpha handling.
 
 The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the editor omits the player panel and gives the bottom area to logs and metrics.
 
+Tilesets replace the sprite player with a canvas repeat preview. The preview draws the selected tile in a 3x3 grid with smoothing disabled and overlays seam guides when diagnostics find repeat risk. This keeps tile inspection separate from animation playback while still sharing the same bottom logs and metrics area.
+
 The current timeline player uses the generated sheet frames in row-major order. It can:
 
 - Switch between detected row clips or all rows when Auto Suggest found row animation metadata.
@@ -161,6 +167,8 @@ Clicking a frame, dragging or resizing a detected source box, scrubbing, steppin
 # Metrics
 
 Metrics are split between source and output. Source metrics describe the imported image. Output metrics describe the fixed result and the operation settings that produced it.
+
+Tileset diagnostics surface seam risk and lighting risk in the Asset inspector and repeat-preview panel. Scene diagnostics for backgrounds and tilemaps report color-bin density, detail density, and preservation warnings so broad scene assets are not judged by sprite cleanup expectations.
 
 The bottom panel can be dragged upward from its top handle when logs, metrics, or the frame list need more room.
 
