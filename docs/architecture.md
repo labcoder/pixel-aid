@@ -16,7 +16,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 1. The web app decodes an imported image file into an `RGBAImage`.
 2. Import status is surfaced in the editor while decode and first-pass analysis run.
 3. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
-4. Auto Suggest classifies the selected `AssetType`, returns confidence, reason text, and support warnings, then derives the compatible processing `AssetMode`. Single-image types use target dimensions; sprite, animation, character, and tile sheets use frame/cell controls. Sheet suggestions can consume row-band detection, outlined-cell separators, first-pass content-centered uneven-gutter normalization, conservative component grouping for mildly drifted unboxed sheets, and common blocky row-label names.
+4. Auto Suggest classifies the selected `AssetType`, returns confidence, reason text, and support warnings, then derives the compatible processing `AssetMode`. Single-image types use target dimensions; sprite, animation, and character sheets use `spriteSheet` processing and frame/cell controls, while tile assets use `tileSheet` processing. Sheet suggestions can consume row-band detection, outlined-cell separators, first-pass content-centered uneven-gutter normalization, conservative component grouping for mildly drifted unboxed sheets, and common blocky row-label names.
 5. Auto Suggest returns and caches the grid candidates it computed so the grid preview panel can render explanations without rerunning detection during React render.
 6. The viewport renders native buffers through Canvas2D with smoothing disabled.
 7. The app shows a preparing/fixing status, clones the selected image buffer, and transfers it to a Web Worker.

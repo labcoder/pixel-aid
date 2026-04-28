@@ -32,6 +32,8 @@ Supported asset types in 0.1.0:
 | Background | Single | Inspect-only | Uses a larger palette budget and avoids aggressive cleanup by default. |
 | Tilemap | Tile sheet | Inspect-only | Map-data import/export is not scoped yet, so PixelAid preserves layout and reports map-aware warnings. |
 
+Character sheet remains a user-facing asset type, but it uses sprite-sheet processing. Character-specific meaning lives in editable frame rows, timeline clips, pivots, animation names, and manifest `assetType` metadata rather than a separate low-level algorithm mode.
+
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
 
 Manual Asset type overrides are stored per imported asset. A character import can stay set to Sprite while another import stays set to Tileset, and switching between assets restores each asset's own classification.
