@@ -75,7 +75,10 @@ export function getGuidedFixSummary(input: GuidedFixSummaryInput): GuidedFixSumm
   if (input.mode === "tileSheet") {
     return {
       title,
-      intent: "Start by checking cell size, palette limits, and transparent background handling before export.",
+      intent:
+        input.assetType === "tileset"
+          ? "Start by checking cell size, repeat preview, seam risk, palette limits, and transparent background handling."
+          : "Start by checking cell size, palette limits, and transparent background handling before export.",
       metrics: [
         `${input.rows}x${input.columns} cells`,
         `Output ${input.targetWidth}x${input.targetHeight}`,

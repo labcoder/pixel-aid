@@ -25,11 +25,21 @@ describe("asset type cleanup presets", () => {
     expect(getAssetTypeCleanupPreset("characterSheet").lockPaletteAcrossFrames).toBe(true);
   });
 
-  test("keeps tileset cleanup conservative until seam diagnostics exist", () => {
+  test("keeps tileset cleanup conservative while enabling seam diagnostics", () => {
     const preset = getAssetTypeCleanupPreset("tileset");
 
+    expect(preset.alpha).toBe("preserve");
+    expect(preset.removeOrphans).toBe(false);
     expect(preset.jaggyCleanup).toBe(false);
-    expect(preset.warningCodes).toContain("tileset-seams-inspect-only");
+    expect(preset.warningCodes).toContain("tileset-engine-metadata-next");
+  });
+
+  test("keeps tilemap-like manual assets preservation-oriented", () => {
+    const preset = getAssetTypeCleanupPreset("tilemap");
+
+    expect(preset.alpha).toBe("preserve");
+    expect(preset.denoiseStrength).toBe(0);
+    expect(getAssetTypeWarnings("tilemap").map((warning) => warning.code)).toContain("tilemap-inspect-only");
   });
 
   test("preserves backgrounds with a larger palette budget and no denoise", () => {

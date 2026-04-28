@@ -126,7 +126,7 @@ function classifyAssetType(input: {
   if (input.mode === "tileSheet") {
     assetType = "tileset";
     confidence = 0.78;
-    reason = "Square, evenly divisible source looks like a tileset; seam diagnostics are inspect-only in 0.1.0.";
+    reason = "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.";
   } else if (input.mode === "spriteSheet") {
     if (input.sheetLayoutScore >= 0.55 || (input.sheetLayout?.rowAnimations.length ?? 0) >= 2) {
       assetType = "animationSheet";

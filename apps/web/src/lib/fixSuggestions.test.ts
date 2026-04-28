@@ -81,7 +81,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.assetType).toBe("tileset");
     expect(suggestion.mode).toBe("tileSheet");
     expect(suggestion.maxColors).toBe(16);
-    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("tileset-seams-inspect-only");
+    expect(suggestion.categoryWarnings.map((warning) => warning.code)).toContain("tileset-engine-metadata-next");
   });
 
   test("uses grid detection candidate dimensions when available", () => {

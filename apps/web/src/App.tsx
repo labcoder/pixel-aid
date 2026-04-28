@@ -42,7 +42,7 @@ import type {
   WorkerProgressStage
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
-import { sliceSheetFrames } from "@pixelaid/core";
+import { analyzeSceneAssetDiagnostics, analyzeTilesetSeams, sliceSheetFrames } from "@pixelaid/core";
 import {
   analyzeFrameStability,
   createExportValidationReport,
@@ -54,6 +54,7 @@ import {
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
+import { TileRepeatPreviewCanvas } from "./components/TileRepeatPreviewCanvas";
 import { ViewportCanvas } from "./components/ViewportCanvas";
 import {
   ALL_ANIMATIONS,
@@ -143,6 +144,8 @@ import {
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import { createTileRepeatPreviewLayout, getTilePreviewFrame } from "./lib/tileRepeatPreview";
+import { formatSceneDiagnosticsSummary, formatTilesetDiagnosticsSummary } from "./lib/tileDiagnosticsView";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type EditorViewMode } from "./lib/viewportModes";
@@ -420,6 +423,33 @@ export function App() {
     [animationFrameIndexes, sourceSheetFrames]
   );
   const previewImage = fixResult?.image ?? selectedAsset?.image ?? null;
+  const tilesetDiagnostics = useMemo(
+    () =>
+      assetType === "tileset" && previewImage && sheetMode
+        ? analyzeTilesetSeams(previewImage, {
+            tileWidth: frameWidth,
+            tileHeight: frameHeight,
+            margin: sheetMargin,
+            spacing: sheetSpacing
+          })
+        : null,
+    [assetType, frameHeight, frameWidth, previewImage, sheetMargin, sheetMode, sheetSpacing]
+  );
+  const sceneDiagnostics = useMemo(
+    () =>
+      (assetType === "background" || assetType === "tilemap") && selectedAsset
+        ? analyzeSceneAssetDiagnostics(selectedAsset.image, { assetType, spritePaletteBudget: 32 })
+        : null,
+    [assetType, selectedAsset]
+  );
+  const tileDiagnosticsSummary = useMemo(() => formatTilesetDiagnosticsSummary(tilesetDiagnostics), [tilesetDiagnostics]);
+  const sceneDiagnosticsSummary = useMemo(() => formatSceneDiagnosticsSummary(sceneDiagnostics), [sceneDiagnostics]);
+  const tilePreviewFrame = useMemo(
+    () => getTilePreviewFrame(fixResult ? sheetFrames : sourceSheetFrames, selectedFrameIndex),
+    [fixResult, selectedFrameIndex, sheetFrames, sourceSheetFrames]
+  );
+  const tileRepeatPreviewLayout = useMemo(() => createTileRepeatPreviewLayout(tilePreviewFrame), [tilePreviewFrame]);
+  const tileRepeatPreviewSeamGuideLines = tilesetDiagnostics?.issues.length ? tileRepeatPreviewLayout.seamGuideLines : [];
   const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
   const framePreviewPlacement = useMemo(
     () => getFramePreviewPlacement(timelineFrames, timelinePosition, normalizeTimelineFrames, fixResult ? [] : sourceTimelineFrames),
@@ -474,8 +504,14 @@ export function App() {
   );
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
-  const bottomPanelSections = useMemo(() => getBottomPanelSections(mode), [mode]);
+  const bottomPanelSections = useMemo(() => getBottomPanelSections(mode, assetType), [assetType, mode]);
   const showTimelinePanel = bottomPanelSections.includes("timeline");
+  const showTilePreviewPanel = bottomPanelSections.includes("tilePreview");
+  const bottomContentClassName = showTimelinePanel
+    ? "bottom-content"
+    : showTilePreviewPanel
+      ? "bottom-content with-tile-preview"
+      : "bottom-content without-timeline";
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
   const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
   const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
@@ -1815,6 +1851,30 @@ export function App() {
             ))}
           </div>
         ) : null}
+        {assetType === "tileset" ? (
+          <>
+            <ReadonlyField label="Seam risk" value={tileDiagnosticsSummary.summary} text />
+            {tileDiagnosticsSummary.warnings.length > 0 ? (
+              <div className="asset-type-warning-list" aria-label="Tileset diagnostics">
+                {tileDiagnosticsSummary.warnings.slice(0, 3).map((warning, index) => (
+                  <p key={`${warning}-${index}`}>{warning}</p>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : null}
+        {sceneDiagnostics ? (
+          <>
+            <ReadonlyField label="Scene detail" value={sceneDiagnosticsSummary.summary} text />
+            {sceneDiagnosticsSummary.warnings.length > 0 ? (
+              <div className="asset-type-warning-list" aria-label="Scene diagnostics">
+                {sceneDiagnosticsSummary.warnings.map((warning, index) => (
+                  <p key={`${warning}-${index}`}>{warning}</p>
+                ))}
+              </div>
+            ) : null}
+          </>
+        ) : null}
         <SelectField
           label="Processing mode"
           value={mode}
@@ -2564,6 +2624,12 @@ export function App() {
               Timeline
             </button>
           ) : null}
+          {showTilePreviewPanel ? (
+            <button type="button" className="active">
+              <Layers size={15} />
+              Repeat Preview
+            </button>
+          ) : null}
           <button type="button">
             <Terminal size={15} />
             Logs
@@ -2573,7 +2639,7 @@ export function App() {
             Metrics
           </button>
         </div>
-        <div className={showTimelinePanel ? "bottom-content" : "bottom-content without-timeline"}>
+        <div className={bottomContentClassName}>
           {showTimelinePanel ? (
           <section>
             <h2>Sprite Player</h2>
@@ -2839,6 +2905,32 @@ export function App() {
               <p className="empty-panel-message">{timelineState.message}</p>
             )}
           </section>
+          ) : null}
+          {showTilePreviewPanel ? (
+            <section className="tile-preview-section" aria-label="Tile repeat preview">
+              <div className="tile-preview-heading">
+                <h2>Repeat Preview</h2>
+                <span>{tileDiagnosticsSummary.status}</span>
+              </div>
+              <div className="tile-preview-panel">
+                <TileRepeatPreviewCanvas
+                  image={previewImage}
+                  layout={tileRepeatPreviewLayout}
+                  seamIssueGuideLines={tileRepeatPreviewSeamGuideLines}
+                />
+                <div className="frame-preview-meta">
+                  <strong>{tilePreviewFrame ? `${tilePreviewFrame.rect.w}x${tilePreviewFrame.rect.h} tile` : "No tile selected"}</strong>
+                  <span>{tileDiagnosticsSummary.summary}</span>
+                  {tileDiagnosticsSummary.warnings.length > 0 ? (
+                    tileDiagnosticsSummary.warnings.slice(0, 3).map((warning, index) => (
+                      <small key={`${warning}-${index}`}>{warning}</small>
+                    ))
+                  ) : (
+                    <small>Adjacent tile edges are within current warning thresholds.</small>
+                  )}
+                </div>
+              </div>
+            </section>
           ) : null}
           <section>
             <h2>Console</h2>
