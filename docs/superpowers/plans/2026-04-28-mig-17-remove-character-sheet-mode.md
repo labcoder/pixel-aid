@@ -221,7 +221,7 @@ git commit -m "docs(shared): document character sheet asset semantics"
 **Files:**
 - Modify: `docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md`
 
-- [ ] **Step 1: Full verification**
+- [x] **Step 1: Full verification**
 
 Run:
 
@@ -233,7 +233,7 @@ npm run build
 
 Expected: pass.
 
-- [ ] **Step 2: Local server smoke**
+- [x] **Step 2: Local server smoke**
 
 Start or reuse a dev server on the next free local port and confirm HTTP 200:
 
@@ -242,15 +242,15 @@ npm run dev -w @pixelaid/web -- --host 127.0.0.1 --port 5178 --strictPort
 Invoke-WebRequest -Uri http://127.0.0.1:5178 -UseBasicParsing
 ```
 
-- [ ] **Step 3: Update Linear**
+- [x] **Step 3: Update Linear**
 
 Add a completion comment to `MIG-17` with delivered scope, verification results, and branch name. Move `MIG-17` to Done.
 
-- [ ] **Step 4: Foundation handoff**
+- [x] **Step 4: Foundation handoff**
 
 Verify the MIG worktree is clean, then fast-forward `codex/pixelaid-roadmap-foundation` from `codex/mig-17-remove-character-sheet-mode`.
 
-- [ ] **Step 5: Commit final checklist**
+- [x] **Step 5: Commit final checklist**
 
 ```powershell
 git add docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md
