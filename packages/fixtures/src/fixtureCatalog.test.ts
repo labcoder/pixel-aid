@@ -42,11 +42,28 @@ describe("cleanup fixture catalog", () => {
         "palette-drift-walk-4f",
         "uneven-gutter-labeled-sheet",
         "drifted-effect-sheet",
+        "baseline-drift-animation-sheet",
         "tileset-seams-4x4-16",
         "large-landscape-bands",
         "large-non-sprite-background"
       ])
     );
+  });
+
+  test("includes unstable animation sheet warning metadata", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "baseline-drift-animation-sheet");
+    const frames = fixture?.expected.sheet?.frames ?? [];
+
+    expect(fixture).toBeDefined();
+    expect(fixture?.expected.sheet?.options).toMatchObject({ frameWidth: 32, frameHeight: 32, rows: 1, columns: 4, margin: 2, spacing: 6 });
+    expect(fixture?.expected.sheet?.rowFrameCounts).toEqual([4]);
+    expect(fixture?.expected.sheet?.animationNames).toEqual(["walk_down"]);
+    expect(fixture?.expected.sheet?.expectedWarnings).toEqual(["baseline-drift", "content-center-drift"]);
+    expect(fixture?.createImage()).toMatchObject({ width: 160, height: 40 });
+    expect(frames).toHaveLength(4);
+    expect(new Set(frames.map((frame) => `${frame.rect.w}x${frame.rect.h}`))).toEqual(new Set(["32x32"]));
+    expect(new Set(frames.map((frame) => frame.pivot.y)).size).toBeGreaterThan(1);
+    expect(new Set(frames.map((frame) => `${frame.sourceRect?.x},${frame.sourceRect?.y}`)).size).toBeGreaterThan(1);
   });
 
   test("keeps large benchmark sources lazy", () => {
