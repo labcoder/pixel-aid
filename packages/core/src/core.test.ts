@@ -5,6 +5,7 @@ import {
   applyDenoise,
   applyHaloRemoval,
   applyOutlineCleanup,
+  assertNotCancelled,
   analyzePaletteDrift,
   createImage,
   detectSheetLayout,
@@ -12,14 +13,17 @@ import {
   detectGridCandidates,
   downsampleBlocks,
   extractPalette,
+  FixCancelledError,
   fixImage,
   pixelOffset,
   readPixel,
   remapToPalette,
+  reportProgress,
   resolvePalette,
   sliceSheetFrames,
   writePixel
 } from "./index";
+import type { FixProgressEvent } from "./index";
 import type { FixOptions, PaletteLockScope, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 const rgba = (r: number, g: number, b: number, a = 255) => [r, g, b, a] as const;
@@ -413,6 +417,25 @@ describe("RGBA image helpers", () => {
 
     expect(pixelOffset(image, 2, 1)).toBe(20);
     expect(readPixel(image, 2, 1)).toEqual([12, 34, 56, 78]);
+  });
+});
+
+describe("fix runtime hooks", () => {
+  test("assertNotCancelled throws FixCancelledError when signal is aborted", () => {
+    expect(() => assertNotCancelled({ aborted: true, reason: "User stopped the fix" })).toThrow(FixCancelledError);
+    expect(() => assertNotCancelled({ aborted: true, reason: "User stopped the fix" })).toThrow("User stopped the fix");
+  });
+
+  test("reportProgress clamps progress to 0..100 and preserves optional message", () => {
+    const events: FixProgressEvent[] = [];
+
+    reportProgress({ onProgress: (event) => events.push(event) }, "downsampling", -12.2, "Starting rows");
+    reportProgress({ onProgress: (event) => events.push(event) }, "palette-remap", 130.7);
+
+    expect(events).toEqual([
+      { stage: "downsampling", percent: 0, message: "Starting rows" },
+      { stage: "palette-remap", percent: 100 }
+    ]);
   });
 });
 
