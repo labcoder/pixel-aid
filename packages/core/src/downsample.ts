@@ -1,6 +1,8 @@
-import type { AlphaMode, DownscaleMethod, RGBAImage } from "@pixelaid/shared";
+import type { AlphaMode, DownscaleMethod, RGBAImage, WorkerProgressStage } from "@pixelaid/shared";
 import { clampByte, packQuantizedRgb, unpackRgb } from "./color";
 import { createImage } from "./image";
+import { assertNotCancelled, phasePercent, reportProgress, shouldReportRow } from "./runtime";
+import type { FixRuntimeOptions } from "./runtime";
 
 export type DownsampleOptions = {
   outputWidth: number;
@@ -18,6 +20,13 @@ export type DownsampleOptions = {
   adaptiveCoverage?: number;
 };
 
+export type LoopProgressOptions = {
+  runtime?: FixRuntimeOptions | undefined;
+  stage: WorkerProgressStage;
+  startPercent: number;
+  endPercent: number;
+};
+
 type DominantResult = {
   color: number;
   coverage: number;
@@ -31,11 +40,18 @@ type ColorCluster = {
   b: number;
 };
 
-export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions): RGBAImage {
+export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, progress?: LoopProgressOptions): RGBAImage {
+  assertNotCancelled(progress?.runtime?.signal);
   const output = createImage(options.outputWidth, options.outputHeight);
   const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
 
   for (let y = 0; y < options.outputHeight; y += 1) {
+    if (progress && shouldReportRow(y, options.outputHeight)) {
+      assertNotCancelled(progress.runtime?.signal);
+      reportProgress(progress.runtime, progress.stage, phasePercent(progress.startPercent, progress.endPercent, y, options.outputHeight));
+      assertNotCancelled(progress.runtime?.signal);
+    }
+
     for (let x = 0; x < options.outputWidth; x += 1) {
       setBlockBounds(block, image, x, y, options);
       const pixel =
@@ -53,6 +69,12 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions): 
       output.data[offset + 2] = pixel[2];
       output.data[offset + 3] = options.alpha === "binary" ? (pixel[3] >= 128 ? 255 : 0) : pixel[3];
     }
+  }
+
+  assertNotCancelled(progress?.runtime?.signal);
+  if (progress) {
+    reportProgress(progress.runtime, progress.stage, progress.endPercent);
+    assertNotCancelled(progress.runtime?.signal);
   }
 
   return output;

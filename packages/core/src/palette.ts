@@ -11,6 +11,8 @@ import type {
 } from "@pixelaid/shared";
 import { cloneImage } from "./image";
 import { clampByte, colorDistanceSq, packQuantizedRgb, parseHexColor, rgbToHex, unpackRgb } from "./color";
+import { assertNotCancelled, phasePercent, reportProgress, shouldReportRow } from "./runtime";
+import type { LoopProgressOptions } from "./downsample";
 
 type ColorCount = {
   color: number;
@@ -636,36 +638,51 @@ function quantizedHexColor(hex: string): string {
   return rgbToHex(packQuantizedRgb(r, g, b));
 }
 
-export function remapToPalette(image: RGBAImage, palette: readonly string[]): RGBAImage {
+export function remapToPalette(image: RGBAImage, palette: readonly string[], progress?: LoopProgressOptions): RGBAImage {
   if (palette.length === 0) {
     throw new Error("palette must contain at least one color");
   }
 
   const colors = palette.map(parseHexColor);
+  assertNotCancelled(progress?.runtime?.signal);
   const output = cloneImage(image);
 
-  for (let offset = 0; offset < output.data.length; offset += 4) {
-    if (output.data[offset + 3]! < 16) {
-      continue;
+  for (let y = 0; y < output.height; y += 1) {
+    if (progress && shouldReportRow(y, output.height)) {
+      assertNotCancelled(progress.runtime?.signal);
+      reportProgress(progress.runtime, progress.stage, phasePercent(progress.startPercent, progress.endPercent, y, output.height));
+      assertNotCancelled(progress.runtime?.signal);
     }
 
-    const source = packQuantizedRgb(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!);
-    let best = colors[0]!;
-    let bestDistance = Number.POSITIVE_INFINITY;
-
-    for (let i = 0; i < colors.length; i += 1) {
-      const color = colors[i]!;
-      const distance = colorDistanceSq(source, color);
-      if (distance < bestDistance) {
-        best = color;
-        bestDistance = distance;
+    const rowEnd = (y * output.width + output.width) * 4;
+    for (let offset = y * output.width * 4; offset < rowEnd; offset += 4) {
+      if (output.data[offset + 3]! < 16) {
+        continue;
       }
-    }
 
-    const [r, g, b] = unpackRgb(best);
-    output.data[offset] = r;
-    output.data[offset + 1] = g;
-    output.data[offset + 2] = b;
+      const source = packQuantizedRgb(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!);
+      let best = colors[0]!;
+      let bestDistance = Number.POSITIVE_INFINITY;
+
+      for (let i = 0; i < colors.length; i += 1) {
+        const color = colors[i]!;
+        const distance = colorDistanceSq(source, color);
+        if (distance < bestDistance) {
+          best = color;
+          bestDistance = distance;
+        }
+      }
+
+      output.data[offset] = (best >> 16) & 0xff;
+      output.data[offset + 1] = (best >> 8) & 0xff;
+      output.data[offset + 2] = best & 0xff;
+    }
+  }
+
+  assertNotCancelled(progress?.runtime?.signal);
+  if (progress) {
+    reportProgress(progress.runtime, progress.stage, progress.endPercent);
+    assertNotCancelled(progress.runtime?.signal);
   }
 
   return output;

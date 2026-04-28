@@ -1315,6 +1315,95 @@ describe("sheet slicing", () => {
 });
 
 describe("fix pipeline", () => {
+  test("reports coarse progress stages for a single image fix", () => {
+    const events: FixProgressEvent[] = [];
+
+    fixImage(blockySource(), defaultOptions, {
+      onProgress: (event) => events.push(event)
+    });
+
+    const firstStageEvents = new Map(events.map((event) => [event.stage, event]));
+    expect([...firstStageEvents.keys()]).toEqual([
+      "grid-detection",
+      "downsampling",
+      "alpha-cleanup",
+      "palette-remap",
+      "export-prep",
+      "complete"
+    ]);
+    expect(events.at(-1)).toEqual({ stage: "complete", percent: 100 });
+    expect(events.map((event) => event.percent)).toEqual([...events.map((event) => event.percent)].sort((a, b) => a - b));
+  });
+
+  test("cancels a sheet fix between frame batches without returning a result", () => {
+    const source = createImage(8, 2, [0, 0, 0, 255]);
+    drawBlock(source, 0, 0, 2, 2, 255, 0, 0, 255);
+    drawBlock(source, 2, 0, 2, 2, 0, 255, 0, 255);
+    drawBlock(source, 4, 0, 2, 2, 0, 0, 255, 255);
+    drawBlock(source, 6, 0, 2, 2, 255, 255, 0, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_001",
+        rect: { x: 1, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 2, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_002",
+        rect: { x: 2, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 4, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_003",
+        rect: { x: 3, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 6, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      }
+    ];
+    const signal = { aborted: false, reason: "Stopped after a frame batch" };
+
+    expect(() =>
+      fixImage(
+        source,
+        {
+          mode: "spriteSheet",
+          assetType: "animationSheet",
+          targetWidth: 4,
+          targetHeight: 1,
+          maxColors: 4,
+          grid: { detect: "manual", scale: 2, phaseX: 0, phaseY: 0 },
+          downscale: "dominant",
+          alpha: "preserve",
+          cleanup: {
+            removeOrphans: false,
+            jaggyCleanup: false,
+            preserveSinglePixelDetails: true
+          },
+          sheetFrames: frames
+        },
+        {
+          signal,
+          onProgress: (event) => {
+            if (event.stage === "downsampling" && event.percent >= 30) {
+              signal.aborted = true;
+            }
+          }
+        }
+      )
+    ).toThrow(FixCancelledError);
+  });
+
   test("passes alpha cleanup settings through the full fix pipeline", () => {
     const source = createImage(3, 1, [248, 248, 248, 255]);
     writePixel(source, 1, 0, 120, 40, 80, 255);
