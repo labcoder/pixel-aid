@@ -94,7 +94,7 @@ git commit -m "refactor(shared): collapse character sheet processing mode"
 - Modify: `apps/web/src/lib/timelineState.test.ts`
 - Modify: `apps/web/src/App.tsx`
 
-- [ ] **Step 1: Add/update tests for character asset behavior**
+- [x] **Step 1: Add/update tests for character asset behavior**
 
 In `apps/web/src/lib/timelineState.test.ts`, import `isSheetLikeMode`:
 
@@ -112,7 +112,7 @@ Add this test:
   });
 ```
 
-- [ ] **Step 2: Run focused web tests before implementation**
+- [x] **Step 2: Run focused web tests before implementation**
 
 Run:
 
@@ -122,7 +122,7 @@ npm run test -w @pixelaid/web -- timelineState
 
 Expected: pass; this locks expected sheet-like behavior before deleting dead mode checks.
 
-- [ ] **Step 3: Remove dead `characterSheet` processing branches**
+- [x] **Step 3: Remove dead `characterSheet` processing branches**
 
 Update `apps/web/src/lib/timelineState.ts`:
 
@@ -156,7 +156,7 @@ function defaultAssetTypeForMode(mode: AssetMode): AssetType {
 }
 ```
 
-- [ ] **Step 4: Verify web type cleanup**
+- [x] **Step 4: Verify web type cleanup**
 
 Run:
 
@@ -167,7 +167,7 @@ npm run test -w @pixelaid/web -- timelineState assetTypePresets
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```powershell
 git add apps/web/src/lib/timelineState.ts apps/web/src/lib/timelineState.test.ts apps/web/src/App.tsx docs/superpowers/plans/2026-04-28-mig-17-remove-character-sheet-mode.md
