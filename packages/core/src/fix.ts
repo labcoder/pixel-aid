@@ -19,32 +19,49 @@ import { applyHaloRemoval } from "./halo";
 import { createImage } from "./image";
 import { applyOutlineCleanup } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
+import { assertNotCancelled, phasePercent, reportProgress } from "./runtime";
+import type { FixRuntimeOptions } from "./runtime";
 
-export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult {
+export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
+  assertNotCancelled(runtime?.signal);
   if (isSheetFrameFix(options)) {
-    return fixSheetFrames(image, options);
+    return fixSheetFrames(image, options, runtime);
   }
 
+  reportProgress(runtime, "grid-detection", 5, "Resolving pixel grid");
   const grid = resolveGrid(image, options);
   const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
+  assertNotCancelled(runtime?.signal);
   const localDriftBoundaries = localDrift?.used && localDrift.xBoundaryRows && localDrift.yBoundaryColumns
     ? {
         xBoundaryRows: localDrift.xBoundaryRows,
         yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
-  const downsampled = downsampleBlocks(image, {
-    outputWidth: gridWithDrift.outputWidth,
-    outputHeight: gridWithDrift.outputHeight,
-    scaleX: gridWithDrift.scaleX,
-    scaleY: gridWithDrift.scaleY,
-    phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
-    phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
-    ...localDriftBoundaries,
-    method: options.downscale,
-    alpha: options.alpha
-  });
+  reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
+  const downsampled = downsampleBlocks(
+    image,
+    {
+      outputWidth: gridWithDrift.outputWidth,
+      outputHeight: gridWithDrift.outputHeight,
+      scaleX: gridWithDrift.scaleX,
+      scaleY: gridWithDrift.scaleY,
+      phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
+      phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
+      ...localDriftBoundaries,
+      method: options.downscale,
+      alpha: options.alpha
+    },
+    {
+      runtime,
+      stage: "downsampling",
+      startPercent: 20,
+      endPercent: 45
+    }
+  );
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   const alphaResult = applyAlphaMode(downsampled, options.alpha, options.alphaSettings);
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
@@ -59,6 +76,9 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     closeGaps: options.cleanup.jaggyCleanup,
     preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
   });
+  reportProgress(runtime, "alpha-cleanup", 65, "Alpha cleanup complete");
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "palette-remap", 70, "Resolving palette");
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(outlineCleaned, {
@@ -66,10 +86,17 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
     fallbackMaxColors: options.maxColors,
     reservedColors: reservedPalette
   });
-  const remapped = remapToPalette(outlineCleaned, paletteResult.palette);
+  const remapped = remapToPalette(outlineCleaned, paletteResult.palette, {
+    runtime,
+    stage: "palette-remap",
+    startPercent: 78,
+    endPercent: 90
+  });
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "export-prep", 95, "Preparing fix result");
   const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
 
-  return {
+  const result = {
     image: remapped,
     palette: paletteResult.palette,
     grid: resultGrid,
@@ -88,6 +115,8 @@ export function fixImage(image: RGBAImage, options: FixOptions): PixelFixResult 
       palette: paletteResult.diagnostics
     }
   };
+  reportProgress(runtime, "complete", 100);
+  return result;
 }
 
 function attachDriftDiagnostics(grid: GridCandidate, drift: GridDriftDiagnostics): GridCandidate {
@@ -114,7 +143,8 @@ function isSheetFrameFix(options: FixOptions): boolean {
   return options.mode !== "single" && options.sheetFrames !== undefined && options.sheetFrames.length > 0;
 }
 
-function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
+function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
+  reportProgress(runtime, "frame-slicing", 5, "Preparing sheet frames");
   const frames = options.sheetFrames ?? [];
   const outputSize = getSheetOutputSize(options, frames);
   const packed = createImage(outputSize.width, outputSize.height);
@@ -125,24 +155,43 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
   const phaseY = options.grid.phaseY ?? 0;
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
 
-  for (const frame of frames) {
+  reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
+  for (let index = 0; index < frames.length; index += 1) {
+    assertNotCancelled(runtime?.signal);
+    const frame = frames[index]!;
     const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
     sourceRects.push(sourceRect);
-    const fixedFrame = downsampleBlocks(image, {
-      outputWidth: frame.rect.w,
-      outputHeight: frame.rect.h,
-      scaleX: sourceRect.w / frame.rect.w,
-      scaleY: sourceRect.h / frame.rect.h,
-      phaseX: sourceRect.x,
-      phaseY: sourceRect.y,
-      method: options.downscale,
-      alpha: options.alpha
-    });
+    const frameStartPercent = phasePercent(20, 65, index, frames.length);
+    const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
+    const fixedFrame = downsampleBlocks(
+      image,
+      {
+        outputWidth: frame.rect.w,
+        outputHeight: frame.rect.h,
+        scaleX: sourceRect.w / frame.rect.w,
+        scaleY: sourceRect.h / frame.rect.h,
+        phaseX: sourceRect.x,
+        phaseY: sourceRect.y,
+        method: options.downscale,
+        alpha: options.alpha
+      },
+      {
+        runtime,
+        stage: "downsampling",
+        startPercent: frameStartPercent,
+        endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
+      }
+    );
     const cleanedFrame = cleanFixedImage(fixedFrame, options);
     alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
     pasteImage(cleanedFrame.image, packed, frame.rect);
+    reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
   }
 
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "alpha-cleanup", 70, "Alpha cleanup complete");
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "palette-remap", 75, "Resolving sheet palette");
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = resolvePalette(packed, {
@@ -151,7 +200,14 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
     reservedColors: reservedPalette,
     frames
   });
-  const remapped = remapToPalette(packed, paletteResult.palette);
+  const remapped = remapToPalette(packed, paletteResult.palette, {
+    runtime,
+    stage: "palette-remap",
+    startPercent: 82,
+    endPercent: 92
+  });
+  assertNotCancelled(runtime?.signal);
+  reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
   const sourceRect = unionRects(sourceRects);
   const grid: GridCandidate = {
     outputWidth: remapped.width,
@@ -167,7 +223,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
     grid.sourceRect = sourceRect;
   }
 
-  return {
+  const result = {
     image: remapped,
     palette: paletteResult.palette,
     grid,
@@ -186,6 +242,8 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions): PixelFixResult {
       palette: paletteResult.diagnostics
     }
   };
+  reportProgress(runtime, "complete", 100);
+  return result;
 }
 
 function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {
