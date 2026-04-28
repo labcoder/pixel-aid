@@ -332,8 +332,20 @@ export type TransferableImage = {
   data: ArrayBuffer;
 };
 
+export type WorkerProgressStage =
+  | "decode-prep"
+  | "grid-detection"
+  | "frame-slicing"
+  | "downsampling"
+  | "alpha-cleanup"
+  | "palette-remap"
+  | "export-prep"
+  | "complete"
+  | "cancelled";
+
 export type WorkerProgress = {
   requestId: string;
-  stage: string;
+  stage: WorkerProgressStage;
   percent: number;
+  message?: string;
 };

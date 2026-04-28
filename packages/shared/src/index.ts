@@ -38,7 +38,8 @@ export type {
   SpriteAnimation,
   SpriteFrame,
   TransferableImage,
-  WorkerProgress
+  WorkerProgress,
+  WorkerProgressStage
 } from "./types";
 
 export { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "./assetTypes";
