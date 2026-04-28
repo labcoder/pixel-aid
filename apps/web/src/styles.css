@@ -1232,6 +1232,17 @@ button:disabled {
   accent-color: var(--cyan);
 }
 
+.engine-export-targets {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.35rem;
+}
+
+.engine-export-targets .toggle-row {
+  min-height: 26px;
+  margin-top: 0;
+}
+
 .bottom-panel {
   grid-area: bottom;
   border-top: 1px solid var(--line);
