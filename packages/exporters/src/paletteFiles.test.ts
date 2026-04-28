@@ -30,8 +30,12 @@ describe("palette file export helpers", () => {
 
   test("creates a deterministic .gpl palette file with header and RGB rows", () => {
     expect(createGplPaletteFile(["#ABCDEF", "bad", "123456"], { name: "Hero Sheet" })).toBe(
-      "GIMP Palette\nName: Hero Sheet\nColumns: 0\n#\n171 205 239\t#abcdef\n18 52 86\t#123456\n"
+      "GIMP Palette\nName: Hero Sheet\nColumns: 8\n#\n171 205 239 #abcdef\n 18  52  86 #123456\n"
     );
+  });
+
+  test("uses a deterministic default .gpl name", () => {
+    expect(createGplPaletteFile(["#000000"], { name: "  " })).toContain("Name: PixelAid Palette\n");
   });
 
   test("creates a palette JSON object with app metadata and normalized colors", () => {
