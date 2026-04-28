@@ -1,8 +1,30 @@
-import { fixImage } from "@pixelaid/core";
+import { FixCancelledError, fixImage } from "@pixelaid/core";
+import type { FixCancellationSignal, FixProgressEvent } from "@pixelaid/core";
 import type { RGBAImage } from "@pixelaid/shared";
 import type { FixImageWorkerRequest, WorkerRequest, WorkerResponse } from "./protocol";
 
-export function runWorkerRequest(request: WorkerRequest, clock: () => number = () => performance.now()): WorkerResponse {
+export type WorkerEventSink = (event: WorkerResponse) => void;
+
+export function createWorkerCancellationController(): { signal: FixCancellationSignal; cancel: (reason?: string) => void } {
+  const state: { aborted: boolean; reason?: string } = {
+    aborted: false
+  };
+
+  return {
+    signal: state,
+    cancel: (reason = "Fix cancelled") => {
+      state.aborted = true;
+      state.reason = reason;
+    }
+  };
+}
+
+export function runWorkerRequest(
+  request: WorkerRequest,
+  clock?: () => number,
+  emit?: WorkerEventSink,
+  signal?: FixCancellationSignal
+): WorkerResponse {
   try {
     if (request.type === "cancel") {
       return {
@@ -12,8 +34,24 @@ export function runWorkerRequest(request: WorkerRequest, clock: () => number = (
       };
     }
 
-    return runFixImageRequest(request, clock);
+    return runFixImageRequest(request, clock ?? (() => performance.now()), emit, signal);
   } catch (error) {
+    if (error instanceof FixCancelledError) {
+      const message = error.message;
+      emit?.({
+        type: "progress",
+        requestId: request.requestId,
+        stage: "cancelled",
+        percent: 100,
+        message
+      });
+      return {
+        type: "cancelled",
+        requestId: request.requestId,
+        message
+      };
+    }
+
     return {
       type: "error",
       requestId: request.requestId,
@@ -22,10 +60,33 @@ export function runWorkerRequest(request: WorkerRequest, clock: () => number = (
   }
 }
 
-function runFixImageRequest(request: FixImageWorkerRequest, clock: () => number): WorkerResponse {
+function runFixImageRequest(
+  request: FixImageWorkerRequest,
+  clock: () => number,
+  emit: WorkerEventSink | undefined,
+  signal: FixCancellationSignal | undefined
+): WorkerResponse {
   const image = transferableToImage(request);
   const startedAt = clock();
-  const result = fixImage(image, request.options);
+  const onProgress = (event: FixProgressEvent) => {
+    emit?.({
+      type: "progress",
+      requestId: request.requestId,
+      ...event
+    });
+  };
+  const result = fixImage(
+    image,
+    request.options,
+    signal
+      ? {
+          signal,
+          onProgress
+        }
+      : {
+          onProgress
+        }
+  );
   const durationMs = clock() - startedAt;
 
   return {

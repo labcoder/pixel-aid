@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { runWorkerRequest } from "./index";
+import { createWorkerCancellationController, runWorkerRequest } from "./index";
 import type { FixOptions, TransferableImage } from "@pixelaid/shared";
-import type { WorkerRequest } from "./index";
+import type { WorkerRequest, WorkerResponse } from "./index";
 
 const options: FixOptions = {
   mode: "single",
@@ -78,6 +78,63 @@ describe("worker fix pipeline", () => {
     });
   });
 
+  test("emits progress events before returning a result", () => {
+    const request: WorkerRequest = {
+      type: "fix-image",
+      requestId: "progress-job",
+      image: image(),
+      options
+    };
+    const events: WorkerResponse[] = [];
+
+    const response = runWorkerRequest(request, () => 0, (event) => events.push(event));
+
+    expect(response.type).toBe("result");
+    expect(events.some((event) => event.type === "progress" && event.stage === "downsampling")).toBe(true);
+    expect(events.at(-1)).toEqual({
+      type: "progress",
+      requestId: "progress-job",
+      stage: "complete",
+      percent: 100
+    });
+  });
+
+  test("returns a cancelled response when the signal is cancelled during progress", () => {
+    const request: WorkerRequest = {
+      type: "fix-image",
+      requestId: "cancel-job",
+      image: image(),
+      options
+    };
+    const controller = createWorkerCancellationController();
+    const events: WorkerResponse[] = [];
+
+    const response = runWorkerRequest(
+      request,
+      () => 0,
+      (event) => {
+        events.push(event);
+        if (event.type === "progress" && event.stage === "downsampling") {
+          controller.cancel("Stopped from progress sink");
+        }
+      },
+      controller.signal
+    );
+
+    expect(response).toEqual({
+      type: "cancelled",
+      requestId: "cancel-job",
+      message: "Stopped from progress sink"
+    });
+    expect(events).toContainEqual({
+      type: "progress",
+      requestId: "cancel-job",
+      stage: "cancelled",
+      percent: 100,
+      message: "Stopped from progress sink"
+    });
+  });
+
   test("passes sheet frame plans through to the frame-aware core fixer", () => {
     const request: WorkerRequest = {
       type: "fix-image",
@@ -127,7 +184,66 @@ describe("worker fix pipeline", () => {
     expect(readPixel(response.result.image.data, 4, 0, 0)).toEqual([255, 0, 0, 255]);
     expect(readPixel(response.result.image.data, 4, 2, 0)).toEqual([0, 0, 255, 255]);
   });
+
+  test("emits bounded progress for a modest multi-frame sheet", () => {
+    const request = sheetRequest("sheet-progress-job");
+    const events: WorkerResponse[] = [];
+
+    const response = runWorkerRequest(request, () => 0, (event) => events.push(event));
+
+    expect(response.type).toBe("result");
+    const downsamplingEvents = events.filter((event) => event.type === "progress" && event.stage === "downsampling");
+    expect(downsamplingEvents.length).toBeGreaterThanOrEqual(2);
+    expect(events.length).toBeLessThan(40);
+    expect(events.at(-1)).toEqual({
+      type: "progress",
+      requestId: "sheet-progress-job",
+      stage: "complete",
+      percent: 100
+    });
+  });
 });
+
+function sheetRequest(requestId: string): WorkerRequest {
+  const request: WorkerRequest = {
+    type: "fix-image",
+    requestId,
+    image: {
+      width: 12,
+      height: 4,
+      data: new Uint8ClampedArray(12 * 4 * 4).buffer
+    },
+    options: {
+      ...options,
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 4,
+      targetHeight: 2,
+      maxColors: 4,
+      grid: { detect: "manual", scaleX: 2, scaleY: 2 },
+      sheet: {
+        frameWidth: 2,
+        frameHeight: 2,
+        rows: 1,
+        columns: 2,
+        margin: 0,
+        spacing: 0,
+        extrude: 0
+      },
+      sheetFrames: [
+        { name: "idle_000", rect: { x: 0, y: 0, w: 2, h: 2 }, sourceRect: { x: 4, y: 0, w: 4, h: 4 }, pivot: { x: 1, y: 2 }, durationMs: 120 },
+        { name: "idle_001", rect: { x: 2, y: 0, w: 2, h: 2 }, sourceRect: { x: 8, y: 0, w: 4, h: 4 }, pivot: { x: 1, y: 2 }, durationMs: 120 }
+      ]
+    }
+  };
+  const pixels = new Uint8ClampedArray(request.image.data);
+  fill(pixels, 12, 4, 8, 10, 10, 255);
+  drawBlock(pixels, 12, 0, 0, 2, 4, 0, 240, 240, 255);
+  drawBlock(pixels, 12, 4, 0, 4, 4, 255, 0, 0, 255);
+  drawBlock(pixels, 12, 8, 0, 4, 4, 0, 0, 255, 255);
+
+  return request;
+}
 
 function fill(data: Uint8ClampedArray, width: number, height: number, r: number, g: number, b: number, a: number): void {
   for (let y = 0; y < height; y += 1) {

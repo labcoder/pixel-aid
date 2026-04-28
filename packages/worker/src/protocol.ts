@@ -26,8 +26,14 @@ export type WorkerErrorResponse = {
   message: string;
 };
 
+export type WorkerCancelledResponse = {
+  type: "cancelled";
+  requestId: string;
+  message: string;
+};
+
 export type WorkerProgressResponse = {
   type: "progress";
 } & WorkerProgress;
 
-export type WorkerResponse = WorkerResultResponse | WorkerErrorResponse | WorkerProgressResponse;
+export type WorkerResponse = WorkerResultResponse | WorkerErrorResponse | WorkerCancelledResponse | WorkerProgressResponse;
