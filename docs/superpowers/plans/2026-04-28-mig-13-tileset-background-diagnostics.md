@@ -249,7 +249,7 @@ git commit -m "feat(shared): add tile and scene diagnostic contracts"
 - Create: `packages/core/src/tileDiagnostics.test.ts`
 - Modify: `packages/core/src/index.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Create `packages/core/src/tileDiagnostics.test.ts`:
 
@@ -323,7 +323,7 @@ function createLightingMismatchTileset(): RGBAImage {
 }
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run:
 
@@ -333,7 +333,7 @@ npm run test -w @pixelaid/core -- tileDiagnostics
 
 Expected red: missing `./tileDiagnostics`.
 
-- [ ] **Step 3: Implement `analyzeTilesetSeams`**
+- [x] **Step 3: Implement `analyzeTilesetSeams`**
 
 Create `packages/core/src/tileDiagnostics.ts` with this API:
 
@@ -369,7 +369,7 @@ Implementation rules:
 `Tile ${rowA},${columnA} ${edgeLabel} seam differs from tile ${rowB},${columnB}.`
 ```
 
-- [ ] **Step 4: Export helper**
+- [x] **Step 4: Export helper**
 
 In `packages/core/src/index.ts`, add:
 
@@ -378,7 +378,7 @@ export { analyzeTilesetSeams } from "./tileDiagnostics";
 export type { AnalyzeTilesetSeamsOptions } from "./tileDiagnostics";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -407,7 +407,7 @@ git commit -m "feat(core): add tileset seam diagnostics"
 - Create: `packages/core/src/sceneDiagnostics.test.ts`
 - Modify: `packages/core/src/index.ts`
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Create `packages/core/src/sceneDiagnostics.test.ts`:
 
@@ -458,7 +458,7 @@ function createManyColorScene() {
 }
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run:
 
@@ -468,7 +468,7 @@ npm run test -w @pixelaid/core -- sceneDiagnostics
 
 Expected red: missing `./sceneDiagnostics`.
 
-- [ ] **Step 3: Implement `analyzeSceneAssetDiagnostics`**
+- [x] **Step 3: Implement `analyzeSceneAssetDiagnostics`**
 
 Create `packages/core/src/sceneDiagnostics.ts`:
 
@@ -507,7 +507,7 @@ Implementation rules:
 - Include `scene-detail-density` when `detailDensityLabel === "high"`.
 - Include `tilemap-inspect-only` for tilemaps.
 
-- [ ] **Step 4: Export helper**
+- [x] **Step 4: Export helper**
 
 In `packages/core/src/index.ts`, add:
 
@@ -516,7 +516,7 @@ export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";
 export type { AnalyzeSceneAssetDiagnosticsOptions } from "./sceneDiagnostics";
 ```
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -624,7 +624,7 @@ git commit -m "test(fixtures): add broken tileset seam fixture"
 - Create: `apps/web/src/lib/tileRepeatPreview.test.ts`
 - Create: `apps/web/src/components/TileRepeatPreviewCanvas.tsx`
 
-- [ ] **Step 1: Add failing repeat-preview model tests**
+- [x] **Step 1: Add failing repeat-preview model tests**
 
 Create `apps/web/src/lib/tileRepeatPreview.test.ts`:
 
@@ -665,7 +665,7 @@ describe("tile repeat preview model", () => {
 });
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 Run:
 
@@ -675,7 +675,7 @@ npm run test -w @pixelaid/web -- tileRepeatPreview
 
 Expected red: missing `./tileRepeatPreview`.
 
-- [ ] **Step 3: Implement repeat-preview model**
+- [x] **Step 3: Implement repeat-preview model**
 
 Create `apps/web/src/lib/tileRepeatPreview.ts`:
 
@@ -716,7 +716,7 @@ Implementation rules:
 - `isCenter` is true for `Math.floor(rows / 2), Math.floor(columns / 2)`.
 - Keep all output deterministic.
 
-- [ ] **Step 4: Add canvas component**
+- [x] **Step 4: Add canvas component**
 
 Create `apps/web/src/components/TileRepeatPreviewCanvas.tsx`.
 
@@ -742,7 +742,7 @@ Rendering rules:
 - If diagnostics has warning issues, draw thin warning-colored seam lines between repeated cells.
 - If `image` or `frame` is null, render an empty state.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
@@ -772,7 +772,7 @@ git commit -m "feat(web): add tile repeat preview model"
 - Modify: `apps/web/src/lib/bottomPanelLayout.ts`
 - Modify: `apps/web/src/lib/bottomPanelLayout.test.ts`
 
-- [ ] **Step 1: Add failing formatting tests**
+- [x] **Step 1: Add failing formatting tests**
 
 Create `apps/web/src/lib/tileDiagnosticsView.test.ts`:
 
@@ -823,7 +823,7 @@ describe("tile diagnostics view formatting", () => {
 });
 ```
 
-- [ ] **Step 2: Add failing bottom layout tests**
+- [x] **Step 2: Add failing bottom layout tests**
 
 Update `apps/web/src/lib/bottomPanelLayout.test.ts` to call the new signature:
 
@@ -833,7 +833,7 @@ expect(getBottomPanelSections("tileSheet", "spriteSheet")).toEqual(["timeline", 
 expect(getBottomPanelSections("single", "background")).toEqual(["logs", "metrics"]);
 ```
 
-- [ ] **Step 3: Run red tests**
+- [x] **Step 3: Run red tests**
 
 Run:
 
@@ -843,7 +843,7 @@ npm run test -w @pixelaid/web -- tileDiagnosticsView bottomPanelLayout
 
 Expected red: missing formatter and old bottom-panel signature.
 
-- [ ] **Step 4: Implement formatting helpers**
+- [x] **Step 4: Implement formatting helpers**
 
 Create `apps/web/src/lib/tileDiagnosticsView.ts`:
 
@@ -867,7 +867,7 @@ export function formatSceneDiagnosticsSummary(diagnostics: SceneAssetDiagnostics
 
 Use percent formatting with `Math.round(score * 100)`.
 
-- [ ] **Step 5: Update bottom panel routing**
+- [x] **Step 5: Update bottom panel routing**
 
 In `apps/web/src/lib/bottomPanelLayout.ts`, update:
 
@@ -887,7 +887,7 @@ export function getBottomPanelSections(mode: AssetMode, assetType: AssetType = "
 }
 ```
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
