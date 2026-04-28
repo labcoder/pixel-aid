@@ -1096,7 +1096,7 @@ git commit -m "feat(web): surface tile and scene diagnostics"
 - Modify: `docs/performance.md`
 - Modify: `docs/superpowers/plans/2026-04-28-mig-13-tileset-background-diagnostics.md`
 
-- [ ] **Step 1: Update editor docs**
+- [x] **Step 1: Update editor docs**
 
 In `docs/editor.md`, update:
 
@@ -1107,7 +1107,7 @@ In `docs/editor.md`, update:
 - Viewport or Timeline section: repeat preview is canvas-based and appears for tilesets.
 - Metrics: seam risk, lighting risk, palette/detail-density warnings.
 
-- [ ] **Step 2: Update algorithm docs**
+- [x] **Step 2: Update algorithm docs**
 
 In `docs/algorithms.md`, add sections:
 
@@ -1123,11 +1123,11 @@ PixelAid compares adjacent tile edges in native pixel space. It reports edge mis
 Background and tilemap diagnostics sample large images for color-bin count and detail density. These diagnostics bias the UI toward preservation-first cleanup and warn when sprite-style palette or alpha settings would be destructive.
 ```
 
-- [ ] **Step 3: Update performance docs**
+- [x] **Step 3: Update performance docs**
 
 In `docs/performance.md`, add a note that diagnostics use bounded deterministic sampling and typed arrays.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 

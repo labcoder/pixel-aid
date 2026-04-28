@@ -13,6 +13,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - React state drives editor controls and asset selection; it does not run animation loops.
 - Timeline playback uses `requestAnimationFrame` and advances React state only when the selected frame changes.
 - Animation stability diagnostics are metadata-only checks over the selected timeline frames. They do not inspect image pixels or run inside the playback loop.
+- Tileset repeat preview is drawn with Canvas2D and `imageSmoothingEnabled = false`; repeated tiles and seam guides are not rendered as React nodes.
 - The bottom timeline/logs/metrics area is resized with a CSS grid variable and pointer events rather than reflow-heavy layout polling.
 
 ## Processing
@@ -20,6 +21,8 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - The core uses `Uint8ClampedArray` image buffers and index math.
 - Grid detection uses typed arrays for edge energy and run histograms; the foreground bounds pass scans the source once and avoids per-pixel object allocation.
 - Sheet layout detection uses row and column count buffers to find bands and frame segments without rendering frame candidates as React elements.
+- Tileset seam diagnostics compare adjacent native tile edges with index math and do not allocate per-pixel color objects.
+- Scene diagnostics use bounded deterministic sampling so large backgrounds and tilemaps do not require full-image scans for color-bin/detail-density warnings.
 - Import and Auto Suggest currently run browser decode and first-pass suggestion analysis on the main thread, but the UI yields between phases and shows decode/analyze status so large sheets do not look stalled.
 - Auto Suggest returns the grid candidates it already computed. The editor caches those candidates per asset instead of rerunning grid detection during React render.
 - Fix start-up yields before building the worker job and shows a preparing/fixing status overlay, so a large sheet does not look idle while frame metadata is packaged.
