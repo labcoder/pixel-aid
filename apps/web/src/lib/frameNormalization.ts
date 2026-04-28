@@ -1,4 +1,5 @@
-import type { Pivot, Rect, SpriteFrame } from "@pixelaid/shared";
+import { analyzeFrameStability } from "@pixelaid/exporters";
+import type { FrameStabilityDiagnostics, Pivot, Rect, SpriteFrame } from "@pixelaid/shared";
 
 export type FramePreviewPlacement = {
   frame: SpriteFrame;
@@ -14,6 +15,10 @@ export type OnionSkinPlacements = {
   current: FramePreviewPlacement | null;
   next: FramePreviewPlacement | null;
 };
+
+export function getFramePreviewDiagnostics(frames: readonly SpriteFrame[]): FrameStabilityDiagnostics {
+  return analyzeFrameStability(frames);
+}
 
 export function normalizeFramePlacements(frames: readonly SpriteFrame[], sourceFrames: readonly SpriteFrame[] = []): FramePreviewPlacement[] {
   if (frames.length === 0) {

@@ -78,6 +78,54 @@ describe("normalized sheet export", () => {
     expect(normalized.result.metrics.outputWidth).toBe(2);
     expect(normalized.result.metrics.outputHeight).toBe(3);
   });
+
+  test("preserves corrected pivot metadata used by normalized exports", () => {
+    const correctedFrames: SpriteFrame[] = [
+      {
+        name: "walk_000",
+        rect: { x: 0, y: 0, w: 2, h: 2 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 2 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 90,
+        tags: ["walk"]
+      },
+      {
+        name: "walk_001",
+        rect: { x: 3, y: 1, w: 1, h: 1 },
+        sourceRect: { x: 3, y: 1, w: 1, h: 1 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 150,
+        tags: ["walk"]
+      }
+    ];
+
+    const normalized = createNormalizedSheetExport({
+      result,
+      frames: correctedFrames,
+      columns: 2,
+      spacing: 1,
+      margin: 1,
+      extrude: 1
+    });
+
+    expect(normalized.sheet).toMatchObject({
+      frameWidth: 2,
+      frameHeight: 2,
+      rows: 1,
+      columns: 2,
+      margin: 1,
+      spacing: 1,
+      extrude: 1,
+      pivot: { x: 1, y: 2 }
+    });
+    expect(normalized.frames.map((frame) => ({ name: frame.name, pivot: frame.pivot, durationMs: frame.durationMs, tags: frame.tags }))).toEqual([
+      { name: "walk_000", pivot: { x: 1, y: 2 }, durationMs: 90, tags: ["walk"] },
+      { name: "walk_001", pivot: { x: 1, y: 2 }, durationMs: 150, tags: ["walk"] }
+    ]);
+    expect(normalized.result.settings.sheet).toEqual(normalized.sheet);
+    expect(normalized.result.metrics.outputWidth).toBe(7);
+    expect(normalized.result.metrics.outputHeight).toBe(4);
+  });
 });
 
 function writePixel(image: RGBAImage, x: number, y: number, r: number, g: number, b: number, a: number): void {
