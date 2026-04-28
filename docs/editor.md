@@ -168,10 +168,22 @@ The bottom panel can be dragged upward from its top handle when logs, metrics, o
 
 The first export target is a generic engine-ready bundle.
 
+- The ZIP layout is deterministic:
+  - `images/<base>_fixed.png` or `images/<base>_normalized.png`
+  - `manifest/<base>_manifest.json`
+  - `palettes/<base>.hex`
+  - `palettes/<base>.gpl`
+  - `palettes/<base>.palette.json`
+  - `reports/<base>_validation.json`
+  - `frames/<frame-name>.png` for sheet-like exports
 - Fixed PNG contains the native-size pixel-art output.
-- JSON manifest includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, and operation settings.
+- JSON manifest remains the canonical metadata file. It includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, animation clips, and operation settings.
+- Palette files are exported beside the manifest. `.hex` is one lowercase `#rrggbb` color per line, `.gpl` is a deterministic GIMP palette, and `.palette.json` repeats the normalized palette with app/version metadata.
+- The validation report records manifest validation results plus warnings from alpha diagnostics, palette diagnostics, palette drift, animation metadata, and frame-sequence consistency.
+- The Export inspector shows the most recent validation summary after download, and the console log records warning and error counts.
 - In sheet-like modes, export uses the current frame/cell settings and selected pivot metadata, even if those controls were edited after the last Fix operation.
-- If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG and manifest frame rects use that packed layout.
+- Sheet-like exports include per-frame PNGs cropped from the exported sheet using manifest frame rects. Single-sprite exports omit `frames/`.
+- If Normalize is enabled in the Sprite Player, sheet export packs every frame into a shared pivot-aligned canvas. The exported PNG, frame sequence, and manifest frame rects use that packed layout.
 - Pivot overrides from the Sprite Player are applied before normalized export, so corrected baseline/pivot decisions are reflected in the exported PNG and manifest.
 - Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting. If a detected clip is renamed, matching frame names and per-frame duration overrides are renamed with it before export.
-- ZIP export packages the PNG and manifest together.
+- Normalized export uses the MIG-11 corrected frame list, including duration, clip rename, and pivot override metadata, rather than recalculating animation structure during bundle assembly.
