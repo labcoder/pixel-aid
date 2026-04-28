@@ -1404,6 +1404,84 @@ describe("fix pipeline", () => {
     ).toThrow(FixCancelledError);
   });
 
+  test("cancels a single image fix during export prep without reporting complete", () => {
+    const signal = { aborted: false, reason: "Stopped during export prep" };
+    const events: FixProgressEvent[] = [];
+
+    expect(() =>
+      fixImage(blockySource(), defaultOptions, {
+        signal,
+        onProgress: (event) => {
+          events.push(event);
+          if (event.stage === "export-prep") {
+            signal.aborted = true;
+          }
+        }
+      })
+    ).toThrow(FixCancelledError);
+
+    expect(events.map((event) => event.stage)).toContain("export-prep");
+    expect(events.map((event) => event.stage)).not.toContain("complete");
+  });
+
+  test("cancels a sheet fix during export prep without reporting complete", () => {
+    const source = createImage(4, 2, [0, 0, 0, 255]);
+    drawBlock(source, 0, 0, 2, 2, 255, 0, 0, 255);
+    drawBlock(source, 2, 0, 2, 2, 0, 0, 255, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      },
+      {
+        name: "frame_001",
+        rect: { x: 1, y: 0, w: 1, h: 1 },
+        sourceRect: { x: 2, y: 0, w: 2, h: 2 },
+        pivot: { x: 0, y: 1 },
+        durationMs: 120
+      }
+    ];
+    const signal = { aborted: false, reason: "Stopped during sheet export prep" };
+    const events: FixProgressEvent[] = [];
+
+    expect(() =>
+      fixImage(
+        source,
+        {
+          mode: "spriteSheet",
+          assetType: "animationSheet",
+          targetWidth: 2,
+          targetHeight: 1,
+          maxColors: 4,
+          grid: { detect: "manual", scale: 2, phaseX: 0, phaseY: 0 },
+          downscale: "dominant",
+          alpha: "preserve",
+          cleanup: {
+            removeOrphans: false,
+            jaggyCleanup: false,
+            preserveSinglePixelDetails: true
+          },
+          sheetFrames: frames
+        },
+        {
+          signal,
+          onProgress: (event) => {
+            events.push(event);
+            if (event.stage === "export-prep") {
+              signal.aborted = true;
+            }
+          }
+        }
+      )
+    ).toThrow(FixCancelledError);
+
+    expect(events.map((event) => event.stage)).toContain("export-prep");
+    expect(events.map((event) => event.stage)).not.toContain("complete");
+  });
+
   test("passes alpha cleanup settings through the full fix pipeline", () => {
     const source = createImage(3, 1, [248, 248, 248, 255]);
     writePixel(source, 1, 0, 120, 40, 80, 255);
