@@ -43,7 +43,14 @@ import type {
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import { sliceSheetFrames } from "@pixelaid/core";
-import { analyzeFrameStability, createPixelAssetManifest } from "@pixelaid/exporters";
+import {
+  analyzeFrameStability,
+  createExportValidationReport,
+  createGplPaletteFile,
+  createHexPaletteFile,
+  createPaletteJsonFile,
+  createPixelAssetManifest
+} from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
@@ -58,7 +65,7 @@ import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOve
 import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
-import { createAssetBundleZip } from "./lib/exportBundle";
+import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleFile } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import {
   applyTargetSizePreset,
@@ -72,6 +79,7 @@ import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
+import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { resizeAnimationRowFromSourceFrame } from "./lib/frameRowEditing";
 import { getFramePreviewPlacement, getOnionSkinPlacements } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
@@ -257,6 +265,11 @@ export function App() {
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
+  const [lastExportValidation, setLastExportValidation] = useState<{
+    ok: boolean;
+    warningCount: number;
+    errorCount: number;
+  } | null>(null);
   const [fixStatus, setFixStatus] = useState<string | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
@@ -288,6 +301,9 @@ export function App() {
   const isFixing = fixStatus !== null || fixProgress !== null;
   const busyStatus = importStatus ?? analysisStatus ?? (fixProgress ? formatFixProgress(fixProgress) : fixStatus);
   const assetPanelStatus = importStatus ?? analysisStatus;
+  useEffect(() => {
+    setLastExportValidation(null);
+  }, [fixResult, selectedAsset?.id]);
   const sourcePalette = useMemo(
     () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
     [selectedAsset]
@@ -1642,21 +1658,60 @@ export function App() {
       ...(sheetMode ? { sheet: exportSheet, frames: exportFrames, ...(animations ? { animations } : {}) } : {})
     });
 
-    void rgbaImageToPngBlob(exportResult.image)
-      .then(async (png) => {
-        const bundle = createAssetBundleZip({
-          pngFilename: imageName,
-          pngBytes: new Uint8Array(await png.arrayBuffer()),
-          manifestFilename: manifestName,
-          manifest
+    void (async () => {
+      const frameSequence = sheetMode && exportFrames.length > 0 ? createFrameSequenceImages({ image: exportResult.image, frames: exportFrames }) : [];
+      const framePngFiles: AssetBundleFile[] = [];
+
+      for (const frame of frameSequence) {
+        const png = await rgbaImageToPngBlob(frame.image);
+        framePngFiles.push({
+          path: frame.filename,
+          bytes: new Uint8Array(await png.arrayBuffer())
         });
-        const bundleBuffer = bundle.buffer.slice(bundle.byteOffset, bundle.byteOffset + bundle.byteLength) as ArrayBuffer;
-        downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
-        appendLog(`Exported ${bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}`);
-      })
-      .catch((error) => {
-        appendLog(error instanceof Error ? error.message : "Export failed");
+      }
+
+      const filePaths = [
+        `images/${imageName}`,
+        `manifest/${manifestName}`,
+        `palettes/${baseName}.hex`,
+        `palettes/${baseName}.gpl`,
+        `palettes/${baseName}.palette.json`,
+        `reports/${baseName}_validation.json`,
+        ...framePngFiles.map((file) => file.path)
+      ];
+      const validation = createExportValidationReport({
+        manifest,
+        files: filePaths,
+        frameSequenceNames: frameSequence.map((frame) => frame.frameName)
       });
+      const fixedPng = await rgbaImageToPngBlob(exportResult.image);
+      const bundleFiles: AssetBundleFile[] = [
+        {
+          path: `images/${imageName}`,
+          bytes: new Uint8Array(await fixedPng.arrayBuffer())
+        },
+        jsonBundleFile(`manifest/${manifestName}`, manifest),
+        textBundleFile(`palettes/${baseName}.hex`, createHexPaletteFile(exportResult.palette)),
+        textBundleFile(`palettes/${baseName}.gpl`, createGplPaletteFile(exportResult.palette, { name: baseName })),
+        jsonBundleFile(`palettes/${baseName}.palette.json`, createPaletteJsonFile(exportResult.palette, { image: imageName })),
+        jsonBundleFile(`reports/${baseName}_validation.json`, validation),
+        ...framePngFiles
+      ];
+      const bundle = createAssetBundleZip({ files: bundleFiles });
+
+      setLastExportValidation({
+        ok: validation.ok,
+        warningCount: validation.summary.warningCount,
+        errorCount: validation.summary.errorCount
+      });
+      const bundleBuffer = bundle.buffer.slice(bundle.byteOffset, bundle.byteOffset + bundle.byteLength) as ArrayBuffer;
+      downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
+      appendLog(
+        `Exported ${bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
+      );
+    })().catch((error) => {
+      appendLog(error instanceof Error ? error.message : "Export failed");
+    });
   }, [
     appendLog,
     detectedRowAnimations,
@@ -2210,6 +2265,15 @@ export function App() {
       <>
         <Field label="Target" value="Generic JSON" />
         <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
+        <ReadonlyField
+          label="Validation"
+          value={
+            lastExportValidation
+              ? `${lastExportValidation.ok ? "OK" : "Review"} / ${lastExportValidation.warningCount} warnings / ${lastExportValidation.errorCount} errors`
+              : "pending"
+          }
+          text
+        />
         <ReadonlyField
           label="Sheet PNG"
           value={sheetMode ? (normalizeTimelineFrames ? "Normalized" : "Current") : "Single"}
