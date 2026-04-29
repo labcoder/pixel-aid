@@ -77,6 +77,6 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 3: Update Linear and merge**
+- [x] **Step 3: Update Linear and merge**
 
 Comment on MIG-19 with the follow-up verification details, then fast-forward merge back to `codex/pixelaid-roadmap-foundation`.
