@@ -1,4 +1,4 @@
-import type { RGBAImage } from "@pixelaid/shared";
+import type { AssetProvenance, RGBAImage } from "@pixelaid/shared";
 import { createDefaultAssetTypeMetadata, type AssetTypeMetadata } from "./assets";
 
 export type ImportedImageAsset = AssetTypeMetadata & {
@@ -6,6 +6,7 @@ export type ImportedImageAsset = AssetTypeMetadata & {
   name: string;
   image: RGBAImage;
   importedAt: string;
+  provenance?: AssetProvenance;
 };
 
 export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
