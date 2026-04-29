@@ -8,6 +8,9 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 - `packages/core`: owns deterministic image algorithms. It has no React or DOM dependency.
 - `packages/worker`: owns worker protocol and orchestration around core algorithms.
 - `packages/exporters`: owns the generic manifest, validation, and engine adapter files for Godot, Unity, and Phaser. Engine adapters never replace the generic manifest; they emit deterministic sidecars and warnings for unsupported target fields.
+- `packages/automation`: owns Node-safe PNG IO, option normalization, safe output planning, and reusable inspect/fix/sheet/palette/export operations for scripts and agents.
+- `packages/cli`: owns the `pixelaid` command parser and JSON/human CLI output, built on `packages/automation`.
+- `packages/mcp`: owns MCP-ready tool definitions, input validation, and direct handler dispatch, built on `packages/automation`.
 - `packages/shared`: owns shared serializable contracts and app constants.
 - `packages/fixtures`: owns generated benchmark fixtures and expected metadata used by tests.
 
@@ -44,4 +47,5 @@ When adding a new public editor section, update both the markdown file and `apps
 - 2D sandbox: reuse fixed assets and manifests without touching core algorithms.
 - 3D sandbox: add Three.js in an isolated panel/package later.
 - CLI/API/MCP: call `packages/core` and `packages/exporters` without browser APIs.
+- Automation CLI/MCP: keep the current shared operation/result contract stable; future server or HTTP transports should call the existing handlers instead of adding parallel pipelines.
 - AI providers: optional adapters should feed generated images into the same fix pipeline and attach agnostic provenance metadata before export. Provider adapters must not be required for offline fixing, and API keys, bearer tokens, passwords, credentials, or other secrets must never be written to source files, logs, manifests, or exported bundles.
