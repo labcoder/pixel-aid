@@ -7,7 +7,6 @@ import {
   FileImage,
   Gauge,
   Layers,
-  Pause,
   Play,
   SlidersHorizontal,
   Sparkles,
@@ -57,6 +56,7 @@ import {
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
 import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
+import { SpritePlayerControls } from "./components/SpritePlayerControls";
 import { TileRepeatPreviewCanvas } from "./components/TileRepeatPreviewCanvas";
 import { ViewportCanvas } from "./components/ViewportCanvas";
 import {
@@ -2970,93 +2970,33 @@ export function App() {
             <h2>Sprite Player</h2>
             {timelineState.enabled ? (
               <>
-                <div className="player-controls" aria-label="Sprite playback controls">
-                  {detectedRowAnimations.length > 0 ? (
-                    <label className="player-number">
-                      <span>Clip</span>
-                      <select value={selectedAnimationName} onChange={(event) => changeSelectedAnimation(event.currentTarget.value)}>
-                        <option value={ALL_ANIMATIONS}>All rows</option>
-                        {detectedRowAnimations.map((animation) => (
-                          <option key={animation.name} value={animation.name}>
-                            {animation.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  ) : null}
-                  <button type="button" disabled={!canPlayTimeline} aria-label="Previous frame" onClick={() => stepTimelineFrame(-1)}>
-                    <SkipBack size={14} />
-                  </button>
-                  <button type="button" className="play-toggle" disabled={!canPlayTimeline} onClick={togglePlayback}>
-                    {isPlaying ? <Pause size={15} /> : <Play size={15} />}
-                    {isPlaying ? "Pause" : "Play"}
-                  </button>
-                  <button type="button" disabled={!canPlayTimeline} aria-label="Next frame" onClick={() => stepTimelineFrame(1)}>
-                    <SkipForward size={14} />
-                  </button>
-                  <label className="player-scrub">
-                    <span>Scrub</span>
-                    <input
-                      type="range"
-                      min="0"
-                      max={Math.max(0, timelineFrames.length - 1)}
-                      step="1"
-                      value={Math.max(0, timelinePosition)}
-                      disabled={!canScrubTimeline}
-                      onChange={(event) => selectPlaybackFrame(Number(event.currentTarget.value))}
-                    />
-                  </label>
-                  <label className="player-number">
-                    <span>FPS</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="60"
-                      value={playbackFps}
-                      onChange={(event) => changePlaybackFps(Number(event.currentTarget.value))}
-                    />
-                  </label>
-                  <label className="player-number">
-                    <span>Direction</span>
-                    <select value={playbackDirection} onChange={(event) => changePlaybackDirection(event.currentTarget.value)}>
-                      <option value="forward">Forward</option>
-                      <option value="reverse">Reverse</option>
-                      <option value="ping-pong">Ping-pong</option>
-                    </select>
-                  </label>
-                  <label className="player-number">
-                    <span>Duration ms</span>
-                    <input
-                      className="duration-input"
-                      type="number"
-                      min="1"
-                      max="60000"
-                      value={currentFrame ? Math.round(currentFrame.durationMs) : 0}
-                      disabled={!currentFrame}
-                      onChange={(event) => updateSelectedFrameDuration(Number(event.currentTarget.value))}
-                    />
-                  </label>
-                  <label className="player-loop">
-                    <input type="checkbox" checked={playbackLoop} onChange={(event) => setPlaybackLoop(event.currentTarget.checked)} />
-                    Loop
-                  </label>
-                  <label className="player-loop">
-                    <input
-                      type="checkbox"
-                      checked={normalizeTimelineFrames}
-                      onChange={(event) => setNormalizeTimelineFrames(event.currentTarget.checked)}
-                    />
-                    Normalize
-                  </label>
-                  <label className="player-loop">
-                    <input
-                      type="checkbox"
-                      checked={showOnionSkin}
-                      onChange={(event) => setShowOnionSkin(event.currentTarget.checked)}
-                    />
-                    Onion
-                  </label>
-                </div>
+                <SpritePlayerControls
+                  animations={detectedRowAnimations}
+                  selectedAnimationName={selectedAnimationName}
+                  canPlay={canPlayTimeline}
+                  canScrub={canScrubTimeline}
+                  isPlaying={isPlaying}
+                  timelinePosition={timelinePosition}
+                  frameCount={timelineFrames.length}
+                  playbackFps={playbackFps}
+                  playbackDirection={playbackDirection}
+                  playbackLoop={playbackLoop}
+                  normalizeTimelineFrames={normalizeTimelineFrames}
+                  showOnionSkin={showOnionSkin}
+                  currentFrameDurationMs={currentFrameDurationMs}
+                  currentFrameDurationInput={currentFrame ? Math.round(currentFrame.durationMs) : 0}
+                  currentFrameSelected={currentFrame !== undefined}
+                  onAnimationChange={changeSelectedAnimation}
+                  onStep={stepTimelineFrame}
+                  onTogglePlayback={togglePlayback}
+                  onScrub={selectPlaybackFrame}
+                  onFpsChange={changePlaybackFps}
+                  onDirectionChange={changePlaybackDirection}
+                  onDurationChange={updateSelectedFrameDuration}
+                  onLoopChange={setPlaybackLoop}
+                  onNormalizeChange={setNormalizeTimelineFrames}
+                  onOnionSkinChange={setShowOnionSkin}
+                />
                 <div className="player-readout">
                   <strong>
                     Frame {timelinePosition >= 0 ? timelinePosition + 1 : 0}/{timelineFrames.length}

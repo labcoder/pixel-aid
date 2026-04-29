@@ -380,7 +380,7 @@ git commit -m "feat(web): add timeline viewport layout model"
 - Modify `apps/web/src/App.tsx`
 - Modify `apps/web/src/styles.css` only if class names need shared scope
 
-- [ ] **Step 1: Extract component without behavior change**
+- [x] **Step 1: Extract component without behavior change**
 
 Create `SpritePlayerControls` with props for:
 
@@ -421,7 +421,7 @@ export type SpritePlayerControlsProps = {
 
 Move the existing `player-controls` JSX from `App.tsx` into this component. Keep the same class names so styles stay stable.
 
-- [ ] **Step 2: Use component in the existing bottom panel**
+- [x] **Step 2: Use component in the existing bottom panel**
 
 In `App.tsx`, replace the inline controls with:
 
@@ -455,7 +455,7 @@ In `App.tsx`, replace the inline controls with:
 />
 ```
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
