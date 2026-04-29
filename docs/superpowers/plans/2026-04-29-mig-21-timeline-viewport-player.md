@@ -718,7 +718,7 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 4: Update Linear and merge**
+- [x] **Step 4: Update Linear and merge**
 
 Add a Linear `MIG-21` comment with:
 - changed files
