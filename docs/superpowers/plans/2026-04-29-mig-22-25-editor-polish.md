@@ -223,7 +223,7 @@ git commit -m "feat(web): add undo redo for sheet frame edits"
 
 ## Task 3: MIG-24 Outline Source Color Detection And Picker
 
-- [ ] **Step 1: Add failing core outline tests**
+- [x] **Step 1: Add failing core outline tests**
 
 In `packages/core/src/core.test.ts`, add tests that:
 
@@ -231,7 +231,7 @@ In `packages/core/src/core.test.ts`, add tests that:
 - repair using an existing dark teal candidate without adding black;
 - keep custom outline color fallback behavior.
 
-- [ ] **Step 2: Run failing core tests**
+- [x] **Step 2: Run failing core tests**
 
 Run:
 
@@ -241,7 +241,7 @@ npm run test -w @pixelaid/core -- core.test.ts
 
 Expected: fail because outline candidate helpers/options do not exist.
 
-- [ ] **Step 3: Implement core detection/options**
+- [x] **Step 3: Implement core detection/options**
 
 Modify `packages/core/src/outline.ts`:
 
@@ -251,7 +251,7 @@ Modify `packages/core/src/outline.ts`:
 - support `sourceColors?: string[]` in `OutlineCleanupOptions`;
 - in `repairExisting`, treat selected source colors as existing outline colors that should not be thickened.
 
-- [ ] **Step 4: Wire shared/core fix options**
+- [x] **Step 4: Wire shared/core fix options**
 
 Modify:
 
@@ -259,11 +259,11 @@ Modify:
 - `packages/core/src/fix.ts` to pass `options.cleanup.outlineSourceColors`;
 - `packages/core/src/index.ts` to export candidate helper if useful to web.
 
-- [ ] **Step 5: Add web outline picker helpers/tests**
+- [x] **Step 5: Add web outline picker helpers/tests**
 
 Extend `apps/web/src/lib/outlineControls.ts` and tests to normalize candidate colors, choose automatic/manual/custom source mode, and decide when to pass `outlineSourceColors`.
 
-- [ ] **Step 6: Add inspector UI**
+- [x] **Step 6: Add inspector UI**
 
 Modify `App.tsx` and `styles.css`:
 
@@ -272,7 +272,7 @@ Modify `App.tsx` and `styles.css`:
 - let user pick detected source colors and custom hex;
 - keep current Color field as the output/add color control.
 
-- [ ] **Step 7: Document and commit**
+- [x] **Step 7: Document and commit**
 
 Update `docs/editor.md`. Run:
 

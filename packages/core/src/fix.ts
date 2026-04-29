@@ -73,6 +73,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
   const outlineCleaned = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
+    sourceColors: options.cleanup.outlineSourceColors,
     alpha: options.cleanup.outlineAlpha,
     size: options.cleanup.outlineSize,
     removeOrphans: options.cleanup.removeOrphans,
@@ -321,6 +322,7 @@ function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImage
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
   const outlined = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
+    sourceColors: options.cleanup.outlineSourceColors,
     alpha: options.cleanup.outlineAlpha,
     size: options.cleanup.outlineSize,
     removeOrphans: options.cleanup.removeOrphans,
