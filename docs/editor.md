@@ -12,6 +12,7 @@ Assets are imported source images. Each item keeps the original filename, source
 - Delete removes the asset from the editor session.
 - The source image remains separate from the fixed output so destructive changes are reversible.
 - Large imports show a visible decode/analyze status in the Assets panel and viewport while PixelAid prepares suggestions.
+- Optional provenance metadata is stored per imported asset. Origin, provider, model, prompt, seed, source image, and generation date can be edited in the Asset inspector without enabling any AI provider integration.
 
 # Fix Settings
 
@@ -191,6 +192,7 @@ Engine export targets can be selected in the Export inspector. When enabled, the
   - `frames/<frame-name>.png` for sheet-like exports
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest remains the canonical metadata file. It includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, animation clips, and operation settings.
+- If the selected import has provenance metadata, the JSON manifest includes it under `meta.provenance`; imports without provenance omit that field. Secret-like settings such as API keys, bearer tokens, passwords, authorization values, and credentials are filtered before manifest and bundle creation.
 - Palette files are exported beside the manifest. `.hex` is one lowercase `#rrggbb` color per line, `.gpl` is a deterministic GIMP palette, and `.palette.json` repeats the normalized palette with app/version metadata.
 - The validation report records manifest validation results plus warnings from alpha diagnostics, palette diagnostics, palette drift, animation metadata, and frame-sequence consistency.
 - The Export inspector shows the most recent validation summary after download, and the console log records warning and error counts.
