@@ -256,7 +256,7 @@ git commit -m "feat(mcp): add automation-ready handlers"
 
 ## Task 5: Documentation And Final Verification
 
-- [ ] **Step 1: Document automation workflows**
+- [x] **Step 1: Document automation workflows**
 
 Update `docs/automation.md` and `README.md` with:
 
@@ -267,7 +267,7 @@ Update `docs/automation.md` and `README.md` with:
 - JSON output and exit-code reference;
 - MCP-ready tool names and future server notes.
 
-- [ ] **Step 2: Run full verification**
+- [x] **Step 2: Run full verification**
 
 Run:
 

@@ -2,7 +2,7 @@
 
 PixelAid is a Vite + React + TypeScript editor for turning AI-generated images that only look like pixel art into real, grid-aligned, palette-limited, engine-ready pixel assets.
 
-The current milestone is a functional editor foundation: import an image, inspect it in a pixel-perfect viewport, run a worker-backed fake-pixel cleanup pipeline, compare input/output, and export a ZIP bundle containing a fixed PNG plus JSON manifest.
+The current milestone is a functional editor and automation foundation: import an image, inspect it in a pixel-perfect viewport, run a worker-backed fake-pixel cleanup pipeline, compare input/output, export engine-ready bundles, or run the same deterministic pipeline through the CLI and MCP-ready handlers.
 
 The near-term product focus is single-sprite cleanup for high-resolution AI images on simple backgrounds, followed by sprite-sheet workflows with frame slicing, playback, pivots, and engine-specific exports.
 
@@ -26,6 +26,9 @@ Useful scoped commands:
 
 ```sh
 npm run test -w @pixelaid/core
+npm run test -w @pixelaid/automation
+npm run test -w @pixelaid/cli
+npm run test -w @pixelaid/mcp
 npm run test -w @pixelaid/fixtures
 npm run benchmark -w @pixelaid/core
 npm run test -w @pixelaid/web
@@ -38,12 +41,16 @@ apps/web              Vite + React editor UI
 packages/core         Pure TypeScript image-processing algorithms
 packages/worker       Web Worker protocol and fix pipeline wrapper
 packages/exporters    Generic JSON manifest exporter
+packages/automation   Node-safe automation operations, PNG IO, and safe writes
+packages/cli          PixelAid CLI commands for local and batch workflows
+packages/mcp          MCP-ready schemas and direct tool handlers
 packages/shared       Shared types, constants, and manifest contracts
 packages/fixtures     Generated benchmark fixtures and expected metadata
 docs                  Architecture, algorithms, performance, and licensing notes
 ```
 
 See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
+See `docs/automation.md` for CLI and MCP-ready workflows.
 
 ## Current Workflow
 
@@ -53,6 +60,13 @@ See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Inspect the result in mode-specific views. Single sprites use Input, Compare, and Output; sheet-like modes use Input, Output, and Timeline. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
 6. Export a ZIP containing the fixed PNG and generic JSON manifest.
+
+Automation workflow:
+
+1. Run `pixelaid inspect input.png --json` to get dimensions, palette counts, alpha stats, grid candidates, sheet detection, and suggested settings.
+2. Run `pixelaid suggest input.png --asset-type sprite --target 64x64 --json` when an agent or script needs normalized settings without writing files.
+3. Run `pixelaid fix`, `pixelaid fix-sheet`, `pixelaid palette`, or `pixelaid export` to produce PNG, manifest, palette, engine sidecars, and optional ZIP output.
+4. Use `@pixelaid/mcp` tool definitions and handlers for MCP-ready agent integrations without launching the editor.
 
 ## Implemented Features
 
@@ -95,15 +109,22 @@ Processing:
 - ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
+Automation:
+
+- `@pixelaid/automation` wraps core/exporter operations for Node: PNG decode/encode, inspect, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
+- `@pixelaid/cli` provides `inspect`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, explicit frame metadata support, outline source color options, engine targets, and optional ZIP bundling.
+- `@pixelaid/mcp` provides MCP-ready tool definitions and direct handlers for `inspect_image`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
+
 ## Known Limitations
 
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
 - Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
-- Export currently downloads a ZIP containing PNG + generic JSON only. Godot, Unity, Phaser, TexturePacker, Tiled, and LDtk adapters are future work.
+- Export currently supports generic manifests plus Godot, Unity, and Phaser helper files. TexturePacker, Tiled, and LDtk adapters are future work.
 - Tilesets are inspect-only until seam diagnostics and tile-engine metadata exist. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
+- CLI and MCP-ready automation currently support PNG only. A long-running MCP server, local HTTP API, non-PNG codecs, and streaming progress are future work.
 
 ## Prioritized Roadmap
 
@@ -111,9 +132,9 @@ Processing:
 2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
 3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
 4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
-5. Exporters: add Godot, Unity, Phaser/TexturePacker, Tiled, and LDtk adapters or import helper scripts, including tileset seam diagnostics and tilemap metadata when those workflows mature.
+5. Exporters: deepen Godot, Unity, and Phaser import helpers, then add TexturePacker, Tiled, and LDtk adapters, including tileset seam diagnostics and tilemap metadata when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
-7. CLI/API/MCP: expose the deterministic core through batch commands, a local API, and MCP tools after the main cleanup and sheet workflows stabilize.
+7. Automation hardening: turn the MCP-ready handlers into a server process, add a local HTTP API, add non-PNG codecs, and support progress events for long batch jobs.
 8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
 
 ## Suggested Next Step
