@@ -45,7 +45,7 @@ Tilesets use conservative cleanup defaults because a clean repeated tile matters
 
 For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips for the timeline player. It can split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, recover faint presentation-cell outlines around tight sprite silhouettes, ignore footer-like metadata bands, merge nearby disconnected body/effect components when mild drift still points to a shared column grid, and name row clips from confident blocky left-side labels such as `idle`, `walk`, or `jump`.
 
-Auto Suggest also runs source-conditioning diagnostics for sheet-like imports. If the source has thousands of exact colors, a dense coarse palette, an opaque dark presentation background, sparse sprite coverage, or footer-like labels, the recommendation warns that frame-first source conditioning should happen before final resizing and palette lock. This is advisory: PixelAid still lets the user edit frame boxes, palette budgets, and cleanup order manually.
+Auto Suggest also runs source-conditioning diagnostics for sheet-like imports. If the source has thousands of exact colors, a dense coarse palette, an opaque dark presentation background, sparse sprite coverage, or footer-like labels, the recommendation warns that frame-first source conditioning should happen before final resizing and palette lock. Complex sheets switch the starting downscale method to `detailPreserving`, which costs a little more work per block but protects high-contrast line clusters such as helmet seams, visors, outlines, and weapon details from being swallowed by the dominant fill color. This is advisory: PixelAid still lets the user edit frame boxes, palette budgets, cleanup order, and downscale method manually.
 
 Auto Suggest chooses the downscale method from sampled pseudo-pixel block purity. Crisp fake-pixel blocks tend to select `dominant`; mixed or noisy blocks can select `adaptive` or `median`. The reason text reports the chosen method and sampled purity so users can understand the starting point before overriding it.
 
@@ -128,7 +128,7 @@ Cleanup controls run after block downsampling and alpha handling.
 
 - Max colors limits the fixed output palette.
 - Denoise controls local color cleanup before palette reduction. `Off` preserves current behavior, `Light` removes mild AI speckles, and `Flat` aggressively merges similar local colors into broader pixel-art regions.
-- Downscale selects the block-to-pixel strategy.
+- Downscale selects the block-to-pixel strategy. `Dominant` is best for crisp fake-pixel blocks, `Adaptive` falls back when a block is mixed, `Median` resists noise, `Average + palette` preserves broad lighting, and `Detail preserving` is intended for complex AI sheet frames where minority high-contrast lines need to survive before palette locking.
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
 - Remove edge halos remaps semi-transparent or background-colored edge pixels to nearby subject colors before outline and palette extraction. It is useful for AI images with pale fringes from white or transparent backgrounds.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.

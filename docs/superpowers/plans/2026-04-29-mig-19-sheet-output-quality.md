@@ -38,7 +38,7 @@
 - Modify: `packages/core/src/downsample.ts`
 - Modify: `packages/core/src/core.test.ts`
 
-- [ ] **Step 1: Write failing core regression**
+- [x] **Step 1: Write failing core regression**
 
 Add a test that builds a noisy pseudo-pixel source block where a minority high-contrast dark detail line should survive conversion. Call `downsampleBlocks` with the new detail-preserving method and assert the output keeps the dark detail instead of replacing it with the dominant fill.
 
@@ -50,7 +50,7 @@ npm run test -w @pixelaid/core -- core.test.ts
 
 Expected: FAIL because the method is not implemented.
 
-- [ ] **Step 2: Implement detail-preserving method**
+- [x] **Step 2: Implement detail-preserving method**
 
 Add a shared downscale method named `detailPreserving`.
 
@@ -61,7 +61,7 @@ Implementation requirements:
 - Avoid obvious one-pixel noise wins by requiring either meaningful support or line-like block coverage.
 - Keep algorithm options serializable.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -88,7 +88,7 @@ git commit -m "feat(core): preserve fine details when downscaling sheet frames"
 - Modify: `apps/web/src/lib/fixSuggestions.test.ts`
 - Modify: `apps/web/src/App.tsx`
 
-- [ ] **Step 1: Write failing web recommendation tests**
+- [x] **Step 1: Write failing web recommendation tests**
 
 Update `fixSuggestions` coverage so a high-color presentation sheet gets `detailPreserving` as the recommended downscale method.
 
@@ -100,14 +100,14 @@ npm run test -w @pixelaid/web -- fixSuggestions.test.ts
 
 Expected: FAIL until recommendation wiring is updated.
 
-- [ ] **Step 2: Wire UI defaults**
+- [x] **Step 2: Wire UI defaults**
 
 Implementation requirements:
 - Include `detailPreserving` in the inspector downscale select.
 - Prefer it for sheet/animation asset types when conditioning diagnostics say frame-first cleanup is recommended.
 - Keep non-sheet sprite presets conservative unless tests show a clear benefit.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
@@ -131,11 +131,11 @@ git commit -m "feat(web): recommend detail-preserving sheet fixes"
 - Modify: `docs/editor.md`
 - Optional: `docs/architecture.md` if implementation changes pipeline ordering.
 
-- [ ] **Step 1: Document user-facing behavior**
+- [x] **Step 1: Document user-facing behavior**
 
 Explain that complex AI sprite sheets may need detail-preserving frame conversion before palette locking, and that this mode is slower but better at preserving readable lines and features.
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run:
 
