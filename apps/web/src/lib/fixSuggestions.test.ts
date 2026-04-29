@@ -191,6 +191,7 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.downscale).toBe("detailPreserving");
     expect(suggestion.reason).toContain("Frame-first source conditioning");
     expect(suggestion.categoryWarnings).toEqual(
       expect.arrayContaining([

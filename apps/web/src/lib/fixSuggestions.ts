@@ -69,7 +69,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
-  const downscale = preset.downscale;
+  const downscale: DownscaleMethod =
+    mode === "spriteSheet" && sheetConditioning.recommendFrameFirst ? "detailPreserving" : preset.downscale;
   const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
