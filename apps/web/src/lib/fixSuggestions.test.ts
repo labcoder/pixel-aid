@@ -54,6 +54,49 @@ function largeAnimationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function complexPresentationSheetLikeSource(): RGBAImage {
+  const image = blankImage(512, 320);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 10;
+    image.data[offset + 1] = 12;
+    image.data[offset + 2] = 12;
+    image.data[offset + 3] = 255;
+  }
+
+  const rows = [
+    { y: 24, cells: 3 },
+    { y: 116, cells: 4 },
+    { y: 208, cells: 3 }
+  ];
+  const startX = 104;
+  const cellWidth = 64;
+  const cellHeight = 64;
+
+  for (const row of rows) {
+    const rowWidth = row.cells * cellWidth;
+    drawRect(image, startX, row.y, rowWidth, 2, [22, 24, 24, 255]);
+    drawRect(image, startX, row.y + cellHeight - 2, rowWidth, 2, [22, 24, 24, 255]);
+    for (let column = 0; column <= row.cells; column += 1) {
+      drawRect(image, startX + column * cellWidth, row.y, 2, cellHeight, [22, 24, 24, 255]);
+    }
+    for (let column = 0; column < row.cells; column += 1) {
+      const baseX = startX + column * cellWidth + 20;
+      const baseY = row.y + 18;
+      for (let y = baseY; y < baseY + 26; y += 1) {
+        for (let x = baseX; x < baseX + 24; x += 1) {
+          const offset = (y * image.width + x) * 4;
+          image.data[offset] = (x * 17 + y * 11 + column * 31) % 256;
+          image.data[offset + 1] = (x * 9 + y * 23 + row.y) % 256;
+          image.data[offset + 2] = (x * 29 + y * 5 + column * 13) % 256;
+          image.data[offset + 3] = 255;
+        }
+      }
+    }
+  }
+
+  return image;
+}
+
 function drawRect(image: RGBAImage, startX: number, startY: number, width: number, height: number, rgba: [number, number, number, number]) {
   for (let y = startY; y < startY + height; y += 1) {
     for (let x = startX; x < startX + width; x += 1) {
@@ -141,6 +184,23 @@ describe("fix setting suggestions", () => {
     expect(suggestion.categoryReason).toMatch(/timeline|animation/i);
     expect(suggestion.modeConfidence).toBeGreaterThan(0.75);
     expect(suggestion.reason).toContain("multiple frames");
+  });
+
+  test("recommends frame-first conditioning for complex presentation sheets", () => {
+    const suggestion = suggestFixSettings(complexPresentationSheetLikeSource());
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.reason).toContain("Frame-first source conditioning");
+    expect(suggestion.categoryWarnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "sheet-frame-first-conditioning",
+          severity: "warning"
+        })
+      ])
+    );
+    expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(true);
   });
 
   test("suggests icon defaults for small near-square sources", () => {

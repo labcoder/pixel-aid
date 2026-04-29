@@ -1,4 +1,4 @@
-import { detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
+import { analyzeSheetConditioning, detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
 import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type {
   AlphaMode,
@@ -49,6 +49,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
   const detectedSheetLayout = detectSheetLayout(image);
+  const sheetConditioning = detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
   const sheetLayoutScore = Math.max(estimateSheetLayoutScore(image), detectedSheetLayout.confidence);
   const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, sheetLayoutScore);
   const candidate = chooseSuggestionGrid(image, candidates, initialMode);
@@ -75,6 +76,12 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
       : undefined;
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
+  const categoryWarnings = withConditioningWarnings(getAssetTypeWarnings(classification.assetType), mode, sheetConditioning.recommendFrameFirst);
+  const baseReason = suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore);
+  const reason =
+    mode === "spriteSheet" && sheetConditioning.recommendFrameFirst
+      ? `${baseReason} Frame-first source conditioning is recommended before final output.`
+      : baseReason;
 
   return {
     assetType: classification.assetType,
@@ -97,13 +104,32 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     alpha: suggestedAlpha,
     alphaSettings: { ...preset.alphaSettings },
     ...(sheetLayout ? { sheetLayout } : {}),
-    reason: suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore),
+    reason,
     confidence: candidate?.confidence ?? 0.25,
     modeConfidence,
     categoryConfidence: classification.confidence,
     categoryReason: classification.reason,
-    categoryWarnings: getAssetTypeWarnings(classification.assetType)
+    categoryWarnings
   };
+}
+
+function withConditioningWarnings(
+  warnings: AssetTypeWarning[],
+  mode: AssetMode,
+  recommendFrameFirst: boolean
+): AssetTypeWarning[] {
+  if (mode !== "spriteSheet" || !recommendFrameFirst) {
+    return warnings;
+  }
+
+  return [
+    ...warnings,
+    {
+      code: "sheet-frame-first-conditioning",
+      severity: "warning",
+      message: "Source sheet looks presentation-style or overly color-dense; condition frame cells before final resizing and palette lock."
+    }
+  ];
 }
 
 function classifyAssetType(input: {
