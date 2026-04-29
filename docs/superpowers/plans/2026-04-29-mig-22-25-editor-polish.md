@@ -356,7 +356,7 @@ git commit -m "fix(web): keep repeated operation status visible"
 
 ## Task 5: Browser Verification, Full Checks, Linear, Merge
 
-- [ ] **Step 1: Browser verify**
+- [x] **Step 1: Browser verify**
 
 Start:
 
@@ -374,7 +374,7 @@ Verify:
 - Fix shows immediate status and clears on completion;
 - console has no app errors.
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run:
 
