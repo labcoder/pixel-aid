@@ -31,7 +31,7 @@
 - Create `apps/web/src/lib/sheetManualEditing.ts`
 - Create `apps/web/src/lib/sheetManualEditing.test.ts`
 
-- [ ] **Step 1: Write failing tests for cell insertion/removal**
+- [x] **Step 1: Write failing tests for cell insertion/removal**
 
 Add `sheetManualEditing.test.ts` with fixtures:
 
@@ -62,7 +62,7 @@ npm run test -w @pixelaid/web -- sheetManualEditing.test.ts
 
 Expected: FAIL because the module does not exist.
 
-- [ ] **Step 2: Implement cell helpers**
+- [x] **Step 2: Implement cell helpers**
 
 Create:
 
@@ -103,7 +103,7 @@ Implementation rules:
 - Repack through `repackAnimationRows`.
 - Return a stable selected frame index for the inserted/nearest remaining frame.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
