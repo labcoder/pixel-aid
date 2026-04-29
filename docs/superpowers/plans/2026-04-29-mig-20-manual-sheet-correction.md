@@ -293,7 +293,7 @@ git commit -m "feat(web): add manual sheet correction controls"
 **Files:**
 - No production file changes expected.
 
-- [ ] **Step 1: Start or reuse dev server**
+- [x] **Step 1: Start or reuse dev server**
 
 Run from the MIG-20 worktree:
 
@@ -303,7 +303,7 @@ npm run dev -w @pixelaid/web -- --host 127.0.0.1 --port 5174
 
 Use another port if occupied.
 
-- [ ] **Step 2: Verify manual correction flow**
+- [x] **Step 2: Verify manual correction flow**
 
 Using the attached robot sheet:
 
@@ -320,7 +320,7 @@ Manual checks:
 - Add a row below a selected row, then remove it.
 - Run Fix and confirm output uses corrected frames.
 
-- [ ] **Step 3: Capture verification notes**
+- [x] **Step 3: Capture verification notes**
 
 Add concise notes to the final response and Linear MIG-20 comment. If a Playwright script is practical, save the browser-observed text output in the working notes, not as a committed artifact.
 
@@ -332,7 +332,7 @@ Add concise notes to the final response and Linear MIG-20 comment. If a Playwrig
 - Modify `docs/editor.md`
 - Modify this plan checklist.
 
-- [ ] **Step 1: Document manual correction tools**
+- [x] **Step 1: Document manual correction tools**
 
 In `docs/editor.md`, update Frame / Cell and Viewport sections:
 - users can add cells before/after selected frames
@@ -340,7 +340,7 @@ In `docs/editor.md`, update Frame / Cell and Viewport sections:
 - new source boxes are approximate and should be dragged/resized in Input view
 - corrections update timeline clips and export metadata
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run:
 
@@ -351,7 +351,7 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 3: Commit, update Linear, merge**
+- [x] **Step 3: Commit, update Linear, merge**
 
 Commit docs and completed plan:
 

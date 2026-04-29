@@ -93,6 +93,8 @@ When Auto Suggest detected explicit source frame rectangles, the Input view uses
 
 Detection notes appear above the frame controls after Auto Suggest. They summarize frame and row counts, variable row lengths, row confidence, column confidence, drift, component merging, label confidence, source-conditioning diagnostics, and warnings such as outlined-cell detection, footer metadata removal, or content-centered uneven-gutter normalization. Treat warnings as review prompts: the boxes are editable, row clip names can still be edited in the timeline, and manual frame controls remain available.
 
+Manual corrections appear when detected row clips are available. They can add a cell before or after the selected frame, remove the selected cell, add a row above or below the selected clip, or remove the selected row when more than one row remains. New cells and rows start from nearby source boxes so the user has something concrete to adjust in the Input view. These edits immediately repack the output sheet, update timeline clip membership, and feed the next Fix/export operation.
+
 When detected row clips are available, the Frame / Cell section switches to per-animation cell controls. Changing a row's Cell W or Cell H updates every frame in that animation and repacks the output sheet by animation row. Different animations can use different cell sizes, so an idle row can be narrower than a shoot or death row. When grid scale is available, the source sampling footprint expands around each frame center to match the requested native cell, which keeps the sprite inside the cell instead of stretching a tight source crop. Margin and Spacing reflow detected rows without clearing the source boxes.
 
 Editing manual Frame W/H, Rows, Columns, Grid, or Fit Rows / Columns clears the detected layout and switches back to manual rectangular slicing.
@@ -121,6 +123,7 @@ The viewport renders images through Canvas2D with smoothing disabled.
 - Compare view shows single-sprite source and fixed output with a draggable divider.
 - When the fixed output is cropped, Compare view aligns it back to the detected source crop and scales it uniformly with nearest-neighbor rendering. When crop is disabled, Compare uses the output dimensions and detected grid scale to synthesize a source-space footprint so the output and its ruler stay aligned without reintroducing crop metadata into exports.
 - Sheet frame overlays are drawn on the source side before Fix and on the output side after Fix.
+- Newly added manual sheet cells and rows are approximate source selections. Select the new frame in the timeline or viewport, then adjust its Input-view source box before running Fix when Auto Suggest missed a first or last cell.
 
 # Cleanup
 
