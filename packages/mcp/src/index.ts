@@ -39,7 +39,7 @@ export type PixelAidMcpToolDefinition = {
 
 export type PixelAidMcpResponse = {
   content: Array<{ type: "text"; text: string }>;
-  structuredContent: any;
+  structuredContent: Record<string, unknown>;
   isError: boolean;
 };
 

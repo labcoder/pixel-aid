@@ -17,7 +17,6 @@ import {
   type EngineExportTarget,
 } from "@pixelaid/exporters";
 import {
-  assetTypeToMode,
   getAssetTypeDefinition,
   type AnimationTag,
   type AssetType,
@@ -41,7 +40,6 @@ import {
   relativeToDirectory,
   writeJsonOutput,
   writeTextOutput,
-  type PlanOutputFileOptions,
 } from "./paths";
 import {
   automationError,

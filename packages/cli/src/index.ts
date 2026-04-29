@@ -44,7 +44,7 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): 
   const args = [...argv];
   const json = takeBooleanFlag(args, "--json");
   try {
-    const result = await runParsedCommand(args, json);
+    const result = await runParsedCommand(args);
     emit(io.stdout, json ? `${JSON.stringify(result.payload, null, 2)}\n` : result.human);
     return result.code;
   } catch (error) {
@@ -59,7 +59,7 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): 
   }
 }
 
-async function runParsedCommand(args: string[], json: boolean): Promise<CliCommandResult> {
+async function runParsedCommand(args: string[]): Promise<CliCommandResult> {
   const command = args.shift();
   if (!command || command === "--help" || command === "-h") {
     return {
@@ -71,23 +71,23 @@ async function runParsedCommand(args: string[], json: boolean): Promise<CliComma
 
   switch (command) {
     case "inspect":
-      return emitAutomation(command, await inspectImage({ inputPath: readInput(args), options: parseFixOptions(args) }), json);
+      return emitAutomation(command, await inspectImage({ inputPath: readInput(args), options: parseFixOptions(args) }));
     case "suggest":
-      return emitAutomation(command, await suggestFixSettings({ inputPath: readInput(args), options: parseFixOptions(args) }), json);
+      return emitAutomation(command, await suggestFixSettings({ inputPath: readInput(args), options: parseFixOptions(args) }));
     case "fix":
-      return runFixCommand(command, args, json);
+      return runFixCommand(command, args);
     case "fix-sheet":
-      return runFixSheetCommand(command, args, json);
+      return runFixSheetCommand(command, args);
     case "palette":
-      return runPaletteCommand(command, args, json);
+      return runPaletteCommand(command, args);
     case "export":
-      return runExportCommand(command, args, json);
+      return runExportCommand(command, args);
     default:
       throw new CliUsageError(`Unknown command "${command}".`);
   }
 }
 
-async function runFixCommand(command: string, args: string[], json: boolean): Promise<CliCommandResult> {
+async function runFixCommand(command: string, args: string[]): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const manifestPath = takeValue(args, "--manifest");
@@ -103,11 +103,10 @@ async function runFixCommand(command: string, args: string[], json: boolean): Pr
       options,
       overwrite,
     }),
-    json,
   );
 }
 
-async function runFixSheetCommand(command: string, args: string[], json: boolean): Promise<CliCommandResult> {
+async function runFixSheetCommand(command: string, args: string[]): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outDir = takeRequiredValue(args, "--out-dir");
   const outputPath = takeValue(args, "--out");
@@ -132,19 +131,19 @@ async function runFixSheetCommand(command: string, args: string[], json: boolean
     options,
     overwrite,
   };
-  return emitAutomation(command, await fixSpriteSheet(request), json);
+  return emitAutomation(command, await fixSpriteSheet(request));
 }
 
-async function runPaletteCommand(command: string, args: string[], json: boolean): Promise<CliCommandResult> {
+async function runPaletteCommand(command: string, args: string[]): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const maxColors = readNumberFlag(args, "--max-colors", readNumberFlag(args, "--colors", 24));
   const overwrite = takeBooleanFlag(args, "--overwrite");
   assertNoExtraArgs(args);
-  return emitAutomation(command, await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }), json);
+  return emitAutomation(command, await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }));
 }
 
-async function runExportCommand(command: string, args: string[], json: boolean): Promise<CliCommandResult> {
+async function runExportCommand(command: string, args: string[]): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outDir = takeRequiredValue(args, "--out-dir");
   const overwrite = takeBooleanFlag(args, "--overwrite");
@@ -155,19 +154,19 @@ async function runExportCommand(command: string, args: string[], json: boolean):
   const request: ExportEngineBundleRequest = { inputPath, outDir, targets, options, overwrite };
   const result = await exportEngineBundle(request);
   if (!result.ok || bundle !== "zip") {
-    return emitAutomation(command, result, json);
+    return emitAutomation(command, result);
   }
 
   const zipResult = await writeZipBundle(outDir, result.value.files, { overwrite });
   if (!zipResult.ok) {
-    return emitAutomation(command, zipResult, json);
+    return emitAutomation(command, zipResult);
   }
 
   result.value.files.push(zipResult.value);
-  return emitAutomation(command, result, json);
+  return emitAutomation(command, result);
 }
 
-function emitAutomation<T>(command: string, result: AutomationResult<T>, _json: boolean): CliCommandResult {
+function emitAutomation<T>(command: string, result: AutomationResult<T>): CliCommandResult {
   if (!result.ok) {
     return {
       code: result.error.exitCode,
