@@ -873,6 +873,72 @@ button:disabled {
   color: var(--amber);
 }
 
+.manual-sheet-corrections {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  padding: 0.55rem;
+  color: var(--muted);
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.68rem;
+}
+
+.manual-sheet-correction-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.manual-sheet-correction-heading strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.manual-sheet-correction-heading span {
+  min-width: 0;
+  overflow: hidden;
+  color: #78837e;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.manual-sheet-correction-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
+}
+
+.manual-sheet-correction-grid button {
+  min-width: 0;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.35rem;
+  color: var(--text);
+  background: #172221;
+  border-color: #31504c;
+  font-size: 0.68rem;
+  line-height: 1.1;
+  white-space: normal;
+}
+
+.manual-sheet-correction-grid button:disabled {
+  color: #606966;
+  background: #111616;
+  border-color: #222b29;
+}
+
+.manual-sheet-corrections small {
+  color: #78837e;
+  line-height: 1.35;
+}
+
 .animation-cell-controls {
   display: grid;
   gap: 5px;

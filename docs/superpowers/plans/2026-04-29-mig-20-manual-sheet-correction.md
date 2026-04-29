@@ -200,7 +200,7 @@ git commit -m "feat(web): add manual sheet row edit helpers"
 - Modify `apps/web/src/App.tsx`
 - Optional modify `apps/web/src/index.css`
 
-- [ ] **Step 1: Add failing App-level coverage if existing harness supports it**
+- [x] **Step 1: Add failing App-level coverage if existing harness supports it**
 
 If there is no component-level harness for `App.tsx`, keep this step manual and rely on pure helper tests plus Playwright verification in Task 4.
 
@@ -212,7 +212,7 @@ Get-ChildItem apps\web\src -Recurse -Filter *.test.tsx
 
 Expected: likely no App component harness.
 
-- [ ] **Step 2: Wire manual correction callbacks**
+- [x] **Step 2: Wire manual correction callbacks**
 
 In `App.tsx`, import:
 
@@ -241,7 +241,7 @@ Each callback must:
 - pause playback
 - append a concise log line
 
-- [ ] **Step 3: Add inspector controls**
+- [x] **Step 3: Add inspector controls**
 
 In the Frame / Cell group, below detection notes and above per-animation cell size controls, add a compact correction panel shown only when `detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0`.
 
@@ -270,7 +270,7 @@ Suggested copy:
 </div>
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
