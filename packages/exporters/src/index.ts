@@ -2,6 +2,7 @@ export {
   GODOT_IMPORT_GUIDANCE,
   UNITY_IMPORT_GUIDANCE,
   createPixelAssetManifest,
+  sanitizeAssetProvenance,
   validateManifest
 } from "./manifest";
 export type { CreateManifestOptions } from "./manifest";

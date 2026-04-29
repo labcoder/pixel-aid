@@ -33,6 +33,23 @@ export type AssetTypeClassification = {
   warnings: AssetTypeWarning[];
 };
 
+export type AssetProvenanceOrigin = "ai" | "manual" | "unknown";
+
+export type AssetProvenanceSettingValue = string | number | boolean | null;
+
+export type AssetProvenance = {
+  origin: AssetProvenanceOrigin;
+  provider?: string;
+  model?: string;
+  prompt?: string;
+  negativePrompt?: string;
+  seed?: string | number;
+  sourceImage?: string;
+  generatedAt?: string;
+  settings?: Record<string, AssetProvenanceSettingValue>;
+  postProcessing?: string[];
+};
+
 export type DiagnosticSeverity = "info" | "warning" | "error";
 
 export type TilesetSeamEdge = "right-left" | "bottom-top";
@@ -382,6 +399,7 @@ export type PixelAssetManifest = {
     assetType: AssetType;
     generatedAt?: string;
     palette: string[];
+    provenance?: AssetProvenance;
     source: {
       width: number;
       height: number;

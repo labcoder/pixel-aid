@@ -3,6 +3,7 @@ import {
   GODOT_IMPORT_GUIDANCE,
   UNITY_IMPORT_GUIDANCE,
   createPixelAssetManifest,
+  sanitizeAssetProvenance,
   validateManifest
 } from "./index";
 import type { FixOptions, PixelFixResult, RGBAImage } from "@pixelaid/shared";
@@ -272,5 +273,84 @@ describe("generic manifest export", () => {
   test("exports engine guidance placeholders for Godot and Unity", () => {
     expect(GODOT_IMPORT_GUIDANCE.join("\n")).toContain("nearest");
     expect(UNITY_IMPORT_GUIDANCE.join("\n")).toContain("Point");
+  });
+
+  test("includes optional agnostic provenance metadata when provided", () => {
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png",
+      provenance: {
+        origin: "ai",
+        provider: "OpenAI",
+        model: "gpt-image-2",
+        prompt: "tiny fantasy hero, transparent background",
+        seed: "42",
+        sourceImage: "concept.png",
+        generatedAt: "2026-04-28T18:15:00.000Z",
+        settings: {
+          size: "1024x1024",
+          quality: "high"
+        },
+        postProcessing: ["PixelAid fix"]
+      }
+    });
+
+    expect(manifest.meta.provenance).toEqual({
+      origin: "ai",
+      provider: "OpenAI",
+      model: "gpt-image-2",
+      prompt: "tiny fantasy hero, transparent background",
+      seed: "42",
+      sourceImage: "concept.png",
+      generatedAt: "2026-04-28T18:15:00.000Z",
+      settings: {
+        size: "1024x1024",
+        quality: "high"
+      },
+      postProcessing: ["PixelAid fix"]
+    });
+  });
+
+  test("omits provenance metadata when it is absent", () => {
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png"
+    });
+
+    expect(manifest.meta.provenance).toBeUndefined();
+  });
+
+  test("filters secret-like provenance settings before manifest export", () => {
+    const sanitized = sanitizeAssetProvenance({
+      origin: "ai",
+      provider: "Example",
+      model: "example-model",
+      settings: {
+        apiKey: "fixture-api-key-redacted",
+        bearerToken: "Bearer hidden",
+        password: "hunter2",
+        promptStrength: 0.75,
+        seed: "abc123"
+      }
+    });
+
+    expect(sanitized?.settings).toEqual({
+      promptStrength: 0.75,
+      seed: "abc123"
+    });
+
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png",
+      provenance: {
+        origin: "ai",
+        settings: {
+          authorization: "Bearer hidden",
+          safeSetting: true
+        }
+      }
+    });
+
+    expect(manifest.meta.provenance?.settings).toEqual({ safeSetting: true });
   });
 });
