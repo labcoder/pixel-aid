@@ -167,8 +167,21 @@ function createCapture(): CliCapture {
   return { stdout: [], stderr: [] };
 }
 
-function parseStdout(capture: CliCapture): any {
-  return JSON.parse(capture.stdout.join(""));
+type CliJson = {
+  ok: boolean;
+  command?: string;
+  result: {
+    image?: { width: number; height: number };
+    options?: { assetType: string; targetWidth?: number; targetHeight?: number };
+    files?: Array<{ kind: string; relativePath: string }>;
+    manifest?: { frames: unknown[] };
+    palette?: string[];
+  };
+  error?: { code: string };
+};
+
+function parseStdout(capture: CliCapture): CliJson {
+  return JSON.parse(capture.stdout.join("")) as CliJson;
 }
 
 function createFrames(): SpriteFrame[] {
