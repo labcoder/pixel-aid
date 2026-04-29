@@ -127,7 +127,7 @@ git commit -m "feat(web): add manual sheet cell edit helpers"
 - Modify `apps/web/src/lib/sheetManualEditing.ts`
 - Modify `apps/web/src/lib/sheetManualEditing.test.ts`
 
-- [ ] **Step 1: Write failing row tests**
+- [x] **Step 1: Write failing row tests**
 
 Add tests for:
 - `insertRowNearSelection(..., placement: "before")` creates a new row above the selected row with one frame copied from the selected row's first frame dimensions.
@@ -143,7 +143,7 @@ npm run test -w @pixelaid/web -- sheetManualEditing.test.ts
 
 Expected: FAIL because row helpers are not implemented.
 
-- [ ] **Step 2: Implement row helpers**
+- [x] **Step 2: Implement row helpers**
 
 Add:
 
@@ -176,7 +176,7 @@ Implementation rules:
 - Repack all rows after insertion/removal.
 - Do not allow the final row to be removed; return unchanged state if it would leave zero rows.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
