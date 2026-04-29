@@ -1,4 +1,14 @@
-import type { Rect, RGBAImage, SheetLayoutDetection, SheetLayoutDiagnostics, SheetRowLabel, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type {
+  Rect,
+  RGBAImage,
+  SheetConditioningDiagnostics,
+  SheetLayoutDetection,
+  SheetLayoutDiagnostics,
+  SheetRowLabel,
+  SheetSliceOptions,
+  SpriteFrame
+} from "@pixelaid/shared";
+import { analyzeSheetConditioning } from "./sheetConditioning";
 
 type Band = {
   start: number;
@@ -23,6 +33,18 @@ type DriftNormalizationResult = {
 };
 
 type ResolvedSegments = {
+  segments: Segment[];
+  usedOutlinedCells: boolean;
+  usedContentCentering: boolean;
+  usedComponentMerging: boolean;
+  usedDriftFitting: boolean;
+  mergedComponentCount: number;
+  maxCenterDriftPx: number;
+  rowLabel?: Omit<SheetRowLabel, "rowIndex">;
+};
+
+type DetectedRow = {
+  band: Band;
   segments: Segment[];
   usedOutlinedCells: boolean;
   usedContentCentering: boolean;
@@ -101,6 +123,7 @@ export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
 
 export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   const background = sampleCornerBackground(image);
+  const sourceConditioning = analyzeSheetConditioning(image);
   const rowCounts = new Uint16Array(image.height);
   const rowThreshold = Math.max(4, Math.floor(image.width * 0.018));
 
@@ -115,11 +138,10 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
 
   const rowBands = bandsFromCounts(rowCounts, rowThreshold, 3, 12);
-  const rawRows = alignDetectedRowsToSharedColumns(
-    rowBands
+  const candidateRows = rowBands
     .map((band) => {
       const resolved = resolveFrameSegments(image, band, background);
-      return {
+      const row: DetectedRow = {
         band,
         segments: resolved.segments,
         usedOutlinedCells: resolved.usedOutlinedCells,
@@ -128,11 +150,14 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
         usedDriftFitting: resolved.usedDriftFitting,
         mergedComponentCount: resolved.mergedComponentCount,
         maxCenterDriftPx: resolved.maxCenterDriftPx,
-        rowLabel: resolved.rowLabel
+        ...(resolved.rowLabel ? { rowLabel: resolved.rowLabel } : {})
       };
+      return expandRowToSubtleCellBounds(image, row, background);
     })
-    .filter((row) => row.segments.length > 0)
-  );
+    .filter((row) => row.segments.length > 0);
+  const footerFilter = filterFooterRows(candidateRows, image.height);
+  const rawRows = alignDetectedRowsToSharedColumns(footerFilter.rows);
+  const conditioning = withFooterConditioningIssue(sourceConditioning, footerFilter.removedCount);
 
   if (rawRows.length === 0) {
     return emptyDetection("No repeated sheet rows detected");
@@ -180,6 +205,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
       frames.push({
         name: `${rowName}_${column.toString().padStart(3, "0")}`,
         rect: { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight },
+        sourceRect: { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight },
         pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
         durationMs: 120,
         tags: [rowName]
@@ -231,7 +257,8 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     usedOutlinedCells: rawRows.some((row) => row.usedOutlinedCells),
     usedContentCentering: rawRows.some((row) => row.usedContentCentering),
     labelNames: rowLabels.map((label) => label.name),
-    labelRowCount: rowLabels.length
+    labelRowCount: rowLabels.length,
+    conditioning
   });
 
   return {
@@ -389,6 +416,162 @@ function resolveFrameSegments(image: RGBAImage, band: Band, background: [number,
     maxCenterDriftPx: 0,
     ...(rowLabel ? { rowLabel } : {})
   };
+}
+
+function expandRowToSubtleCellBounds(
+  image: RGBAImage,
+  row: DetectedRow,
+  background: [number, number, number, number]
+): DetectedRow {
+  if (row.segments.length < 2 || row.usedOutlinedCells) {
+    return row;
+  }
+
+  const centered = normalizeUnevenContentSegments(row.segments, image.width);
+  const segments = centered.usedContentCentering ? centered.segments : row.segments;
+  const expandedBand = subtleCellBandForRow(image, row.band, segments, background);
+
+  if (!expandedBand) {
+    return centered.usedContentCentering
+      ? {
+          ...row,
+          segments,
+          usedContentCentering: true
+        }
+      : row;
+  }
+
+  return {
+    ...row,
+    band: expandedBand,
+    segments,
+    usedOutlinedCells: true,
+    usedContentCentering: row.usedContentCentering || centered.usedContentCentering
+  };
+}
+
+function subtleCellBandForRow(
+  image: RGBAImage,
+  band: Band,
+  segments: Segment[],
+  background: [number, number, number, number]
+): Band | undefined {
+  if (segments.length < 2) {
+    return undefined;
+  }
+
+  const xStart = Math.max(0, Math.min(...segments.map((segment) => segment.x)));
+  const xEnd = Math.min(image.width, Math.max(...segments.map((segment) => segment.x + segment.w)));
+  const rowWidth = xEnd - xStart;
+  if (rowWidth < 24) {
+    return undefined;
+  }
+
+  const typicalWidth = Math.max(1, medianInteger(segments.map((segment) => segment.w)));
+  const searchRadius = Math.max(12, Math.min(96, Math.round(typicalWidth * 0.8)));
+  const top = findSubtleHorizontalLine(
+    image,
+    xStart,
+    xEnd,
+    band.start,
+    Math.max(0, band.start - searchRadius),
+    -1,
+    background
+  );
+  const bottom = findSubtleHorizontalLine(
+    image,
+    xStart,
+    xEnd,
+    band.end,
+    Math.min(image.height - 1, band.end + searchRadius),
+    1,
+    background
+  );
+
+  if (top === undefined || bottom === undefined || bottom <= top) {
+    return undefined;
+  }
+
+  const topStart = extendSubtleHorizontalLineStart(image, xStart, xEnd, top, background);
+  const bottomEnd = extendSubtleHorizontalLineEnd(image, xStart, xEnd, bottom, background);
+  const height = bottomEnd - topStart + 1;
+  if (height < Math.max(16, typicalWidth * 0.55) || height > typicalWidth * 1.55) {
+    return undefined;
+  }
+
+  return { start: topStart, end: bottomEnd };
+}
+
+function findSubtleHorizontalLine(
+  image: RGBAImage,
+  xStart: number,
+  xEnd: number,
+  startY: number,
+  stopY: number,
+  step: 1 | -1,
+  background: [number, number, number, number]
+): number | undefined {
+  for (let y = startY; step > 0 ? y <= stopY : y >= stopY; y += step) {
+    if (subtleHorizontalLineScore(image, xStart, xEnd, y, background) >= 0.58) {
+      return y;
+    }
+  }
+
+  return undefined;
+}
+
+function extendSubtleHorizontalLineEnd(
+  image: RGBAImage,
+  xStart: number,
+  xEnd: number,
+  startY: number,
+  background: [number, number, number, number]
+): number {
+  let y = startY;
+  while (y + 1 < image.height && subtleHorizontalLineScore(image, xStart, xEnd, y + 1, background) >= 0.58) {
+    y += 1;
+  }
+  return y;
+}
+
+function extendSubtleHorizontalLineStart(
+  image: RGBAImage,
+  xStart: number,
+  xEnd: number,
+  startY: number,
+  background: [number, number, number, number]
+): number {
+  let y = startY;
+  while (y - 1 >= 0 && subtleHorizontalLineScore(image, xStart, xEnd, y - 1, background) >= 0.58) {
+    y -= 1;
+  }
+  return y;
+}
+
+function subtleHorizontalLineScore(
+  image: RGBAImage,
+  xStart: number,
+  xEnd: number,
+  y: number,
+  background: [number, number, number, number]
+): number {
+  let count = 0;
+  for (let x = xStart; x < xEnd; x += 1) {
+    if (isSubtleGridPixel(image, x, y, background)) {
+      count += 1;
+    }
+  }
+  return count / Math.max(1, xEnd - xStart);
+}
+
+function isSubtleGridPixel(image: RGBAImage, x: number, y: number, background: [number, number, number, number]): boolean {
+  const offset = (y * image.width + x) * 4;
+  const distance =
+    Math.abs(image.data[offset]! - background[0]) +
+    Math.abs(image.data[offset + 1]! - background[1]) +
+    Math.abs(image.data[offset + 2]! - background[2]) +
+    Math.abs(image.data[offset + 3]! - background[3]);
+  return distance > 18;
 }
 
 function outlinedCellSegmentsForBand(
@@ -701,6 +884,55 @@ function normalizeDriftedSegmentsByStart(segments: Segment[], imageWidth: number
   };
 }
 
+function filterFooterRows(rows: DetectedRow[], imageHeight: number): { rows: DetectedRow[]; removedCount: number } {
+  if (rows.length <= 1) {
+    return { rows, removedCount: 0 };
+  }
+
+  const frameLikeRows = rows.filter((row) => row.segments.length >= 2);
+  const typicalHeight = Math.max(1, medianInteger(frameLikeRows.map((row) => row.band.end - row.band.start + 1)));
+  const typicalSegmentWidth = Math.max(1, medianInteger(frameLikeRows.flatMap((row) => row.segments.map((segment) => segment.w))));
+  const filtered = rows.filter((row) => !isFooterLikeRow(row, imageHeight, typicalHeight, typicalSegmentWidth));
+
+  return {
+    rows: filtered,
+    removedCount: rows.length - filtered.length
+  };
+}
+
+function isFooterLikeRow(row: DetectedRow, imageHeight: number, typicalHeight: number, typicalSegmentWidth: number): boolean {
+  const height = row.band.end - row.band.start + 1;
+  const medianSegmentWidth = Math.max(1, medianInteger(row.segments.map((segment) => segment.w)));
+  const nearBottom = row.band.start >= imageHeight * 0.82;
+  const tooShort = height <= Math.max(16, typicalHeight * 0.42);
+  const tooNarrow = medianSegmentWidth <= Math.max(18, typicalSegmentWidth * 0.48);
+  const resemblesFooterText = row.segments.length >= 3 && tooNarrow;
+
+  return nearBottom && (tooShort || resemblesFooterText) && !row.rowLabel;
+}
+
+function withFooterConditioningIssue(
+  conditioning: SheetConditioningDiagnostics,
+  removedFooterCount: number
+): SheetConditioningDiagnostics {
+  if (removedFooterCount <= 0 || conditioning.issues.some((issue) => issue.code === "footer-like-band")) {
+    return conditioning;
+  }
+
+  return {
+    ...conditioning,
+    recommendFrameFirst: true,
+    issues: [
+      ...conditioning.issues,
+      {
+        code: "footer-like-band",
+        severity: "info",
+        message: `Ignored ${removedFooterCount} footer-like metadata band${removedFooterCount === 1 ? "" : "s"} during sheet detection.`
+      }
+    ]
+  };
+}
+
 function alignDetectedRowsToSharedColumns<
   Row extends {
     segments: Segment[];
@@ -992,7 +1224,7 @@ function normalizeUnevenContentSegments(
   const widthSpread = (maxWidth - minWidth) / typicalWidth;
   const contentOccupancy = typicalWidth / pitch;
 
-  if (contentOccupancy >= 0.78 || (centerGapSpread < 0.12 && widthSpread < 0.18)) {
+  if (contentOccupancy >= 0.78 || (contentOccupancy >= 0.62 && centerGapSpread < 0.12 && widthSpread < 0.18)) {
     return { segments, usedContentCentering: false };
   }
 
@@ -1057,7 +1289,8 @@ function createSheetDiagnostics({
   usedOutlinedCells,
   usedContentCentering,
   labelNames,
-  labelRowCount
+  labelRowCount,
+  conditioning
 }: {
   rows: number;
   columns: number;
@@ -1071,6 +1304,7 @@ function createSheetDiagnostics({
   usedContentCentering: boolean;
   labelNames: string[];
   labelRowCount: number;
+  conditioning?: SheetConditioningDiagnostics;
 }): SheetLayoutDiagnostics {
   const averageBandHeight =
     frameHeights.length > 0 ? Math.round(frameHeights.reduce((total, height) => total + height, 0) / frameHeights.length) : 0;
@@ -1121,6 +1355,7 @@ function createSheetDiagnostics({
       maxCenterDriftPx,
       mergedComponentCount
     },
+    ...(conditioning ? { conditioning } : {}),
     notes
   };
 }

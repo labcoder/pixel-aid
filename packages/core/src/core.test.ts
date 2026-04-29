@@ -284,6 +284,44 @@ function effectHeavyLabeledAnimationSheet(): RGBAImage {
   return image;
 }
 
+function subtleOutlinedPresentationSheetWithFooter(): RGBAImage {
+  const image = createImage(480, 290);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { label: "IDLE", y: 20, frames: 3 },
+    { label: "WALK", y: 104, frames: 4 },
+    { label: "JUMP", y: 188, frames: 3 }
+  ];
+  const startX = 112;
+  const cellWidth = 64;
+  const cellHeight = 64;
+
+  for (const row of rows) {
+    drawPixelLabel(image, row.label, 18, row.y + 20, 2);
+    const rowWidth = row.frames * cellWidth;
+    drawBlock(image, startX, row.y, rowWidth, 2, 22, 24, 24, 255);
+    drawBlock(image, startX, row.y + cellHeight - 2, rowWidth, 2, 22, 24, 24, 255);
+    for (let column = 0; column <= row.frames; column += 1) {
+      drawBlock(image, startX + column * cellWidth, row.y, 2, cellHeight, 22, 24, 24, 255);
+    }
+    for (let column = 0; column < row.frames; column += 1) {
+      const x = startX + column * cellWidth;
+      drawBlock(image, x + 19, row.y + 15, 26, 34, 70, 120, 114, 255);
+      drawBlock(image, x + 25, row.y + 25, 14, 10, 0, 240, 240, 255);
+    }
+  }
+
+  for (let index = 0; index < 5; index += 1) {
+    drawBlock(image, 350 + index * 24, 270, 16, 12, 0, 240, 240, 255);
+  }
+  return image;
+}
+
 function drawPixelLabel(image: RGBAImage, text: string, startX: number, startY: number, scale: number): void {
   const lines = text.split("\n");
   for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
@@ -1270,6 +1308,25 @@ describe("sheet slicing", () => {
     expect(detection.rowLabels?.map((label) => label.rawText)).toEqual(["IDLE", "SHOOT", "TAKE DAMAGE", "DEATH"]);
     expect(detection.diagnostics!.notes).toContain("Labels: idle, shoot, take_damage, death detected.");
     expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("preserves subtle full cells and ignores footer metadata on presentation sheets", () => {
+    const detection = detectSheetLayout(subtleOutlinedPresentationSheetWithFooter());
+
+    expect(detection).toMatchObject({
+      frameWidth: 64,
+      frameHeight: 64,
+      rows: 3,
+      columns: 4,
+      margin: 112,
+      spacing: 0,
+      rowFrameCounts: [3, 4, 3]
+    });
+    expect(detection.frames).toHaveLength(10);
+    expect(detection.frames[0]!.rect).toEqual({ x: 112, y: 20, w: 64, h: 64 });
+    expect(detection.frames[0]!.sourceRect).toEqual({ x: 112, y: 20, w: 64, h: 64 });
+    expect(detection.rowAnimations.map((animation) => animation.name)).toEqual(["idle", "walk", "jump"]);
+    expect(detection.diagnostics!.conditioning?.issues.map((issue) => issue.code)).toContain("footer-like-band");
   });
 
   test("generates deterministic frame rects from rows columns margin and spacing", () => {
