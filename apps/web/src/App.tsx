@@ -25,6 +25,7 @@ import type {
   AlphaMode,
   AnimationTag,
   AssetMode,
+  AssetProvenanceOrigin,
   AssetType,
   AssetTypeWarning,
   DownscaleMethod,
@@ -65,7 +66,13 @@ import {
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
 import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
-import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./lib/assets";
+import {
+  formatAssetProvenanceSummary,
+  removeAssetAndSelectNext,
+  updateAssetProvenanceMetadata,
+  updateAssetTypeMetadata,
+  type AssetProvenancePatch
+} from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import { engineExportFileToBundleFile, engineWarningsToValidationIssues } from "./lib/engineExportFiles";
@@ -308,6 +315,8 @@ export function App() {
   const assetTypeWarnings = selectedAsset?.assetTypeWarnings ?? [];
   const categoryReason = selectedAsset?.categoryReason ?? "Auto Suggest will classify the imported asset type.";
   const categoryConfidence = selectedAsset?.categoryConfidence ?? 0;
+  const provenanceOrigin = selectedAsset?.provenance?.origin ?? "unknown";
+  const provenanceSummary = formatAssetProvenanceSummary(selectedAsset?.provenance);
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
   const isImporting = importStatus !== null;
   const isAnalyzing = analysisStatus !== null;
@@ -1108,6 +1117,18 @@ export function App() {
     [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset, setPaletteBudget]
   );
 
+  const updateSelectedAssetProvenance = useCallback(
+    (patch: AssetProvenancePatch) => {
+      if (!selectedAsset) {
+        return;
+      }
+
+      setAssets((current) => updateAssetProvenanceMetadata(current, selectedAsset.id, patch));
+      setLastExportValidation(null);
+    },
+    [selectedAsset]
+  );
+
   const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
     setInspectorGroupOrder((current) => moveInspectorGroup(current, group, direction));
   }, []);
@@ -1695,6 +1716,7 @@ export function App() {
       imageName,
       originalFilename: selectedAsset.name,
       generatedAt: new Date().toISOString(),
+      ...(selectedAsset.provenance ? { provenance: selectedAsset.provenance } : {}),
       ...(sheetMode ? { sheet: exportSheet, frames: exportFrames, ...(animations ? { animations } : {}) } : {})
     });
     const engineBundle = createEngineExportBundle({
@@ -1862,6 +1884,58 @@ export function App() {
               <p key={warning.code}>{warning.message}</p>
             ))}
           </div>
+        ) : null}
+        <ReadonlyField label="Provenance" value={selectedAsset ? provenanceSummary : "--"} text disabled={!selectedAsset} />
+        <SelectField
+          label="Origin"
+          value={provenanceOrigin}
+          options={[
+            ["unknown", "Unknown"],
+            ["ai", "AI generated"],
+            ["manual", "Manual"]
+          ]}
+          disabled={!selectedAsset}
+          onChange={(value) => updateSelectedAssetProvenance({ origin: value as AssetProvenanceOrigin })}
+        />
+        {provenanceOrigin !== "unknown" ? (
+          <>
+            <TextField
+              label="Provider"
+              value={selectedAsset?.provenance?.provider ?? ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ provider: value })}
+            />
+            <TextField
+              label="Model"
+              value={selectedAsset?.provenance?.model ?? ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ model: value })}
+            />
+            <TextareaField
+              label="Prompt"
+              value={selectedAsset?.provenance?.prompt ?? ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ prompt: value })}
+            />
+            <TextField
+              label="Seed"
+              value={selectedAsset?.provenance?.seed !== undefined ? String(selectedAsset.provenance.seed) : ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ seed: value })}
+            />
+            <TextField
+              label="Source"
+              value={selectedAsset?.provenance?.sourceImage ?? ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ sourceImage: value })}
+            />
+            <TextField
+              label="Generated"
+              value={selectedAsset?.provenance?.generatedAt ?? ""}
+              disabled={!selectedAsset}
+              onChange={(value) => updateSelectedAssetProvenance({ generatedAt: value })}
+            />
+          </>
         ) : null}
         {assetType === "tileset" ? (
           <>
@@ -2337,6 +2411,7 @@ export function App() {
       <>
         <Field label="Target" value="Generic JSON" />
         <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
+        <ReadonlyField label="Provenance" value={selectedAsset ? provenanceSummary : "--"} text disabled={!selectedAsset} />
         <ReadonlyField
           label="Validation"
           value={
@@ -2973,6 +3048,7 @@ export function App() {
                   ["Size", selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"],
                   ["Colors", selectedAsset ? String(sourceColorCount) : "--"],
                   ["Type", selectedAsset ? assetTypeDefinition.shortLabel : "--"],
+                  ["Origin", selectedAsset ? provenanceSummary : "--"],
                   ["Mode", mode],
                   ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
                 ]}
@@ -3503,6 +3579,44 @@ function SelectField({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  disabled,
+  onChange
+}: {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field-row">
+      <span>{label}</span>
+      <input type="text" value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
+    </label>
+  );
+}
+
+function TextareaField({
+  label,
+  value,
+  disabled,
+  onChange
+}: {
+  label: string;
+  value: string;
+  disabled?: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="field-row field-row-stack">
+      <span>{label}</span>
+      <textarea value={value} disabled={disabled} spellCheck={false} onChange={(event) => onChange(event.currentTarget.value)} />
     </label>
   );
 }

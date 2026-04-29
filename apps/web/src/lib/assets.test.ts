@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { removeAssetAndSelectNext, updateAssetTypeMetadata } from "./assets";
+import {
+  formatAssetProvenanceSummary,
+  removeAssetAndSelectNext,
+  updateAssetProvenanceMetadata,
+  updateAssetTypeMetadata
+} from "./assets";
 
 const asset = (id: string) => ({ id });
 
@@ -56,5 +61,62 @@ describe("asset list helpers", () => {
       }),
       { id: "grass", assetType: "tileset", assetTypeSource: "manual" }
     ]);
+  });
+
+  test("updates provenance metadata only for the selected import", () => {
+    const result = updateAssetProvenanceMetadata(
+      [
+        { id: "character", provenance: { origin: "unknown" as const } },
+        { id: "grass", provenance: { origin: "manual" as const, sourceImage: "tiles.png" } }
+      ],
+      "character",
+      {
+        origin: "ai",
+        provider: "OpenAI",
+        model: "gpt-image-2",
+        prompt: "tiny fantasy hero",
+        seed: "42",
+        generatedAt: "2026-04-28T18:15:00.000Z"
+      }
+    );
+
+    expect(result).toEqual([
+      {
+        id: "character",
+        provenance: {
+          origin: "ai",
+          provider: "OpenAI",
+          model: "gpt-image-2",
+          prompt: "tiny fantasy hero",
+          seed: "42",
+          generatedAt: "2026-04-28T18:15:00.000Z"
+        }
+      },
+      { id: "grass", provenance: { origin: "manual", sourceImage: "tiles.png" } }
+    ]);
+  });
+
+  test("removes empty unknown provenance from an import", () => {
+    const result = updateAssetProvenanceMetadata(
+      [{ id: "character", provenance: { origin: "ai" as const, provider: "OpenAI" } }],
+      "character",
+      {
+        origin: "unknown"
+      }
+    );
+
+    expect(result).toEqual([{ id: "character" }]);
+  });
+
+  test("summarizes provenance for editor readouts", () => {
+    expect(formatAssetProvenanceSummary()).toBe("None");
+    expect(formatAssetProvenanceSummary({ origin: "manual", sourceImage: "paintover.png" })).toBe("Manual / paintover.png");
+    expect(
+      formatAssetProvenanceSummary({
+        origin: "ai",
+        provider: "OpenAI",
+        model: "gpt-image-2"
+      })
+    ).toBe("AI / OpenAI / gpt-image-2");
   });
 });
