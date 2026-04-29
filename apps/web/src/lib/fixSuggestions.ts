@@ -34,6 +34,11 @@ export type FixSettingSuggestion = {
   downscale: DownscaleMethod;
   alpha: AlphaMode;
   alphaSettings: AlphaCleanupSettings;
+  removeOrphans: boolean;
+  jaggyCleanup: boolean;
+  preserveSinglePixelDetails: boolean;
+  removeHalos: boolean;
+  denoiseStrength: number;
   sheetLayout?: SheetLayoutDetection;
   reason: string;
   confidence: number;
@@ -71,6 +76,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const preset = getAssetTypeCleanupPreset(classification.assetType);
   const downscale: DownscaleMethod =
     mode === "spriteSheet" && sheetConditioning.recommendFrameFirst ? "detailPreserving" : preset.downscale;
+  const cleanup = suggestCleanupSettings(preset, mode, sheetConditioning.recommendFrameFirst);
   const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
@@ -104,6 +110,11 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     downscale,
     alpha: suggestedAlpha,
     alphaSettings: { ...preset.alphaSettings },
+    removeOrphans: cleanup.removeOrphans,
+    jaggyCleanup: cleanup.jaggyCleanup,
+    preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
+    removeHalos: cleanup.removeHalos,
+    denoiseStrength: cleanup.denoiseStrength,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason,
     confidence: candidate?.confidence ?? 0.25,
@@ -111,6 +122,30 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     categoryConfidence: classification.confidence,
     categoryReason: classification.reason,
     categoryWarnings
+  };
+}
+
+function suggestCleanupSettings(
+  preset: ReturnType<typeof getAssetTypeCleanupPreset>,
+  mode: AssetMode,
+  recommendFrameFirst: boolean
+): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "denoiseStrength"> {
+  if (mode === "spriteSheet" && recommendFrameFirst) {
+    return {
+      removeOrphans: preset.removeOrphans,
+      jaggyCleanup: preset.jaggyCleanup,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: false,
+      denoiseStrength: 0
+    };
+  }
+
+  return {
+    removeOrphans: preset.removeOrphans,
+    jaggyCleanup: preset.jaggyCleanup,
+    preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+    removeHalos: preset.removeHalos,
+    denoiseStrength: preset.denoiseStrength
   };
 }
 

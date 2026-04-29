@@ -15,7 +15,7 @@
 - Modify `apps/web/src/lib/fixSuggestions.ts`
 - Modify `apps/web/src/App.tsx`
 
-- [ ] **Step 1: Write failing web test**
+- [x] **Step 1: Write failing web test**
 
 Add coverage that a complex presentation-style animation sheet:
 - still recommends `detailPreserving`
@@ -31,11 +31,11 @@ npm run test -w @pixelaid/web -- fixSuggestions.test.ts
 
 Expected: FAIL because suggestions do not expose cleanup overrides yet.
 
-- [ ] **Step 2: Wire cleanup recommendations**
+- [x] **Step 2: Wire cleanup recommendations**
 
 Add explicit cleanup fields to the suggestion result and apply them in `App.tsx`. When `sheetConditioning.recommendFrameFirst` is true, use a preservation cleanup profile with `removeHalos: false` and `denoiseStrength: 0`.
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run targeted web tests and typecheck, then commit.
 
