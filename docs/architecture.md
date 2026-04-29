@@ -15,7 +15,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 
 1. The web app decodes an imported image file into an `RGBAImage`.
 2. Import status is surfaced in the editor while decode and first-pass analysis run.
-3. The asset browser stores the immutable source image, filename, dimensions, and a thumbnail.
+3. The asset browser stores the immutable source image, filename, dimensions, thumbnail, and optional provenance metadata for the import.
 4. Auto Suggest classifies the selected `AssetType`, returns confidence, reason text, and support warnings, then derives the compatible processing `AssetMode`. Single-image types use target dimensions; sprite, animation, and character sheets use `spriteSheet` processing and frame/cell controls, while tile assets use `tileSheet` processing. Sheet suggestions can consume row-band detection, outlined-cell separators, first-pass content-centered uneven-gutter normalization, conservative component grouping for mildly drifted unboxed sheets, and common blocky row-label names.
 5. Auto Suggest returns and caches the grid candidates it computed so the grid preview panel can render explanations without rerunning detection during React render.
 6. The viewport renders native buffers through Canvas2D with smoothing disabled.
@@ -29,7 +29,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 14. Sheet-like modes either derive frame rectangles and pivots from manual frame/cell controls or consume explicit detected frame rectangles from Auto Suggest. Detected layouts also carry row-label metadata and row/column confidence diagnostics for the inspector notes. Per-animation cell-size controls repack detected native frame rectangles without mutating the source rectangles. The viewport maps manual rectangles back into source space before Fix and uses detected `sourceRect`s directly when available.
 15. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
 16. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop/direction metadata. Selected frames can also receive explicit `durationMs` overrides, which take priority over clip FPS. Web-side normalization helpers preview frames in a shared pivot-aligned canvas and compute preview-only onion-skin neighbors.
-17. Export passes the selected asset type, current frame metadata, per-frame durations, playback direction, and detected row animations to `packages/exporters`. Manifests include both `meta.assetType` and `meta.operation.settings.assetType`. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
+17. Export passes the selected asset type, current frame metadata, per-frame durations, playback direction, detected row animations, and optional sanitized provenance metadata to `packages/exporters`. Manifests include both `meta.assetType` and `meta.operation.settings.assetType`. When provenance is present, `meta.provenance` can record origin, provider, model, prompt, seed, source image, generation date, non-secret settings, and post-processing notes. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
 18. Selected engine adapters generate Godot, Unity, and Phaser sidecar files from the same manifest. Adapter warnings are folded into the export validation report so unsupported fields are visible without blocking generic exports.
 
 ## Documentation Flow
@@ -44,4 +44,4 @@ When adding a new public editor section, update both the markdown file and `apps
 - 2D sandbox: reuse fixed assets and manifests without touching core algorithms.
 - 3D sandbox: add Three.js in an isolated panel/package later.
 - CLI/API/MCP: call `packages/core` and `packages/exporters` without browser APIs.
-- AI providers: optional adapters should feed generated images into the same fix pipeline.
+- AI providers: optional adapters should feed generated images into the same fix pipeline and attach agnostic provenance metadata before export. Provider adapters must not be required for offline fixing, and API keys, bearer tokens, passwords, credentials, or other secrets must never be written to source files, logs, manifests, or exported bundles.
