@@ -125,7 +125,7 @@ git commit -m "feat(cli): add node image io foundation"
 
 ## Task 2: Automation Core Operations
 
-- [ ] **Step 1: Add failing option/result/path tests**
+- [x] **Step 1: Add failing option/result/path tests**
 
 Add tests for:
 
@@ -135,11 +135,11 @@ Add tests for:
 - no-overwrite output planning;
 - result envelopes and exit-code mapping.
 
-- [ ] **Step 2: Implement options, paths, and result helpers**
+- [x] **Step 2: Implement options, paths, and result helpers**
 
 Add strongly typed helpers with deterministic error codes and no unsafe output writes.
 
-- [ ] **Step 3: Add failing operation tests**
+- [x] **Step 3: Add failing operation tests**
 
 Use small in-memory or generated fixture PNGs to test:
 
@@ -150,11 +150,11 @@ Use small in-memory or generated fixture PNGs to test:
 - `extractPalette`;
 - `exportEngineBundle`.
 
-- [ ] **Step 4: Implement operations**
+- [x] **Step 4: Implement operations**
 
 Reuse current `packages/core` and `packages/exporters` APIs. Include timings, warnings, generated filenames, manifest metadata, and output file lists.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 

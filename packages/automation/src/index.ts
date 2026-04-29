@@ -5,6 +5,41 @@ export {
   type ImageFileMetadata,
 } from "./imageIo";
 export {
+  normalizeFixOptions,
+  parseAutomationAssetType,
+  type AutomationAssetTypeInput,
+  type AutomationFixOptionsInput,
+  type AutomationTargetInput,
+  type ParsedAutomationAssetType,
+} from "./options";
+export {
+  assertSafeBundlePath,
+  planOutputFile,
+  relativeToDirectory,
+  writeJsonOutput,
+  writeTextOutput,
+  type PlanOutputFileOptions,
+  type PlannedOutputFile,
+} from "./paths";
+export {
+  exportEngineBundle,
+  extractPaletteFile,
+  fixSprite,
+  fixSpriteSheet,
+  inspectImage,
+  suggestFixSettings,
+  type AutomationFileRecord,
+  type ExportEngineBundleRequest,
+  type ExtractPaletteFileRequest,
+  type FixOperationResult,
+  type FixSpriteRequest,
+  type FixSpriteSheetRequest,
+  type FixSuggestion,
+  type ImageInspection,
+  type InspectImageRequest,
+  type SuggestFixSettingsRequest,
+} from "./operations";
+export {
   automationError,
   automationOk,
   unknownAutomationError,
