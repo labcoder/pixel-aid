@@ -11,7 +11,7 @@ Assets are imported source images. Each item keeps the original filename, source
 - Select an asset to preview and fix it.
 - Delete removes the asset from the editor session.
 - The source image remains separate from the fixed output so destructive changes are reversible.
-- Large imports show a visible decode/analyze status in the Assets panel and viewport while PixelAid prepares suggestions.
+- Large imports show a visible decode/analyze status in the Assets panel and viewport while PixelAid prepares suggestions. Each import, Auto Suggest, and Fix run has its own operation id, so repeated imports and repeated fixes still surface a fresh busy message even when the visible text is the same as the previous run.
 - Optional provenance metadata is stored per imported asset. Origin, provider, model, prompt, seed, source image, and generation date can be edited in the Asset inspector without enabling any AI provider integration.
 
 # Fix Settings
@@ -36,6 +36,8 @@ Supported asset types in 0.1.0:
 Character sheet remains a user-facing asset type, but it uses sprite-sheet processing. Character-specific meaning lives in editable frame rows, timeline clips, pivots, animation names, and manifest `assetType` metadata rather than a separate low-level algorithm mode.
 
 Auto Suggest seeds controls from the current source. It should make a strong first guess, but every important value remains editable.
+
+Fix starts with a visible preparation status before worker progress events arrive, then switches to progress text as the worker reports phases. The viewport busy overlay clears only when the matching operation finishes or is cancelled.
 
 Manual Asset type overrides are stored per imported asset. A character import can stay set to Sprite while another import stays set to Tileset, and switching between assets restores each asset's own classification.
 
