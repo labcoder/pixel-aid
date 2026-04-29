@@ -2102,6 +2102,7 @@ export function App() {
           value={downscale}
           options={[
             ["dominant", "Dominant"],
+            ["detailPreserving", "Detail preserving"],
             ["median", "Median"],
             ["adaptive", "Adaptive"],
             ["averageThenPalette", "Average + palette"]
