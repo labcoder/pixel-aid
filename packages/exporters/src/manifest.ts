@@ -1,15 +1,27 @@
 import { PIXELAID_APP_NAME, PIXELAID_VERSION } from "@pixelaid/shared";
-import type { PixelAssetManifest, PixelFixResult, SheetSliceOptions, SpriteAnimation, SpriteFrame } from "@pixelaid/shared";
+import type {
+  AssetProvenance,
+  AssetProvenanceSettingValue,
+  PixelAssetManifest,
+  PixelFixResult,
+  SheetSliceOptions,
+  SpriteAnimation,
+  SpriteFrame
+} from "@pixelaid/shared";
 
 export type CreateManifestOptions = {
   result: PixelFixResult;
   imageName: string;
   originalFilename?: string;
   generatedAt?: string;
+  provenance?: AssetProvenance;
   sheet?: SheetSliceOptions;
   frames?: SpriteFrame[];
   animations?: Record<string, SpriteAnimation>;
 };
+
+const secretKeyPattern = /(api[_-]?key|token|secret|password|credential|authorization|bearer)/i;
+const secretValuePatterns = [/^bearer\s+/i, /^sk-[a-z0-9_-]{8,}/i];
 
 export const GODOT_IMPORT_GUIDANCE = [
   "Import the PNG as a lossless 2D texture.",
@@ -45,6 +57,8 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
     source.originalFilename = options.originalFilename;
   }
 
+  const provenance = sanitizeAssetProvenance(options.provenance);
+
   return {
     meta: {
       app: PIXELAID_APP_NAME,
@@ -53,6 +67,7 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
       assetType: options.result.settings.assetType,
       ...(options.generatedAt ? { generatedAt: options.generatedAt } : {}),
       palette: options.result.palette,
+      ...(provenance ? { provenance } : {}),
       source,
       operation: {
         settings: operationSettings,
@@ -65,6 +80,36 @@ export function createPixelAssetManifest(options: CreateManifestOptions): PixelA
     frames,
     animations: options.animations ?? {}
   };
+}
+
+export function sanitizeAssetProvenance(provenance: AssetProvenance | undefined): AssetProvenance | undefined {
+  if (!provenance) {
+    return undefined;
+  }
+
+  const sanitized: AssetProvenance = {
+    origin: provenance.origin
+  };
+
+  assignString(sanitized, "provider", provenance.provider);
+  assignString(sanitized, "model", provenance.model);
+  assignString(sanitized, "prompt", provenance.prompt);
+  assignString(sanitized, "negativePrompt", provenance.negativePrompt);
+  assignSeed(sanitized, provenance.seed);
+  assignString(sanitized, "sourceImage", provenance.sourceImage);
+  assignString(sanitized, "generatedAt", provenance.generatedAt);
+
+  const settings = sanitizeSettings(provenance.settings);
+  if (settings) {
+    sanitized.settings = settings;
+  }
+
+  const postProcessing = provenance.postProcessing?.map((item) => item.trim()).filter((item) => item.length > 0 && !isSecretLikeValue(item));
+  if (postProcessing && postProcessing.length > 0) {
+    sanitized.postProcessing = postProcessing;
+  }
+
+  return hasProvenanceDetails(sanitized) ? sanitized : undefined;
 }
 
 export function validateManifest(manifest: PixelAssetManifest): string[] {
@@ -131,4 +176,87 @@ function createFrames(result: PixelFixResult, sheetOptions: SheetSliceOptions | 
   }
 
   return frames;
+}
+
+function assignString<T extends keyof AssetProvenance>(target: AssetProvenance, key: T, value: AssetProvenance[T]): void {
+  if (typeof value !== "string") {
+    return;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length > 0 && !isSecretLikeValue(trimmed)) {
+    target[key] = trimmed as AssetProvenance[T];
+  }
+}
+
+function assignSeed(target: AssetProvenance, value: AssetProvenance["seed"]): void {
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) {
+      target.seed = value;
+    }
+    return;
+  }
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed.length > 0 && !isSecretLikeValue(trimmed)) {
+      target.seed = trimmed;
+    }
+  }
+}
+
+function sanitizeSettings(settings: AssetProvenance["settings"]): AssetProvenance["settings"] | undefined {
+  if (!settings) {
+    return undefined;
+  }
+
+  const sanitized: Record<string, AssetProvenanceSettingValue> = {};
+  for (const [rawKey, rawValue] of Object.entries(settings)) {
+    const key = rawKey.trim();
+    if (key.length === 0 || isSecretLikeKey(key) || isSecretLikeSettingValue(rawValue)) {
+      continue;
+    }
+
+    if (typeof rawValue === "string") {
+      const value = rawValue.trim();
+      if (value.length > 0) {
+        sanitized[key] = value;
+      }
+    } else if (typeof rawValue === "number") {
+      if (Number.isFinite(rawValue)) {
+        sanitized[key] = rawValue;
+      }
+    } else if (typeof rawValue === "boolean") {
+      sanitized[key] = rawValue;
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function isSecretLikeKey(value: string): boolean {
+  return secretKeyPattern.test(value);
+}
+
+function isSecretLikeSettingValue(value: AssetProvenanceSettingValue): boolean {
+  return typeof value === "string" && isSecretLikeValue(value);
+}
+
+function isSecretLikeValue(value: string): boolean {
+  return secretValuePatterns.some((pattern) => pattern.test(value.trim()));
+}
+
+function hasProvenanceDetails(provenance: AssetProvenance): boolean {
+  return (
+    provenance.origin !== "unknown" ||
+    provenance.provider !== undefined ||
+    provenance.model !== undefined ||
+    provenance.prompt !== undefined ||
+    provenance.negativePrompt !== undefined ||
+    provenance.seed !== undefined ||
+    provenance.sourceImage !== undefined ||
+    provenance.generatedAt !== undefined ||
+    provenance.settings !== undefined ||
+    provenance.postProcessing !== undefined
+  );
 }
