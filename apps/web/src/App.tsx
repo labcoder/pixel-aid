@@ -8,6 +8,7 @@ import {
   Gauge,
   Layers,
   Play,
+  Redo2,
   SlidersHorizontal,
   Sparkles,
   SkipBack,
@@ -15,6 +16,7 @@ import {
   Terminal,
   Trash2,
   Upload,
+  Undo2,
   WandSparkles
 } from "lucide-react";
 import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
@@ -90,6 +92,17 @@ import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
+import {
+  canRedoFrameEditHistory,
+  canUndoFrameEditHistory,
+  createFrameEditHistoryState,
+  pushFrameEditHistoryEntry,
+  redoFrameEditHistory,
+  replaceFrameEditHistoryPresent,
+  resetFrameEditHistory,
+  undoFrameEditHistory,
+  type FrameEditSnapshot
+} from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { resizeAnimationRowFromSourceFrame } from "./lib/frameRowEditing";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
@@ -208,6 +221,34 @@ function createTimelinePlacements(
       normalized: false
     };
   });
+}
+
+function createEmptyFrameEditSnapshot(): FrameEditSnapshot {
+  return {
+    frames: [],
+    animations: [],
+    selectedFrameIndex: -1,
+    selectedAnimationName: ALL_ANIMATIONS
+  };
+}
+
+function createFrameEditSnapshot({
+  frames,
+  animations,
+  selectedFrameIndex,
+  selectedAnimationName
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  selectedFrameIndex: number;
+  selectedAnimationName: string;
+}): FrameEditSnapshot {
+  return {
+    frames: [...frames],
+    animations: [...animations],
+    selectedFrameIndex,
+    selectedAnimationName
+  };
 }
 
 const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: string; tooltip: string }> = {
@@ -329,10 +370,15 @@ export function App() {
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
+  const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const activeJobRef = useRef<FixJob | null>(null);
   const fixStartCancelledRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
+  const selectedAnimationNameRef = useRef(selectedAnimationName);
+  const detectedSheetFramesRef = useRef<SpriteFrame[]>(detectedSheetFrames);
+  const detectedRowAnimationsRef = useRef<AnimationTag[]>(detectedRowAnimations);
+  const sourceFrameEditStartSnapshotRef = useRef<FrameEditSnapshot | null>(null);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
@@ -571,6 +617,8 @@ export function App() {
   const canEditManualSheetCell = hasDetectedSheetLayout && selectedDetectedFrame !== undefined;
   const canEditManualSheetRow = hasDetectedSheetLayout && selectedManualAnimation !== undefined;
   const canRemoveManualSheetRow = canEditManualSheetRow && detectedRowAnimations.length > 1;
+  const canUndoFrameEdit = canUndoFrameEditHistory(frameEditHistory);
+  const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
   const bottomPanelSections = useMemo(() => getBottomPanelSections(mode, assetType), [assetType, mode]);
@@ -659,6 +707,18 @@ export function App() {
   }, [selectedFrameIndex]);
 
   useEffect(() => {
+    selectedAnimationNameRef.current = selectedAnimationName;
+  }, [selectedAnimationName]);
+
+  useEffect(() => {
+    detectedSheetFramesRef.current = detectedSheetFrames;
+  }, [detectedSheetFrames]);
+
+  useEffect(() => {
+    detectedRowAnimationsRef.current = detectedRowAnimations;
+  }, [detectedRowAnimations]);
+
+  useEffect(() => {
     if (!timelineState.enabled || timelineFrames.length <= 1) {
       setIsPlaying(false);
     }
@@ -692,12 +752,18 @@ export function App() {
 
   const clearDetectedSheetLayout = useCallback(() => {
     setDetectedSheetFrames([]);
+    detectedSheetFramesRef.current = [];
     setDetectedRowAnimations([]);
+    detectedRowAnimationsRef.current = [];
     setDetectedSheetWarnings([]);
     setDetectedSheetDiagnostics(undefined);
     setFrameDurationOverrides({});
     setPivotOverrides(emptyPivotOverrides);
+    selectedFrameIndexRef.current = -1;
+    setSelectedFrameIndex(-1);
+    selectedAnimationNameRef.current = ALL_ANIMATIONS;
     setSelectedAnimationName(ALL_ANIMATIONS);
+    setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
   }, []);
 
   const applyAlphaSettings = useCallback((settings: AlphaCleanupSettings | undefined) => {
@@ -728,6 +794,10 @@ export function App() {
       targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon"
         ? preset.alphaSettings
         : suggestion.alphaSettings;
+    const layoutFrames = layout?.frames ?? [];
+    const layoutAnimations = layout?.rowAnimations ?? [];
+    const layoutSelectedFrameIndex = layoutFrames.length > 0 ? 0 : -1;
+    const layoutSelectedAnimationName = layoutAnimations[0]?.name ?? ALL_ANIMATIONS;
 
     if (targetAsset) {
       setAssets((current) =>
@@ -750,13 +820,28 @@ export function App() {
     setSheetColumns(layout?.columns ?? (resolvedMode === "spriteSheet" ? 2 : 1));
     setSheetMargin(layout?.margin ?? 0);
     setSheetSpacing(layout?.spacing ?? 0);
-    setDetectedSheetFrames(layout?.frames ?? []);
-    setDetectedRowAnimations(layout?.rowAnimations ?? []);
+    setDetectedSheetFrames(layoutFrames);
+    detectedSheetFramesRef.current = layoutFrames;
+    setDetectedRowAnimations(layoutAnimations);
+    detectedRowAnimationsRef.current = layoutAnimations;
     setDetectedSheetWarnings(layout?.warnings ?? []);
     setDetectedSheetDiagnostics(layout?.diagnostics);
     setFrameDurationOverrides({});
     setPivotOverrides(emptyPivotOverrides);
-    setSelectedAnimationName(layout?.rowAnimations[0]?.name ?? ALL_ANIMATIONS);
+    selectedFrameIndexRef.current = layoutSelectedFrameIndex;
+    setSelectedFrameIndex(layoutSelectedFrameIndex);
+    selectedAnimationNameRef.current = layoutSelectedAnimationName;
+    setSelectedAnimationName(layoutSelectedAnimationName);
+    setFrameEditHistory(
+      resetFrameEditHistory(
+        createFrameEditSnapshot({
+          frames: layoutFrames,
+          animations: layoutAnimations,
+          selectedFrameIndex: layoutSelectedFrameIndex,
+          selectedAnimationName: layoutSelectedAnimationName
+        })
+      )
+    );
     setIsPlaying(false);
     setPivotPreset("bottomCenter");
     setCustomPivotX(Math.floor((layout?.frameWidth ?? suggestion.targetWidth) / 2));
@@ -1341,6 +1426,110 @@ export function App() {
     playbackStepDirectionRef.current = getInitialPlayDirection(direction);
   }, []);
 
+  const createCurrentFrameEditSnapshot = useCallback(
+    () =>
+      createFrameEditSnapshot({
+        frames: detectedSheetFramesRef.current,
+        animations: detectedRowAnimationsRef.current,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        selectedAnimationName: selectedAnimationNameRef.current
+      }),
+    []
+  );
+
+  const restoreFrameEditSnapshot = useCallback(
+    (snapshot: FrameEditSnapshot) => {
+      const nextSelectedFrameIndex = clampSelectedFrameIndex(snapshot.frames.length, snapshot.selectedFrameIndex);
+      const nextSelectedAnimationName =
+        snapshot.selectedAnimationName === ALL_ANIMATIONS || snapshot.animations.some((animation) => animation.name === snapshot.selectedAnimationName)
+          ? snapshot.selectedAnimationName
+          : snapshot.animations[0]?.name ?? ALL_ANIMATIONS;
+
+      detectedSheetFramesRef.current = snapshot.frames;
+      detectedRowAnimationsRef.current = snapshot.animations;
+      selectedFrameIndexRef.current = nextSelectedFrameIndex;
+      selectedAnimationNameRef.current = nextSelectedAnimationName;
+      setDetectedSheetFrames(snapshot.frames);
+      setDetectedRowAnimations(snapshot.animations);
+      setSelectedFrameIndex(nextSelectedFrameIndex);
+      setSelectedAnimationName(nextSelectedAnimationName);
+      setFixResult(null);
+      setIsPlaying(false);
+
+      const restoredAnimation = snapshot.animations.find((animation) => animation.name === nextSelectedAnimationName);
+      if (restoredAnimation) {
+        const nextDirection = restoredAnimation.direction ?? playbackDirection;
+        setPlaybackFps(clampFps(restoredAnimation.fps ?? playbackFps));
+        setPlaybackLoop(restoredAnimation.loop);
+        setPlaybackDirection(nextDirection);
+        resetPlaybackStepDirection(nextDirection);
+      } else {
+        resetPlaybackStepDirection(playbackDirection);
+      }
+    },
+    [playbackDirection, playbackFps, resetPlaybackStepDirection]
+  );
+
+  const undoFrameEdit = useCallback(() => {
+    if (!canUndoFrameEditHistory(frameEditHistory)) {
+      return;
+    }
+
+    const nextHistory = undoFrameEditHistory(frameEditHistory);
+    setFrameEditHistory(nextHistory);
+    restoreFrameEditSnapshot(nextHistory.present);
+    appendLog("Undid sheet frame edit");
+  }, [appendLog, frameEditHistory, restoreFrameEditSnapshot]);
+
+  const redoFrameEdit = useCallback(() => {
+    if (!canRedoFrameEditHistory(frameEditHistory)) {
+      return;
+    }
+
+    const nextHistory = redoFrameEditHistory(frameEditHistory);
+    setFrameEditHistory(nextHistory);
+    restoreFrameEditSnapshot(nextHistory.present);
+    appendLog("Redid sheet frame edit");
+  }, [appendLog, frameEditHistory, restoreFrameEditSnapshot]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable)
+      ) {
+        return;
+      }
+
+      const hasModifier = event.ctrlKey || event.metaKey;
+      if (!hasModifier) {
+        return;
+      }
+
+      const key = event.key.toLowerCase();
+      if (key === "z" && event.shiftKey) {
+        event.preventDefault();
+        redoFrameEdit();
+        return;
+      }
+      if (key === "z") {
+        event.preventDefault();
+        undoFrameEdit();
+        return;
+      }
+      if (key === "y") {
+        event.preventDefault();
+        redoFrameEdit();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [redoFrameEdit, undoFrameEdit]);
+
   const updateSelectedFrameDuration = useCallback(
     (durationMs: number) => {
       if (!currentFrame) {
@@ -1586,10 +1775,20 @@ export function App() {
 
   const applyManualSheetEdit = useCallback(
     (result: ManualSheetEditResult, logLine: string) => {
+      const nextSnapshot = createFrameEditSnapshot({
+        frames: result.frames,
+        animations: result.animations,
+        selectedFrameIndex: result.selectedFrameIndex,
+        selectedAnimationName: result.selectedAnimationName
+      });
+      setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
+      detectedSheetFramesRef.current = result.frames;
+      detectedRowAnimationsRef.current = result.animations;
       setDetectedSheetFrames(result.frames);
       setDetectedRowAnimations(result.animations);
       selectedFrameIndexRef.current = result.selectedFrameIndex;
       setSelectedFrameIndex(result.selectedFrameIndex);
+      selectedAnimationNameRef.current = result.selectedAnimationName;
       setSelectedAnimationName(result.selectedAnimationName);
       setFixResult(null);
       setIsPlaying(false);
@@ -1757,8 +1956,8 @@ export function App() {
         return;
       }
 
-      setDetectedSheetFrames((current) =>
-        current.map((frame, index) =>
+      setDetectedSheetFrames((current) => {
+        const next = current.map((frame, index) =>
           index === frameIndex
             ? moveFrameBySourceDelta({
                 frame,
@@ -1770,8 +1969,12 @@ export function App() {
                 outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight }
               })
             : frame
-        )
-      );
+        );
+        detectedSheetFramesRef.current = next;
+        return next;
+      });
+      setFixResult(null);
+      setIsPlaying(false);
     },
     [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
   );
@@ -1782,8 +1985,8 @@ export function App() {
         return;
       }
 
-      setDetectedSheetFrames((current) =>
-        resizeAnimationRowFromSourceFrame({
+      setDetectedSheetFrames((current) => {
+        const next = resizeAnimationRowFromSourceFrame({
           frames: current,
           animations: detectedRowAnimations,
           frameIndex,
@@ -1795,12 +1998,35 @@ export function App() {
           outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
           margin: sheetMargin,
           spacing: sheetSpacing
-        })
-      );
+        });
+        detectedSheetFramesRef.current = next;
+        return next;
+      });
       setFixResult(null);
       setIsPlaying(false);
     },
     [detectedRowAnimations, effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]
+  );
+
+  const beginSourceFrameEdit = useCallback(() => {
+    const snapshot = createCurrentFrameEditSnapshot();
+    sourceFrameEditStartSnapshotRef.current = snapshot;
+    setFrameEditHistory((current) => replaceFrameEditHistoryPresent(current, snapshot));
+  }, [createCurrentFrameEditSnapshot]);
+
+  const commitSourceFrameEdit = useCallback(
+    (changed: boolean) => {
+      const startSnapshot = sourceFrameEditStartSnapshotRef.current;
+      sourceFrameEditStartSnapshotRef.current = null;
+      if (!startSnapshot || !changed) {
+        return;
+      }
+
+      const nextSnapshot = createCurrentFrameEditSnapshot();
+      setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
+      appendLog(`Edited ${nextSnapshot.frames[nextSnapshot.selectedFrameIndex]?.name ?? "source frame"}`);
+    },
+    [appendLog, createCurrentFrameEditSnapshot]
   );
 
   const applyGridCandidate = useCallback(
@@ -1828,6 +2054,8 @@ export function App() {
       const nextAsset = assets.find((asset) => asset.id === assetId);
       if (assetId !== selectedAsset?.id) {
         setFixResult(null);
+        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+        sourceFrameEditStartSnapshotRef.current = null;
       }
       if (nextAsset) {
         const nextMode = assetTypeToMode(nextAsset.assetType);
@@ -1855,6 +2083,8 @@ export function App() {
       });
       if (assetId === selectedAsset?.id) {
         setFixResult(null);
+        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+        sourceFrameEditStartSnapshotRef.current = null;
       }
       setGridCandidateCache((current) => {
         const next = { ...current };
@@ -2849,6 +3079,17 @@ export function App() {
               </button>
             ))}
           </div>
+          {hasDetectedSheetLayout ? (
+            <div className="edit-history-controls" aria-label="Frame edit history controls">
+              <button type="button" className="mini-icon-button" disabled={!canUndoFrameEdit} onClick={undoFrameEdit} title="Undo frame edit">
+                <Undo2 size={14} />
+              </button>
+              <button type="button" className="mini-icon-button" disabled={!canRedoFrameEdit} onClick={redoFrameEdit} title="Redo frame edit">
+                <Redo2 size={14} />
+              </button>
+              <span>Ctrl/Cmd drag selected cells</span>
+            </div>
+          ) : null}
           <div className="viewport-readouts">
             <span>{viewportNativeReadout}</span>
             <span>Zoom: {zoom * 100}%</span>
@@ -2932,6 +3173,8 @@ export function App() {
             onFrameSelect={selectSourceFrame}
             onSourceFrameMove={moveDetectedSourceFrame}
             onSourceFrameResize={resizeDetectedSourceFrame}
+            onSourceFrameEditStart={beginSourceFrameEdit}
+            onSourceFrameEditCommit={commitSourceFrameEdit}
           />
         )}
         {busyStatus ? (
