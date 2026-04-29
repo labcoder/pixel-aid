@@ -8,6 +8,7 @@ import {
   assertNotCancelled,
   analyzePaletteDrift,
   createImage,
+  detectOutlineColorCandidates,
   detectSheetLayout,
   detectSpriteBounds,
   detectGridCandidates,
@@ -1113,10 +1114,24 @@ describe("halo cleanup", () => {
   });
 });
 
-describe("outline cleanup", () => {
-  test("adds a one-pixel outline around visible pixels without resizing the image", () => {
-    const source = createImage(3, 3);
-    writePixel(source, 1, 1, 120, 200, 180, 255);
+  describe("outline cleanup", () => {
+    test("detects multiple dark outline color candidates from subject edges", () => {
+      const source = createImage(5, 5);
+      writePixel(source, 2, 2, 120, 200, 180, 255);
+      writePixel(source, 1, 2, 16, 17, 18, 255);
+      writePixel(source, 2, 1, 16, 17, 18, 255);
+      writePixel(source, 3, 2, 24, 63, 60, 255);
+      writePixel(source, 2, 3, 24, 63, 60, 255);
+
+      const candidates = detectOutlineColorCandidates(source);
+
+      expect(candidates.slice(0, 2).map((candidate) => candidate.color)).toEqual(expect.arrayContaining(["#101112", "#183f3c"]));
+      expect(candidates[0]?.count).toBeGreaterThanOrEqual(2);
+    });
+
+    test("adds a one-pixel outline around visible pixels without resizing the image", () => {
+      const source = createImage(3, 3);
+      writePixel(source, 1, 1, 120, 200, 180, 255);
 
     const outlined = applyOutlineCleanup(source, "add", { color: "#010203" });
 
@@ -1141,11 +1156,32 @@ describe("outline cleanup", () => {
 
     const unchanged = applyOutlineCleanup(noEdge, "repairExisting");
 
-    expect(readPixel(unchanged, 0, 0)).toEqual([0, 0, 0, 0]);
-  });
+      expect(readPixel(unchanged, 0, 0)).toEqual([0, 0, 0, 0]);
+    });
 
-  test("adds an outline over opaque background pixels when alpha is preserved", () => {
-    const source = createImage(3, 3, [255, 255, 255, 255]);
+    test("repair mode can use selected source outline colors without thickening existing edges", () => {
+      const source = createImage(5, 3);
+      writePixel(source, 2, 1, 120, 200, 180, 255);
+      writePixel(source, 1, 1, 24, 63, 60, 255);
+      writePixel(source, 2, 0, 16, 17, 18, 255);
+
+      const repaired = applyOutlineCleanup(source, "repairExisting", { sourceColors: ["#183f3c", "#101112"] });
+
+      expect(readPixel(repaired, 3, 1)).toEqual([24, 63, 60, 255]);
+      expect(readPixel(repaired, 0, 1)).toEqual([0, 0, 0, 0]);
+    });
+
+    test("repair mode keeps custom outline color fallback behavior", () => {
+      const source = createImage(3, 3);
+      writePixel(source, 1, 1, 120, 200, 180, 255);
+
+      const repaired = applyOutlineCleanup(source, "repairExisting", { color: "#443322" });
+
+      expect(readPixel(repaired, 0, 1)).toEqual([68, 51, 34, 255]);
+    });
+
+    test("adds an outline over opaque background pixels when alpha is preserved", () => {
+      const source = createImage(3, 3, [255, 255, 255, 255]);
     writePixel(source, 1, 1, 120, 200, 180, 255);
 
     const outlined = applyOutlineCleanup(source, "add", { color: "#010203" });

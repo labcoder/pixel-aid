@@ -44,7 +44,7 @@ import type {
   WorkerProgressStage
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
-import { analyzeSceneAssetDiagnostics, analyzeTilesetSeams, sliceSheetFrames } from "@pixelaid/core";
+import { analyzeSceneAssetDiagnostics, analyzeTilesetSeams, detectOutlineColorCandidates, sliceSheetFrames } from "@pixelaid/core";
 import {
   analyzeFrameStability,
   createEngineExportBundle,
@@ -114,7 +114,13 @@ import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
-import { isOutlineColorEditable, shouldUseCustomOutlineColor } from "./lib/outlineControls";
+import {
+  getOutlineSourceColorsForFix,
+  isOutlineColorEditable,
+  normalizeOutlineSourceColors,
+  shouldUseCustomOutlineColor,
+  type OutlineSourceMode
+} from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
 import { normalizePaletteBudget, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
@@ -350,6 +356,8 @@ export function App() {
   const [outlineColor, setOutlineColor] = useState("#101112");
   const [outlineAlpha, setOutlineAlpha] = useState(255);
   const [outlineColorEdited, setOutlineColorEdited] = useState(false);
+  const [outlineSourceMode, setOutlineSourceMode] = useState<OutlineSourceMode>("auto");
+  const [selectedOutlineSourceColors, setSelectedOutlineSourceColors] = useState<string[]>([]);
   const [removeOrphans, setRemoveOrphans] = useState(defaultCleanupSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(defaultCleanupSettings.jaggyCleanup);
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(defaultCleanupSettings.preserveSinglePixelDetails);
@@ -414,6 +422,10 @@ export function App() {
     [selectedAsset]
   );
   const sourceColorCount = useMemo(() => (selectedAsset ? countVisibleColors(selectedAsset.image) : 0), [selectedAsset]);
+  const outlineSourceCandidates = useMemo(
+    () => (selectedAsset ? detectOutlineColorCandidates(selectedAsset.image, { maxCandidates: 6 }) : []),
+    [selectedAsset]
+  );
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -711,6 +723,11 @@ export function App() {
   }, [selectedAnimationName]);
 
   useEffect(() => {
+    const candidateColors = new Set(outlineSourceCandidates.map((candidate) => candidate.color));
+    setSelectedOutlineSourceColors((current) => normalizeOutlineSourceColors(current).filter((color) => candidateColors.has(color)));
+  }, [outlineSourceCandidates]);
+
+  useEffect(() => {
     detectedSheetFramesRef.current = detectedSheetFrames;
   }, [detectedSheetFrames]);
 
@@ -923,6 +940,12 @@ export function App() {
 
   const buildFixOptions = useCallback((): FixOptions => {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
+    const outlineSourceColors = getOutlineSourceColorsForFix({
+      mode: outlineMode,
+      sourceMode: outlineSourceMode,
+      selectedColors: selectedOutlineSourceColors,
+      candidates: outlineSourceCandidates
+    });
     const options: FixOptions = {
       mode,
       assetType,
@@ -965,6 +988,7 @@ export function App() {
         outlineMode,
         outlineSize,
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
+        ...(outlineSourceColors.length > 0 ? { outlineSourceColors } : {}),
         ...(useCustomOutlineColor ? { outlineColor } : {})
       },
       ...(sheetMode ? { sheet: sheetOptions, sheetFrames: createSheetFixFramePlan(sheetFrames) } : {})
@@ -998,6 +1022,9 @@ export function App() {
     outlineAlpha,
     outlineColorEdited,
     outlineMode,
+    outlineSourceCandidates,
+    outlineSourceMode,
+    selectedOutlineSourceColors,
     outlineSize,
     paletteMode,
     palettePreset,
@@ -2276,6 +2303,18 @@ export function App() {
     setAlphaColorKey(rgbToHex(data[0]!, data[1]!, data[2]!));
   };
 
+  const toggleOutlineSourceColor = useCallback((color: string) => {
+    const [normalized] = normalizeOutlineSourceColors([color]);
+    if (!normalized) {
+      return;
+    }
+
+    setOutlineSourceMode("manual");
+    setSelectedOutlineSourceColors((current) =>
+      current.includes(normalized) ? current.filter((item) => item !== normalized) : [...current, normalized]
+    );
+  }, []);
+
   const alphaWarningMessages = getAssetTypeCleanupPreset(assetType).alphaWarningCodes
     .map((code) => assetTypeWarnings.find((warning) => warning.code === code)?.message)
     .filter((message): message is string => message !== undefined);
@@ -2579,6 +2618,43 @@ export function App() {
           ]}
           onChange={(value) => setOutlineMode(value as OutlineMode)}
         />
+        {outlineMode === "repairExisting" ? (
+          <div className="outline-source-panel" aria-label="Outline source colors">
+            <SelectField
+              label="Source"
+              value={outlineSourceMode}
+              options={[
+                ["auto", "Auto"],
+                ["manual", "Manual"]
+              ]}
+              onChange={(value) => setOutlineSourceMode(value as OutlineSourceMode)}
+            />
+            {outlineSourceCandidates.length > 0 ? (
+              <div className="outline-source-swatches">
+                {outlineSourceCandidates.map((candidate) => {
+                  const active =
+                    outlineSourceMode === "auto"
+                      ? outlineSourceCandidates.slice(0, 3).some((item) => item.color === candidate.color)
+                      : selectedOutlineSourceColors.includes(candidate.color);
+                  return (
+                    <button
+                      key={candidate.color}
+                      type="button"
+                      className={active ? "active" : ""}
+                      title={`${candidate.color} (${candidate.count} edge pixels)`}
+                      aria-label={`Use outline source ${candidate.color}`}
+                      onClick={() => toggleOutlineSourceColor(candidate.color)}
+                    >
+                      <span style={{ background: candidate.color }} />
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="field-note">No dark edge colors detected.</p>
+            )}
+          </div>
+        ) : null}
         <NumberField label="Outline px" value={outlineSize} min={1} max={8} disabled={outlineMode === "none"} onChange={setOutlineSize} />
         <ColorField
           label="Color"
