@@ -278,11 +278,11 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 3: Update Linear**
+- [x] **Step 3: Update Linear**
 
 Add a MIG-15 completion note with commands run, files/packages added, and any deferred follow-ups. Move MIG-15 to Done after the branch is merged into `codex/pixelaid-roadmap-foundation`.
 
-- [ ] **Step 4: Merge into foundation**
+- [x] **Step 4: Merge into foundation**
 
 Fast-forward merge:
 
