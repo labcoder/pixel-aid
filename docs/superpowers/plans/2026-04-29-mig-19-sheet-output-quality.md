@@ -146,7 +146,7 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 3: Commit docs and update Linear**
+- [x] **Step 3: Commit docs and update Linear**
 
 Commit:
 
