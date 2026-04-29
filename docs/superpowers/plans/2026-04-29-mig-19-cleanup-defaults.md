@@ -46,11 +46,11 @@ Run targeted web tests and typecheck, then commit.
 **Files:**
 - Modify `apps/web/src/lib/fixSuggestions.test.ts` or add a focused core/web pipeline test.
 
-- [ ] **Step 1: Add a regression that exercises final output settings**
+- [x] **Step 1: Add a regression that exercises final output settings**
 
 Use a deterministic high-color presentation sheet fixture and assert the final recommended settings preserve more edge/detail contrast than the previous destructive cleanup profile.
 
-- [ ] **Step 2: Verify and commit**
+- [x] **Step 2: Verify and commit**
 
 Run targeted tests and commit.
 

@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
 import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
+import { fixImage } from "@pixelaid/core";
 import { chooseSuggestionGrid, suggestFixSettings } from "./fixSuggestions";
-import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
 
 function blankImage(width: number, height: number): RGBAImage {
   return {
@@ -97,6 +98,22 @@ function complexPresentationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function detailedPresentationSheetLikeSource(): RGBAImage {
+  const image = complexPresentationSheetLikeSource();
+  const frameX = 104;
+  const frameY = 24;
+
+  for (let y = 0; y < 36; y += 1) {
+    const x = frameX + 16 + Math.floor(y * 0.55);
+    drawRect(image, x, frameY + 10 + y, 2, 2, [14, 24, 26, 255]);
+    drawRect(image, x + 3, frameY + 10 + y, 2, 2, [188, 225, 218, 255]);
+  }
+  drawRect(image, frameX + 20, frameY + 42, 28, 3, [14, 24, 26, 255]);
+  drawRect(image, frameX + 27, frameY + 35, 18, 5, [0, 244, 246, 255]);
+
+  return image;
+}
+
 function drawRect(image: RGBAImage, startX: number, startY: number, width: number, height: number, rgba: [number, number, number, number]) {
   for (let y = startY; y < startY + height; y += 1) {
     for (let x = startX; x < startX + width; x += 1) {
@@ -107,6 +124,112 @@ function drawRect(image: RGBAImage, startX: number, startY: number, width: numbe
       image.data[offset + 3] = rgba[3];
     }
   }
+}
+
+function buildSuggestedFixOptions(image: RGBAImage, cleanupOverride: Partial<FixOptions["cleanup"]> = {}): FixOptions {
+  const suggestion = suggestFixSettings(image);
+  const layout = suggestion.sheetLayout;
+  if (!layout) {
+    throw new Error("Expected sheet layout");
+  }
+
+  return {
+    mode: suggestion.mode,
+    assetType: suggestion.assetType,
+    targetWidth: suggestion.targetWidth,
+    targetHeight: suggestion.targetHeight,
+    maxColors: suggestion.maxColors,
+    paletteSettings: {
+      mode: "auto",
+      strategy: "medianCut",
+      maxColors: suggestion.maxColors,
+      lockScope: "sheet",
+      dithering: "none"
+    },
+    grid: {
+      detect: suggestion.gridDetect,
+      scaleX: suggestion.gridScaleX,
+      scaleY: suggestion.gridScaleY,
+      phaseX: suggestion.gridPhaseX,
+      phaseY: suggestion.gridPhaseY
+    },
+    downscale: suggestion.downscale,
+    alpha: suggestion.alpha,
+    alphaSettings: { ...suggestion.alphaSettings, transparentRgb: "#000000" },
+    cleanup: {
+      removeOrphans: suggestion.removeOrphans,
+      jaggyCleanup: suggestion.jaggyCleanup,
+      preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
+      removeHalos: suggestion.removeHalos,
+      denoiseStrength: suggestion.denoiseStrength,
+      ...cleanupOverride
+    },
+    sheet: {
+      frameWidth: layout.frameWidth,
+      frameHeight: layout.frameHeight,
+      rows: layout.rows,
+      columns: layout.columns,
+      margin: layout.margin,
+      spacing: layout.spacing,
+      extrude: 0
+    },
+    sheetFrames: layout.frames
+  };
+}
+
+function cropImage(image: RGBAImage, rect: Rect): RGBAImage {
+  const out = blankImage(rect.w, rect.h);
+  for (let y = 0; y < rect.h; y += 1) {
+    for (let x = 0; x < rect.w; x += 1) {
+      const sourceOffset = ((rect.y + y) * image.width + rect.x + x) * 4;
+      const outputOffset = (y * out.width + x) * 4;
+      out.data[outputOffset] = image.data[sourceOffset]!;
+      out.data[outputOffset + 1] = image.data[sourceOffset + 1]!;
+      out.data[outputOffset + 2] = image.data[sourceOffset + 2]!;
+      out.data[outputOffset + 3] = image.data[sourceOffset + 3]!;
+    }
+  }
+  return out;
+}
+
+function frameDetailMetrics(image: RGBAImage): { darkPixels: number; edgeEnergy: number } {
+  let darkPixels = 0;
+  let edgeEnergy = 0;
+  let edgeCount = 0;
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const a = image.data[offset + 3]!;
+      const luma = r * 0.299 + g * 0.587 + b * 0.114;
+      if (a >= 16 && luma < 55) {
+        darkPixels += 1;
+      }
+
+      if (x + 1 < image.width) {
+        const nextOffset = offset + 4;
+        const nextLuma =
+          image.data[nextOffset]! * 0.299 + image.data[nextOffset + 1]! * 0.587 + image.data[nextOffset + 2]! * 0.114;
+        edgeEnergy += Math.abs(luma - nextLuma);
+        edgeCount += 1;
+      }
+      if (y + 1 < image.height) {
+        const nextOffset = ((y + 1) * image.width + x) * 4;
+        const nextLuma =
+          image.data[nextOffset]! * 0.299 + image.data[nextOffset + 1]! * 0.587 + image.data[nextOffset + 2]! * 0.114;
+        edgeEnergy += Math.abs(luma - nextLuma);
+        edgeCount += 1;
+      }
+    }
+  }
+
+  return {
+    darkPixels,
+    edgeEnergy: edgeEnergy / Math.max(1, edgeCount)
+  };
 }
 
 describe("fix setting suggestions", () => {
@@ -214,6 +337,31 @@ describe("fix setting suggestions", () => {
     expect(suggestion.removeHalos).toBe(true);
     expect(suggestion.denoiseStrength).toBe(20);
     expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(false);
+  });
+
+  test("preserves final frame detail better than destructive sheet cleanup for complex sheets", () => {
+    const source = detailedPresentationSheetLikeSource();
+    const recommendedOptions = buildSuggestedFixOptions(source);
+    const destructiveOptions = buildSuggestedFixOptions(source, {
+      removeHalos: true,
+      denoiseStrength: 20
+    });
+    const frame = recommendedOptions.sheetFrames?.[0];
+
+    if (!frame) {
+      throw new Error("Expected first frame");
+    }
+
+    const recommended = cropImage(fixImage(source, recommendedOptions).image, frame.rect);
+    const destructive = cropImage(fixImage(source, destructiveOptions).image, frame.rect);
+    const recommendedMetrics = frameDetailMetrics(recommended);
+    const destructiveMetrics = frameDetailMetrics(destructive);
+
+    expect(recommendedOptions.downscale).toBe("detailPreserving");
+    expect(recommendedOptions.cleanup.removeHalos).toBe(false);
+    expect(recommendedOptions.cleanup.denoiseStrength).toBe(0);
+    expect(recommendedMetrics.darkPixels).toBeGreaterThan(destructiveMetrics.darkPixels);
+    expect(recommendedMetrics.edgeEnergy).toBeGreaterThan(destructiveMetrics.edgeEnergy);
   });
 
   test("suggests icon defaults for small near-square sources", () => {
