@@ -385,7 +385,7 @@ npm run lint
 npm run build
 ```
 
-- [ ] **Step 3: Linear and merge**
+- [x] **Step 3: Linear and merge**
 
 Comment verification on `MIG-22`, `MIG-23`, `MIG-24`, `MIG-25`; mark each Done after merge. Fast-forward merge:
 
