@@ -47,7 +47,8 @@ export function setFramePivotOverride(state: PivotOverrideState, frameName: stri
 }
 
 export function clearFramePivotOverride(state: PivotOverrideState, frameName: string): PivotOverrideState {
-  const { [frameName]: _removed, ...frames } = state.frames;
+  const frames = { ...state.frames };
+  delete frames[frameName];
   return { frames, animations: { ...state.animations } };
 }
 
@@ -59,7 +60,8 @@ export function setAnimationPivotOverride(state: PivotOverrideState, animationNa
 }
 
 export function clearAnimationPivotOverride(state: PivotOverrideState, animationName: string): PivotOverrideState {
-  const { [animationName]: _removed, ...animations } = state.animations;
+  const animations = { ...state.animations };
+  delete animations[animationName];
   return { frames: { ...state.frames }, animations };
 }
 

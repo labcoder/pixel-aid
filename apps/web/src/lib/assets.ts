@@ -74,8 +74,9 @@ export function updateAssetProvenanceMetadata<TAsset extends AssetLike & { prove
     });
 
     if (!provenance) {
-      const { provenance: _provenance, ...rest } = asset;
-      return rest as TAsset;
+      const nextAsset = { ...asset };
+      delete nextAsset.provenance;
+      return nextAsset;
     }
 
     return { ...asset, provenance };
