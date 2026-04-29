@@ -62,11 +62,11 @@ Run targeted tests and commit.
 - Modify `docs/editor.md`
 - Update this plan checklist.
 
-- [ ] **Step 1: Document safer complex-sheet cleanup defaults**
+- [x] **Step 1: Document safer complex-sheet cleanup defaults**
 
 Note that complex AI sheets should preserve raw downscale detail first and treat halo/denoise as an opt-in review step.
 
-- [ ] **Step 2: Full verification**
+- [x] **Step 2: Full verification**
 
 Run:
 
