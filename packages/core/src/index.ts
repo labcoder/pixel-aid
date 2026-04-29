@@ -39,6 +39,8 @@ export { assertNotCancelled, FixCancelledError, phasePercent, reportProgress, sh
 export type { FixCancellationSignal, FixProgressEvent, FixRuntimeOptions } from "./runtime";
 export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";
 export type { SceneAssetDiagnosticsOptions } from "./sceneDiagnostics";
+export { analyzeSheetConditioning } from "./sheetConditioning";
+export type { SheetConditioningOptions } from "./sheetConditioning";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
 export { analyzeTilesetSeams } from "./tileDiagnostics";
 export type { TilesetSeamAnalysisOptions } from "./tileDiagnostics";
