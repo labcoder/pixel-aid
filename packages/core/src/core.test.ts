@@ -564,6 +564,44 @@ describe("block downsampling", () => {
     expect(readPixel(fixed, 0, 0)).toEqual([11, 21, 31, 255]);
   });
 
+  test("preserves high-contrast line details in noisy pseudo-pixel blocks", () => {
+    const fillA = rgba(92, 150, 138);
+    const fillB = rgba(98, 158, 145);
+    const fillC = rgba(104, 164, 151);
+    const line = rgba(18, 30, 32);
+    const source = imageFromPixels(4, [
+      fillA,
+      line,
+      fillB,
+      fillC,
+      fillB,
+      line,
+      fillC,
+      fillA,
+      fillC,
+      line,
+      fillA,
+      fillB,
+      fillA,
+      line,
+      fillB,
+      fillC
+    ]);
+
+    const fixed = downsampleBlocks(source, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 4,
+      scaleY: 4,
+      phaseX: 0,
+      phaseY: 0,
+      method: "detailPreserving",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(fixed, 0, 0)).toEqual([18, 30, 32, 255]);
+  });
+
   test("collapses each source block to one dominant output pixel", () => {
     const fixed = downsampleBlocks(blockySource(), {
       outputWidth: 2,

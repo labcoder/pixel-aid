@@ -113,7 +113,7 @@ export type SheetConditioningDiagnostics = {
   issues: SheetConditioningIssue[];
 };
 
-export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette";
+export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette" | "detailPreserving";
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill" | "colorKey";
 
