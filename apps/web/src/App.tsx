@@ -695,6 +695,7 @@ export function App() {
     const resolvedAssetType = targetAssetSource === "manual" ? targetAssetType : suggestion.assetType;
     const resolvedMode = assetTypeToMode(resolvedAssetType);
     const preset = getAssetTypeCleanupPreset(resolvedAssetType);
+    const cleanupDefaults = targetAssetSource === "manual" ? preset : suggestion;
     const definition = getAssetTypeDefinition(resolvedAssetType);
     const resolvedWarnings = targetAssetSource === "manual" ? getAssetTypeWarnings(resolvedAssetType) : suggestion.categoryWarnings;
     const resolvedCategoryReason =
@@ -753,11 +754,11 @@ export function App() {
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
     setPaletteBudget(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
-    setRemoveOrphans(preset.removeOrphans);
-    setJaggyCleanup(preset.jaggyCleanup);
-    setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
-    setRemoveHalos(preset.removeHalos);
-    setDenoiseStrength(preset.denoiseStrength);
+    setRemoveOrphans(cleanupDefaults.removeOrphans);
+    setJaggyCleanup(cleanupDefaults.jaggyCleanup);
+    setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
+    setRemoveHalos(cleanupDefaults.removeHalos);
+    setDenoiseStrength(cleanupDefaults.denoiseStrength);
     setRecommendationConfidence(suggestion.confidence);
     setSuggestionReason(
       formatSuggestionReason(

@@ -192,6 +192,8 @@ describe("fix setting suggestions", () => {
     expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.downscale).toBe("detailPreserving");
+    expect(suggestion.removeHalos).toBe(false);
+    expect(suggestion.denoiseStrength).toBe(0);
     expect(suggestion.reason).toContain("Frame-first source conditioning");
     expect(suggestion.categoryWarnings).toEqual(
       expect.arrayContaining([
@@ -202,6 +204,16 @@ describe("fix setting suggestions", () => {
       ])
     );
     expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(true);
+  });
+
+  test("keeps normal animation sheet cleanup defaults when conditioning is not needed", () => {
+    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.removeHalos).toBe(true);
+    expect(suggestion.denoiseStrength).toBe(20);
+    expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(false);
   });
 
   test("suggests icon defaults for small near-square sources", () => {
