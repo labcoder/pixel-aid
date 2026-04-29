@@ -13,6 +13,7 @@ import {
 import { getFrameOverlayGeometry } from "../lib/frameOverlay";
 import { findFrameAtSourcePoint, findFrameResizeHandleAtSourcePoint } from "../lib/frameEditing";
 import type { FrameResizeHandle } from "../lib/frameEditing";
+import { hasFrameEditModifier, resolveFrameEditIntent } from "../lib/frameEditIntent";
 import type { Point } from "../lib/viewportMath";
 
 export type ViewMode = "before" | "after" | "split";
@@ -32,6 +33,8 @@ export type ViewportCanvasProps = {
   onFrameSelect?: (index: number) => void;
   onSourceFrameMove?: (index: number, delta: Point) => void;
   onSourceFrameResize?: (index: number, handle: FrameResizeHandle, delta: Point) => void;
+  onSourceFrameEditStart?: () => void;
+  onSourceFrameEditCommit?: (changed: boolean) => void;
 };
 
 export function ViewportCanvas({
@@ -48,7 +51,9 @@ export function ViewportCanvas({
   onZoomChange,
   onFrameSelect,
   onSourceFrameMove,
-  onSourceFrameResize
+  onSourceFrameResize,
+  onSourceFrameEditStart,
+  onSourceFrameEditCommit
 }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
@@ -61,6 +66,7 @@ export function ViewportCanvas({
     lastX: number;
     lastY: number;
     sourceZoom: number;
+    changed: boolean;
   } | null>(null);
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
@@ -198,35 +204,50 @@ export function ViewportCanvas({
       splitRatio: splitRatioRef.current
     });
     if (canEditSourceFrames && sourceHit) {
-      const handleHit = findFrameResizeHandleAtSourcePoint(sourceFrames, sourceHit.point, Math.max(2, 8 / sourceHit.sourceZoom));
-      if (handleHit) {
+      const handleHit = getSelectedFrameResizeHit(sourceFrames, selectedFrameIndex, sourceHit.point, Math.max(2, 8 / sourceHit.sourceZoom));
+      const frameIndex = findFrameAtSourcePoint(sourceFrames, sourceHit.point);
+      const intent = resolveFrameEditIntent({
+        frameIndex,
+        resizeHit: handleHit,
+        selectedFrameIndex,
+        modifier: hasFrameEditModifier({ ctrlKey: event.ctrlKey, metaKey: event.metaKey })
+      });
+
+      if (intent.intent === "resize") {
         event.currentTarget.setPointerCapture(event.pointerId);
-        onFrameSelect?.(handleHit.frameIndex);
+        onFrameSelect?.(intent.frameIndex);
+        onSourceFrameEditStart?.();
         frameDragRef.current = {
           pointerId: event.pointerId,
           mode: "resize",
-          frameIndex: handleHit.frameIndex,
-          handle: handleHit.handle,
+          frameIndex: intent.frameIndex,
+          handle: intent.handle,
           lastX: event.clientX,
           lastY: event.clientY,
-          sourceZoom: sourceHit.sourceZoom
+          sourceZoom: sourceHit.sourceZoom,
+          changed: false
         };
         return;
       }
 
-      const frameIndex = findFrameAtSourcePoint(sourceFrames, sourceHit.point);
-      if (frameIndex >= 0) {
+      if (intent.intent === "move") {
         event.currentTarget.setPointerCapture(event.pointerId);
-        onFrameSelect?.(frameIndex);
+        onFrameSelect?.(intent.frameIndex);
+        onSourceFrameEditStart?.();
         frameDragRef.current = {
           pointerId: event.pointerId,
           mode: "move",
-          frameIndex,
+          frameIndex: intent.frameIndex,
           lastX: event.clientX,
           lastY: event.clientY,
-          sourceZoom: sourceHit.sourceZoom
+          sourceZoom: sourceHit.sourceZoom,
+          changed: false
         };
         return;
+      }
+
+      if (intent.intent === "select") {
+        onFrameSelect?.(intent.frameIndex);
       }
     }
 
@@ -246,6 +267,9 @@ export function ViewportCanvas({
         x: (event.clientX - frameDrag.lastX) / frameDrag.sourceZoom,
         y: (event.clientY - frameDrag.lastY) / frameDrag.sourceZoom
       };
+      if (delta.x !== 0 || delta.y !== 0) {
+        frameDrag.changed = true;
+      }
       frameDrag.lastX = event.clientX;
       frameDrag.lastY = event.clientY;
       if (frameDrag.mode === "resize" && frameDrag.handle) {
@@ -279,6 +303,7 @@ export function ViewportCanvas({
 
   const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
     if (frameDragRef.current?.pointerId === event.pointerId) {
+      onSourceFrameEditCommit?.(frameDragRef.current.changed);
       frameDragRef.current = null;
     }
     if (splitDragRef.current?.pointerId === event.pointerId) {
@@ -408,6 +433,21 @@ function getSourcePointFromViewport({
     },
     sourceZoom: zoom
   };
+}
+
+function getSelectedFrameResizeHit(
+  frames: readonly SpriteFrame[],
+  selectedFrameIndex: number,
+  point: Point,
+  hitRadius: number
+): { frameIndex: number; handle: FrameResizeHandle } | null {
+  const selectedFrame = frames[selectedFrameIndex];
+  if (!selectedFrame) {
+    return null;
+  }
+
+  const hit = findFrameResizeHandleAtSourcePoint([selectedFrame], point, hitRadius);
+  return hit ? { frameIndex: selectedFrameIndex, handle: hit.handle } : null;
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {

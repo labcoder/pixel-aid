@@ -88,7 +88,7 @@ git commit -m "docs(web): plan editor polish phase"
 
 ## Task 1: MIG-22 Modifier-Gated Frame Editing
 
-- [ ] **Step 1: Add failing intent tests**
+- [x] **Step 1: Add failing intent tests**
 
 Create `apps/web/src/lib/frameEditIntent.test.ts` with tests that assert:
 
@@ -98,7 +98,7 @@ Create `apps/web/src/lib/frameEditIntent.test.ts` with tests that assert:
 - Ctrl/Cmd over an unselected frame only selects, so the next modified drag edits it;
 - resize handles are only considered for the selected frame.
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run:
 
@@ -108,7 +108,7 @@ npm run test -w @pixelaid/web -- frameEditIntent.test.ts frameEditing.test.ts
 
 Expected: fail because `frameEditIntent.ts` does not exist.
 
-- [ ] **Step 3: Implement `frameEditIntent.ts`**
+- [x] **Step 3: Implement `frameEditIntent.ts`**
 
 Create the helper with:
 
@@ -122,7 +122,7 @@ export function hasFrameEditModifier(input: { ctrlKey: boolean; metaKey: boolean
 
 and a resolver that receives `frameIndex`, `resizeHit`, `selectedFrameIndex`, and modifier state.
 
-- [ ] **Step 4: Wire `ViewportCanvas`**
+- [x] **Step 4: Wire `ViewportCanvas`**
 
 Modify `ViewportCanvas` so:
 
@@ -131,7 +131,7 @@ Modify `ViewportCanvas` so:
 - resize hit testing is scoped to `[sourceFrames[selectedFrameIndex]]`;
 - move/resize completion calls new optional callbacks `onSourceFrameEditStart` and `onSourceFrameEditCommit`.
 
-- [ ] **Step 5: Verify and commit**
+- [x] **Step 5: Verify and commit**
 
 Run:
 
