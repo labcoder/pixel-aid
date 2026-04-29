@@ -20,6 +20,10 @@ export function coerceEditorViewMode(mode: AssetMode, viewMode: EditorViewMode):
   return mode === "single" ? "before" : "timeline";
 }
 
+export function isTimelineEditorViewMode(viewMode: EditorViewMode): viewMode is "timeline" {
+  return viewMode === "timeline";
+}
+
 export function getCanvasViewMode(viewMode: EditorViewMode, hasOutput: boolean): CanvasViewMode {
   if (viewMode === "timeline") {
     return hasOutput ? "after" : "before";

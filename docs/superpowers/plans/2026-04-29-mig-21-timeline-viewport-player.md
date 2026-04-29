@@ -56,7 +56,7 @@
 - Modify `apps/web/src/lib/viewportModes.ts`
 - Modify `apps/web/src/lib/viewportModes.test.ts`
 
-- [ ] **Step 1: Write failing source-mode tests**
+- [x] **Step 1: Write failing source-mode tests**
 
 Create `apps/web/src/lib/timelineViewportSources.test.ts`:
 
@@ -106,7 +106,7 @@ test("keeps timeline as a non-canvas editor surface", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
 Run:
 
@@ -116,7 +116,7 @@ npm run test -w @pixelaid/web -- timelineViewportSources.test.ts viewportModes.t
 
 Expected: FAIL because `timelineViewportSources.ts` and `isTimelineEditorViewMode` do not exist yet.
 
-- [ ] **Step 3: Implement source-mode helpers**
+- [x] **Step 3: Implement source-mode helpers**
 
 Create `apps/web/src/lib/timelineViewportSources.ts`:
 
@@ -166,7 +166,7 @@ export function isTimelineEditorViewMode(viewMode: EditorViewMode): viewMode is 
 }
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
