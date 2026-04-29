@@ -4,5 +4,6 @@ coverage/
 .vite/
 .playwright-cli/
 .worktrees/
+docs/internal/
 *.local
 *.log
