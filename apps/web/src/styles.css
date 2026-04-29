@@ -526,6 +526,18 @@ button:disabled {
   font-weight: 800;
 }
 
+.edit-history-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.edit-history-controls span {
+  white-space: nowrap;
+}
+
 .viewport-readouts span {
   padding: 0.2rem 0.45rem;
   color: #101112;

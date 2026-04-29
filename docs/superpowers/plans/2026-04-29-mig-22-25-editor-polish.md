@@ -151,7 +151,7 @@ git commit -m "fix(web): require modifier for frame overlay edits"
 
 ## Task 2: MIG-23 Frame Edit Undo/Redo
 
-- [ ] **Step 1: Add failing history tests**
+- [x] **Step 1: Add failing history tests**
 
 Create `apps/web/src/lib/frameEditHistory.test.ts` covering:
 
@@ -162,7 +162,7 @@ Create `apps/web/src/lib/frameEditHistory.test.ts` covering:
 - `resetFrameEditHistory`;
 - redo-stack clearing after a new edit.
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run:
 
@@ -172,7 +172,7 @@ npm run test -w @pixelaid/web -- frameEditHistory.test.ts
 
 Expected: fail because the helper does not exist.
 
-- [ ] **Step 3: Implement history helper**
+- [x] **Step 3: Implement history helper**
 
 Create `apps/web/src/lib/frameEditHistory.ts` with serializable snapshots:
 
@@ -187,7 +187,7 @@ export type FrameEditSnapshot = {
 
 Use `past`, `present`, and `future` arrays; clone frames/animations when storing snapshots.
 
-- [ ] **Step 4: Wire App history**
+- [x] **Step 4: Wire App history**
 
 Modify `App.tsx` so:
 
@@ -196,14 +196,14 @@ Modify `App.tsx` so:
 - source frame drag/resize pushes one entry at pointer-down start and one commit at pointer-up if changed;
 - undo/redo updates detected frames, row animations, selected frame, selected animation, pauses playback, and clears `fixResult`.
 
-- [ ] **Step 5: Add controls and shortcuts**
+- [x] **Step 5: Add controls and shortcuts**
 
 Add Undo and Redo buttons near viewport/timeline controls using `lucide-react` `Undo2` and `Redo2`. Add keyboard support:
 
 - `Ctrl+Z` / `Cmd+Z` undo
 - `Ctrl+Shift+Z`, `Cmd+Shift+Z`, or `Ctrl+Y` redo
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 
