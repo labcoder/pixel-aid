@@ -214,7 +214,7 @@ git commit -m "feat(cli): add pixelaid automation commands"
 
 ## Task 4: MCP-Ready Schemas And Handlers
 
-- [ ] **Step 1: Add failing MCP tests**
+- [x] **Step 1: Add failing MCP tests**
 
 Create tests for schemas and direct handlers:
 
@@ -228,15 +228,15 @@ Create tests for schemas and direct handlers:
 
 Tests should cover schema validation, handler success, handler error envelopes, and no direct AI/network calls.
 
-- [ ] **Step 2: Scaffold MCP package**
+- [x] **Step 2: Scaffold MCP package**
 
 Create `packages/mcp` with exported tool definitions, input/output schema objects, and handler functions that call `@pixelaid/automation`.
 
-- [ ] **Step 3: Implement handlers**
+- [x] **Step 3: Implement handlers**
 
 Handlers return MCP-friendly content plus the same machine-readable PixelAid result model for automation consistency.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
