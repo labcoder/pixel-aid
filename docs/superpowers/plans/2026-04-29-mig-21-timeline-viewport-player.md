@@ -678,7 +678,7 @@ git commit -m "feat(web): move sprite player into timeline viewport"
 **Files:**
 - Modify this plan checklist as work completes.
 
-- [ ] **Step 1: Start the dev server**
+- [x] **Step 1: Start the dev server**
 
 Run from the MIG-21 worktree:
 
@@ -688,7 +688,7 @@ npx vite --host 127.0.0.1 --port 5175
 
 Use another port if 5175 is occupied.
 
-- [ ] **Step 2: Browser verify with the robot sheet**
+- [x] **Step 2: Browser verify with the robot sheet**
 
 Use:
 
@@ -707,7 +707,7 @@ Manual/browser checks:
 - Compare playback draws input and output for the same selected row side by side.
 - Bottom panel still shows logs/metrics and clip metadata, but no duplicate animated preview.
 
-- [ ] **Step 3: Full verification**
+- [x] **Step 3: Full verification**
 
 Run:
 
