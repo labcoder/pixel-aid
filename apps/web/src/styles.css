@@ -423,9 +423,55 @@ button:disabled {
 .viewport-panel {
   grid-area: viewport;
   min-width: 0;
+  position: relative;
   display: grid;
   grid-template-rows: 42px minmax(0, 1fr);
   background: #0f1010;
+}
+
+.timeline-viewport-shell {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: #0f1010;
+}
+
+.timeline-viewport-toolbar {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 8px 10px;
+  background: #111414;
+  border-bottom: 1px solid var(--line);
+}
+
+.timeline-viewport-toolbar .player-controls {
+  flex: 1 1 520px;
+  margin-top: 0;
+}
+
+.timeline-source-controls {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.timeline-source-controls button {
+  min-height: 28px;
+  padding: 0 0.55rem;
+  color: var(--muted);
+  background: var(--surface-2);
+}
+
+.timeline-source-controls button.active {
+  color: #101112;
+  background: var(--amber);
+  border-color: var(--amber);
+  font-weight: 800;
 }
 
 .timeline-viewport-player {
@@ -1545,6 +1591,17 @@ button:disabled {
   background: #101414;
   border: 1px solid var(--line);
   border-radius: 5px;
+}
+
+.timeline-metadata-panel {
+  min-width: 0;
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.timeline-frame-meta {
+  align-content: start;
 }
 
 .frame-preview-meta {

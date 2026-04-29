@@ -562,7 +562,7 @@ git commit -m "feat(web): add timeline viewport canvas player"
 - Modify `apps/web/src/styles.css`
 - Modify `docs/editor.md`
 
-- [ ] **Step 1: Add Timeline viewport source state**
+- [x] **Step 1: Add Timeline viewport source state**
 
 In `App.tsx`:
 
@@ -579,7 +579,7 @@ useEffect(() => {
 }, [fixResult, sourceTimelineFrames.length, timelineFrames.length]);
 ```
 
-- [ ] **Step 2: Derive Input and Output placements**
+- [x] **Step 2: Derive Input and Output placements**
 
 Use existing helpers:
 
@@ -597,7 +597,7 @@ const outputTimelinePlacements = useMemo(
 
 If the exact implementation needs clearer code, extract this into a local helper inside `App.tsx` or a small pure helper with tests.
 
-- [ ] **Step 3: Render Timeline viewport as a real player**
+- [x] **Step 3: Render Timeline viewport as a real player**
 
 Inside the viewport panel:
 - If `viewMode !== "timeline"`, render existing `ViewportCanvas`.
@@ -608,7 +608,7 @@ Inside the viewport panel:
 
 The source controls must be disabled when the source option is unavailable.
 
-- [ ] **Step 4: Remove the App-level playback RAF loop**
+- [x] **Step 4: Remove the App-level playback RAF loop**
 
 Remove the `useEffect` that advances `selectedFrameIndex` on every animation frame from `App.tsx`.
 
@@ -637,7 +637,7 @@ const commitTimelineViewportFrame = useCallback(
 
 Pass it to `TimelineViewportCanvas`.
 
-- [ ] **Step 5: Keep the bottom panel useful without duplicating the main player**
+- [x] **Step 5: Keep the bottom panel useful without duplicating the main player**
 
 When `showTimelinePanel` is true:
 - Remove the bottom `FramePreviewCanvas` player surface.
@@ -646,7 +646,7 @@ When `showTimelinePanel` is true:
 
 The bottom panel should not render a second animated preview.
 
-- [ ] **Step 6: Document the new workflow**
+- [x] **Step 6: Document the new workflow**
 
 Update `docs/editor.md`:
 - Timeline view in the main viewport is the animation player for sheet-like assets.
@@ -655,7 +655,7 @@ Update `docs/editor.md`:
 - Compare plays input and output for the same selected row side by side.
 - The bottom panel keeps clip metadata, stability, logs, and metrics rather than duplicating the player.
 
-- [ ] **Step 7: Verify and commit**
+- [x] **Step 7: Verify and commit**
 
 Run:
 
