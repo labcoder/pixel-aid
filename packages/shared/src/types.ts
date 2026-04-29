@@ -89,6 +89,30 @@ export type SceneAssetDiagnostics = {
   warnings: AssetTypeWarning[];
 };
 
+export type SheetConditioningIssueCode =
+  | "excessive-exact-colors"
+  | "dense-coarse-palette"
+  | "opaque-dark-background"
+  | "low-foreground-coverage"
+  | "footer-like-band"
+  | "outlined-cell-grid";
+
+export type SheetConditioningIssue = {
+  code: SheetConditioningIssueCode;
+  severity: DiagnosticSeverity;
+  message: string;
+};
+
+export type SheetConditioningDiagnostics = {
+  exactColorCount: number;
+  coarseColorBinCount: number;
+  foregroundPixelRatio: number;
+  background: { r: number; g: number; b: number; a: number };
+  presentationLike: boolean;
+  recommendFrameFirst: boolean;
+  issues: SheetConditioningIssue[];
+};
+
 export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette";
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill" | "colorKey";
@@ -380,6 +404,7 @@ export type SheetLayoutDiagnostics = {
     maxCenterDriftPx: number;
     mergedComponentCount: number;
   };
+  conditioning?: SheetConditioningDiagnostics;
   notes: string[];
 };
 
