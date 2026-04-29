@@ -84,11 +84,11 @@ git commit -m "docs(cli): plan automation surface"
 
 ## Task 1: Dependency And PNG IO Foundation
 
-- [ ] **Step 1: Verify PNG dependency license**
+- [x] **Step 1: Verify PNG dependency license**
 
 Choose a small PNG encode/decode dependency, inspect its actual package license file, and confirm it is compatible with the project dependency policy.
 
-- [ ] **Step 2: Add failing automation IO tests**
+- [x] **Step 2: Add failing automation IO tests**
 
 Create `packages/automation/src/imageIo.test.ts` covering:
 
@@ -97,15 +97,15 @@ Create `packages/automation/src/imageIo.test.ts` covering:
 - unsupported extensions return a stable `unsupported_format` error;
 - malformed PNG data returns a stable `decode_failed` error.
 
-- [ ] **Step 3: Add package scaffolding**
+- [x] **Step 3: Add package scaffolding**
 
 Create `packages/automation/package.json`, `tsconfig.json`, `src/index.ts`, `src/result.ts`, and initial `src/imageIo.ts`.
 
-- [ ] **Step 4: Implement PNG IO**
+- [x] **Step 4: Implement PNG IO**
 
 Implement Node PNG decode/encode without browser APIs.
 
-- [ ] **Step 5: Update notices and verify**
+- [x] **Step 5: Update notices and verify**
 
 Update `THIRD_PARTY_NOTICES.md`, then run:
 
