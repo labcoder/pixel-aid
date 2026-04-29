@@ -138,6 +138,13 @@ import {
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./lib/sheetLayoutModel";
+import {
+  insertFrameNearSelection,
+  insertRowNearSelection,
+  removeFrameAtSelection,
+  removeRowAtSelection,
+  type ManualSheetEditResult
+} from "./lib/sheetManualEditing";
 import { mapFrameToSource } from "./lib/sourceFrameMapping";
 import {
   getSimpleAlphaChoice,
@@ -521,6 +528,18 @@ export function App() {
         : [],
     [detectedRowAnimations, detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings]
   );
+  const hasDetectedSheetLayout = detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0;
+  const selectedDetectedFrame =
+    selectedFrameIndex >= 0 && selectedFrameIndex < detectedSheetFrames.length ? detectedSheetFrames[selectedFrameIndex] : undefined;
+  const selectedDetectedFrameRowName = selectedDetectedFrame?.tags?.find((tag) =>
+    detectedRowAnimations.some((animation) => animation.name === tag)
+  );
+  const selectedManualAnimationName =
+    selectedAnimationName !== ALL_ANIMATIONS ? selectedAnimationName : selectedDetectedFrameRowName ?? detectedRowAnimations[0]?.name ?? ALL_ANIMATIONS;
+  const selectedManualAnimation = detectedRowAnimations.find((animation) => animation.name === selectedManualAnimationName);
+  const canEditManualSheetCell = hasDetectedSheetLayout && selectedDetectedFrame !== undefined;
+  const canEditManualSheetRow = hasDetectedSheetLayout && selectedManualAnimation !== undefined;
+  const canRemoveManualSheetRow = canEditManualSheetRow && detectedRowAnimations.length > 1;
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
   const bottomPanelSections = useMemo(() => getBottomPanelSections(mode, assetType), [assetType, mode]);
@@ -1562,6 +1581,174 @@ export function App() {
     [detectedRowAnimations, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
   );
 
+  const applyManualSheetEdit = useCallback(
+    (result: ManualSheetEditResult, logLine: string) => {
+      setDetectedSheetFrames(result.frames);
+      setDetectedRowAnimations(result.animations);
+      selectedFrameIndexRef.current = result.selectedFrameIndex;
+      setSelectedFrameIndex(result.selectedFrameIndex);
+      setSelectedAnimationName(result.selectedAnimationName);
+      setFixResult(null);
+      setIsPlaying(false);
+      playbackAccumulatorRef.current = 0;
+
+      const selectedAnimation = result.animations.find((animation) => animation.name === result.selectedAnimationName);
+      if (selectedAnimation) {
+        const nextDirection = selectedAnimation.direction ?? playbackDirection;
+        setPlaybackFps(clampFps(selectedAnimation.fps ?? playbackFps));
+        setPlaybackLoop(selectedAnimation.loop);
+        setPlaybackDirection(nextDirection);
+        resetPlaybackStepDirection(nextDirection);
+      } else {
+        resetPlaybackStepDirection(playbackDirection);
+      }
+
+      appendLog(logLine);
+    },
+    [appendLog, playbackDirection, playbackFps, resetPlaybackStepDirection]
+  );
+
+  const addCellBeforeSelected = useCallback(() => {
+    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+      return;
+    }
+
+    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    applyManualSheetEdit(
+      insertFrameNearSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        placement: "before",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Added cell before ${selectedName}`
+    );
+  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]);
+
+  const addCellAfterSelected = useCallback(() => {
+    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+      return;
+    }
+
+    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    applyManualSheetEdit(
+      insertFrameNearSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        placement: "after",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Added cell after ${selectedName}`
+    );
+  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]);
+
+  const removeSelectedCell = useCallback(() => {
+    if (detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+      return;
+    }
+
+    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    applyManualSheetEdit(
+      removeFrameAtSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        margin: sheetMargin,
+        spacing: sheetSpacing
+      }),
+      `Removed cell ${selectedName}`
+    );
+  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, sheetMargin, sheetSpacing]);
+
+  const addRowBeforeSelected = useCallback(() => {
+    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      insertRowNearSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedManualAnimationName,
+        placement: "before",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Added row above ${selectedManualAnimationName}`
+    );
+  }, [
+    applyManualSheetEdit,
+    detectedRowAnimations,
+    detectedSheetFrames,
+    gridScaleX,
+    gridScaleY,
+    selectedAsset,
+    selectedManualAnimationName,
+    sheetMargin,
+    sheetSpacing
+  ]);
+
+  const addRowAfterSelected = useCallback(() => {
+    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      insertRowNearSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedManualAnimationName,
+        placement: "after",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Added row below ${selectedManualAnimationName}`
+    );
+  }, [
+    applyManualSheetEdit,
+    detectedRowAnimations,
+    detectedSheetFrames,
+    gridScaleX,
+    gridScaleY,
+    selectedAsset,
+    selectedManualAnimationName,
+    sheetMargin,
+    sheetSpacing
+  ]);
+
+  const removeSelectedRow = useCallback(() => {
+    if (detectedRowAnimations.length <= 1 || detectedSheetFrames.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      removeRowAtSelection({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedManualAnimationName,
+        margin: sheetMargin,
+        spacing: sheetSpacing
+      }),
+      `Removed row ${selectedManualAnimationName}`
+    );
+  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, selectedManualAnimationName, sheetMargin, sheetSpacing]);
+
   const moveDetectedSourceFrame = useCallback(
     (frameIndex: number, delta: { x: number; y: number }) => {
       if (!selectedAsset) {
@@ -2294,6 +2481,43 @@ export function App() {
               <p key={note}>{note}</p>
             ))}
             <small>Detected rows keep their source boxes. Cell edits change the packed output canvas, not the source selection.</small>
+          </div>
+        ) : null}
+        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+          <div className="manual-sheet-corrections" aria-label="Manual sheet correction tools">
+            <div className="manual-sheet-correction-heading">
+              <strong>Manual corrections</strong>
+              <span>
+                {selectedManualAnimation ? `${selectedManualAnimation.name} / ${selectedManualAnimation.frameNames.length} cells` : "No row selected"}
+              </span>
+            </div>
+            <div className="manual-sheet-correction-grid">
+              <button type="button" disabled={!canEditManualSheetCell} onClick={addCellBeforeSelected}>
+                <SkipBack size={13} />
+                Cell before
+              </button>
+              <button type="button" disabled={!canEditManualSheetCell} onClick={addCellAfterSelected}>
+                <SkipForward size={13} />
+                Cell after
+              </button>
+              <button type="button" disabled={!canEditManualSheetCell} onClick={removeSelectedCell}>
+                <Trash2 size={13} />
+                Remove cell
+              </button>
+              <button type="button" disabled={!canEditManualSheetRow} onClick={addRowBeforeSelected}>
+                <ArrowUp size={13} />
+                Row above
+              </button>
+              <button type="button" disabled={!canEditManualSheetRow} onClick={addRowAfterSelected}>
+                <ArrowDown size={13} />
+                Row below
+              </button>
+              <button type="button" disabled={!canRemoveManualSheetRow} onClick={removeSelectedRow}>
+                <Trash2 size={13} />
+                Remove row
+              </button>
+            </div>
+            <small>Add missing cells before or after the selected frame, then adjust the new source box in the Input view.</small>
           </div>
         ) : null}
         {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
