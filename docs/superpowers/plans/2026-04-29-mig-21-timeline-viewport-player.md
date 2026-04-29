@@ -479,7 +479,7 @@ git commit -m "refactor(web): extract sprite player controls"
 - Create `apps/web/src/components/TimelineViewportCanvas.tsx`
 - Modify `apps/web/src/styles.css`
 
-- [ ] **Step 1: Implement the canvas component**
+- [x] **Step 1: Implement the canvas component**
 
 Create `TimelineViewportCanvas` with props:
 
@@ -517,7 +517,7 @@ Implementation rules:
 - Do not call React state setters on each frame.
 - Call `onFrameCommit` when playback stops, source/clip changes, or the component unmounts while playing.
 
-- [ ] **Step 2: Add styles**
+- [x] **Step 2: Add styles**
 
 Add styles:
 
@@ -537,7 +537,7 @@ Add styles:
 }
 ```
 
-- [ ] **Step 3: Verify and commit**
+- [x] **Step 3: Verify and commit**
 
 Run:
 
