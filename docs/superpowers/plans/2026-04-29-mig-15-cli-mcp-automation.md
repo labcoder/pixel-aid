@@ -174,7 +174,7 @@ git commit -m "feat(cli): add automation core operations"
 
 ## Task 3: CLI Commands
 
-- [ ] **Step 1: Add failing CLI tests**
+- [x] **Step 1: Add failing CLI tests**
 
 Create tests that execute the CLI entrypoint and verify:
 
@@ -186,15 +186,15 @@ Create tests that execute the CLI entrypoint and verify:
 - `pixelaid export <input.png> --out-dir <dir> --engine godot,unity,phaser --bundle zip`;
 - invalid args, missing files, no-overwrite, and deterministic exit codes.
 
-- [ ] **Step 2: Scaffold CLI package**
+- [x] **Step 2: Scaffold CLI package**
 
 Create `packages/cli` with a `pixelaid` bin entry and a testable `runCli(argv, io)` function.
 
-- [ ] **Step 3: Implement parser and commands**
+- [x] **Step 3: Implement parser and commands**
 
 Keep parsing small and deterministic. Emit human-readable text by default and stable JSON when `--json` is supplied.
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
