@@ -293,7 +293,7 @@ git commit -m "feat(core): add outline source color controls"
 
 ## Task 4: MIG-25 Repeated Busy Feedback
 
-- [ ] **Step 1: Add failing busy-status tests**
+- [x] **Step 1: Add failing busy-status tests**
 
 Create `apps/web/src/lib/busyStatus.test.ts` for:
 
@@ -302,7 +302,7 @@ Create `apps/web/src/lib/busyStatus.test.ts` for:
 - fix queued/running/finishing labels before progress events;
 - cancel/completion clear behavior.
 
-- [ ] **Step 2: Run failing tests**
+- [x] **Step 2: Run failing tests**
 
 Run:
 
@@ -312,7 +312,7 @@ npm run test -w @pixelaid/web -- busyStatus.test.ts
 
 Expected: fail because helper does not exist.
 
-- [ ] **Step 3: Implement busy helper**
+- [x] **Step 3: Implement busy helper**
 
 Create `apps/web/src/lib/busyStatus.ts` with an operation model:
 
@@ -328,15 +328,15 @@ export type BusyOperation = {
 
 Include helpers for label formatting and visible-state selection.
 
-- [ ] **Step 4: Wire repeated import/fix status**
+- [x] **Step 4: Wire repeated import/fix status**
 
 Modify `App.tsx` so every import/analyze/fix operation increments an id, sets status before expensive work, awaits at least one paint, and clears only the active operation id.
 
-- [ ] **Step 5: Improve UI rendering**
+- [x] **Step 5: Improve UI rendering**
 
 Show busy status consistently in viewport and guided panel. Keep action buttons disabled while busy. Avoid status flicker on fast import by keeping at least one paint before clearing.
 
-- [ ] **Step 6: Verify and commit**
+- [x] **Step 6: Verify and commit**
 
 Run:
 

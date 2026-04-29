@@ -77,6 +77,15 @@ import {
 } from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
+import {
+  clearBusyOperation,
+  createBusyOperation,
+  formatBusyOperationLabel,
+  selectVisibleBusyOperation,
+  updateBusyOperation,
+  type BusyOperation,
+  type BusyOperationKind
+} from "./lib/busyStatus";
 import { engineExportFileToBundleFile, engineWarningsToValidationIssues } from "./lib/engineExportFiles";
 import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleFile } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
@@ -297,8 +306,8 @@ export function App() {
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [logs, setLogs] = useState(defaultLogLines);
   const [isDropActive, setIsDropActive] = useState(false);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [analysisStatus, setAnalysisStatus] = useState<string | null>(null);
+  const [importOperation, setImportOperation] = useState<BusyOperation | null>(null);
+  const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(true);
   const [zoom, setZoom] = useState(8);
@@ -372,14 +381,16 @@ export function App() {
     errorCount: number;
   } | null>(null);
   const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(["godot", "unity", "phaser"]);
-  const [fixStatus, setFixStatus] = useState<string | null>(null);
+  const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [showAdvancedControls, setShowAdvancedControls] = useState(false);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
+  const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
+  const activeFixOperationIdRef = useRef<number | null>(null);
   const fixStartCancelledRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
@@ -400,6 +411,11 @@ export function App() {
     );
   }, []);
 
+  const nextBusyOperation = useCallback((kind: BusyOperationKind, label: string, detail?: string) => {
+    busyOperationIdRef.current += 1;
+    return createBusyOperation(busyOperationIdRef.current, kind, label, detail);
+  }, []);
+
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const assetType = selectedAsset?.assetType ?? "sprite";
   const assetTypeSource = selectedAsset?.assetTypeSource ?? "auto";
@@ -409,11 +425,15 @@ export function App() {
   const provenanceOrigin = selectedAsset?.provenance?.origin ?? "unknown";
   const provenanceSummary = formatAssetProvenanceSummary(selectedAsset?.provenance);
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
-  const isImporting = importStatus !== null;
-  const isAnalyzing = analysisStatus !== null;
-  const isFixing = fixStatus !== null || fixProgress !== null;
-  const busyStatus = importStatus ?? analysisStatus ?? (fixProgress ? formatFixProgress(fixProgress) : fixStatus);
-  const assetPanelStatus = importStatus ?? analysisStatus;
+  const isImporting = importOperation !== null;
+  const isAnalyzing = analysisOperation !== null;
+  const isFixing = fixOperation !== null || fixProgress !== null;
+  const visibleFixOperation = fixProgress
+    ? updateBusyOperation(fixOperation ?? createBusyOperation(0, "fix", formatFixProgress(fixProgress)), formatFixProgress(fixProgress))
+    : fixOperation;
+  const visibleBusyOperation = selectVisibleBusyOperation({ importOperation, analysisOperation, fixOperation: visibleFixOperation });
+  const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
+  const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, analysisOperation }));
   useEffect(() => {
     setLastExportValidation(null);
   }, [engineExportTargets, fixResult, selectedAsset?.id]);
@@ -901,13 +921,14 @@ export function App() {
         return;
       }
 
-      setImportStatus(`Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
+      const operation = nextBusyOperation("import", `Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
+      setImportOperation(operation);
       await waitForNextPaint();
 
       try {
         for (const file of imageFiles) {
           try {
-            setImportStatus(`Decoding ${file.name}...`);
+            setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Decoding ${file.name}...`) : current));
             await waitForNextPaint();
 
             const asset = await decodeImageFile(file);
@@ -920,7 +941,7 @@ export function App() {
             setViewMode(getImportViewMode());
             setShowAdvancedControls(false);
 
-            setImportStatus(`Analyzing ${asset.name}...`);
+            setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Analyzing ${asset.name}...`) : current));
             await waitForNextPaint();
 
             const suggestion = suggestFixSettings(asset.image);
@@ -932,10 +953,10 @@ export function App() {
           }
         }
       } finally {
-        setImportStatus(null);
+        setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion]
+    [appendLog, applyFixSuggestion, nextBusyOperation]
   );
 
   const buildFixOptions = useCallback((): FixOptions => {
@@ -1047,22 +1068,28 @@ export function App() {
     const frameCount = sheetMode ? sheetFrames.length : 1;
     fixStartCancelledRef.current = false;
     lastLoggedFixStageRef.current = undefined;
-    setFixStatus(sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
+    const operation = nextBusyOperation("fix", sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
+    activeFixOperationIdRef.current = operation.id;
+    setFixOperation(operation);
     setFixProgress({ requestId: "pending", stage: "decode-prep", percent: 0 });
     await waitForNextPaint();
     if (fixStartCancelledRef.current) {
-      setFixStatus(null);
+      setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
+      activeFixOperationIdRef.current = null;
       return;
     }
 
     try {
       const options = buildFixOptions();
-      setFixStatus(sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...");
+      setFixOperation((current) =>
+        current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...") : current
+      );
       await waitForNextPaint();
       if (fixStartCancelledRef.current) {
-        setFixStatus(null);
+        setFixOperation((current) => clearBusyOperation(current, operation.id));
         setFixProgress(null);
+        activeFixOperationIdRef.current = null;
         return;
       }
 
@@ -1092,27 +1119,32 @@ export function App() {
         .finally(() => {
           if (activeJobRef.current?.requestId === job.requestId) {
             activeJobRef.current = null;
+            activeFixOperationIdRef.current = null;
           }
-          setFixStatus(null);
+          setFixOperation((current) => clearBusyOperation(current, operation.id));
           setFixProgress(null);
         });
     } catch (error) {
       appendLog(error instanceof Error ? error.message : "Fix failed to start");
-      setFixStatus(null);
+      setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
+      activeFixOperationIdRef.current = null;
     }
-  }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, selectedAsset, sheetFrames.length, sheetMode]);
+  }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset, sheetFrames.length, sheetMode]);
 
   const cancelFix = useCallback(() => {
     if (!activeJobRef.current) {
       fixStartCancelledRef.current = true;
-      setFixStatus(null);
+      const operationId = activeFixOperationIdRef.current;
+      if (operationId !== null) {
+        setFixOperation((current) => clearBusyOperation(current, operationId));
+      }
       setFixProgress((progress) =>
         progress ? { ...progress, stage: "cancelled", percent: 100, message: "Cancelling" } : { requestId: "pending", stage: "cancelled", percent: 100, message: "Cancelling" }
       );
       return;
     }
-    setFixStatus("Cancelling fix...");
+    setFixOperation((current) => (current ? updateBusyOperation(current, "Cancelling fix...") : current));
     setFixProgress((progress) => ({
       requestId: activeJobRef.current?.requestId ?? progress?.requestId ?? "pending",
       stage: "cancelled",
@@ -1127,7 +1159,8 @@ export function App() {
       return;
     }
 
-    setAnalysisStatus(`Analyzing ${selectedAsset.name}...`);
+    const operation = nextBusyOperation("analysis", `Analyzing ${selectedAsset.name}...`);
+    setAnalysisOperation(operation);
     await waitForNextPaint();
 
     try {
@@ -1136,9 +1169,9 @@ export function App() {
       applyFixSuggestion(suggestion, selectedAsset);
       appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
     } finally {
-      setAnalysisStatus(null);
+      setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -3577,7 +3610,7 @@ export function App() {
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
                   ["Halos", removeHalos ? "remove" : "keep"],
-                  ["Progress", fixProgress ? formatFixProgress(fixProgress) : fixStatus ?? "--"],
+                  ["Progress", formatBusyOperationLabel(visibleFixOperation) ?? "--"],
                   [
                     "Outline",
                     outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
