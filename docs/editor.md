@@ -115,6 +115,7 @@ The viewport renders images through Canvas2D with smoothing disabled.
 
 - Switching between Input, Output, and Compare auto-fits the active source/output footprint so a large import and a small fixed sprite appear at a comparable working distance by default.
 - Single-sprite mode exposes Input, Compare, and Output views. Sheet-like modes replace Compare with Timeline because frame/player inspection is more useful than a split-sheet overlay.
+- Timeline view is the main animation player for sheet-like assets. Before Fix it plays the detected input frame bounds; after Fix it can play Input, Output, or Compare so source and fixed frames can be reviewed side by side for the selected row.
 - The native-size readout follows the active view: Input shows source dimensions, Output shows fixed output dimensions, and Compare shows both.
 - Mouse wheel zooms around the cursor.
 - Hold the left mouse button and drag to pan.
@@ -150,9 +151,10 @@ The timeline and sprite player are enabled when a sheet-like mode has frame meta
 
 Tilesets replace the sprite player with a canvas repeat preview. The preview draws the selected tile in a 3x3 grid with smoothing disabled and overlays seam guides when diagnostics find repeat risk. This keeps tile inspection separate from animation playback while still sharing the same bottom logs and metrics area.
 
-The current timeline player uses the generated sheet frames in row-major order. It can:
+The Timeline viewport player uses the selected row clip or all generated sheet frames. Its live playback loop runs inside the viewport canvas so React state is only updated when the user scrubs, steps, stops, or changes clip/source. It can:
 
 - Switch between detected row clips or all rows when Auto Suggest found row animation metadata.
+- Switch viewport source between Input, Output, and Compare. Input uses the original detected source rectangles, Output uses the fixed sheet after Fix, and Compare draws both sources for the same timeline position.
 - Play or pause frame advancement using `requestAnimationFrame`.
 - Step to the previous or next frame.
 - Scrub directly to any frame with the range control.
@@ -168,7 +170,9 @@ The current timeline player uses the generated sheet frames in row-major order. 
 - Edit per-clip FPS, direction, and loop metadata for manifest export.
 - Show the selected frame name, frame size, and frame duration.
 
-The frame preview canvas draws either the fixed output frame after Fix or the detected source bounds before Fix. It uses nearest-neighbor scaling, shows the normalized canvas size, marks the pivot, and can overlay previous/next onion frames. When the selected frame participates in a stability warning, the preview draws a warning outline around the normalized canvas. Looping forward/reverse clips can wrap onion neighbors; ping-pong clips do not wrap onion neighbors at the ends, so the preview does not imply a jump from first to last frame.
+The Timeline viewport canvas uses nearest-neighbor scaling, shows the normalized canvas size, marks the pivot, and can overlay previous/next onion frames. Looping forward/reverse clips can wrap onion neighbors; ping-pong clips do not wrap onion neighbors at the ends, so the preview does not imply a jump from first to last frame.
+
+The bottom Timeline panel keeps metadata and editing controls instead of rendering a second animated preview. It shows the selected frame, canvas/pivot readout, stability diagnostics, pivot correction controls, detected clip metadata, and the timeline rail.
 
 Clicking a frame, dragging or resizing a detected source box, scrubbing, stepping, editing duration, changing pivots, changing direction, or changing clips pauses playback and keeps the viewport highlight in sync. Onion opacity/range controls, imported timesheet editing, automatic pivot suggestions, and per-engine normalized atlas options are future timeline work.
 

@@ -19,6 +19,7 @@ export type TimelineViewportCanvasProps = {
   playDirection: PlaybackStepDirection;
   showOnionSkin: boolean;
   onFrameCommit: (timelinePosition: number, playDirection: PlaybackStepDirection) => void;
+  onPlaybackStop?: () => void;
 };
 
 type LivePlaybackState = {
@@ -40,7 +41,8 @@ export function TimelineViewportCanvas({
   direction,
   playDirection,
   showOnionSkin,
-  onFrameCommit
+  onFrameCommit,
+  onPlaybackStop
 }: TimelineViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
@@ -107,6 +109,7 @@ export function TimelineViewportCanvas({
           animationFrameId = window.requestAnimationFrame(draw);
         } else {
           onFrameCommit(activeState.frameIndex, activeState.playDirection);
+          onPlaybackStop?.();
         }
       }
     };
@@ -128,6 +131,7 @@ export function TimelineViewportCanvas({
     isPlaying,
     loop,
     onFrameCommit,
+    onPlaybackStop,
     outputCanvas,
     outputPlacements,
     playDirection,

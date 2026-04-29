@@ -55,8 +55,8 @@ import {
 } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
-import { FramePreviewCanvas } from "./components/FramePreviewCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
+import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
 import { TileRepeatPreviewCanvas } from "./components/TileRepeatPreviewCanvas";
 import { ViewportCanvas } from "./components/ViewportCanvas";
 import {
@@ -92,7 +92,7 @@ import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { resizeAnimationRowFromSourceFrame } from "./lib/frameRowEditing";
-import { getFramePreviewPlacement, getOnionSkinPlacements } from "./lib/frameNormalization";
+import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
@@ -112,7 +112,6 @@ import {
   getInitialPlaybackState,
   scrubPlayback,
   stepPlaybackFrame,
-  tickPlayback,
   type PlaybackDirection,
   type PlaybackStepDirection
 } from "./lib/playbackModel";
@@ -161,6 +160,11 @@ import {
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import {
+  coerceTimelineViewportSourceMode,
+  getTimelineViewportSourceOptions,
+  type TimelineViewportSourceMode
+} from "./lib/timelineViewportSources";
 import { createTileRepeatPreviewLayout, getTilePreviewFrame } from "./lib/tileRepeatPreview";
 import { formatSceneDiagnosticsSummary, formatTilesetDiagnosticsSummary } from "./lib/tileDiagnosticsView";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
@@ -177,6 +181,33 @@ const palettePresetOptions = [
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function createTimelinePlacements(
+  frames: readonly SpriteFrame[],
+  normalize: boolean,
+  sourceFrames: readonly SpriteFrame[] = []
+): FramePreviewPlacement[] {
+  if (frames.length === 0) {
+    return [];
+  }
+
+  if (normalize) {
+    return normalizeFramePlacements(frames, sourceFrames);
+  }
+
+  const sourceRects = new Map(sourceFrames.map((frame) => [frame.name, frame.rect]));
+  return frames.map((frame) => {
+    const drawRect = sourceRects.get(frame.name);
+    return {
+      frame,
+      ...(drawRect ? { drawRect: { ...drawRect } } : {}),
+      canvas: { width: frame.rect.w, height: frame.rect.h },
+      offset: { x: 0, y: 0 },
+      normalizedPivot: { ...frame.pivot },
+      normalized: false
+    };
+  });
 }
 
 const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: string; tooltip: string }> = {
@@ -266,6 +297,7 @@ export function App() {
   const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(getInitialPlaybackState(0).direction);
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(true);
   const [showOnionSkin, setShowOnionSkin] = useState(false);
+  const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>("input");
   const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
   const [alpha, setAlpha] = useState<AlphaMode>("preserve");
   const [alphaThreshold, setAlphaThreshold] = useState(128);
@@ -301,9 +333,7 @@ export function App() {
   const fixStartCancelledRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
-  const playbackAccumulatorRef = useRef(0);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
-  const playbackLastTimeRef = useRef<number | null>(null);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
   const setPaletteBudget = useCallback((value: number) => {
@@ -440,14 +470,35 @@ export function App() {
     () => new Set(timelineStabilityDiagnostics?.issues.flatMap((issue) => issue.affectedFrameNames) ?? []),
     [timelineStabilityDiagnostics]
   );
-  const currentFrameIssues = useMemo(
-    () => timelineStabilityDiagnostics?.issues.filter((issue) => (currentFrame ? issue.affectedFrameNames.includes(currentFrame.name) : false)) ?? [],
-    [currentFrame, timelineStabilityDiagnostics]
-  );
   const sourceTimelineFrames = useMemo(
     () => animationFrameIndexes.map((index) => sourceSheetFrames[index]!).filter(Boolean),
     [animationFrameIndexes, sourceSheetFrames]
   );
+  const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
+  const timelineViewportSourceAvailability = useMemo(
+    () => ({
+      hasInput: sourceTimelineFrames.length > 0,
+      hasOutput: fixResult !== null && timelineFrames.length > 0
+    }),
+    [fixResult, sourceTimelineFrames.length, timelineFrames.length]
+  );
+  const timelineViewportSourceOptions = useMemo(
+    () => getTimelineViewportSourceOptions(timelineViewportSourceAvailability),
+    [timelineViewportSourceAvailability]
+  );
+  const inputTimelinePlacements = useMemo(
+    () => createTimelinePlacements(timelineFrames, normalizeTimelineFrames, sourceTimelineFrames),
+    [normalizeTimelineFrames, sourceTimelineFrames, timelineFrames]
+  );
+  const outputTimelinePlacements = useMemo(
+    () => (fixResult ? createTimelinePlacements(timelineFrames, normalizeTimelineFrames) : []),
+    [fixResult, normalizeTimelineFrames, timelineFrames]
+  );
+  const timelineMetadataPlacements =
+    timelineViewportSourceMode === "input" || outputTimelinePlacements.length === 0 ? inputTimelinePlacements : outputTimelinePlacements;
+  const timelineMetadataPlacement = timelinePosition >= 0 ? timelineMetadataPlacements[timelinePosition] ?? null : null;
+  const timelineSourceModeLabel =
+    timelineViewportSourceMode === "compare" ? "Input and output" : timelineViewportSourceMode === "output" ? "Output" : "Input";
   const previewImage = fixResult?.image ?? selectedAsset?.image ?? null;
   const tilesetDiagnostics = useMemo(
     () =>
@@ -476,11 +527,6 @@ export function App() {
   );
   const tileRepeatPreviewLayout = useMemo(() => createTileRepeatPreviewLayout(tilePreviewFrame), [tilePreviewFrame]);
   const tileRepeatPreviewSeamGuideLines = tilesetDiagnostics?.issues.length ? tileRepeatPreviewLayout.seamGuideLines : [];
-  const timelinePosition = getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndex);
-  const framePreviewPlacement = useMemo(
-    () => getFramePreviewPlacement(timelineFrames, timelinePosition, normalizeTimelineFrames, fixResult ? [] : sourceTimelineFrames),
-    [fixResult, normalizeTimelineFrames, sourceTimelineFrames, timelineFrames, timelinePosition]
-  );
   const fixedComparisonSourceRect = useMemo(
     () =>
       getFixedComparisonSourceRect({
@@ -499,21 +545,6 @@ export function App() {
         fixedImage: fixResult?.image ?? null
       }),
     [canvasViewMode, fixResult?.image, selectedAsset?.image]
-  );
-  const onionSkinPlacements = useMemo(
-    () =>
-      showOnionSkin
-        ? getOnionSkinPlacements(
-            timelineFrames,
-            timelinePosition,
-            normalizeTimelineFrames,
-            {
-              wrap: playbackLoop && playbackDirection !== "ping-pong"
-            },
-            fixResult ? [] : sourceTimelineFrames
-          )
-        : { previous: null, current: null, next: null },
-    [fixResult, normalizeTimelineFrames, playbackDirection, playbackLoop, showOnionSkin, sourceTimelineFrames, timelineFrames, timelinePosition]
   );
   const sheetDetectionNotes = useMemo(
     () =>
@@ -601,6 +632,10 @@ export function App() {
   }, [mode]);
 
   useEffect(() => {
+    setTimelineViewportSourceMode((current) => coerceTimelineViewportSourceMode(current, timelineViewportSourceAvailability));
+  }, [timelineViewportSourceAvailability]);
+
+  useEffect(() => {
     setSelectedFrameIndex((current) => {
       const nextIndex = clampSelectedFrameIndex(sheetFrames.length, current);
       selectedFrameIndexRef.current = nextIndex;
@@ -626,50 +661,14 @@ export function App() {
   useEffect(() => {
     if (!timelineState.enabled || timelineFrames.length <= 1) {
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
-      playbackLastTimeRef.current = null;
     }
   }, [timelineFrames.length, timelineState.enabled]);
 
   useEffect(() => {
-    if (!isPlaying || !timelineState.enabled || timelineFrames.length <= 1) {
-      playbackLastTimeRef.current = null;
-      return undefined;
+    if (viewMode !== "timeline") {
+      setIsPlaying(false);
     }
-
-    let animationFrameId = 0;
-    const tick = (now: number) => {
-      const lastTime = playbackLastTimeRef.current ?? now;
-      playbackLastTimeRef.current = now;
-      const next = tickPlayback({
-        frameCount: timelineFrames.length,
-        frameIndex: getTimelinePositionForFrame(animationFrameIndexes, selectedFrameIndexRef.current),
-        accumulatorMs: playbackAccumulatorRef.current,
-        deltaMs: now - lastTime,
-        fps: playbackFps,
-        loop: playbackLoop,
-        direction: playbackDirection,
-        playDirection: playbackStepDirectionRef.current,
-        frames: timelineFrames
-      });
-      const nextFrameIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
-
-      playbackAccumulatorRef.current = next.accumulatorMs;
-      playbackStepDirectionRef.current = next.playDirection;
-      if (nextFrameIndex !== selectedFrameIndexRef.current) {
-        selectedFrameIndexRef.current = nextFrameIndex;
-        setSelectedFrameIndex(nextFrameIndex);
-      }
-      if (!next.playing) {
-        setIsPlaying(false);
-        return;
-      }
-      animationFrameId = window.requestAnimationFrame(tick);
-    };
-
-    animationFrameId = window.requestAnimationFrame(tick);
-    return () => window.cancelAnimationFrame(animationFrameId);
-  }, [animationFrameIndexes, isPlaying, playbackDirection, playbackFps, playbackLoop, timelineFrames, timelineState.enabled]);
+  }, [viewMode]);
 
   useEffect(() => {
     const syncRoute = () => setRoute(window.location.pathname);
@@ -779,6 +778,7 @@ export function App() {
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
     setRecommendationConfidence(suggestion.confidence);
+    setViewMode(resolvedMode === "single" ? "before" : "timeline");
     setSuggestionReason(
       formatSuggestionReason(
         suggestion.reason,
@@ -969,7 +969,7 @@ export function App() {
       void job.promise
         .then((result) => {
           setFixResult(result);
-          setViewMode("after");
+          setViewMode(sheetMode ? "timeline" : "after");
           appendLog(
             `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
           );
@@ -1335,7 +1335,6 @@ export function App() {
 
   const changePlaybackFps = useCallback((value: number) => {
     setPlaybackFps(clampFps(value));
-    playbackAccumulatorRef.current = 0;
   }, []);
 
   const resetPlaybackStepDirection = useCallback((direction: PlaybackDirection) => {
@@ -1354,7 +1353,6 @@ export function App() {
       }
 
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       resetPlaybackStepDirection(playbackDirection);
       setFrameDurationOverrides((current) => ({
         ...current,
@@ -1369,7 +1367,6 @@ export function App() {
       const nextPosition = scrubPlayback({ frameCount: timelineFrames.length, frameIndex: index });
       const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, nextPosition);
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       resetPlaybackStepDirection(playbackDirection);
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
@@ -1389,7 +1386,6 @@ export function App() {
         setSelectedAnimationName(rowTag);
       }
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       resetPlaybackStepDirection(playbackDirection);
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
@@ -1407,7 +1403,6 @@ export function App() {
       });
       const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, next.frameIndex);
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       playbackStepDirectionRef.current = direction;
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
@@ -1415,13 +1410,28 @@ export function App() {
     [animationFrameIndexes, playbackLoop, timelineFrames.length]
   );
 
+  const commitTimelineViewportFrame = useCallback(
+    (timelinePosition: number, nextPlayDirection: PlaybackStepDirection) => {
+      const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, timelinePosition);
+      if (nextIndex >= 0) {
+        selectedFrameIndexRef.current = nextIndex;
+        setSelectedFrameIndex(nextIndex);
+      }
+      playbackStepDirectionRef.current = nextPlayDirection;
+    },
+    [animationFrameIndexes]
+  );
+
+  const stopTimelinePlayback = useCallback(() => {
+    setIsPlaying(false);
+  }, []);
+
   const togglePlayback = useCallback(() => {
     if (!canPlayTimeline) {
       setIsPlaying(false);
       return;
     }
 
-    playbackAccumulatorRef.current = 0;
     resetPlaybackStepDirection(playbackDirection);
     setIsPlaying((current) => !current);
   }, [canPlayTimeline, playbackDirection, resetPlaybackStepDirection]);
@@ -1429,7 +1439,6 @@ export function App() {
   const changeSelectedAnimation = useCallback(
     (value: string) => {
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       setSelectedAnimationName(value);
       const animation = detectedRowAnimations.find((item) => item.name === value);
       if (animation) {
@@ -1473,7 +1482,6 @@ export function App() {
       };
       setPivotOverrides((current) => setFramePivotOverride(current, currentFrame.name, nextPivot));
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
     },
     [currentFrame]
   );
@@ -1485,7 +1493,6 @@ export function App() {
 
     setPivotOverrides((current) => clearFramePivotOverride(current, currentFrame.name));
     setIsPlaying(false);
-    playbackAccumulatorRef.current = 0;
   }, [currentFrame]);
 
   const applyCurrentPivotToSelectedAnimation = useCallback(() => {
@@ -1495,7 +1502,6 @@ export function App() {
 
     setPivotOverrides((current) => setAnimationPivotOverride(current, selectedAnimationName, currentFrame.pivot));
     setIsPlaying(false);
-    playbackAccumulatorRef.current = 0;
   }, [currentFrame, selectedAnimationName]);
 
   const resetSelectedAnimationPivot = useCallback(() => {
@@ -1505,7 +1511,6 @@ export function App() {
 
     setPivotOverrides((current) => clearAnimationPivotOverride(current, selectedAnimationName));
     setIsPlaying(false);
-    playbackAccumulatorRef.current = 0;
   }, [selectedAnimationName]);
 
   const updateDetectedAnimationTiming = useCallback(
@@ -1554,7 +1559,6 @@ export function App() {
       });
       setFixResult(null);
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
     },
     [detectedRowAnimations, frameHeight, frameWidth, gridScaleX, gridScaleY, selectedAsset, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
@@ -1564,7 +1568,6 @@ export function App() {
       const nextDirection = value as PlaybackDirection;
       setPlaybackDirection(nextDirection);
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
       resetPlaybackStepDirection(nextDirection);
       if (selectedAnimationName !== ALL_ANIMATIONS && detectedRowAnimations.some((animation) => animation.name === selectedAnimationName)) {
         setDetectedRowAnimations((current) =>
@@ -1590,7 +1593,6 @@ export function App() {
       setSelectedAnimationName(result.selectedAnimationName);
       setFixResult(null);
       setIsPlaying(false);
-      playbackAccumulatorRef.current = 0;
 
       const selectedAnimation = result.animations.find((animation) => animation.name === result.selectedAnimationName);
       if (selectedAnimation) {
@@ -2853,22 +2855,85 @@ export function App() {
             <span>Grid: {showGrid ? "on" : "off"}</span>
           </div>
         </div>
-        <ViewportCanvas
-          sourceImage={selectedAsset?.image ?? null}
-          fixedImage={fixResult?.image ?? null}
-          fixedSourceRect={fixedComparisonSourceRect}
-          viewMode={canvasViewMode}
-          zoom={zoom}
-          showGrid={showGrid}
-          sourceFrames={sourceSheetFrames}
-          frames={sheetFrames}
-          selectedFrameIndex={selectedFrameIndex}
-          canEditSourceFrames={detectedSheetFrames.length > 0}
-          onZoomChange={setZoom}
-          onFrameSelect={selectSourceFrame}
-          onSourceFrameMove={moveDetectedSourceFrame}
-          onSourceFrameResize={resizeDetectedSourceFrame}
-        />
+        {viewMode === "timeline" ? (
+          <div className="timeline-viewport-shell">
+            <div className="timeline-viewport-toolbar">
+              <SpritePlayerControls
+                animations={detectedRowAnimations}
+                selectedAnimationName={selectedAnimationName}
+                canPlay={canPlayTimeline}
+                canScrub={canScrubTimeline}
+                isPlaying={isPlaying}
+                timelinePosition={timelinePosition}
+                frameCount={timelineFrames.length}
+                playbackFps={playbackFps}
+                playbackDirection={playbackDirection}
+                playbackLoop={playbackLoop}
+                normalizeTimelineFrames={normalizeTimelineFrames}
+                showOnionSkin={showOnionSkin}
+                currentFrameDurationMs={currentFrameDurationMs}
+                currentFrameDurationInput={currentFrame ? Math.round(currentFrame.durationMs) : 0}
+                currentFrameSelected={currentFrame !== undefined}
+                onAnimationChange={changeSelectedAnimation}
+                onStep={stepTimelineFrame}
+                onTogglePlayback={togglePlayback}
+                onScrub={selectPlaybackFrame}
+                onFpsChange={changePlaybackFps}
+                onDirectionChange={changePlaybackDirection}
+                onDurationChange={updateSelectedFrameDuration}
+                onLoopChange={setPlaybackLoop}
+                onNormalizeChange={setNormalizeTimelineFrames}
+                onOnionSkinChange={setShowOnionSkin}
+              />
+              <div className="timeline-source-controls" aria-label="Timeline playback source">
+                {timelineViewportSourceOptions.map((option) => (
+                  <button
+                    key={option.mode}
+                    type="button"
+                    className={timelineViewportSourceMode === option.mode ? "active" : ""}
+                    disabled={!option.enabled}
+                    onClick={() => setTimelineViewportSourceMode(option.mode)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <TimelineViewportCanvas
+              inputImage={selectedAsset?.image ?? null}
+              outputImage={fixResult?.image ?? null}
+              inputPlacements={inputTimelinePlacements}
+              outputPlacements={outputTimelinePlacements}
+              sourceMode={timelineViewportSourceMode}
+              selectedTimelinePosition={timelinePosition}
+              isPlaying={isPlaying}
+              fps={playbackFps}
+              loop={playbackLoop}
+              direction={playbackDirection}
+              playDirection={playbackStepDirectionRef.current}
+              showOnionSkin={showOnionSkin}
+              onFrameCommit={commitTimelineViewportFrame}
+              onPlaybackStop={stopTimelinePlayback}
+            />
+          </div>
+        ) : (
+          <ViewportCanvas
+            sourceImage={selectedAsset?.image ?? null}
+            fixedImage={fixResult?.image ?? null}
+            fixedSourceRect={fixedComparisonSourceRect}
+            viewMode={canvasViewMode}
+            zoom={zoom}
+            showGrid={showGrid}
+            sourceFrames={sourceSheetFrames}
+            frames={sheetFrames}
+            selectedFrameIndex={selectedFrameIndex}
+            canEditSourceFrames={detectedSheetFrames.length > 0}
+            onZoomChange={setZoom}
+            onFrameSelect={selectSourceFrame}
+            onSourceFrameMove={moveDetectedSourceFrame}
+            onSourceFrameResize={resizeDetectedSourceFrame}
+          />
+        )}
         {busyStatus ? (
           <div className="viewport-empty-state viewport-busy-state" role="status" aria-live="polite">
             <span className="activity-dot" />
@@ -2967,36 +3032,9 @@ export function App() {
         <div className={bottomContentClassName}>
           {showTimelinePanel ? (
           <section>
-            <h2>Sprite Player</h2>
+            <h2>Timeline Metadata</h2>
             {timelineState.enabled ? (
               <>
-                <SpritePlayerControls
-                  animations={detectedRowAnimations}
-                  selectedAnimationName={selectedAnimationName}
-                  canPlay={canPlayTimeline}
-                  canScrub={canScrubTimeline}
-                  isPlaying={isPlaying}
-                  timelinePosition={timelinePosition}
-                  frameCount={timelineFrames.length}
-                  playbackFps={playbackFps}
-                  playbackDirection={playbackDirection}
-                  playbackLoop={playbackLoop}
-                  normalizeTimelineFrames={normalizeTimelineFrames}
-                  showOnionSkin={showOnionSkin}
-                  currentFrameDurationMs={currentFrameDurationMs}
-                  currentFrameDurationInput={currentFrame ? Math.round(currentFrame.durationMs) : 0}
-                  currentFrameSelected={currentFrame !== undefined}
-                  onAnimationChange={changeSelectedAnimation}
-                  onStep={stepTimelineFrame}
-                  onTogglePlayback={togglePlayback}
-                  onScrub={selectPlaybackFrame}
-                  onFpsChange={changePlaybackFps}
-                  onDirectionChange={changePlaybackDirection}
-                  onDurationChange={updateSelectedFrameDuration}
-                  onLoopChange={setPlaybackLoop}
-                  onNormalizeChange={setNormalizeTimelineFrames}
-                  onOnionSkinChange={setShowOnionSkin}
-                />
                 <div className="player-readout">
                   <strong>
                     Frame {timelinePosition >= 0 ? timelinePosition + 1 : 0}/{timelineFrames.length}
@@ -3004,24 +3042,16 @@ export function App() {
                   <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
                 </div>
-                <div className="frame-preview-panel">
-                  <FramePreviewCanvas
-                    image={previewImage}
-                    placement={framePreviewPlacement}
-                    previousPlacement={showOnionSkin ? onionSkinPlacements.previous : null}
-                    nextPlacement={showOnionSkin ? onionSkinPlacements.next : null}
-                    stabilityWarning={currentFrameIssues.length > 0}
-                  />
-                  <div className="frame-preview-meta">
-                    <strong>{framePreviewPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
+                <div className="timeline-metadata-panel">
+                  <div className="frame-preview-meta timeline-frame-meta">
+                    <strong>{timelineMetadataPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
                     <span>
-                      {framePreviewPlacement
-                        ? `${framePreviewPlacement.canvas.width}x${framePreviewPlacement.canvas.height} pivot ${framePreviewPlacement.normalizedPivot.x},${framePreviewPlacement.normalizedPivot.y}`
+                      {timelineMetadataPlacement
+                        ? `${timelineMetadataPlacement.canvas.width}x${timelineMetadataPlacement.canvas.height} pivot ${timelineMetadataPlacement.normalizedPivot.x},${timelineMetadataPlacement.normalizedPivot.y}`
                         : "No preview frame"}
                     </span>
                     <small>
-                      {fixResult ? "Previewing fixed output" : "Previewing source frame bounds"}
-                      {showOnionSkin ? " with onion skin" : ""}
+                      {timelineSourceModeLabel} playback is shown in the Timeline viewport{showOnionSkin ? " with onion skin" : ""}.
                     </small>
                     {timelineStabilityDiagnostics ? (
                       <div className={`stability-summary ${timelineStabilityDiagnostics.issues.length > 0 ? "is-warning" : "is-stable"}`}>
