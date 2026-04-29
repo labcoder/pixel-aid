@@ -190,7 +190,7 @@ git commit -m "feat(web): add timeline viewport source model"
 - Create `apps/web/src/lib/timelineViewportLayout.ts`
 - Create `apps/web/src/lib/timelineViewportLayout.test.ts`
 
-- [ ] **Step 1: Write failing layout tests**
+- [x] **Step 1: Write failing layout tests**
 
 Create `apps/web/src/lib/timelineViewportLayout.test.ts`:
 
@@ -245,7 +245,7 @@ describe("timeline viewport layout", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests and verify they fail**
+- [x] **Step 2: Run tests and verify they fail**
 
 Run:
 
@@ -255,7 +255,7 @@ npm run test -w @pixelaid/web -- timelineViewportLayout.test.ts
 
 Expected: FAIL because `timelineViewportLayout.ts` does not exist.
 
-- [ ] **Step 3: Implement layout helpers**
+- [x] **Step 3: Implement layout helpers**
 
 Create `apps/web/src/lib/timelineViewportLayout.ts` with:
 
@@ -355,7 +355,7 @@ function createPane(
 }
 ```
 
-- [ ] **Step 4: Verify and commit**
+- [x] **Step 4: Verify and commit**
 
 Run:
 
