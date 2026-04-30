@@ -63,7 +63,8 @@ See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for p
 3. Use the guided recommendation card for a first pass. Auto Suggest classifies the selected asset type, shows confidence and support warnings, and caches the grid candidates used by the preview cards. The manual Asset type selector is stored per imported asset.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Inspect the result in mode-specific views. Single sprites use Input, Compare, and Output; sheet-like modes use Input, Output, and Timeline. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
-6. Export a ZIP containing the fixed PNG and generic JSON manifest.
+6. Save a local editor preset when the current cleanup settings are useful for future imports. Local presets and editor defaults persist in browser/desktop storage without changing per-asset classification.
+7. Export a ZIP containing the fixed PNG and generic JSON manifest.
 
 Automation workflow:
 
@@ -79,6 +80,7 @@ Editor:
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
 - Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri.
+- Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, and saved user presets across web and desktop sessions. Manual asset type remains per imported asset.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
 - Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.
