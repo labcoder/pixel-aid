@@ -79,6 +79,14 @@ import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetType
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
 import {
+  createDefaultEditorPreferences,
+  editorPreferencesVersion,
+  loadEditorPreferences,
+  saveEditorPreferences,
+  type EditorPreferenceSettings,
+  type EditorPreferences
+} from "./lib/editorPreferences";
+import {
   clearBusyOperation,
   createBusyOperation,
   formatBusyOperationLabel,
@@ -92,7 +100,6 @@ import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleF
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import {
   applyTargetSizePreset,
-  defaultCleanupSettings,
   denoiseStrengthLabel,
   deriveGridScale,
   resizeWithAspectLock,
@@ -123,7 +130,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
-import { defaultInspectorGroupOrder, moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
+import { moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
 import {
   getOutlineSourceColorsForFix,
   isOutlineColorEditable,
@@ -302,6 +309,9 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
 
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const initialPreferencesRef = useRef(loadEditorPreferences());
+  const initialPreferences = initialPreferencesRef.current;
+  const initialSettings = initialPreferences.settings;
   const [route, setRoute] = useState(window.location.pathname);
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
@@ -310,35 +320,35 @@ export function App() {
   const [importOperation, setImportOperation] = useState<BusyOperation | null>(null);
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
-  const [showGrid, setShowGrid] = useState(true);
-  const [zoom, setZoom] = useState(8);
-  const [mode, setMode] = useState<AssetMode>("single");
-  const [targetWidth, setTargetWidth] = useState(64);
-  const [targetHeight, setTargetHeight] = useState(64);
-  const [maxColors, setMaxColors] = useState(16);
-  const [paletteMode, setPaletteMode] = useState<PaletteMode>("auto");
-  const [paletteStrategy, setPaletteStrategy] = useState<PaletteStrategy>("medianCut");
-  const [paletteLockScope, setPaletteLockScope] = useState<PaletteLockScope>("sheet");
-  const [palettePreset, setPalettePreset] = useState("pixelaid-arcade-8");
-  const [customPaletteText, setCustomPaletteText] = useState("");
-  const [gridDetect, setGridDetect] = useState<"auto" | "manual">("auto");
-  const [gridScaleX, setGridScaleX] = useState(8);
-  const [gridScaleY, setGridScaleY] = useState(8);
-  const [gridPhaseX, setGridPhaseX] = useState(0);
-  const [gridPhaseY, setGridPhaseY] = useState(0);
-  const [cropToBounds, setCropToBounds] = useState(true);
-  const [localCorrection, setLocalCorrection] = useState(false);
-  const [aspectLocked, setAspectLocked] = useState(true);
-  const [frameWidth, setFrameWidth] = useState(32);
-  const [frameHeight, setFrameHeight] = useState(32);
-  const [sheetRows, setSheetRows] = useState(1);
-  const [sheetColumns, setSheetColumns] = useState(1);
-  const [sheetMargin, setSheetMargin] = useState(0);
-  const [sheetSpacing, setSheetSpacing] = useState(0);
-  const [sheetExtrude, setSheetExtrude] = useState(1);
-  const [pivotPreset, setPivotPreset] = useState<PivotPreset>("bottomCenter");
-  const [customPivotX, setCustomPivotX] = useState(16);
-  const [customPivotY, setCustomPivotY] = useState(32);
+  const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
+  const [zoom, setZoom] = useState(initialSettings.zoom);
+  const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
+  const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
+  const [targetHeight, setTargetHeight] = useState(initialSettings.targetHeight);
+  const [maxColors, setMaxColors] = useState(initialSettings.maxColors);
+  const [paletteMode, setPaletteMode] = useState<PaletteMode>(initialSettings.paletteMode);
+  const [paletteStrategy, setPaletteStrategy] = useState<PaletteStrategy>(initialSettings.paletteStrategy);
+  const [paletteLockScope, setPaletteLockScope] = useState<PaletteLockScope>(initialSettings.paletteLockScope);
+  const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
+  const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
+  const [gridDetect, setGridDetect] = useState<"auto" | "manual">(initialSettings.gridDetect);
+  const [gridScaleX, setGridScaleX] = useState(initialSettings.gridScaleX);
+  const [gridScaleY, setGridScaleY] = useState(initialSettings.gridScaleY);
+  const [gridPhaseX, setGridPhaseX] = useState(initialSettings.gridPhaseX);
+  const [gridPhaseY, setGridPhaseY] = useState(initialSettings.gridPhaseY);
+  const [cropToBounds, setCropToBounds] = useState(initialSettings.cropToBounds);
+  const [localCorrection, setLocalCorrection] = useState(initialSettings.localCorrection);
+  const [aspectLocked, setAspectLocked] = useState(initialSettings.aspectLocked);
+  const [frameWidth, setFrameWidth] = useState(initialSettings.frameWidth);
+  const [frameHeight, setFrameHeight] = useState(initialSettings.frameHeight);
+  const [sheetRows, setSheetRows] = useState(initialSettings.sheetRows);
+  const [sheetColumns, setSheetColumns] = useState(initialSettings.sheetColumns);
+  const [sheetMargin, setSheetMargin] = useState(initialSettings.sheetMargin);
+  const [sheetSpacing, setSheetSpacing] = useState(initialSettings.sheetSpacing);
+  const [sheetExtrude, setSheetExtrude] = useState(initialSettings.sheetExtrude);
+  const [pivotPreset, setPivotPreset] = useState<PivotPreset>(initialSettings.pivotPreset);
+  const [customPivotX, setCustomPivotX] = useState(initialSettings.customPivotX);
+  const [customPivotY, setCustomPivotY] = useState(initialSettings.customPivotY);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
@@ -347,32 +357,32 @@ export function App() {
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [pivotOverrides, setPivotOverrides] = useState<PivotOverrideState>(emptyPivotOverrides);
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
-  const [bottomPanelHeight, setBottomPanelHeight] = useState(198);
+  const [bottomPanelHeight, setBottomPanelHeight] = useState(initialSettings.bottomPanelHeight);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackFps, setPlaybackFps] = useState(getInitialPlaybackState(0).fps);
-  const [playbackLoop, setPlaybackLoop] = useState(getInitialPlaybackState(0).loop);
-  const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(getInitialPlaybackState(0).direction);
-  const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(true);
-  const [showOnionSkin, setShowOnionSkin] = useState(false);
-  const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>("input");
-  const [downscale, setDownscale] = useState<DownscaleMethod>("dominant");
-  const [alpha, setAlpha] = useState<AlphaMode>("preserve");
-  const [alphaThreshold, setAlphaThreshold] = useState(128);
-  const [alphaTolerance, setAlphaTolerance] = useState(18);
-  const [alphaColorKey, setAlphaColorKey] = useState("#ffffff");
-  const [decontaminateRgb, setDecontaminateRgb] = useState(true);
-  const [outlineMode, setOutlineMode] = useState<OutlineMode>("none");
-  const [outlineSize, setOutlineSize] = useState(1);
-  const [outlineColor, setOutlineColor] = useState("#101112");
-  const [outlineAlpha, setOutlineAlpha] = useState(255);
-  const [outlineColorEdited, setOutlineColorEdited] = useState(false);
-  const [outlineSourceMode, setOutlineSourceMode] = useState<OutlineSourceMode>("auto");
+  const [playbackFps, setPlaybackFps] = useState(initialSettings.playbackFps);
+  const [playbackLoop, setPlaybackLoop] = useState(initialSettings.playbackLoop);
+  const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(initialSettings.playbackDirection);
+  const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(initialSettings.normalizeTimelineFrames);
+  const [showOnionSkin, setShowOnionSkin] = useState(initialSettings.showOnionSkin);
+  const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>(initialSettings.timelineViewportSourceMode);
+  const [downscale, setDownscale] = useState<DownscaleMethod>(initialSettings.downscale);
+  const [alpha, setAlpha] = useState<AlphaMode>(initialSettings.alpha);
+  const [alphaThreshold, setAlphaThreshold] = useState(initialSettings.alphaThreshold);
+  const [alphaTolerance, setAlphaTolerance] = useState(initialSettings.alphaTolerance);
+  const [alphaColorKey, setAlphaColorKey] = useState(initialSettings.alphaColorKey);
+  const [decontaminateRgb, setDecontaminateRgb] = useState(initialSettings.decontaminateRgb);
+  const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialSettings.outlineMode);
+  const [outlineSize, setOutlineSize] = useState(initialSettings.outlineSize);
+  const [outlineColor, setOutlineColor] = useState(initialSettings.outlineColor);
+  const [outlineAlpha, setOutlineAlpha] = useState(initialSettings.outlineAlpha);
+  const [outlineColorEdited, setOutlineColorEdited] = useState(initialSettings.outlineColorEdited);
+  const [outlineSourceMode, setOutlineSourceMode] = useState<OutlineSourceMode>(initialSettings.outlineSourceMode);
   const [selectedOutlineSourceColors, setSelectedOutlineSourceColors] = useState<string[]>([]);
-  const [removeOrphans, setRemoveOrphans] = useState(defaultCleanupSettings.removeOrphans);
-  const [jaggyCleanup, setJaggyCleanup] = useState(defaultCleanupSettings.jaggyCleanup);
-  const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(defaultCleanupSettings.preserveSinglePixelDetails);
-  const [removeHalos, setRemoveHalos] = useState(defaultCleanupSettings.removeHalos);
-  const [denoiseStrength, setDenoiseStrength] = useState(defaultCleanupSettings.denoiseStrength);
+  const [removeOrphans, setRemoveOrphans] = useState(initialSettings.removeOrphans);
+  const [jaggyCleanup, setJaggyCleanup] = useState(initialSettings.jaggyCleanup);
+  const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(initialSettings.preserveSinglePixelDetails);
+  const [removeHalos, setRemoveHalos] = useState(initialSettings.removeHalos);
+  const [denoiseStrength, setDenoiseStrength] = useState(initialSettings.denoiseStrength);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
@@ -381,13 +391,14 @@ export function App() {
     warningCount: number;
     errorCount: number;
   } | null>(null);
-  const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(["godot", "unity", "phaser"]);
+  const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(initialSettings.engineExportTargets);
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
-  const [showAdvancedControls, setShowAdvancedControls] = useState(false);
+  const [showAdvancedControls, setShowAdvancedControls] = useState(initialSettings.showAdvancedControls);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
-  const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(defaultInspectorGroupOrder);
+  const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
+  const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
@@ -406,6 +417,69 @@ export function App() {
     setMaxColors(normalizePaletteBudget(value));
   }, []);
 
+  const applyPreferenceSettings = useCallback(
+    (settings: EditorPreferenceSettings) => {
+      setShowGrid(settings.showGrid);
+      setZoom(settings.zoom);
+      setMode(settings.mode);
+      setTargetWidth(settings.targetWidth);
+      setTargetHeight(settings.targetHeight);
+      setPaletteBudget(settings.maxColors);
+      setPaletteMode(settings.paletteMode);
+      setPaletteStrategy(settings.paletteStrategy);
+      setPaletteLockScope(settings.paletteLockScope);
+      setPalettePreset(settings.palettePreset);
+      setCustomPaletteText(settings.customPaletteText);
+      setGridDetect(settings.gridDetect);
+      setGridScaleX(settings.gridScaleX);
+      setGridScaleY(settings.gridScaleY);
+      setGridPhaseX(settings.gridPhaseX);
+      setGridPhaseY(settings.gridPhaseY);
+      setCropToBounds(settings.cropToBounds);
+      setLocalCorrection(settings.localCorrection);
+      setAspectLocked(settings.aspectLocked);
+      setFrameWidth(settings.frameWidth);
+      setFrameHeight(settings.frameHeight);
+      setSheetRows(settings.sheetRows);
+      setSheetColumns(settings.sheetColumns);
+      setSheetMargin(settings.sheetMargin);
+      setSheetSpacing(settings.sheetSpacing);
+      setSheetExtrude(settings.sheetExtrude);
+      setPivotPreset(settings.pivotPreset);
+      setCustomPivotX(settings.customPivotX);
+      setCustomPivotY(settings.customPivotY);
+      setBottomPanelHeight(settings.bottomPanelHeight);
+      setPlaybackFps(settings.playbackFps);
+      setPlaybackLoop(settings.playbackLoop);
+      setPlaybackDirection(settings.playbackDirection);
+      setNormalizeTimelineFrames(settings.normalizeTimelineFrames);
+      setShowOnionSkin(settings.showOnionSkin);
+      setTimelineViewportSourceMode(settings.timelineViewportSourceMode);
+      setDownscale(settings.downscale);
+      setAlpha(settings.alpha);
+      setAlphaThreshold(settings.alphaThreshold);
+      setAlphaTolerance(settings.alphaTolerance);
+      setAlphaColorKey(settings.alphaColorKey);
+      setDecontaminateRgb(settings.decontaminateRgb);
+      setOutlineMode(settings.outlineMode);
+      setOutlineSize(settings.outlineSize);
+      setOutlineColor(settings.outlineColor);
+      setOutlineAlpha(settings.outlineAlpha);
+      setOutlineColorEdited(settings.outlineColorEdited);
+      setOutlineSourceMode(settings.outlineSourceMode);
+      setSelectedOutlineSourceColors([]);
+      setRemoveOrphans(settings.removeOrphans);
+      setJaggyCleanup(settings.jaggyCleanup);
+      setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
+      setRemoveHalos(settings.removeHalos);
+      setDenoiseStrength(settings.denoiseStrength);
+      setEngineExportTargets(settings.engineExportTargets);
+      setShowAdvancedControls(settings.showAdvancedControls);
+      setInspectorGroupOrder(settings.inspectorGroupOrder);
+    },
+    [setPaletteBudget]
+  );
+
   const toggleEngineExportTarget = useCallback((target: EngineExportTarget) => {
     setEngineExportTargets((current) =>
       current.includes(target) ? current.filter((item) => item !== target) : [...current, target]
@@ -416,6 +490,130 @@ export function App() {
     busyOperationIdRef.current += 1;
     return createBusyOperation(busyOperationIdRef.current, kind, label, detail);
   }, []);
+
+  useEffect(() => {
+    const preferences: EditorPreferences = {
+      version: editorPreferencesVersion,
+      settings: {
+        showGrid,
+        zoom,
+        mode,
+        targetWidth,
+        targetHeight,
+        maxColors,
+        paletteMode,
+        paletteStrategy,
+        paletteLockScope,
+        palettePreset,
+        customPaletteText,
+        gridDetect,
+        gridScaleX,
+        gridScaleY,
+        gridPhaseX,
+        gridPhaseY,
+        cropToBounds,
+        localCorrection,
+        aspectLocked,
+        frameWidth,
+        frameHeight,
+        sheetRows,
+        sheetColumns,
+        sheetMargin,
+        sheetSpacing,
+        sheetExtrude,
+        pivotPreset,
+        customPivotX,
+        customPivotY,
+        bottomPanelHeight,
+        playbackFps,
+        playbackLoop,
+        playbackDirection,
+        normalizeTimelineFrames,
+        showOnionSkin,
+        timelineViewportSourceMode,
+        downscale,
+        alpha,
+        alphaThreshold,
+        alphaTolerance,
+        alphaColorKey,
+        decontaminateRgb,
+        outlineMode,
+        outlineSize,
+        outlineColor,
+        outlineAlpha,
+        outlineColorEdited,
+        outlineSourceMode,
+        removeOrphans,
+        jaggyCleanup,
+        preserveSinglePixelDetails,
+        removeHalos,
+        denoiseStrength,
+        engineExportTargets,
+        showAdvancedControls,
+        inspectorGroupOrder
+      },
+      savedPresets: savedEditorPresets
+    };
+    saveEditorPreferences(preferences);
+  }, [
+    alpha,
+    alphaColorKey,
+    alphaThreshold,
+    alphaTolerance,
+    aspectLocked,
+    bottomPanelHeight,
+    cropToBounds,
+    customPaletteText,
+    customPivotX,
+    customPivotY,
+    decontaminateRgb,
+    denoiseStrength,
+    downscale,
+    engineExportTargets,
+    frameHeight,
+    frameWidth,
+    gridDetect,
+    gridPhaseX,
+    gridPhaseY,
+    gridScaleX,
+    gridScaleY,
+    inspectorGroupOrder,
+    jaggyCleanup,
+    localCorrection,
+    maxColors,
+    mode,
+    normalizeTimelineFrames,
+    outlineAlpha,
+    outlineColor,
+    outlineColorEdited,
+    outlineMode,
+    outlineSize,
+    outlineSourceMode,
+    paletteLockScope,
+    paletteMode,
+    palettePreset,
+    paletteStrategy,
+    playbackDirection,
+    playbackFps,
+    playbackLoop,
+    pivotPreset,
+    preserveSinglePixelDetails,
+    removeHalos,
+    removeOrphans,
+    savedEditorPresets,
+    sheetColumns,
+    sheetExtrude,
+    sheetMargin,
+    sheetRows,
+    sheetSpacing,
+    showAdvancedControls,
+    showGrid,
+    showOnionSkin,
+    targetHeight,
+    targetWidth,
+    timelineViewportSourceMode,
+    zoom
+  ]);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
   const assetType = selectedAsset?.assetType ?? "sprite";
@@ -1244,6 +1442,57 @@ export function App() {
     },
     [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
   );
+
+  const currentEditorPresetSettings = useCallback(
+    (): EditorPreset["settings"] => ({
+      assetType,
+      mode,
+      targetWidth,
+      targetHeight,
+      maxColors,
+      gridDetect,
+      gridScaleX,
+      gridScaleY,
+      downscale,
+      alpha
+    }),
+    [alpha, assetType, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
+  );
+
+  const saveCurrentEditorPreset = useCallback(() => {
+    const label = window.prompt("Preset name", `${getAssetTypeDefinition(assetType).label} ${targetWidth}x${targetHeight}`);
+    const trimmed = label?.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const preset: EditorPreset = {
+      id: `user-${Date.now().toString(36)}`,
+      label: trimmed,
+      description: `${getAssetTypeDefinition(assetType).label}, ${targetWidth}x${targetHeight}, ${maxColors} colors`,
+      settings: currentEditorPresetSettings()
+    };
+    setSavedEditorPresets((current) => [preset, ...current.filter((item) => item.label !== trimmed)]);
+    appendLog(`Saved preset: ${preset.label}`);
+  }, [appendLog, assetType, currentEditorPresetSettings, maxColors, targetHeight, targetWidth]);
+
+  const removeSavedEditorPreset = useCallback(
+    (preset: EditorPreset) => {
+      setSavedEditorPresets((current) => current.filter((item) => item.id !== preset.id));
+      appendLog(`Removed preset: ${preset.label}`);
+    },
+    [appendLog]
+  );
+
+  const resetEditorPreferences = useCallback(() => {
+    const defaults = createDefaultEditorPreferences();
+    applyPreferenceSettings(defaults.settings);
+    setSavedEditorPresets([]);
+    appendLog("Reset local editor preferences");
+  }, [appendLog, applyPreferenceSettings]);
+
+  const savedEditorPresetIds = useMemo(() => new Set(savedEditorPresets.map((preset) => preset.id)), [savedEditorPresets]);
+  const allEditorPresets = useMemo(() => [...editorPresets, ...savedEditorPresets], [savedEditorPresets]);
 
   const changeAssetType = useCallback(
     (nextAssetType: AssetType) => {
@@ -3192,15 +3441,32 @@ export function App() {
         </section>
         <section className="panel-section">
           <h2>Presets</h2>
+          <div className="preset-actions">
+            <button type="button" onClick={saveCurrentEditorPreset}>
+              <Sparkles size={14} />
+              Save current
+            </button>
+            <button type="button" onClick={resetEditorPreferences}>
+              <Undo2 size={14} />
+              Reset
+            </button>
+          </div>
           <div className="preset-list">
-            {editorPresets.map((preset) => (
-              <button key={preset.id} type="button" className="preset-row" onClick={() => applyPreset(preset)}>
-                <Sparkles size={15} />
-                <span>
-                  <strong>{preset.label}</strong>
-                  <small>{preset.description}</small>
-                </span>
-              </button>
+            {allEditorPresets.map((preset) => (
+              <div key={preset.id} className="preset-entry">
+                <button type="button" className="preset-row" onClick={() => applyPreset(preset)}>
+                  <Sparkles size={15} />
+                  <span>
+                    <strong>{preset.label}</strong>
+                    <small>{preset.description}</small>
+                  </span>
+                </button>
+                {savedEditorPresetIds.has(preset.id) ? (
+                  <button type="button" className="preset-remove-button" aria-label={`Remove ${preset.label}`} onClick={() => removeSavedEditorPreset(preset)}>
+                    <Trash2 size={14} />
+                  </button>
+                ) : null}
+              </div>
             ))}
           </div>
         </section>

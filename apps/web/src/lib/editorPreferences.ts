@@ -1,0 +1,347 @@
+import type { AlphaMode, AssetMode, AssetType, DownscaleMethod, OutlineMode, PaletteLockScope, PaletteMode, PaletteStrategy } from "@pixelaid/shared";
+import type { EngineExportTarget } from "@pixelaid/exporters";
+import type { PlaybackDirection } from "./playbackModel";
+import type { PivotPreset } from "./sheetControls";
+import { defaultInspectorGroupOrder, type InspectorGroupId } from "./inspectorGroups";
+import type { EditorPreset, EditorSettingsState } from "./presets";
+import type { OutlineSourceMode } from "./outlineControls";
+import type { TimelineViewportSourceMode } from "./timelineViewportSources";
+
+export const editorPreferencesStorageKey = "pixelaid.editorPreferences.v1";
+export const editorPreferencesVersion = 1;
+
+export type EditorPreferenceSettings = {
+  showGrid: boolean;
+  zoom: number;
+  mode: AssetMode;
+  targetWidth: number;
+  targetHeight: number;
+  maxColors: number;
+  paletteMode: PaletteMode;
+  paletteStrategy: PaletteStrategy;
+  paletteLockScope: PaletteLockScope;
+  palettePreset: string;
+  customPaletteText: string;
+  gridDetect: "auto" | "manual";
+  gridScaleX: number;
+  gridScaleY: number;
+  gridPhaseX: number;
+  gridPhaseY: number;
+  cropToBounds: boolean;
+  localCorrection: boolean;
+  aspectLocked: boolean;
+  frameWidth: number;
+  frameHeight: number;
+  sheetRows: number;
+  sheetColumns: number;
+  sheetMargin: number;
+  sheetSpacing: number;
+  sheetExtrude: number;
+  pivotPreset: PivotPreset;
+  customPivotX: number;
+  customPivotY: number;
+  bottomPanelHeight: number;
+  playbackFps: number;
+  playbackLoop: boolean;
+  playbackDirection: PlaybackDirection;
+  normalizeTimelineFrames: boolean;
+  showOnionSkin: boolean;
+  timelineViewportSourceMode: TimelineViewportSourceMode;
+  downscale: DownscaleMethod;
+  alpha: AlphaMode;
+  alphaThreshold: number;
+  alphaTolerance: number;
+  alphaColorKey: string;
+  decontaminateRgb: boolean;
+  outlineMode: OutlineMode;
+  outlineSize: number;
+  outlineColor: string;
+  outlineAlpha: number;
+  outlineColorEdited: boolean;
+  outlineSourceMode: OutlineSourceMode;
+  removeOrphans: boolean;
+  jaggyCleanup: boolean;
+  preserveSinglePixelDetails: boolean;
+  removeHalos: boolean;
+  denoiseStrength: number;
+  engineExportTargets: EngineExportTarget[];
+  showAdvancedControls: boolean;
+  inspectorGroupOrder: InspectorGroupId[];
+};
+
+export type EditorPreferences = {
+  version: typeof editorPreferencesVersion;
+  settings: EditorPreferenceSettings;
+  savedPresets: EditorPreset[];
+};
+
+export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
+  showGrid: true,
+  zoom: 8,
+  mode: "single",
+  targetWidth: 64,
+  targetHeight: 64,
+  maxColors: 16,
+  paletteMode: "auto",
+  paletteStrategy: "medianCut",
+  paletteLockScope: "sheet",
+  palettePreset: "pixelaid-arcade-8",
+  customPaletteText: "",
+  gridDetect: "auto",
+  gridScaleX: 8,
+  gridScaleY: 8,
+  gridPhaseX: 0,
+  gridPhaseY: 0,
+  cropToBounds: true,
+  localCorrection: false,
+  aspectLocked: true,
+  frameWidth: 32,
+  frameHeight: 32,
+  sheetRows: 1,
+  sheetColumns: 1,
+  sheetMargin: 0,
+  sheetSpacing: 0,
+  sheetExtrude: 1,
+  pivotPreset: "bottomCenter",
+  customPivotX: 16,
+  customPivotY: 32,
+  bottomPanelHeight: 198,
+  playbackFps: 8,
+  playbackLoop: true,
+  playbackDirection: "forward",
+  normalizeTimelineFrames: true,
+  showOnionSkin: false,
+  timelineViewportSourceMode: "input",
+  downscale: "dominant",
+  alpha: "preserve",
+  alphaThreshold: 128,
+  alphaTolerance: 18,
+  alphaColorKey: "#ffffff",
+  decontaminateRgb: true,
+  outlineMode: "none",
+  outlineSize: 1,
+  outlineColor: "#101112",
+  outlineAlpha: 255,
+  outlineColorEdited: false,
+  outlineSourceMode: "auto",
+  removeOrphans: true,
+  jaggyCleanup: true,
+  preserveSinglePixelDetails: true,
+  removeHalos: true,
+  denoiseStrength: 20,
+  engineExportTargets: ["godot", "unity", "phaser"],
+  showAdvancedControls: false,
+  inspectorGroupOrder: defaultInspectorGroupOrder
+};
+
+export function createDefaultEditorPreferences(): EditorPreferences {
+  return {
+    version: editorPreferencesVersion,
+    settings: {
+      ...defaultEditorPreferenceSettings,
+      engineExportTargets: [...defaultEditorPreferenceSettings.engineExportTargets],
+      inspectorGroupOrder: [...defaultEditorPreferenceSettings.inspectorGroupOrder]
+    },
+    savedPresets: []
+  };
+}
+
+export function loadEditorPreferences(storage = getPreferenceStorage()): EditorPreferences {
+  if (!storage) {
+    return createDefaultEditorPreferences();
+  }
+
+  try {
+    const raw = storage.getItem(editorPreferencesStorageKey);
+    if (!raw) {
+      return createDefaultEditorPreferences();
+    }
+    return normalizeEditorPreferences(JSON.parse(raw) as unknown);
+  } catch {
+    return createDefaultEditorPreferences();
+  }
+}
+
+export function saveEditorPreferences(preferences: EditorPreferences, storage = getPreferenceStorage()): void {
+  if (!storage) {
+    return;
+  }
+
+  try {
+    storage.setItem(editorPreferencesStorageKey, JSON.stringify(preferences));
+  } catch {
+    // Storage can be unavailable in private windows or restricted desktop contexts.
+  }
+}
+
+export function normalizeEditorPreferences(value: unknown): EditorPreferences {
+  const defaults = createDefaultEditorPreferences();
+  if (!isRecord(value)) {
+    return defaults;
+  }
+
+  const settings = isRecord(value.settings) ? value.settings : {};
+  return {
+    version: editorPreferencesVersion,
+    settings: {
+      showGrid: booleanSetting(settings.showGrid, defaults.settings.showGrid),
+      zoom: numberSetting(settings.zoom, defaults.settings.zoom, 1, 64),
+      mode: unionSetting<AssetMode>(settings.mode, ["single", "spriteSheet", "tileSheet"], defaults.settings.mode),
+      targetWidth: integerSetting(settings.targetWidth, defaults.settings.targetWidth, 1, 4096),
+      targetHeight: integerSetting(settings.targetHeight, defaults.settings.targetHeight, 1, 4096),
+      maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 256),
+      paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
+      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency"], defaults.settings.paletteStrategy),
+      paletteLockScope: unionSetting(settings.paletteLockScope, ["single", "firstFrame", "sheet", "project"], defaults.settings.paletteLockScope),
+      palettePreset: stringSetting(settings.palettePreset, defaults.settings.palettePreset),
+      customPaletteText: stringSetting(settings.customPaletteText, defaults.settings.customPaletteText),
+      gridDetect: unionSetting(settings.gridDetect, ["auto", "manual"], defaults.settings.gridDetect),
+      gridScaleX: numberSetting(settings.gridScaleX, defaults.settings.gridScaleX, 0.01, 1024),
+      gridScaleY: numberSetting(settings.gridScaleY, defaults.settings.gridScaleY, 0.01, 1024),
+      gridPhaseX: numberSetting(settings.gridPhaseX, defaults.settings.gridPhaseX, 0, 1024),
+      gridPhaseY: numberSetting(settings.gridPhaseY, defaults.settings.gridPhaseY, 0, 1024),
+      cropToBounds: booleanSetting(settings.cropToBounds, defaults.settings.cropToBounds),
+      localCorrection: booleanSetting(settings.localCorrection, defaults.settings.localCorrection),
+      aspectLocked: booleanSetting(settings.aspectLocked, defaults.settings.aspectLocked),
+      frameWidth: integerSetting(settings.frameWidth, defaults.settings.frameWidth, 1, 4096),
+      frameHeight: integerSetting(settings.frameHeight, defaults.settings.frameHeight, 1, 4096),
+      sheetRows: integerSetting(settings.sheetRows, defaults.settings.sheetRows, 1, 256),
+      sheetColumns: integerSetting(settings.sheetColumns, defaults.settings.sheetColumns, 1, 256),
+      sheetMargin: integerSetting(settings.sheetMargin, defaults.settings.sheetMargin, 0, 4096),
+      sheetSpacing: integerSetting(settings.sheetSpacing, defaults.settings.sheetSpacing, 0, 4096),
+      sheetExtrude: integerSetting(settings.sheetExtrude, defaults.settings.sheetExtrude, 0, 64),
+      pivotPreset: unionSetting(settings.pivotPreset, ["center", "bottomCenter", "topLeft", "custom"], defaults.settings.pivotPreset),
+      customPivotX: integerSetting(settings.customPivotX, defaults.settings.customPivotX, -4096, 4096),
+      customPivotY: integerSetting(settings.customPivotY, defaults.settings.customPivotY, -4096, 4096),
+      bottomPanelHeight: integerSetting(settings.bottomPanelHeight, defaults.settings.bottomPanelHeight, 120, 560),
+      playbackFps: numberSetting(settings.playbackFps, defaults.settings.playbackFps, 1, 60),
+      playbackLoop: booleanSetting(settings.playbackLoop, defaults.settings.playbackLoop),
+      playbackDirection: unionSetting(settings.playbackDirection, ["forward", "reverse", "ping-pong"], defaults.settings.playbackDirection),
+      normalizeTimelineFrames: booleanSetting(settings.normalizeTimelineFrames, defaults.settings.normalizeTimelineFrames),
+      showOnionSkin: booleanSetting(settings.showOnionSkin, defaults.settings.showOnionSkin),
+      timelineViewportSourceMode: unionSetting(settings.timelineViewportSourceMode, ["input", "output", "compare"], defaults.settings.timelineViewportSourceMode),
+      downscale: unionSetting(settings.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"], defaults.settings.downscale),
+      alpha: unionSetting(settings.alpha, ["preserve", "binary", "backgroundFloodFill", "colorKey"], defaults.settings.alpha),
+      alphaThreshold: integerSetting(settings.alphaThreshold, defaults.settings.alphaThreshold, 0, 255),
+      alphaTolerance: integerSetting(settings.alphaTolerance, defaults.settings.alphaTolerance, 0, 255),
+      alphaColorKey: stringSetting(settings.alphaColorKey, defaults.settings.alphaColorKey),
+      decontaminateRgb: booleanSetting(settings.decontaminateRgb, defaults.settings.decontaminateRgb),
+      outlineMode: unionSetting(settings.outlineMode, ["none", "repairExisting", "add"], defaults.settings.outlineMode),
+      outlineSize: integerSetting(settings.outlineSize, defaults.settings.outlineSize, 1, 8),
+      outlineColor: stringSetting(settings.outlineColor, defaults.settings.outlineColor),
+      outlineAlpha: integerSetting(settings.outlineAlpha, defaults.settings.outlineAlpha, 0, 255),
+      outlineColorEdited: booleanSetting(settings.outlineColorEdited, defaults.settings.outlineColorEdited),
+      outlineSourceMode: unionSetting(settings.outlineSourceMode, ["auto", "manual"], defaults.settings.outlineSourceMode),
+      removeOrphans: booleanSetting(settings.removeOrphans, defaults.settings.removeOrphans),
+      jaggyCleanup: booleanSetting(settings.jaggyCleanup, defaults.settings.jaggyCleanup),
+      preserveSinglePixelDetails: booleanSetting(settings.preserveSinglePixelDetails, defaults.settings.preserveSinglePixelDetails),
+      removeHalos: booleanSetting(settings.removeHalos, defaults.settings.removeHalos),
+      denoiseStrength: numberSetting(settings.denoiseStrength, defaults.settings.denoiseStrength, 0, 100),
+      engineExportTargets: engineTargetsSetting(settings.engineExportTargets, defaults.settings.engineExportTargets),
+      showAdvancedControls: booleanSetting(settings.showAdvancedControls, defaults.settings.showAdvancedControls),
+      inspectorGroupOrder: inspectorOrderSetting(settings.inspectorGroupOrder, defaults.settings.inspectorGroupOrder)
+    },
+    savedPresets: savedPresetsSetting(value.savedPresets)
+  };
+}
+
+function getPreferenceStorage(): Storage | null {
+  try {
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function booleanSetting(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function numberSetting(value: unknown, fallback: number, min: number, max: number): number {
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+}
+
+function integerSetting(value: unknown, fallback: number, min: number, max: number): number {
+  return Math.round(numberSetting(value, fallback, min, max));
+}
+
+function stringSetting(value: unknown, fallback: string): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function unionSetting<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
+}
+
+function engineTargetsSetting(value: unknown, fallback: EngineExportTarget[]): EngineExportTarget[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+  const allowed: EngineExportTarget[] = ["godot", "unity", "phaser"];
+  const next = value.filter((target): target is EngineExportTarget => allowed.includes(target as EngineExportTarget));
+  return next.length > 0 ? [...new Set(next)] : [...fallback];
+}
+
+function inspectorOrderSetting(value: unknown, fallback: InspectorGroupId[]): InspectorGroupId[] {
+  if (!Array.isArray(value)) {
+    return [...fallback];
+  }
+  const allowed = new Set<InspectorGroupId>(defaultInspectorGroupOrder);
+  const next = value.filter((group): group is InspectorGroupId => typeof group === "string" && allowed.has(group as InspectorGroupId));
+  for (const group of defaultInspectorGroupOrder) {
+    if (!next.includes(group)) {
+      next.push(group);
+    }
+  }
+  return next.length > 0 ? next : [...fallback];
+}
+
+function savedPresetsSetting(value: unknown): EditorPreset[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((candidate, index) => {
+    if (!isRecord(candidate) || !isRecord(candidate.settings) || typeof candidate.label !== "string") {
+      return [];
+    }
+
+    const settings = presetSettingsSetting(candidate.settings);
+    if (Object.keys(settings).length === 0) {
+      return [];
+    }
+
+    return [
+      {
+        id: typeof candidate.id === "string" ? candidate.id : `user-${index}`,
+        label: candidate.label,
+        description: typeof candidate.description === "string" ? candidate.description : "Saved editor preset",
+        settings
+      }
+    ];
+  });
+}
+
+function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSettingsState> {
+  const settings: Partial<EditorSettingsState> = {};
+  const assetType = unionSetting<AssetType>(
+    value.assetType,
+    ["sprite", "spriteSheet", "animationSheet", "characterSheet", "tileset", "tilemap", "portrait", "icon", "uiElement", "background"],
+    "sprite"
+  );
+  if (typeof value.assetType === "string") settings.assetType = assetType;
+  if (typeof value.mode === "string") settings.mode = unionSetting<AssetMode>(value.mode, ["single", "spriteSheet", "tileSheet"], "single");
+  if (typeof value.targetWidth === "number") settings.targetWidth = integerSetting(value.targetWidth, 64, 1, 4096);
+  if (typeof value.targetHeight === "number") settings.targetHeight = integerSetting(value.targetHeight, 64, 1, 4096);
+  if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 256);
+  if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
+  if (typeof value.gridScaleX === "number") settings.gridScaleX = numberSetting(value.gridScaleX, 8, 0.01, 1024);
+  if (typeof value.gridScaleY === "number") settings.gridScaleY = numberSetting(value.gridScaleY, 8, 0.01, 1024);
+  if (typeof value.downscale === "string") settings.downscale = unionSetting(value.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"], "dominant");
+  if (typeof value.alpha === "string") settings.alpha = unionSetting(value.alpha, ["preserve", "binary", "backgroundFloodFill", "colorKey"], "preserve");
+  return settings;
+}

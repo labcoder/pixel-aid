@@ -267,6 +267,39 @@ button:disabled {
   margin-top: 0.7rem;
 }
 
+.preset-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.preset-actions button,
+.preset-remove-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0 0.55rem;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.preset-actions button:hover,
+.preset-remove-button:hover {
+  color: var(--text);
+  border-color: var(--accent-muted);
+}
+
+.preset-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.45rem;
+}
+
 .preset-row {
   min-height: 48px;
 }
@@ -286,6 +319,12 @@ button:disabled {
 .preset-row small {
   color: var(--muted);
   font-size: 0.7rem;
+}
+
+.preset-remove-button {
+  width: 34px;
+  align-self: stretch;
+  padding: 0;
 }
 
 .asset-list .asset-row {

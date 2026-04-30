@@ -29,7 +29,7 @@ See `docs/desktop-release.md` for the release packaging checklist, artifact note
 
 The desktop shell wraps the web editor and enables native image import plus ZIP bundle export through the operating system's open/save dialogs. Drag/drop and paste still use the browser path, and the browser build still uses the web file picker and download behavior.
 
-Persisted desktop preferences, app icons, signing, and installer artifacts are tracked as separate 0.4.0 follow-up issues.
+Editor settings and user presets persist through the same local preference store used by the web app. App icons, signing, and installer artifacts are tracked as separate follow-up issues.
 
 ## Filesystem Permissions
 

@@ -14,6 +14,17 @@ Assets are imported source images. Each item keeps the original filename, source
 - Large imports show a visible decode/analyze status in the Assets panel and viewport while PixelAid prepares suggestions. Each import, Auto Suggest, and Fix run has its own operation id, so repeated imports and repeated fixes still surface a fresh busy message even when the visible text is the same as the previous run.
 - Optional provenance metadata is stored per imported asset. Origin, provider, model, prompt, seed, source image, and generation date can be edited in the Asset inspector without enabling any AI provider integration.
 
+# Local Preferences
+
+PixelAid persists editor defaults in local browser or desktop storage. The persisted state includes viewport grid/zoom, target and sheet dimensions, palette strategy, grid controls, alpha/cleanup/outline options, timeline playback, export targets, inspector group order, and user-saved presets.
+
+The Presets panel has two layers:
+
+- Built-in presets stay versioned with the app and cannot be removed.
+- User presets save the current high-level fix settings, appear after the built-in presets, and can be removed from local storage.
+
+Manual asset type stays on the imported asset instead of in global preferences. This keeps a character import from forcing later tileset or background imports into the wrong UI mode.
+
 # Fix Settings
 
 Asset type describes the user's product intent for the import. Processing mode describes the algorithm path PixelAid will use to fix it.
