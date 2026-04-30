@@ -20,3 +20,5 @@ This file tracks direct dependencies used by PixelAid. Transitive dependency rep
 | @types/pngjs | 6.0.5 | MIT | PNG library type definitions |
 | @types/react | 19.2.14 | MIT | Type definitions |
 | @types/react-dom | 19.2.3 | MIT | Type definitions |
+| @tauri-apps/cli | 2.10.1 | Apache-2.0 OR MIT | Desktop app build and development CLI |
+| Tauri Rust crates | 2.x | Apache-2.0 OR MIT | Desktop shell runtime and build support |

@@ -13,6 +13,7 @@ This repo currently uses npm workspaces because `pnpm` is not installed in the w
 ```sh
 npm install
 npm run dev
+npm run desktop:dev
 npm run test
 npm run lint
 npm run typecheck
@@ -20,7 +21,7 @@ npm run build
 npm run benchmark
 ```
 
-The web app runs from `apps/web` through the root `npm run dev` command.
+The web app runs from `apps/web` through the root `npm run dev` command. The desktop shell runs through `npm run desktop:dev` and requires Rust/Cargo for Tauri.
 
 Useful scoped commands:
 
@@ -38,6 +39,7 @@ npm run test -w @pixelaid/web
 
 ```txt
 apps/web              Vite + React editor UI
+apps/desktop          Tauri desktop shell around the web editor
 packages/core         Pure TypeScript image-processing algorithms
 packages/worker       Web Worker protocol and fix pipeline wrapper
 packages/exporters    Generic JSON manifest exporter
@@ -51,6 +53,7 @@ docs                  Architecture, algorithms, performance, and licensing notes
 
 See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 See `docs/automation.md` for CLI and MCP-ready workflows.
+See `docs/desktop.md` for desktop app setup and packaging notes.
 
 ## Current Workflow
 

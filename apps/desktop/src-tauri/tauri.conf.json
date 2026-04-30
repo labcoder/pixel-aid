@@ -1,0 +1,32 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "PixelAid",
+  "version": "0.1.0",
+  "identifier": "com.mighty.pixelaid",
+  "build": {
+    "beforeDevCommand": "npm run dev -w @pixelaid/web",
+    "devUrl": "http://127.0.0.1:5173",
+    "beforeBuildCommand": "npm run build -w @pixelaid/web",
+    "frontendDist": "../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "PixelAid",
+        "label": "main",
+        "width": 1440,
+        "height": 960,
+        "minWidth": 1024,
+        "minHeight": 720,
+        "resizable": true
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all"
+  }
+}
