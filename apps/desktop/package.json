@@ -9,6 +9,10 @@
     "desktop:build": "tauri build",
     "info": "tauri info"
   },
+  "dependencies": {
+    "@tauri-apps/plugin-dialog": "^2.7.0",
+    "@tauri-apps/plugin-fs": "^2.5.0"
+  },
   "devDependencies": {
     "@tauri-apps/cli": "^2.10.1"
   }

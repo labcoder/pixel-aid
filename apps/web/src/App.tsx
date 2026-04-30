@@ -77,6 +77,7 @@ import {
 } from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
+import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
 import {
   clearBusyOperation,
   createBusyOperation,
@@ -958,6 +959,27 @@ export function App() {
     },
     [appendLog, applyFixSuggestion, nextBusyOperation]
   );
+
+  const openImportPicker = useCallback(() => {
+    if (!isDesktopRuntime()) {
+      fileInputRef.current?.click();
+      return;
+    }
+
+    void (async () => {
+      try {
+        const files = await openDesktopImageFiles();
+        if (files.length === 0) {
+          appendLog("Desktop import canceled");
+          return;
+        }
+
+        await importFiles(files);
+      } catch (error) {
+        appendLog(error instanceof Error ? error.message : "Desktop import failed");
+      }
+    })();
+  }, [appendLog, importFiles]);
 
   const buildFixOptions = useCallback((): FixOptions => {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
@@ -2254,9 +2276,24 @@ export function App() {
         errorCount: validation.summary.errorCount
       });
       const bundleBuffer = bundle.buffer.slice(bundle.byteOffset, bundle.byteOffset + bundle.byteLength) as ArrayBuffer;
-      downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
+      const bundleBytes = new Uint8Array(bundleBuffer);
+      let exportPath: string | null = null;
+
+      if (isDesktopRuntime()) {
+        const saveResult = await saveDesktopBundleFile({ suggestedName: bundleName, bytes: bundleBytes });
+        if (saveResult.status === "cancelled") {
+          appendLog("Desktop export canceled");
+          return;
+        }
+        if (saveResult.status === "saved") {
+          exportPath = saveResult.path;
+        }
+      } else {
+        downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
+      }
+
       appendLog(
-        `Exported ${bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
+        `Exported ${exportPath ?? bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
       );
     })().catch((error) => {
       appendLog(error instanceof Error ? error.message : "Export failed");
@@ -3052,7 +3089,7 @@ export function App() {
           </div>
         </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={() => fileInputRef.current?.click()}>
+          <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={openImportPicker}>
             <Upload size={16} />
             {isImporting ? "Importing" : "Import"}
           </button>

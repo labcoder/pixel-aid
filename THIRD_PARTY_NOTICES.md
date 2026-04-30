@@ -21,4 +21,6 @@ This file tracks direct dependencies used by PixelAid. Transitive dependency rep
 | @types/react | 19.2.14 | MIT | Type definitions |
 | @types/react-dom | 19.2.3 | MIT | Type definitions |
 | @tauri-apps/cli | 2.10.1 | Apache-2.0 OR MIT | Desktop app build and development CLI |
+| @tauri-apps/plugin-dialog | 2.7.0 | MIT OR Apache-2.0 | Runtime native open/save dialogs in desktop builds |
+| @tauri-apps/plugin-fs | 2.5.0 | MIT OR Apache-2.0 | Runtime filesystem reads/writes for desktop import/export |
 | Tauri Rust crates | 2.x | Apache-2.0 OR MIT | Desktop shell runtime and build support |
