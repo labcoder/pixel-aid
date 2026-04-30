@@ -1,0 +1,15 @@
+{
+  "name": "@pixelaid/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tauri desktop shell for the PixelAid web editor.",
+  "scripts": {
+    "dev": "tauri dev",
+    "desktop:build": "tauri build",
+    "info": "tauri info"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.10.1"
+  }
+}

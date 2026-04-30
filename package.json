@@ -10,6 +10,9 @@
   ],
   "scripts": {
     "dev": "npm run dev -w @pixelaid/web",
+    "desktop:dev": "npm run dev -w @pixelaid/desktop",
+    "desktop:build": "npm run desktop:build -w @pixelaid/desktop",
+    "desktop:info": "npm run info -w @pixelaid/desktop",
     "build": "npm run build --workspaces --if-present",
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
