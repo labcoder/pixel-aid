@@ -14,6 +14,7 @@ This repo currently uses npm workspaces because `pnpm` is not installed in the w
 npm install
 npm run dev
 npm run desktop:dev
+npm run desktop:check
 npm run test
 npm run lint
 npm run typecheck
@@ -53,7 +54,7 @@ docs                  Architecture, algorithms, performance, and licensing notes
 
 See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 See `docs/automation.md` for CLI and MCP-ready workflows.
-See `docs/desktop.md` for desktop app setup and packaging notes.
+See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for packaging and release checklist notes.
 
 ## Current Workflow
 
