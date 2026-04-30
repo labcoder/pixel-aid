@@ -6,11 +6,12 @@ PixelAid's desktop app is a Tauri shell around the existing Vite web editor. The
 
 ```sh
 npm run desktop:dev
+npm run desktop:check
 npm run desktop:build
 npm run desktop:info
 ```
 
-The desktop commands require the Rust toolchain and Cargo to be installed. The normal root `npm run build` command intentionally stays focused on the TypeScript workspaces so web/core verification can pass on machines that do not have Rust installed yet.
+The desktop build commands require the Rust toolchain and Cargo to be installed. `npm run desktop:check` reports missing prerequisites before packaging starts. The normal root `npm run build` command intentionally stays focused on the TypeScript workspaces so web/core verification can pass on machines that do not have Rust installed yet.
 
 ## Structure
 
@@ -21,6 +22,8 @@ apps/desktop/src-tauri/tauri.conf.json
 ```
 
 The Tauri config runs the existing web dev server in development and builds `@pixelaid/web` before packaging. The packaged app loads `apps/web/dist`.
+
+See `docs/desktop-release.md` for the release packaging checklist, artifact notes, and signing/update gaps.
 
 ## Current Scope
 

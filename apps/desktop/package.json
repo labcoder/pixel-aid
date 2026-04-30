@@ -6,6 +6,7 @@
   "description": "Tauri desktop shell for the PixelAid web editor.",
   "scripts": {
     "dev": "tauri dev",
+    "check": "node scripts/check-desktop-prereqs.mjs",
     "desktop:build": "tauri build",
     "info": "tauri info"
   },
