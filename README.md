@@ -21,7 +21,7 @@ npm run build
 npm run benchmark
 ```
 
-The web app runs from `apps/web` through the root `npm run dev` command. The desktop shell runs through `npm run desktop:dev` and requires Rust/Cargo for Tauri.
+The web app runs from `apps/web` through the root `npm run dev` command. The desktop shell runs through `npm run desktop:dev`, wraps the same editor UI with native import/export dialogs, and requires Rust/Cargo for Tauri.
 
 Useful scoped commands:
 
@@ -77,6 +77,7 @@ Editor:
 
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
+- Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
 - Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.

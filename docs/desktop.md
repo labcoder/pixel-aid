@@ -24,8 +24,14 @@ The Tauri config runs the existing web dev server in development and builds `@pi
 
 ## Current Scope
 
-The first desktop shell only wraps the web editor. Native filesystem import/export, persisted desktop preferences, app icons, signing, and installer artifacts are tracked as separate 0.4.0 follow-up issues.
+The desktop shell wraps the web editor and enables native image import plus ZIP bundle export through the operating system's open/save dialogs. Drag/drop and paste still use the browser path, and the browser build still uses the web file picker and download behavior.
+
+Persisted desktop preferences, app icons, signing, and installer artifacts are tracked as separate 0.4.0 follow-up issues.
+
+## Filesystem Permissions
+
+The desktop shell registers Tauri's dialog and filesystem plugins. The open/save dialogs temporarily add selected paths to the filesystem scope, and the app enables read-file and write-file permissions for those selected paths. PixelAid does not grant broad recursive filesystem access by default.
 
 ## License Notes
 
-The direct desktop dependency added for the shell is `@tauri-apps/cli`, licensed `Apache-2.0 OR MIT`. Tauri Rust crates are also used by the desktop shell and should be included in the generated third-party license report before release.
+The direct desktop dependencies added for the shell are `@tauri-apps/cli`, `@tauri-apps/plugin-dialog`, and `@tauri-apps/plugin-fs`, all licensed `Apache-2.0 OR MIT` or `MIT OR Apache-2.0`. Tauri Rust crates and plugins are also used by the desktop shell and should be included in the generated third-party license report before release.
