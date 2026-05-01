@@ -2,6 +2,8 @@
 
 PixelAid's editor is organized around an asset browser, a canvas viewport, an inspector, and a bottom timeline/logs/metrics area.
 
+For release-readiness keyboard coverage, assistive technology notes, canvas limitations, and manual QA steps, see [Accessibility And Keyboard Workflow Audit](./accessibility-keyboard-audit.md).
+
 The inspector starts with a guided recommendation card. It summarizes what PixelAid thinks the input is, offers Auto Suggest and Fix actions, and keeps the full advanced inspector collapsed until the user opens it. Inspector groups are collapsible and can be moved up or down. The default order puts Cleanup before Grid because palette, alpha, denoise, and outline choices usually explain why a grid result looks good or bad.
 
 # Assets
