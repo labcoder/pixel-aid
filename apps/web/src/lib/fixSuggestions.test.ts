@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
+import { cleanupFixtureCatalog, createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import { fixImage } from "@pixelaid/core";
 import { chooseSuggestionGrid, suggestFixSettings } from "./fixSuggestions";
 import type { FixOptions, GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
@@ -177,6 +177,47 @@ function buildSuggestedFixOptions(image: RGBAImage, cleanupOverride: Partial<Fix
   };
 }
 
+function buildSuggestedSingleFixOptions(image: RGBAImage): FixOptions {
+  const suggestion = suggestFixSettings(image);
+  return {
+    mode: suggestion.mode,
+    assetType: suggestion.assetType,
+    targetWidth: suggestion.targetWidth,
+    targetHeight: suggestion.targetHeight,
+    maxColors: suggestion.maxColors,
+    paletteSettings: {
+      mode: "auto",
+      strategy: "medianCut",
+      maxColors: suggestion.maxColors,
+      lockScope: "single",
+      dithering: "none"
+    },
+    grid: {
+      detect: suggestion.gridDetect,
+      scaleX: suggestion.gridScaleX,
+      scaleY: suggestion.gridScaleY,
+      phaseX: suggestion.gridPhaseX,
+      phaseY: suggestion.gridPhaseY,
+      cropToBounds: true,
+      localCorrection: suggestion.localCorrection
+    },
+    downscale: suggestion.downscale,
+    alpha: suggestion.alpha,
+    alphaSettings: { ...suggestion.alphaSettings, transparentRgb: "#000000" },
+    cleanup: {
+      removeOrphans: suggestion.removeOrphans,
+      jaggyCleanup: suggestion.jaggyCleanup,
+      preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
+      removeHalos: suggestion.removeHalos,
+      denoiseStrength: suggestion.denoiseStrength,
+      ...(suggestion.contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
+      outlineMode: suggestion.outlineMode,
+      outlineSize: suggestion.outlineSize,
+      ...(suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {})
+    }
+  };
+}
+
 function cropImage(image: RGBAImage, rect: Rect): RGBAImage {
   const out = blankImage(rect.w, rect.h);
   for (let y = 0; y < rect.h; y += 1) {
@@ -230,6 +271,83 @@ function frameDetailMetrics(image: RGBAImage): { darkPixels: number; edgeEnergy:
     darkPixels,
     edgeEnergy: edgeEnergy / Math.max(1, edgeCount)
   };
+}
+
+function countSoftAlphaPixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha > 0 && alpha < 255) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countVisibleCreamPixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! < 16) {
+      continue;
+    }
+
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (r >= 220 && g >= 200 && b >= 150 && r - b >= 35) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function exteriorEdgeColorMetrics(image: RGBAImage): { edgePixels: number; darkEdgePixels: number; uniqueEdgeColors: number } {
+  const colors = new Set<string>();
+  let edgePixels = 0;
+  let darkEdgePixels = 0;
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      if (image.data[offset + 3]! < 16 || !hasTransparentNeighbor(image, x, y)) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const luma = r * 0.299 + g * 0.587 + b * 0.114;
+      edgePixels += 1;
+      if (luma < 72) {
+        darkEdgePixels += 1;
+      }
+      colors.add(`${r},${g},${b}`);
+    }
+  }
+
+  return { edgePixels, darkEdgePixels, uniqueEdgeColors: colors.size };
+}
+
+function hasTransparentNeighbor(image: RGBAImage, x: number, y: number): boolean {
+  const offsets = [
+    [-1, 0],
+    [1, 0],
+    [0, -1],
+    [0, 1]
+  ] as const;
+
+  for (const [dx, dy] of offsets) {
+    const nx = x + dx;
+    const ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+      return true;
+    }
+    if (image.data[(ny * image.width + nx) * 4 + 3]! < 16) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 describe("fix setting suggestions", () => {
@@ -287,6 +405,42 @@ describe("fix setting suggestions", () => {
       transparentRgb: "#000000"
     });
     expect(suggestion.downscale).toBe("adaptive");
+  });
+
+  test("suggests crisp sprite cleanup for baked checkerboard panda backgrounds", () => {
+    const fixture = cleanupFixtureCatalog.find((item) => item.id === "high-contrast-checkerboard-panda");
+    if (!fixture) {
+      throw new Error("Expected panda checkerboard fixture");
+    }
+
+    const suggestion = suggestFixSettings(fixture.createImage());
+
+    expect(["sprite", "icon"]).toContain(suggestion.assetType);
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.downscale).toBe("dominant");
+    expect(suggestion.contrastExpansionEnabled).toBe(true);
+    expect(suggestion.outlineMode).toBe("repairExisting");
+    expect(suggestion.outlineSourceColors.length).toBeGreaterThan(0);
+  });
+
+  test("suggested baked checkerboard panda cleanup preserves body and repairs exterior outline", () => {
+    const fixture = cleanupFixtureCatalog.find((item) => item.id === "high-contrast-checkerboard-panda");
+    if (!fixture) {
+      throw new Error("Expected panda checkerboard fixture");
+    }
+
+    const result = fixImage(fixture.createImage(), buildSuggestedSingleFixOptions(fixture.createImage()));
+    const edgeMetrics = exteriorEdgeColorMetrics(result.image);
+
+    expect(result.settings.downscale).toBe("dominant");
+    expect(result.settings.cleanup.contrastExpansion?.enabled).toBe(true);
+    expect(result.settings.cleanup.outlineMode).toBe("repairExisting");
+    expect(countSoftAlphaPixels(result.image)).toBe(0);
+    expect(countVisibleCreamPixels(result.image)).toBeGreaterThanOrEqual(20);
+    expect(edgeMetrics.edgePixels).toBeGreaterThan(0);
+    expect(edgeMetrics.darkEdgePixels / edgeMetrics.edgePixels).toBeGreaterThanOrEqual(0.8);
+    expect(edgeMetrics.uniqueEdgeColors).toBeLessThanOrEqual(3);
   });
 
   test("suggests local correction for high-resolution single sprites", () => {

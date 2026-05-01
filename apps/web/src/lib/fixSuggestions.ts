@@ -1,4 +1,5 @@
-import { analyzeSheetConditioning, detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
+import { analyzeQualityReport, analyzeSheetConditioning, detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
+import type { QualityReport } from "@pixelaid/core";
 import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type {
   AlphaMode,
@@ -9,6 +10,7 @@ import type {
   AssetTypeWarning,
   DownscaleMethod,
   GridCandidate,
+  OutlineMode,
   Rect,
   RGBAImage,
   SheetLayoutDetection,
@@ -39,6 +41,10 @@ export type FixSettingSuggestion = {
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
+  contrastExpansionEnabled: boolean;
+  outlineMode: OutlineMode;
+  outlineSize: number;
+  outlineSourceColors: string[];
   sheetLayout?: SheetLayoutDetection;
   reason: string;
   confidence: number;
@@ -74,17 +80,35 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
-  const downscale: DownscaleMethod =
-    mode === "spriteSheet" && sheetConditioning.recommendFrameFirst ? "detailPreserving" : preset.downscale;
   const cleanup = suggestCleanupSettings(preset, mode, sheetConditioning.recommendFrameFirst);
   const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
+  const qualityReport = analyzeQualityReport(image, {
+    assetType: classification.assetType,
+    maxColors: preset.maxColors,
+    alpha: suggestedAlpha,
+    gridCandidates: candidates,
+    sheetLayout: detectedSheetLayout
+  });
+  const bakedTransparencyDetected = qualityReport.findings.some((finding) => finding.id === "baked-transparency-background");
+  const blockPurity = estimateBlockPurity(image, candidate);
+  const downscale = suggestDownscaleMethod({
+    mode,
+    assetType: classification.assetType,
+    preset: preset.downscale,
+    recommendFrameFirst: sheetConditioning.recommendFrameFirst,
+    alpha: suggestedAlpha,
+    bakedTransparencyDetected,
+    blockPurity
+  });
+  const contrastExpansionEnabled = suggestContrastExpansionEnabled(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
+  const outline = suggestOutlineRepair(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
       : undefined;
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
   const categoryWarnings = withConditioningWarnings(getAssetTypeWarnings(classification.assetType), mode, sheetConditioning.recommendFrameFirst);
-  const baseReason = suggestionReason(mode, sourceRatio, downscale, estimateBlockPurity(image, candidate), sheetLayoutScore);
+  const baseReason = suggestionReason(mode, sourceRatio, downscale, blockPurity, sheetLayoutScore);
   const reason =
     mode === "spriteSheet" && sheetConditioning.recommendFrameFirst
       ? `${baseReason} Frame-first source conditioning is recommended before final output.`
@@ -115,6 +139,10 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
     removeHalos: cleanup.removeHalos,
     denoiseStrength: cleanup.denoiseStrength,
+    contrastExpansionEnabled,
+    outlineMode: outline.mode,
+    outlineSize: outline.size,
+    outlineSourceColors: outline.sourceColors,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason,
     confidence: candidate?.confidence ?? 0.25,
@@ -123,6 +151,59 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     categoryReason: classification.reason,
     categoryWarnings
   };
+}
+
+function suggestDownscaleMethod(input: {
+  mode: AssetMode;
+  assetType: AssetType;
+  preset: DownscaleMethod;
+  recommendFrameFirst: boolean;
+  alpha: AlphaMode;
+  bakedTransparencyDetected: boolean;
+  blockPurity: number;
+}): DownscaleMethod {
+  if (input.mode === "spriteSheet" && input.recommendFrameFirst) {
+    return "detailPreserving";
+  }
+
+  const spriteLike = input.mode === "single" && (input.assetType === "sprite" || input.assetType === "icon");
+  if (spriteLike && input.alpha === "backgroundFloodFill" && input.bakedTransparencyDetected && input.blockPurity >= 0.55) {
+    return "dominant";
+  }
+
+  return input.preset;
+}
+
+function suggestContrastExpansionEnabled(report: QualityReport, mode: AssetMode, assetType: AssetType, bakedTransparencyDetected: boolean): boolean {
+  const spriteLike = mode === "single" && (assetType === "sprite" || assetType === "icon");
+  if (!spriteLike) {
+    return false;
+  }
+
+  return bakedTransparencyDetected || report.recommendations.some((recommendation) => recommendation.id === "use-contrast-downscale");
+}
+
+function suggestOutlineRepair(
+  report: QualityReport,
+  mode: AssetMode,
+  assetType: AssetType,
+  bakedTransparencyDetected: boolean
+): { mode: OutlineMode; size: number; sourceColors: string[] } {
+  const spriteLike = mode === "single" && (assetType === "sprite" || assetType === "icon");
+  if (!spriteLike || (!bakedTransparencyDetected && report.metrics.outline.candidateCount === 0)) {
+    return { mode: "none", size: 1, sourceColors: [] };
+  }
+
+  const sourceColors = report.metrics.outline.candidates
+    .filter((candidate) => candidate.luma <= 96)
+    .slice(0, 2)
+    .map((candidate) => candidate.color);
+
+  if (sourceColors.length === 0) {
+    return { mode: "none", size: 1, sourceColors: [] };
+  }
+
+  return { mode: "repairExisting", size: bakedTransparencyDetected ? 2 : 1, sourceColors };
 }
 
 function suggestCleanupSettings(
