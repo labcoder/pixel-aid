@@ -71,6 +71,7 @@ import {
 } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
 import { DocsPage } from "./components/DocsPage";
+import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
 import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
 import { TileRepeatPreviewCanvas } from "./components/TileRepeatPreviewCanvas";
@@ -511,6 +512,9 @@ export function App() {
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(initialSettings.normalizeTimelineFrames);
   const [showOnionSkin, setShowOnionSkin] = useState(initialSettings.showOnionSkin);
   const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>(initialSettings.timelineViewportSourceMode);
+  const [sandboxSpeed, setSandboxSpeed] = useState(96);
+  const [sandboxScale, setSandboxScale] = useState(3);
+  const [showSandboxGuides, setShowSandboxGuides] = useState(true);
   const [downscale, setDownscale] = useState<DownscaleMethod>(initialSettings.downscale);
   const [alpha, setAlpha] = useState<AlphaMode>(initialSettings.alpha);
   const [alphaThreshold, setAlphaThreshold] = useState(initialSettings.alphaThreshold);
@@ -4617,6 +4621,58 @@ export function App() {
               onFrameCommit={commitTimelineViewportFrame}
               onPlaybackStop={stopTimelinePlayback}
             />
+            <div className="sprite-sandbox-panel" aria-label="2D sprite sandbox">
+              <div className="sprite-sandbox-header">
+                <div>
+                  <strong>Sandbox</strong>
+                  <span>{timelineViewportSourceMode === "compare" ? "Output over input reference" : `${timelineSourceModeLabel} source`}</span>
+                </div>
+                <div className="sprite-sandbox-controls">
+                  <label>
+                    <span>Scale</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="8"
+                      value={sandboxScale}
+                      onChange={(event) => setSandboxScale(Math.max(1, Math.min(8, Math.round(Number(event.currentTarget.value) || 1))))}
+                    />
+                  </label>
+                  <label>
+                    <span>Speed</span>
+                    <input
+                      type="range"
+                      min="24"
+                      max="240"
+                      step="12"
+                      value={sandboxSpeed}
+                      onChange={(event) => setSandboxSpeed(Math.max(24, Math.min(240, Number(event.currentTarget.value) || 96)))}
+                    />
+                  </label>
+                  <label className="checkbox-row">
+                    <input type="checkbox" checked={showSandboxGuides} onChange={(event) => setShowSandboxGuides(event.currentTarget.checked)} />
+                    <span>Guides</span>
+                  </label>
+                </div>
+              </div>
+              <SpriteSandboxCanvas
+                inputImage={selectedAsset?.image ?? null}
+                outputImage={fixResult?.image ?? null}
+                inputPlacements={inputTimelinePlacements}
+                outputPlacements={outputTimelinePlacements}
+                sourceMode={timelineViewportSourceMode}
+                selectedTimelinePosition={timelinePosition}
+                isPlaying={isPlaying}
+                fps={playbackFps}
+                loop={playbackLoop}
+                direction={playbackDirection}
+                playDirection={playbackStepDirectionRef.current}
+                showOnionSkin={showOnionSkin}
+                showGuides={showSandboxGuides}
+                movementSpeed={sandboxSpeed}
+                spriteScale={sandboxScale}
+              />
+            </div>
           </div>
         ) : (
           <ViewportCanvas
