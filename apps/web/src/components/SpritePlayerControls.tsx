@@ -73,14 +73,22 @@ export function SpritePlayerControls({
           </select>
         </label>
       ) : null}
-      <button type="button" disabled={!canPlay} aria-label="Previous frame" onClick={() => onStep(-1)}>
+      <button type="button" disabled={!canPlay} aria-label="Previous frame" aria-keyshortcuts="ArrowLeft" title="Previous frame (Left Arrow)" onClick={() => onStep(-1)}>
         <SkipBack size={14} />
       </button>
-      <button type="button" className="play-toggle" disabled={!canPlay} onClick={onTogglePlayback}>
+      <button
+        type="button"
+        className="play-toggle"
+        disabled={!canPlay}
+        onClick={onTogglePlayback}
+        aria-keyshortcuts="Space"
+        aria-pressed={isPlaying}
+        title="Play or pause animation (Space)"
+      >
         {isPlaying ? <Pause size={15} /> : <Play size={15} />}
         {isPlaying ? "Pause" : "Play"}
       </button>
-      <button type="button" disabled={!canPlay} aria-label="Next frame" onClick={() => onStep(1)}>
+      <button type="button" disabled={!canPlay} aria-label="Next frame" aria-keyshortcuts="ArrowRight" title="Next frame (Right Arrow)" onClick={() => onStep(1)}>
         <SkipForward size={14} />
       </button>
       <label className="player-scrub">
@@ -92,6 +100,7 @@ export function SpritePlayerControls({
           step="1"
           value={Math.max(0, timelinePosition)}
           disabled={!canScrub}
+          aria-label="Timeline frame scrubber"
           onChange={(event) => onScrub(Number(event.currentTarget.value))}
         />
       </label>

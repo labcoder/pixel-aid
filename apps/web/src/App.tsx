@@ -22,7 +22,7 @@ import {
   Undo2,
   WandSparkles
 } from "lucide-react";
-import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlphaCleanupSettings,
@@ -116,6 +116,7 @@ import {
   type EditorPreferenceSettings,
   type EditorPreferences
 } from "./lib/editorPreferences";
+import { getEditorShortcutAction, isEditableShortcutTarget } from "./lib/editorShortcuts";
 import {
   clearBusyOperation,
   createBusyOperation,
@@ -338,6 +339,10 @@ function createUniquePaletteLibraryId(
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function clampBottomPanelHeight(value: number): number {
+  return Math.max(150, Math.min(460, Math.round(value)));
 }
 
 function createTimelinePlacements(
@@ -2274,44 +2279,6 @@ export function App() {
     appendLog("Redid sheet frame edit");
   }, [appendLog, frameEditHistory, restoreFrameEditSnapshot]);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
-
-      const hasModifier = event.ctrlKey || event.metaKey;
-      if (!hasModifier) {
-        return;
-      }
-
-      const key = event.key.toLowerCase();
-      if (key === "z" && event.shiftKey) {
-        event.preventDefault();
-        redoFrameEdit();
-        return;
-      }
-      if (key === "z") {
-        event.preventDefault();
-        undoFrameEdit();
-        return;
-      }
-      if (key === "y") {
-        event.preventDefault();
-        redoFrameEdit();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [redoFrameEdit, undoFrameEdit]);
-
   const updateSelectedFrameDuration = useCallback(
     (durationMs: number) => {
       if (!currentFrame) {
@@ -3405,6 +3372,82 @@ export function App() {
   ]);
 
   useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = getEditorShortcutAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        isEditableTarget: isEditableShortcutTarget(event.target)
+      });
+
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (action === "import") {
+        if (!isImporting && !isAnalyzing && !isFixing) {
+          openImportPicker();
+        }
+        return;
+      }
+      if (action === "fix") {
+        if (selectedAsset && !isFixing && !isImporting && !isAnalyzing) {
+          void runFix();
+        }
+        return;
+      }
+      if (action === "export") {
+        if (fixResult) {
+          exportFixedAsset();
+        }
+        return;
+      }
+      if (action === "toggleGrid") {
+        setShowGrid((current) => !current);
+        return;
+      }
+      if (action === "togglePlayback") {
+        togglePlayback();
+        return;
+      }
+      if (action === "previousFrame") {
+        stepTimelineFrame(-1);
+        return;
+      }
+      if (action === "nextFrame") {
+        stepTimelineFrame(1);
+        return;
+      }
+      if (action === "redoFrameEdit") {
+        redoFrameEdit();
+        return;
+      }
+
+      undoFrameEdit();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    exportFixedAsset,
+    fixResult,
+    isAnalyzing,
+    isFixing,
+    isImporting,
+    openImportPicker,
+    redoFrameEdit,
+    runFix,
+    selectedAsset,
+    stepTimelineFrame,
+    togglePlayback,
+    undoFrameEdit
+  ]);
+
+  useEffect(() => {
     const closeAssetMenu = () => setAssetMenu(null);
     const onPaste = (event: ClipboardEvent) => {
       if (event.clipboardData?.files.length) {
@@ -3442,12 +3485,34 @@ export function App() {
     }
 
     const nextHeight = resize.startHeight + resize.startY - event.clientY;
-    setBottomPanelHeight(Math.max(150, Math.min(460, Math.round(nextHeight))));
+    setBottomPanelHeight(clampBottomPanelHeight(nextHeight));
   };
 
   const onBottomResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     if (bottomResizeRef.current?.pointerId === event.pointerId) {
       bottomResizeRef.current = null;
+    }
+  };
+
+  const onBottomResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setBottomPanelHeight((current) => clampBottomPanelHeight(current + 16));
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setBottomPanelHeight((current) => clampBottomPanelHeight(current - 16));
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setBottomPanelHeight(150);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      setBottomPanelHeight(460);
     }
   };
 
@@ -4231,6 +4296,7 @@ export function App() {
         type="file"
         accept="image/*"
         multiple
+        aria-label="Import image files"
         onChange={(event) => {
           if (event.currentTarget.files) {
             void importFiles(event.currentTarget.files);
@@ -4248,11 +4314,23 @@ export function App() {
             </div>
           </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={openImportPicker}>
+          <button
+            type="button"
+            disabled={isImporting || isAnalyzing || isFixing}
+            onClick={openImportPicker}
+            aria-keyshortcuts="Control+O Meta+O"
+            title="Import images (Ctrl/Cmd+O)"
+          >
             <Upload size={16} />
             {isImporting ? "Importing" : "Import"}
           </button>
-          <button type="button" disabled={!selectedAsset || isFixing || isImporting || isAnalyzing} onClick={runFix}>
+          <button
+            type="button"
+            disabled={!selectedAsset || isFixing || isImporting || isAnalyzing}
+            onClick={runFix}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            title="Run fix (Ctrl/Cmd+Enter)"
+          >
             <WandSparkles size={16} />
             {isFixing ? "Fixing" : "Fix"}
           </button>
@@ -4260,7 +4338,13 @@ export function App() {
             <Ban size={16} />
             Cancel
           </button>
-          <button type="button" disabled={!fixResult} onClick={exportFixedAsset}>
+          <button
+            type="button"
+            disabled={!fixResult}
+            onClick={exportFixedAsset}
+            aria-keyshortcuts="Control+Shift+E Meta+Shift+E"
+            title="Export bundle (Ctrl/Cmd+Shift+E)"
+          >
             <Download size={16} />
             Export
           </button>
@@ -4285,10 +4369,11 @@ export function App() {
               </li>
             ) : (
               assets.map((asset) => (
-                <li key={asset.id}>
+                <li key={asset.id} className="asset-list-entry">
                   <button
                     type="button"
                     className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}`}
+                    aria-label={`Select ${asset.name}`}
                     onClick={() => selectAsset(asset.id)}
                     onContextMenu={(event) => {
                       event.preventDefault();
@@ -4302,25 +4387,9 @@ export function App() {
                         {getAssetTypeDefinition(asset.assetType).shortLabel} · Source {asset.image.width}x{asset.image.height}
                       </small>
                     </span>
-                    <span
-                      className="icon-button danger"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Remove ${asset.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeAsset(asset.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          removeAsset(asset.id);
-                        }
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </span>
+                  </button>
+                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} onClick={() => removeAsset(asset.id)}>
+                    <Trash2 size={14} />
                   </button>
                 </li>
               ))
@@ -4527,6 +4596,7 @@ export function App() {
                 key={modeOption}
                 type="button"
                 className={viewMode === modeOption ? "active" : ""}
+                aria-pressed={viewMode === modeOption}
                 onClick={() => setViewMode(modeOption)}
               >
                 {getViewportModeLabel(modeOption)}
@@ -4545,10 +4615,26 @@ export function App() {
           </label>
           {hasDetectedSheetLayout ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
-              <button type="button" className="mini-icon-button" disabled={!canUndoFrameEdit} onClick={undoFrameEdit} title="Undo frame edit">
+              <button
+                type="button"
+                className="mini-icon-button"
+                disabled={!canUndoFrameEdit}
+                onClick={undoFrameEdit}
+                aria-label="Undo frame edit"
+                aria-keyshortcuts="Control+Z Meta+Z"
+                title="Undo frame edit (Ctrl/Cmd+Z)"
+              >
                 <Undo2 size={14} />
               </button>
-              <button type="button" className="mini-icon-button" disabled={!canRedoFrameEdit} onClick={redoFrameEdit} title="Redo frame edit">
+              <button
+                type="button"
+                className="mini-icon-button"
+                disabled={!canRedoFrameEdit}
+                onClick={redoFrameEdit}
+                aria-label="Redo frame edit"
+                aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+                title="Redo frame edit (Ctrl/Cmd+Shift+Z or Ctrl+Y)"
+              >
                 <Redo2 size={14} />
               </button>
               <span>Ctrl/Cmd drag selected cells</span>
@@ -4609,6 +4695,7 @@ export function App() {
                     type="button"
                     className={timelineViewportSourceMode === option.mode ? "active" : ""}
                     disabled={!option.enabled}
+                    aria-pressed={timelineViewportSourceMode === option.mode}
                     onClick={() => setTimelineViewportSourceMode(option.mode)}
                   >
                     {option.label}
@@ -4774,13 +4861,17 @@ export function App() {
           role="separator"
           aria-label="Resize bottom panel"
           aria-orientation="horizontal"
+          aria-valuemin={150}
+          aria-valuemax={460}
+          aria-valuenow={bottomPanelHeight}
           tabIndex={0}
           onPointerDown={onBottomResizePointerDown}
           onPointerMove={onBottomResizePointerMove}
           onPointerUp={onBottomResizePointerUp}
           onPointerCancel={onBottomResizePointerUp}
+          onKeyDown={onBottomResizeKeyDown}
         />
-        <div className="tab-strip" role="tablist" aria-label="Bottom panels">
+        <div className="tab-strip" aria-label="Bottom panels">
           {showTimelinePanel ? (
             <button type="button" className="active">
               <Play size={15} />
@@ -4876,10 +4967,22 @@ export function App() {
                         <div className="frame-metadata-heading">
                           <strong>Gameplay metadata</strong>
                           <span>{currentFrameBoxes.length} box{currentFrameBoxes.length === 1 ? "" : "es"}</span>
-                          <button type="button" disabled={!canUndoFrameMetadata} onClick={undoFrameMetadataEdit} title="Undo metadata edit">
+                          <button
+                            type="button"
+                            disabled={!canUndoFrameMetadata}
+                            onClick={undoFrameMetadataEdit}
+                            aria-label="Undo metadata edit"
+                            title="Undo metadata edit"
+                          >
                             <Undo2 size={13} />
                           </button>
-                          <button type="button" disabled={!canRedoFrameMetadata} onClick={redoFrameMetadataEdit} title="Redo metadata edit">
+                          <button
+                            type="button"
+                            disabled={!canRedoFrameMetadata}
+                            onClick={redoFrameMetadataEdit}
+                            aria-label="Redo metadata edit"
+                            title="Redo metadata edit"
+                          >
                             <Redo2 size={13} />
                           </button>
                         </div>
@@ -5007,7 +5110,12 @@ export function App() {
                                   max={currentFrame.rect.h}
                                   onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, h: value } })}
                                 />
-                                <button type="button" onClick={() => deleteCurrentFrameBox(box.id)} title={`Delete ${box.name}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteCurrentFrameBox(box.id)}
+                                  aria-label={`Delete ${box.name}`}
+                                  title={`Delete ${box.name}`}
+                                >
                                   <Trash2 size={13} />
                                 </button>
                               </div>
@@ -5130,6 +5238,7 @@ export function App() {
                       title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.durationMs)}ms${
                         affectedTimelineFrameNames.has(frame.name) ? " stability warning" : ""
                       }`}
+                      aria-label={`Select frame ${index + 1}: ${frame.name}, ${frame.rect.w} by ${frame.rect.h}, ${Math.round(frame.durationMs)} milliseconds`}
                       onClick={() => selectPlaybackFrame(index)}
                     >
                       <strong>{index + 1}</strong>
