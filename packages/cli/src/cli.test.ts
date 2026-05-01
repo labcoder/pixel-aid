@@ -50,6 +50,19 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("prints batch quality report JSON", async () => {
+    await withFixture(async ({ input }) => {
+      const capture = createCapture();
+      const code = await runCli(["report", input, "--colors", "3", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.command).toBe("report");
+      expect(body.result.summary.assetCount).toBe(1);
+      expect(body.result.reports[0]?.findings.some((finding) => finding.id === "palette-over-budget")).toBe(true);
+    });
+  });
+
   it("fixes a sprite and writes a manifest", async () => {
     await withFixture(async ({ dir, input }) => {
       const capture = createCapture();
@@ -185,6 +198,8 @@ type CliJson = {
     files?: Array<{ kind: string; relativePath: string }>;
     manifest?: { frames: unknown[] };
     palette?: string[];
+    summary?: { assetCount: number };
+    reports?: Array<{ findings: Array<{ id: string }> }>;
   };
   error?: { code: string };
 };

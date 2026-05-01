@@ -35,6 +35,8 @@ export { applyOutlineCleanup, detectOutlineColorCandidates } from "./outline";
 export type { OutlineCleanupOptions, OutlineColorCandidate } from "./outline";
 export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
 export type { AnalyzePaletteDriftOptions, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
+export { analyzeQualityReport } from "./qualityReport";
+export type { QualityFinding, QualityFindingCategory, QualityFindingSeverity, QualityRecommendation, QualityRecommendationSettings, QualityReport, QualityReportOptions } from "./qualityReport";
 export { assertNotCancelled, FixCancelledError, phasePercent, reportProgress, shouldReportRow } from "./runtime";
 export type { FixCancellationSignal, FixProgressEvent, FixRuntimeOptions } from "./runtime";
 export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";

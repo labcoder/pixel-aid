@@ -3,6 +3,7 @@ import path from "node:path";
 import { strToU8, zipSync } from "fflate";
 import {
   automationError,
+  createQualityReport,
   exportEngineBundle,
   extractPaletteFile,
   fixSprite,
@@ -74,6 +75,8 @@ async function runParsedCommand(args: string[]): Promise<CliCommandResult> {
       return emitAutomation(command, await inspectImage({ inputPath: readInput(args), options: parseFixOptions(args) }));
     case "suggest":
       return emitAutomation(command, await suggestFixSettings({ inputPath: readInput(args), options: parseFixOptions(args) }));
+    case "report":
+      return runReportCommand(command, args);
     case "fix":
       return runFixCommand(command, args);
     case "fix-sheet":
@@ -85,6 +88,13 @@ async function runParsedCommand(args: string[]): Promise<CliCommandResult> {
     default:
       throw new CliUsageError(`Unknown command "${command}".`);
   }
+}
+
+async function runReportCommand(command: string, args: string[]): Promise<CliCommandResult> {
+  const options = parseFixOptions(args);
+  const inputPaths = readInputs(args);
+  assertNoExtraArgs(args);
+  return emitAutomation(command, await createQualityReport({ inputPaths, options }));
 }
 
 async function runFixCommand(command: string, args: string[]): Promise<CliCommandResult> {
@@ -318,6 +328,17 @@ function readInput(args: string[]): string {
   return input;
 }
 
+function readInputs(args: string[]): string[] {
+  const inputs: string[] = [];
+  while (args.length > 0 && !args[0]!.startsWith("--")) {
+    inputs.push(args.shift()!);
+  }
+  if (inputs.length === 0) {
+    throw new CliUsageError("Missing input path.");
+  }
+  return inputs;
+}
+
 function takeBooleanFlag(args: string[], name: string): boolean {
   const index = args.indexOf(name);
   if (index < 0) return false;
@@ -396,6 +417,7 @@ function usageText(): string {
     "",
     "Commands:",
     "  pixelaid inspect <input.png> --json",
+    "  pixelaid report <input.png> [more.png] --json",
     "  pixelaid suggest <input.png> --json",
     "  pixelaid fix <input.png> --out <fixed.png> --manifest <manifest.json>",
     "  pixelaid fix-sheet <input.png> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",

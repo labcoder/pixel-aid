@@ -227,4 +227,10 @@ Palette sidecar files derive from the fixed result palette. `.hex` writes one no
 
 The validation report combines `validateManifest` errors with operation diagnostics copied into the manifest. It warns about missing animation metadata for multi-frame exports, alpha cleanup warnings, remaining soft alpha after non-preserve alpha modes, palette warnings, palette drift warnings, and missing frame-sequence PNGs.
 
+## Quality Reports
+
+`analyzeQualityReport` is a non-destructive inspection pass that ranks likely production risks before Fix or Export mutates any output state. It combines grid candidates, exact visible color count, palette budget fit, alpha statistics, sheet detection, outline color candidates, asset support level, and export readiness into deterministic findings and recommendations.
+
+The report intentionally uses the current asset type and settings instead of global assumptions. A sprite can recommend binary alpha and palette locking, while an inspect-only background recommends preservation-oriented cleanup. Automation exposes the same contract through CLI `report` and the MCP-ready `quality_report` handler for batch agent workflows.
+
 Frame sequence PNGs are cropped from the exported image using manifest frame rectangles. If a frame rectangle reaches outside the image bounds, the crop keeps the requested frame dimensions and pads out-of-bounds pixels as transparent instead of throwing. This keeps the exported sequence aligned with the manifest and lets validation report the metadata issue separately.

@@ -9,6 +9,7 @@ import {
   extractPaletteFile,
   fixSprite,
   fixSpriteSheet,
+  createQualityReport,
   inspectImage,
   suggestFixSettings,
 } from "./operations";
@@ -49,6 +50,30 @@ describe("automation operations", () => {
       expect(result.value.options.targetWidth).toBe(2);
       expect(result.value.options.targetHeight).toBe(2);
       expect(result.value.options.maxColors).toBe(4);
+    });
+  });
+
+  it("creates a deterministic non-destructive batch quality report", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const second = path.join(dir, "background.png");
+      await encodePngFile(createFixtureImage(), second);
+
+      const result = await createQualityReport({
+        assets: [
+          { inputPath: input, options: { assetType: "sprite", maxColors: 3 } },
+          { inputPath: second, options: { assetType: "background", maxColors: 64 } },
+        ],
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.summary.assetCount).toBe(2);
+      expect(result.value.reports.map((report) => report.assetType)).toEqual(["sprite", "background"]);
+      expect(result.value.reports[0]?.findings.some((finding) => finding.id === "palette-over-budget")).toBe(true);
+      expect(result.value.reports[1]?.findings.some((finding) => finding.id === "asset-inspect-only")).toBe(true);
+      expect(JSON.parse(JSON.stringify(result.value))).toMatchObject({
+        summary: { assetCount: 2 },
+      });
     });
   });
 

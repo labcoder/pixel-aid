@@ -25,6 +25,7 @@ Common commands:
 
 ```sh
 pixelaid inspect input.png --json
+pixelaid report input.png more.png --colors 24 --json
 pixelaid suggest input.png --asset-type sprite --target 64x64 --json
 pixelaid fix input.png --out hero.png --manifest hero.json --target 64x64 --colors 24
 pixelaid fix-sheet sheet.png --out-dir ./out --frames frames.json --asset-type animation
@@ -125,11 +126,12 @@ Exit codes:
 A typical local AI workflow should avoid guessing settings:
 
 1. Run `inspect` to get dimensions, exact color count, alpha stats, grid candidates, and sheet detection.
-2. Run `suggest` with an explicit `--asset-type` if the user already knows the asset category.
-3. For sprite sheets, use detected frames or supply corrected frame metadata through `--frames`.
-4. Run `fix` or `fix-sheet`.
-5. Run `export` for generic manifest plus engine sidecars.
-6. Keep the source image and generated manifest together so pivots, frame rects, animations, palette, and provenance remain inspectable.
+2. Run `report` when an agent needs ranked quality findings across one or more assets before changing files. Reports include grid confidence, palette budget fit, alpha risks, sheet consistency, outline candidates, export readiness, and recommended setting changes.
+3. Run `suggest` with an explicit `--asset-type` if the user already knows the asset category.
+4. For sprite sheets, use detected frames or supply corrected frame metadata through `--frames`.
+5. Run `fix` or `fix-sheet`.
+6. Run `export` for generic manifest plus engine sidecars.
+7. Keep the source image and generated manifest together so pivots, frame rects, animations, palette, and provenance remain inspectable.
 
 For outline-sensitive assets, pass source outline colors when known:
 
@@ -146,6 +148,7 @@ This prevents automation from treating only black as the existing outline.
 Tool names:
 
 - `inspect_image`
+- `quality_report`
 - `suggest_fix_settings`
 - `fix_sprite`
 - `fix_sprite_sheet`

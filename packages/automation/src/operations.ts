@@ -3,11 +3,14 @@ import { performance } from "node:perf_hooks";
 import {
   analyzeSceneAssetDiagnostics,
   analyzeSheetConditioning,
+  analyzeQualityReport,
   analyzeTilesetSeams,
   detectGridCandidates,
   detectSheetLayout,
   extractPalette,
   fixImage,
+  type QualityFindingSeverity,
+  type QualityReport,
 } from "@pixelaid/core";
 import {
   createEngineExportBundle as createExporterEngineBundle,
@@ -87,6 +90,32 @@ export type FixOperationResult = {
   manifest: PixelAssetManifest;
   files: AutomationFileRecord[];
   warnings: string[];
+};
+
+export type QualityReportAssetRequest = {
+  inputPath: string;
+  options?: AutomationFixOptionsInput;
+};
+
+export type CreateQualityReportRequest = {
+  assets?: QualityReportAssetRequest[];
+  inputPaths?: string[];
+  options?: AutomationFixOptionsInput;
+};
+
+export type QualityReportAsset = QualityReport & {
+  inputPath: string;
+  suggestion: FixSuggestion;
+};
+
+export type QualityReportBatch = {
+  reports: QualityReportAsset[];
+  summary: {
+    assetCount: number;
+    findingCount: number;
+    recommendationCount: number;
+    highestSeverity: QualityFindingSeverity | "none";
+  };
 };
 
 export type InspectImageRequest = {
@@ -184,6 +213,47 @@ export async function suggestFixSettings(request: SuggestFixSettingsRequest): Pr
   }
 
   return createFixSuggestion(imageResult.value, request.options);
+}
+
+export async function createQualityReport(request: CreateQualityReportRequest): Promise<AutomationResult<QualityReportBatch>> {
+  const assets = normalizeQualityReportAssets(request);
+  if (assets.length === 0) {
+    return automationError("invalid_options", "quality report requires at least one input path.", 2);
+  }
+
+  const reports: QualityReportAsset[] = [];
+  const warnings: string[] = [];
+
+  for (const asset of assets) {
+    const imageResult = await readRgbaImageFile(asset.inputPath);
+    if (!imageResult.ok) {
+      return imageResult;
+    }
+
+    const suggestion = createFixSuggestion(imageResult.value, asset.options);
+    if (!suggestion.ok) {
+      return suggestion;
+    }
+    warnings.push(...suggestion.warnings);
+
+    const report = analyzeQualityReport(imageResult.value, {
+      assetType: suggestion.value.options.assetType,
+      maxColors: suggestion.value.options.maxColors,
+      alpha: suggestion.value.options.alpha,
+      gridCandidates: withFallbackGridCandidates(imageResult.value),
+      sheetLayout: detectSheetLayout(imageResult.value),
+    });
+    reports.push({
+      ...report,
+      inputPath: asset.inputPath,
+      suggestion: suggestion.value,
+    });
+  }
+
+  return automationOk({
+    reports,
+    summary: summarizeQualityReports(reports),
+  }, [...new Set(warnings)]);
 }
 
 export async function fixSprite(request: FixSpriteRequest): Promise<AutomationResult<FixOperationResult>> {
@@ -442,6 +512,51 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     warnings,
     support: definition.support,
   }, warnings);
+}
+
+function normalizeQualityReportAssets(request: CreateQualityReportRequest): QualityReportAssetRequest[] {
+  const assets: QualityReportAssetRequest[] = request.assets && request.assets.length > 0
+    ? request.assets
+    : (request.inputPaths ?? []).map((inputPath) => ({ inputPath }));
+
+  return assets
+    .filter((asset) => asset.inputPath.trim().length > 0)
+    .map((asset) => ({
+      inputPath: asset.inputPath,
+      options: {
+        ...request.options,
+        ...asset.options,
+      },
+    }));
+}
+
+function summarizeQualityReports(reports: readonly QualityReportAsset[]): QualityReportBatch["summary"] {
+  let highestSeverity: QualityFindingSeverity | "none" = "none";
+  let findingCount = 0;
+  let recommendationCount = 0;
+
+  for (const report of reports) {
+    findingCount += report.findings.length;
+    recommendationCount += report.recommendations.length;
+    highestSeverity = mergeSeverity(highestSeverity, report.summary.highestSeverity);
+  }
+
+  return {
+    assetCount: reports.length,
+    findingCount,
+    recommendationCount,
+    highestSeverity,
+  };
+}
+
+function mergeSeverity(
+  current: QualityFindingSeverity | "none",
+  next: QualityFindingSeverity | "none"
+): QualityFindingSeverity | "none" {
+  if (current === "error" || next === "error") return "error";
+  if (current === "warning" || next === "warning") return "warning";
+  if (current === "info" || next === "info") return "info";
+  return "none";
 }
 
 function classifyAssetType(image: RGBAImage, sheetLayout: SheetLayoutDetection): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {

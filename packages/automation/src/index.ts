@@ -26,9 +26,11 @@ export {
   extractPaletteFile,
   fixSprite,
   fixSpriteSheet,
+  createQualityReport,
   inspectImage,
   suggestFixSettings,
   type AutomationFileRecord,
+  type CreateQualityReportRequest,
   type ExportEngineBundleRequest,
   type ExtractPaletteFileRequest,
   type FixOperationResult,
@@ -37,6 +39,9 @@ export {
   type FixSuggestion,
   type ImageInspection,
   type InspectImageRequest,
+  type QualityReportAsset,
+  type QualityReportAssetRequest,
+  type QualityReportBatch,
   type SuggestFixSettingsRequest,
 } from "./operations";
 export {
