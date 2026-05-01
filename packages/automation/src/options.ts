@@ -7,6 +7,7 @@ import {
   type DownscaleMethod,
   type FixOptions,
   type OutlineMode,
+  type PaletteDitheringMode,
   type PaletteLockScope,
   type PaletteMode,
   type PaletteStrategy,
@@ -39,6 +40,7 @@ export type AutomationFixOptionsInput = {
   paletteMode?: PaletteMode;
   paletteStrategy?: PaletteStrategy;
   paletteLockScope?: PaletteLockScope;
+  paletteDithering?: PaletteDitheringMode;
   palettePreset?: string;
   downscale?: DownscaleMethod;
   alpha?: AlphaMode;
@@ -94,8 +96,9 @@ const assetTypeAliases: Record<string, AssetType> = {
 const downscaleMethods = new Set<DownscaleMethod>(["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"]);
 const alphaModes = new Set<AlphaMode>(["preserve", "binary", "backgroundFloodFill", "colorKey"]);
 const paletteModes = new Set<PaletteMode>(["auto", "fixed", "preset"]);
-const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency"]);
+const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual"]);
 const paletteLockScopes = new Set<PaletteLockScope>(["single", "firstFrame", "sheet", "project"]);
+const paletteDitheringModes = new Set<PaletteDitheringMode>(["none", "ordered", "errorDiffusion"]);
 const outlineModes = new Set<OutlineMode>(["none", "repairExisting", "add"]);
 
 const presets: Record<AssetType, AssetPreset> = {
@@ -180,6 +183,11 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return paletteLockScope;
   }
 
+  const paletteDithering = normalizeEnum(input.paletteDithering ?? "none", paletteDitheringModes, "paletteDithering");
+  if (!paletteDithering.ok) {
+    return paletteDithering;
+  }
+
   const cleanup = normalizeCleanup(input.cleanup, preset.cleanup);
   if (!cleanup.ok) {
     return cleanup;
@@ -203,7 +211,7 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     strategy: paletteStrategy.value,
     maxColors: maxColors.value,
     lockScope: paletteLockScope.value,
-    dithering: "none",
+    dithering: paletteDithering.value,
     ...(input.palette && input.palette.length > 0 ? { colors: normalizeHexColors(input.palette) } : {}),
     ...(input.palettePreset ? { preset: input.palettePreset } : {}),
   };

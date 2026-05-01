@@ -33,6 +33,7 @@ import type {
   FixOptions,
   GridCandidate,
   OutlineMode,
+  PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
   PaletteStrategy,
@@ -329,6 +330,7 @@ export function App() {
   const [paletteMode, setPaletteMode] = useState<PaletteMode>(initialSettings.paletteMode);
   const [paletteStrategy, setPaletteStrategy] = useState<PaletteStrategy>(initialSettings.paletteStrategy);
   const [paletteLockScope, setPaletteLockScope] = useState<PaletteLockScope>(initialSettings.paletteLockScope);
+  const [paletteDithering, setPaletteDithering] = useState<PaletteDitheringMode>(initialSettings.paletteDithering);
   const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
   const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">(initialSettings.gridDetect);
@@ -428,6 +430,7 @@ export function App() {
       setPaletteMode(settings.paletteMode);
       setPaletteStrategy(settings.paletteStrategy);
       setPaletteLockScope(settings.paletteLockScope);
+      setPaletteDithering(settings.paletteDithering);
       setPalettePreset(settings.palettePreset);
       setCustomPaletteText(settings.customPaletteText);
       setGridDetect(settings.gridDetect);
@@ -504,6 +507,7 @@ export function App() {
         paletteMode,
         paletteStrategy,
         paletteLockScope,
+        paletteDithering,
         palettePreset,
         customPaletteText,
         gridDetect,
@@ -590,6 +594,7 @@ export function App() {
     outlineSize,
     outlineSourceMode,
     paletteLockScope,
+    paletteDithering,
     paletteMode,
     palettePreset,
     paletteStrategy,
@@ -1198,7 +1203,7 @@ export function App() {
         strategy: paletteStrategy,
         maxColors,
         lockScope: activePaletteLockScope,
-        dithering: "none",
+        dithering: paletteDithering,
         ...(paletteMode === "fixed" ? { colors: fixedPaletteColors } : {}),
         ...(paletteMode === "preset" ? { preset: palettePreset } : {})
       },
@@ -1267,6 +1272,7 @@ export function App() {
     outlineSourceMode,
     selectedOutlineSourceColors,
     outlineSize,
+    paletteDithering,
     paletteMode,
     palettePreset,
     paletteStrategy,
@@ -2827,10 +2833,21 @@ export function App() {
           value={paletteStrategy}
           options={[
             ["medianCut", "Median cut"],
+            ["perceptual", "Perceptual"],
             ["frequency", "Frequency"]
           ]}
           disabled={paletteMode !== "auto"}
           onChange={(value) => setPaletteStrategy(value as PaletteStrategy)}
+        />
+        <SelectField
+          label="Dither"
+          value={paletteDithering}
+          options={[
+            ["none", "None"],
+            ["ordered", "Ordered"],
+            ["errorDiffusion", "Error diffusion"]
+          ]}
+          onChange={(value) => setPaletteDithering(value as PaletteDitheringMode)}
         />
         {sheetMode ? (
           <SelectField
@@ -3909,7 +3926,12 @@ export function App() {
                 metrics={[
                   ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${effectiveTargetWidth}x${effectiveTargetHeight}`],
                   ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
-                  ["Palette", paletteDiagnostics ? `${paletteDiagnostics.mode} / ${paletteDiagnostics.lockScope}` : `${paletteMode} / ${activePaletteLockScope}`],
+                  [
+                    "Palette",
+                    paletteDiagnostics
+                      ? `${paletteDiagnostics.mode} / ${paletteDiagnostics.lockScope} / ${paletteDiagnostics.dithering}`
+                      : `${paletteMode} / ${activePaletteLockScope} / ${paletteDithering}`
+                  ],
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
                   ["Halos", removeHalos ? "remove" : "keep"],

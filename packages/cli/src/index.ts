@@ -190,6 +190,10 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (target) options.target = target;
   const colors = readOptionalNumberFlag(args, "--colors") ?? readOptionalNumberFlag(args, "--max-colors");
   if (colors !== undefined) options.maxColors = colors;
+  const paletteStrategy = takeValue(args, "--palette-strategy");
+  if (paletteStrategy) options.paletteStrategy = paletteStrategy as NonNullable<AutomationFixOptionsInput["paletteStrategy"]>;
+  const dither = takeValue(args, "--dither") ?? takeValue(args, "--dithering");
+  if (dither) options.paletteDithering = dither as NonNullable<AutomationFixOptionsInput["paletteDithering"]>;
   const downscale = takeValue(args, "--downscale");
   if (downscale) options.downscale = downscale as NonNullable<AutomationFixOptionsInput["downscale"]>;
   const alpha = takeValue(args, "--alpha");
@@ -397,6 +401,10 @@ function usageText(): string {
     "  pixelaid fix-sheet <input.png> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
     "  pixelaid palette <input.png> --max-colors <n> --out <palette.hex|palette.json>",
     "  pixelaid export <input.png> --out-dir <dir> --engine godot,unity,phaser --bundle zip",
+    "",
+    "Palette options:",
+    "  --palette-strategy medianCut|perceptual|frequency",
+    "  --dither none|ordered|errorDiffusion",
     "",
   ].join("\n");
 }
