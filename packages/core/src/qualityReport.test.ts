@@ -53,4 +53,88 @@ describe("quality report", () => {
     expect(report.recommendations.some((recommendation) => recommendation.id === "preserve-inspect-only")).toBe(true);
     expect(report.findings.some((finding) => finding.id === "sheet-manual-correction")).toBe(false);
   });
+
+  test("adds tilemap grid recommendations for repeated map-like assets", () => {
+    const image = createRepeatedTilemap(8, 8, 16);
+    const report = analyzeQualityReport(image, {
+      assetType: "tilemap",
+      maxColors: 8
+    });
+
+    expect(report.metrics.tilemap.detected).toBe(true);
+    expect(report.metrics.tilemap.selected).toMatchObject({
+      tileWidth: 16,
+      tileHeight: 16,
+      rows: 8,
+      columns: 8
+    });
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        id: "tilemap-grid-candidate",
+        category: "tilemap",
+        recommendationId: "review-tilemap-grid"
+      })
+    );
+    expect(report.recommendations).toContainEqual(
+      expect.objectContaining({
+        id: "review-tilemap-grid",
+        settings: {
+          assetType: "tilemap",
+          mode: "tileSheet",
+          sheet: {
+            frameWidth: 16,
+            frameHeight: 16,
+            rows: 8,
+            columns: 8,
+            margin: 0,
+            spacing: 0,
+            extrude: 0
+          }
+        }
+      })
+    );
+  });
 });
+
+function createRepeatedTilemap(columns: number, rows: number, tileSize: number) {
+  const patterns = [
+    [
+      [38, 92, 48, 255],
+      [48, 112, 58, 255],
+      [30, 74, 42, 255],
+      [72, 140, 80, 255]
+    ],
+    [
+      [42, 98, 140, 255],
+      [64, 126, 176, 255],
+      [28, 72, 120, 255],
+      [84, 150, 196, 255]
+    ],
+    [
+      [120, 110, 66, 255],
+      [150, 136, 82, 255],
+      [96, 88, 54, 255],
+      [176, 158, 96, 255]
+    ],
+    [
+      [88, 88, 96, 255],
+      [116, 118, 128, 255],
+      [62, 64, 72, 255],
+      [146, 148, 156, 255]
+    ]
+  ] as const;
+  const image = createImage(columns * tileSize, rows * tileSize, [0, 0, 0, 255]);
+  const half = Math.floor(tileSize / 2);
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const pattern = patterns[(row + column * 3) % patterns.length]!;
+      for (let y = 0; y < tileSize; y += 1) {
+        for (let x = 0; x < tileSize; x += 1) {
+          const index = (x < half ? 0 : 1) + (y < half ? 0 : 2);
+          writePixel(image, column * tileSize + x, row * tileSize + y, ...pattern[index]!);
+        }
+      }
+    }
+  }
+  return image;
+}

@@ -89,6 +89,26 @@ export type SceneAssetDiagnostics = {
   warnings: AssetTypeWarning[];
 };
 
+export type TilemapGridCandidate = {
+  tileWidth: number;
+  tileHeight: number;
+  rows: number;
+  columns: number;
+  tileCount: number;
+  uniqueTileSignatures: number;
+  repeatedTileRatio: number;
+  dimensionFitScore: number;
+  gridConsistencyScore: number;
+  confidence: number;
+  reason: string;
+};
+
+export type TilemapDiagnostics = {
+  candidates: TilemapGridCandidate[];
+  selected?: TilemapGridCandidate;
+  warnings: AssetTypeWarning[];
+};
+
 export type SheetConditioningIssueCode =
   | "excessive-exact-colors"
   | "dense-coarse-palette"

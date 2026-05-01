@@ -53,6 +53,8 @@ export type {
   SpriteFrameBox,
   SpriteFrameBoxType,
   SpriteFrame,
+  TilemapDiagnostics,
+  TilemapGridCandidate,
   TilesetSeamDiagnostics,
   TilesetSeamEdge,
   TilesetSeamIssue,

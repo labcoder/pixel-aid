@@ -4,6 +4,7 @@ import {
   analyzeSceneAssetDiagnostics,
   analyzeSheetConditioning,
   analyzeQualityReport,
+  analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
   detectGridCandidates,
   detectSheetLayout,
@@ -73,6 +74,7 @@ export type ImageInspection = {
   diagnostics: {
     sheetConditioning: ReturnType<typeof analyzeSheetConditioning>;
     scene?: ReturnType<typeof analyzeSceneAssetDiagnostics>;
+    tilemap?: ReturnType<typeof analyzeTilemapDiagnostics>;
     tileset?: ReturnType<typeof analyzeTilesetSeams>;
   };
 };
@@ -182,6 +184,9 @@ export async function inspectImage(request: InspectImageRequest): Promise<Automa
   };
   if (assetType === "background" || assetType === "tilemap") {
     diagnostics.scene = analyzeSceneAssetDiagnostics(image, { assetType });
+  }
+  if (assetType === "tilemap") {
+    diagnostics.tilemap = analyzeTilemapDiagnostics(image);
   }
   if (assetType === "tileset") {
     const frameWidth = suggestion.value.options.sheet?.frameWidth ?? 16;
@@ -468,7 +473,8 @@ export async function exportEngineBundle(request: ExportEngineBundleRequest): Pr
 function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsInput | undefined): AutomationResult<FixSuggestion> {
   const gridCandidates = withFallbackGridCandidates(image);
   const sheetLayout = detectSheetLayout(image);
-  const assetType = overrides?.assetType ? parseAutomationAssetType(overrides.assetType) : classifyAssetType(image, sheetLayout);
+  const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
+  const assetType = overrides?.assetType ? parseAutomationAssetType(overrides.assetType) : classifyAssetType(image, sheetLayout, tilemapDiagnostics);
   if (!assetType.ok) {
     return assetType;
   }
@@ -559,7 +565,23 @@ function mergeSeverity(
   return "none";
 }
 
-function classifyAssetType(image: RGBAImage, sheetLayout: SheetLayoutDetection): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {
+function classifyAssetType(
+  image: RGBAImage,
+  sheetLayout: SheetLayoutDetection,
+  tilemapDiagnostics: ReturnType<typeof analyzeTilemapDiagnostics>
+): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {
+  const tilemapCandidate = tilemapDiagnostics.selected;
+  if (
+    tilemapCandidate &&
+    image.width >= 96 &&
+    image.height >= 96 &&
+    tilemapCandidate.repeatedTileRatio >= 0.35 &&
+    tilemapCandidate.rows >= 4 &&
+    tilemapCandidate.columns >= 4
+  ) {
+    return parseAutomationAssetType("tilemap");
+  }
+
   if (sheetLayout.confidence >= 0.65) {
     return parseAutomationAssetType("animationSheet");
   }
@@ -642,6 +664,9 @@ function suggestionReason(assetType: AssetType, grid: ReturnType<typeof detectGr
   }
   if (assetType === "tileset") {
     return `Square source suggests a tileset; best grid is ${grid.outputWidth}x${grid.outputHeight}.`;
+  }
+  if (assetType === "tilemap") {
+    return `Repeated tile signatures suggest a tilemap; best pixel grid is ${grid.outputWidth}x${grid.outputHeight}.`;
   }
   return `Best grid is ${grid.outputWidth}x${grid.outputHeight} with ${(grid.confidence * 100).toFixed(0)}% confidence.`;
 }

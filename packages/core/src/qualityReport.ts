@@ -3,9 +3,10 @@ import type { AlphaMode, AssetType, FixOptions, GridCandidate, RGBAImage, SheetL
 import { detectGridCandidates } from "./grid";
 import { detectOutlineColorCandidates, type OutlineColorCandidate } from "./outline";
 import { detectSheetLayout } from "./sheet";
+import { analyzeTilemapDiagnostics } from "./tilemapDiagnostics";
 
 export type QualityFindingSeverity = "error" | "warning" | "info";
-export type QualityFindingCategory = "grid" | "palette" | "alpha" | "sheet" | "outline" | "export";
+export type QualityFindingCategory = "grid" | "palette" | "alpha" | "sheet" | "outline" | "export" | "tilemap";
 
 export type QualityFinding = {
   id: string;
@@ -70,6 +71,12 @@ export type QualityReport = {
       candidateCount: number;
       candidates: OutlineColorCandidate[];
     };
+    tilemap: {
+      detected: boolean;
+      candidates: ReturnType<typeof analyzeTilemapDiagnostics>["candidates"];
+      selected?: ReturnType<typeof analyzeTilemapDiagnostics>["selected"];
+      warnings: string[];
+    };
     exportReadiness: {
       support: ReturnType<typeof getAssetTypeDefinition>["support"];
       ready: boolean;
@@ -101,6 +108,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const alpha = countAlphaPixels(image);
   const sheetLayout = options.sheetLayout ?? detectSheetLayout(image);
   const outlineCandidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
+  const tilemapDiagnostics = assetType === "tilemap" ? analyzeTilemapDiagnostics(image) : undefined;
   const findings: QualityFinding[] = [];
   const recommendations: QualityRecommendation[] = [];
 
@@ -208,6 +216,47 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
     });
   }
 
+  if (assetType === "tilemap" && tilemapDiagnostics) {
+    const selected = tilemapDiagnostics.selected;
+    if (selected) {
+      findings.push({
+        id: "tilemap-grid-candidate",
+        severity: "info",
+        category: "tilemap",
+        title: "Tilemap grid candidate",
+        detail: `Best tilemap candidate is ${selected.tileWidth}x${selected.tileHeight} across ${selected.columns} columns and ${selected.rows} rows.`,
+        recommendationId: "review-tilemap-grid"
+      });
+      recommendations.push({
+        id: "review-tilemap-grid",
+        label: "Review tilemap grid",
+        rationale: "Tilemap cleanup should preserve map layout; apply the detected tile size only after checking repeated tile candidates.",
+        settings: {
+          assetType: "tilemap",
+          mode: "tileSheet",
+          sheet: {
+            frameWidth: selected.tileWidth,
+            frameHeight: selected.tileHeight,
+            rows: selected.rows,
+            columns: selected.columns,
+            margin: 0,
+            spacing: 0,
+            extrude: 0
+          }
+        }
+      });
+    } else {
+      findings.push({
+        id: "tilemap-grid-low-confidence",
+        severity: "warning",
+        category: "tilemap",
+        title: "Tilemap grid needs review",
+        detail: "No tile size candidate had enough repeated signatures for confident map cleanup.",
+        recommendationId: "preserve-inspect-only"
+      });
+    }
+  }
+
   findings.sort((left, right) => severityRank[left.severity] - severityRank[right.severity]);
 
   return {
@@ -236,6 +285,12 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       outline: {
         candidateCount: outlineCandidates.length,
         candidates: outlineCandidates
+      },
+      tilemap: {
+        detected: tilemapDiagnostics?.selected !== undefined,
+        candidates: tilemapDiagnostics?.candidates ?? [],
+        ...(tilemapDiagnostics?.selected ? { selected: tilemapDiagnostics.selected } : {}),
+        warnings: tilemapDiagnostics?.warnings.map((warning) => warning.code) ?? []
       },
       exportReadiness: {
         support: definition.support,

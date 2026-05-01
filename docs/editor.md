@@ -42,7 +42,7 @@ Supported asset types in 0.1.0:
 | Portrait | Single | Inspect-only | Uses generic PNG/manifest export with preservation-oriented cleanup. |
 | UI element | Single | Inspect-only | Uses conservative alpha/effect cleanup. |
 | Background | Single | Inspect-only | Uses a larger palette budget and avoids aggressive cleanup by default. |
-| Tilemap | Tile sheet | Inspect-only | Map-data import/export is not scoped yet, so PixelAid preserves layout and reports map-aware warnings. |
+| Tilemap | Tile sheet | Inspect-only | PixelAid detects repeated tile candidates, preserves layout, and reports map-aware warnings before destructive cleanup. |
 
 Character sheet remains a user-facing asset type, but it uses sprite-sheet processing. Character-specific meaning lives in editable frame rows, timeline clips, pivots, animation names, and manifest `assetType` metadata rather than a separate low-level algorithm mode.
 
@@ -54,7 +54,7 @@ Manual Asset type overrides are stored per imported asset. A character import ca
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
 
-Tilesets use conservative cleanup defaults because a clean repeated tile matters more than removing every small mark. The Asset inspector reports seam risk and lighting risk from adjacent tile edges. Backgrounds and tilemaps get scene diagnostics for coarse color-bin count, detail density, and preservation warnings so sprite-style crop, binary alpha, and denoise choices are easier to review before Fix.
+Tilesets use conservative cleanup defaults because a clean repeated tile matters more than removing every small mark. The Asset inspector reports seam risk and lighting risk from adjacent tile edges. Backgrounds and tilemaps get scene diagnostics for coarse color-bin count, detail density, and preservation warnings so sprite-style crop, binary alpha, and denoise choices are easier to review before Fix. Tilemaps also get repeated-pattern tile candidates so the user can review likely tile sizes before applying a tile-sheet cleanup path.
 
 For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips for the timeline player. It can split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, recover faint presentation-cell outlines around tight sprite silhouettes, ignore footer-like metadata bands, merge nearby disconnected body/effect components when mild drift still points to a shared column grid, and name row clips from confident blocky left-side labels such as `idle`, `walk`, or `jump`.
 
@@ -196,7 +196,7 @@ Clicking a frame, dragging or resizing a detected source box, scrubbing, steppin
 
 Metrics are split between source and output. Source metrics describe the imported image. Output metrics describe the fixed result and the operation settings that produced it.
 
-Tileset diagnostics surface seam risk and lighting risk in the Asset inspector and repeat-preview panel. Scene diagnostics for backgrounds and tilemaps report color-bin density, detail density, and preservation warnings so broad scene assets are not judged by sprite cleanup expectations.
+Tileset diagnostics surface seam risk and lighting risk in the Asset inspector and repeat-preview panel. Scene diagnostics for backgrounds and tilemaps report color-bin density, detail density, and preservation warnings so broad scene assets are not judged by sprite cleanup expectations. Tilemap diagnostics rank candidate tile sizes by dimension fit, grid consistency, and repeated tile signatures; low-repeat candidates keep the asset in inspect-first mode.
 
 The bottom panel can be dragged upward from its top handle when logs, metrics, or the frame list need more room.
 

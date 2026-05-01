@@ -27,7 +27,8 @@ const categoryLabels: Record<QualityFinding["category"], string> = {
   grid: "Grid",
   outline: "Outline",
   palette: "Palette",
-  sheet: "Sheet"
+  sheet: "Sheet",
+  tilemap: "Tilemap"
 };
 
 const severityLabels: Record<QualityFinding["severity"], string> = {

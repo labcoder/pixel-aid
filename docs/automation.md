@@ -133,6 +133,8 @@ A typical local AI workflow should avoid guessing settings:
 6. Run `export` for generic manifest plus engine sidecars.
 7. Keep the source image and generated manifest together so pivots, frame rects, animations, palette, and provenance remain inspectable.
 
+For tilemap-like images, `inspect`, `suggest`, and `quality_report` include repeated-tile candidates when the source appears to be a map rather than a tileset. Candidates include tile size, row/column count, repeated signature ratio, dimension fit, grid consistency, confidence, and warnings. PixelAid keeps tilemaps inspect-first; use those candidates as manual tile-size guidance before applying destructive cleanup.
+
 For outline-sensitive assets, pass source outline colors when known:
 
 ```sh
