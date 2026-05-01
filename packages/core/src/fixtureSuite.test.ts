@@ -84,6 +84,36 @@ describe("cleanup fixture suite", () => {
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
   });
 
+  test("removes high-contrast baked checkerboards before they poison downsampling", () => {
+    const fixture = requiredFixture("high-contrast-checkerboard-panda");
+    const result = fixImage(fixture.createImage(), {
+      ...singleOptions("sprite", 16, 16, "backgroundFloodFill", true),
+      grid: { detect: "manual", scale: 4, phaseX: 0, phaseY: 0 },
+      alphaSettings: {
+        tolerance: 18,
+        decontaminateRgb: true,
+        transparentRgb: "#000000"
+      }
+    });
+    const signature = createGoldenSignature(result.image, {
+      samplePoints: [...fixture.expected.alpha!.sampleTransparentPixels!, "8,6"],
+      maxPalette: 8
+    });
+    const bodyPixel = signature.samplePixels["8,6"]!;
+
+    expect(signature.transparentPixels).toBeGreaterThanOrEqual(fixture.expected.alpha!.transparentPixelsAtLeast!);
+    expect(signature.samplePixels["0,0"]).toEqual([0, 0, 0, 0]);
+    expect(signature.samplePixels["1,0"]).toEqual([0, 0, 0, 0]);
+    expect(signature.samplePixels["15,15"]).toEqual([0, 0, 0, 0]);
+    expect(bodyPixel[3]).toBe(255);
+    expect(bodyPixel[0]).toBeGreaterThan(230);
+    expect(bodyPixel[1]).toBeGreaterThan(210);
+    expect(bodyPixel[2]).toBeGreaterThan(160);
+    expect(bodyPixel[0] - bodyPixel[2]).toBeGreaterThan(30);
+    expect(signature.palette).not.toContain("#cacaca");
+    expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
+  });
+
   test("cleans opaque white matte fixture into transparent edges", () => {
     const fixture = requiredFixture("matte-opaque-white-edge");
     const result = fixImage(fixture.createImage(), {

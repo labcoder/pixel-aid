@@ -247,8 +247,16 @@ function shouldIncludeSecondBackground(
   const b = Math.round(secondB / secondCount);
   const firstBrightness = colors[0]! + colors[1]! + colors[2]!;
   const secondBrightness = r + g + b;
+  const firstNeutral = Math.max(colors[0]!, colors[1]!, colors[2]!) - Math.min(colors[0]!, colors[1]!, colors[2]!) <= 24;
+  const secondNeutral = Math.max(r, g, b) - Math.min(r, g, b) <= 24;
 
-  return firstBrightness > 540 && secondBrightness > 540 && Math.abs(firstBrightness - secondBrightness) <= 96;
+  return (
+    firstBrightness > 540 &&
+    secondBrightness > 540 &&
+    firstNeutral &&
+    secondNeutral &&
+    Math.abs(firstBrightness - secondBrightness) <= 180
+  );
 }
 
 function matchesBackgroundModel(data: Uint8ClampedArray, offset: number, model: BackgroundModel, toleranceSq: number): boolean {

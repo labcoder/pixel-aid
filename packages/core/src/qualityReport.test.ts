@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { transparentMatteHaloSprites } from "@pixelaid/fixtures";
 import { analyzeQualityReport, createImage, writePixel } from "./index";
 
 describe("quality report", () => {
@@ -144,6 +145,28 @@ describe("quality report", () => {
       expect.objectContaining({
         id: "use-contrast-downscale",
         settings: { downscale: "contrast" }
+      })
+    );
+  });
+
+  test("flags baked checkerboard transparency backgrounds", () => {
+    const fixture = transparentMatteHaloSprites.find((candidate) => candidate.id === "high-contrast-checkerboard-panda");
+    const report = analyzeQualityReport(fixture!.createImage(), {
+      assetType: "sprite",
+      maxColors: 8
+    });
+
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        id: "baked-transparency-background",
+        category: "alpha",
+        recommendationId: "remove-baked-background"
+      })
+    );
+    expect(report.recommendations).toContainEqual(
+      expect.objectContaining({
+        id: "remove-baked-background",
+        settings: expect.objectContaining({ alpha: "backgroundFloodFill" })
       })
     );
   });
