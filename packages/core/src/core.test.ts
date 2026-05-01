@@ -63,6 +63,66 @@ function blockySource(): RGBAImage {
   ]);
 }
 
+function sparseNoisyPseudoPixelSource({
+  scale,
+  phaseX,
+  phaseY,
+  background
+}: {
+  scale: number;
+  phaseX: number;
+  phaseY: number;
+  background: "transparentRgbNoise" | "opaqueMatteNoise";
+}): RGBAImage {
+  const image = createImage(192, 160, [0, 0, 0, 0]);
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      if (background === "transparentRgbNoise") {
+        const channel = (x + y) % 2 === 0 ? 12 : 76;
+        writePixel(image, x, y, channel, channel + 4, channel + 8, 0);
+      } else {
+        const jitter = ((x * 3 + y * 5) % 5) - 2;
+        writePixel(image, x, y, 28 + jitter, 30 + jitter, 34 + jitter, 255);
+      }
+    }
+  }
+
+  const startX = phaseX + scale * 7;
+  const startY = phaseY + scale * 6;
+  const colors = [
+    [24, 30, 34, 255],
+    [54, 112, 106, 255],
+    [96, 172, 156, 255],
+    [12, 232, 224, 255],
+    [184, 226, 208, 255]
+  ] as const;
+  const mask = [
+    "00111100",
+    "01122110",
+    "12233221",
+    "12344321",
+    "12344321",
+    "01233210",
+    "00122100",
+    "00011000"
+  ];
+
+  for (let row = 0; row < mask.length; row += 1) {
+    const line = mask[row]!;
+    for (let column = 0; column < line.length; column += 1) {
+      const index = Number(line[column]);
+      if (index === 0) {
+        continue;
+      }
+      const color = colors[index]!;
+      drawBlock(image, startX + column * scale, startY + row * scale, scale, scale, color[0], color[1], color[2], color[3]);
+    }
+  }
+
+  return image;
+}
+
 function rowLocalDriftSource(): RGBAImage {
   const image = createImage(12, 8, [0, 0, 0, 255]);
   drawBlock(image, 0, 0, 4, 4, 220, 20, 20, 255);
@@ -539,6 +599,53 @@ describe("grid detection", () => {
       sizeScore: expect.any(Number)
     });
     expect(candidate!.diagnostics!.notes).toContain("Foreground crop used");
+  });
+
+  test("uses Sobel tile voting to ignore transparent RGB noise outside sparse sprites", () => {
+    const source = sparseNoisyPseudoPixelSource({
+      scale: 8,
+      phaseX: 3,
+      phaseY: 5,
+      background: "transparentRgbNoise"
+    });
+    const [candidate] = detectGridCandidates(source, { maxScale: 16 });
+    const tileVoting = candidate!.diagnostics?.sobelTileVoting;
+
+    expect(candidate).toMatchObject({
+      scaleX: 8,
+      scaleY: 8,
+      phaseX: 3,
+      phaseY: 5
+    });
+    expect(tileVoting).toMatchObject({
+      selectedTileCount: expect.any(Number),
+      phaseConfidenceX: expect.any(Number),
+      phaseConfidenceY: expect.any(Number)
+    });
+    expect(tileVoting!.selectedTileCount).toBeGreaterThan(0);
+    expect(tileVoting!.scaleHistogram[0]).toMatchObject({ scale: 8 });
+    expect(candidate!.diagnostics!.notes).toContain("Sobel tile voting selected sparse foreground edges");
+  });
+
+  test("uses Sobel tile voting to recover sprite phase from low-contrast matte noise", () => {
+    const source = sparseNoisyPseudoPixelSource({
+      scale: 10,
+      phaseX: 4,
+      phaseY: 6,
+      background: "opaqueMatteNoise"
+    });
+    const [candidate] = detectGridCandidates(source, { maxScale: 16 });
+    const tileVoting = candidate!.diagnostics?.sobelTileVoting;
+
+    expect(candidate).toMatchObject({
+      scaleX: 10,
+      scaleY: 10,
+      phaseX: 4,
+      phaseY: 6
+    });
+    expect(tileVoting!.scaleHistogram[0]).toMatchObject({ scale: 10 });
+    expect(tileVoting!.phaseConfidenceX).toBeGreaterThan(0.55);
+    expect(tileVoting!.phaseConfidenceY).toBeGreaterThan(0.55);
   });
 });
 
