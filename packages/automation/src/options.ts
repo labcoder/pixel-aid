@@ -6,6 +6,7 @@ import {
   type AssetType,
   type DownscaleMethod,
   type FixOptions,
+  type MorphologyCleanupSettings,
   type OutlineMode,
   type PaletteDitheringMode,
   type PaletteLockScope,
@@ -344,8 +345,53 @@ function normalizeCleanup(
   if (input?.outlineSourceColors) {
     cleanup.outlineSourceColors = normalizeHexColors(input.outlineSourceColors);
   }
+  const morphology = normalizeMorphology(input?.morphology ?? fallback.morphology);
+  if (!morphology.ok) {
+    return morphology;
+  }
+  if (morphology.value) {
+    cleanup.morphology = morphology.value;
+  }
 
   return automationOk(cleanup);
+}
+
+function normalizeMorphology(input: MorphologyCleanupSettings | undefined): AutomationResult<MorphologyCleanupSettings | undefined> {
+  if (!input) {
+    return automationOk(undefined);
+  }
+
+  const morphology: MorphologyCleanupSettings = {};
+  assignBoolean(morphology, "enabled", input.enabled);
+  assignBoolean(morphology, "open", input.open);
+  assignBoolean(morphology, "close", input.close);
+  assignBoolean(morphology, "fillTinyHoles", input.fillTinyHoles);
+  assignBoolean(morphology, "removeTinyComponents", input.removeTinyComponents);
+  assignBoolean(morphology, "preserveSinglePixelDetails", input.preserveSinglePixelDetails);
+
+  if (input.maxHolePixels !== undefined) {
+    const maxHolePixels = normalizeNonNegativeInteger(input.maxHolePixels, "cleanup.morphology.maxHolePixels");
+    if (!maxHolePixels.ok) return maxHolePixels;
+    morphology.maxHolePixels = maxHolePixels.value;
+  }
+  if (input.maxComponentPixels !== undefined) {
+    const maxComponentPixels = normalizeNonNegativeInteger(input.maxComponentPixels, "cleanup.morphology.maxComponentPixels");
+    if (!maxComponentPixels.ok) return maxComponentPixels;
+    morphology.maxComponentPixels = maxComponentPixels.value;
+  }
+  if (input.alphaThreshold !== undefined) {
+    const alphaThreshold = normalizePositiveInteger(input.alphaThreshold, "cleanup.morphology.alphaThreshold");
+    if (!alphaThreshold.ok) return alphaThreshold;
+    morphology.alphaThreshold = Math.min(255, alphaThreshold.value);
+  }
+  if (input.connectivity !== undefined) {
+    if (input.connectivity !== 4 && input.connectivity !== 8) {
+      return automationError("invalid_options", `Invalid cleanup.morphology.connectivity "${input.connectivity}".`, 2);
+    }
+    morphology.connectivity = input.connectivity;
+  }
+
+  return automationOk(morphology);
 }
 
 function normalizeSheet(input: Partial<SheetSliceOptions>): AutomationResult<SheetSliceOptions> {
@@ -403,6 +449,12 @@ function normalizeIntegerOrDefault(value: number | undefined, fallback: number):
 
 function assignFinite<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {
   if (typeof value === "number" && Number.isFinite(value)) {
+    target[key] = value;
+  }
+}
+
+function assignBoolean<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {
+  if (typeof value === "boolean") {
     target[key] = value;
   }
 }

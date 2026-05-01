@@ -6,6 +6,8 @@ export type {
   DownscaleMethod,
   FixOptions,
   GridCandidate,
+  MorphologyCleanupSettings,
+  MorphologyDiagnostics,
   OutlineMode,
   PixelFixResult,
   RGBAImage,
@@ -28,6 +30,21 @@ export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
 export { applyHaloRemoval } from "./halo";
 export type { HaloRemovalOptions } from "./halo";
+export {
+  analyzeMaskArtifacts,
+  applyMorphologyCleanup,
+  closeMask,
+  fillTinyHoles,
+  openMask,
+  removeTinyComponents
+} from "./morphology";
+export type {
+  FillTinyHolesOptions,
+  MaskArtifactOptions,
+  MorphologyCleanupResult,
+  MorphologyMaskOptions,
+  RemoveTinyComponentsOptions
+} from "./morphology";
 export { downsampleBlocks } from "./downsample";
 export type { DownsampleOptions } from "./downsample";
 export { fixImage } from "./fix";
