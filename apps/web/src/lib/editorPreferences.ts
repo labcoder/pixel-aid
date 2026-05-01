@@ -299,7 +299,7 @@ function engineTargetsSetting(value: unknown, fallback: EngineExportTarget[]): E
   if (!Array.isArray(value)) {
     return [...fallback];
   }
-  const allowed: EngineExportTarget[] = ["godot", "unity", "phaser"];
+  const allowed: EngineExportTarget[] = ["godot", "unity", "phaser", "texturepacker"];
   const next = value.filter((target): target is EngineExportTarget => allowed.includes(target as EngineExportTarget));
   return next.length > 0 ? [...new Set(next)] : [...fallback];
 }

@@ -91,6 +91,12 @@ describe("editor preferences", () => {
     expect(preferences.settings.playbackDirection).toBe("hold");
   });
 
+  test("preserves TexturePacker as an engine export target", () => {
+    const preferences = normalizeEditorPreferences({ settings: { engineExportTargets: ["texturepacker", "phaser", "bad"] } });
+
+    expect(preferences.settings.engineExportTargets).toEqual(["texturepacker", "phaser"]);
+  });
+
   test("normalizes saved palette library entries", () => {
     const preferences = normalizeEditorPreferences({
       savedPaletteLibrary: [

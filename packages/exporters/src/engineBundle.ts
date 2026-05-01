@@ -1,6 +1,7 @@
 import type { PixelAssetManifest } from "@pixelaid/shared";
 import { createGodotImportExport } from "./godot";
 import { createPhaserAtlasExport } from "./phaser";
+import { createTexturePackerAtlasExport } from "./texturePacker";
 import { createUnityImportExport } from "./unity";
 import type { EngineExportBundle, EngineExportTarget } from "./engineTypes";
 
@@ -37,6 +38,9 @@ function createTargetBundle(target: EngineExportTarget, manifest: PixelAssetMani
   }
   if (target === "unity") {
     return createUnityImportExport(manifest);
+  }
+  if (target === "texturepacker") {
+    return createTexturePackerAtlasExport(manifest);
   }
   return createPhaserAtlasExport(manifest);
 }

@@ -153,7 +153,7 @@ describe("automation operations", () => {
       const result = await exportEngineBundle({
         inputPath: input,
         outDir,
-        targets: ["godot", "unity", "phaser"],
+        targets: ["godot", "unity", "phaser", "texturepacker"],
         options: {
           assetType: "sprite",
           target: "2x2",
@@ -169,6 +169,7 @@ describe("automation operations", () => {
       expect(paths).toContain("input.manifest.json");
       expect(paths).toContain("input.palette.hex");
       expect(paths).toContain("engines/README.md");
+      expect(paths).toContain("texturepacker/input.fixed.json");
     });
   });
 });

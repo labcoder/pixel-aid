@@ -39,7 +39,7 @@ type CliCommandResult = {
 
 type EngineExportTarget = ExportEngineBundleRequest["targets"][number];
 
-const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser"]);
+const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker"]);
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
@@ -422,7 +422,7 @@ function usageText(): string {
     "  pixelaid fix <input.png> --out <fixed.png> --manifest <manifest.json>",
     "  pixelaid fix-sheet <input.png> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
     "  pixelaid palette <input.png> --max-colors <n> --out <palette.hex|palette.json>",
-    "  pixelaid export <input.png> --out-dir <dir> --engine godot,unity,phaser --bundle zip",
+    "  pixelaid export <input.png> --out-dir <dir> --engine godot,unity,phaser,texturepacker --bundle zip",
     "",
     "Palette options:",
     "  --palette-strategy medianCut|perceptual|frequency",

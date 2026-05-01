@@ -29,6 +29,8 @@ export type {
 } from "./engineTypes";
 export { createPhaserAtlasExport } from "./phaser";
 export type { PhaserAtlas } from "./phaser";
+export { createTexturePackerAtlas, createTexturePackerAtlasExport } from "./texturePacker";
+export type { TexturePackerAtlas, TexturePackerAtlasOptions, TexturePackerFrame } from "./texturePacker";
 export { createAsepriteCompanionExport, importAsepriteWorkflow } from "./aseprite";
 export type {
   AsepriteCompanionExport,

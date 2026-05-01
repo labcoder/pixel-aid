@@ -30,7 +30,7 @@ pixelaid suggest input.png --asset-type sprite --target 64x64 --json
 pixelaid fix input.png --out hero.png --manifest hero.json --target 64x64 --colors 24
 pixelaid fix-sheet sheet.png --out-dir ./out --frames frames.json --asset-type animation
 pixelaid palette input.png --max-colors 24 --out palette.hex
-pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser --bundle zip
+pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texturepacker --bundle zip
 ```
 
 Useful fix flags:
