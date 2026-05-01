@@ -7,6 +7,7 @@ import {
   analyzeQualityReport,
   analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
+  applyAlphaMode,
   detectGridCandidates,
   detectSheetLayout,
   extractPalette,
@@ -26,6 +27,7 @@ import {
   type AnimationTag,
   type AssetType,
   type FixOptions,
+  type GridCandidate,
   type PixelAssetManifest,
   type PixelFixResult,
   type RGBAImage,
@@ -688,12 +690,16 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
   const gridCandidates = withFallbackGridCandidates(image);
   const sheetLayout = detectSheetLayout(image);
   const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
-  const assetType = overrides?.assetType ? parseAutomationAssetType(overrides.assetType) : classifyAssetType(image, sheetLayout, tilemapDiagnostics);
+  const bakedTransparencyDetected = detectBakedTransparencyForSuggestion(image, gridCandidates, sheetLayout, overrides);
+  const assetType = overrides?.assetType
+    ? parseAutomationAssetType(overrides.assetType)
+    : classifyAssetType(image, sheetLayout, tilemapDiagnostics, bakedTransparencyDetected);
   if (!assetType.ok) {
     return assetType;
   }
 
-  const bestGrid = gridCandidates[0]!;
+  const effectiveGridCandidates = resolveSuggestionGridCandidates(image, gridCandidates, assetType.value.assetType, bakedTransparencyDetected, overrides);
+  const bestGrid = effectiveGridCandidates[0]!;
   const defaultTarget = sheetLayout.confidence >= 0.65 && assetType.value.mode === "spriteSheet"
     ? packedSheetSize(sheetLayout)
     : { width: bestGrid.outputWidth, height: bestGrid.outputHeight };
@@ -711,12 +717,23 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     gridOverrides.localCorrection = overrides.grid.localCorrection;
   }
 
+  const suggestedCleanup = suggestAutomationCleanupOverrides(overrides?.cleanup, assetType.value.assetType, bakedTransparencyDetected, bestGrid);
+  const suggestedAlpha = shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.alpha === undefined
+    ? "backgroundFloodFill"
+    : overrides?.alpha;
+  const suggestedDownscale = shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.downscale === undefined
+    ? "dominant"
+    : overrides?.downscale;
+
   const normalized = normalizeFixOptions({
     assetType: assetType.value.assetType,
     targetWidth: defaultTarget.width,
     targetHeight: defaultTarget.height,
     ...overrides,
+    ...(suggestedAlpha ? { alpha: suggestedAlpha } : {}),
+    ...(suggestedDownscale ? { downscale: suggestedDownscale } : {}),
     grid: gridOverrides,
+    ...(suggestedCleanup ? { cleanup: suggestedCleanup } : {}),
     ...(sheetLayout.confidence >= 0.65 && assetType.value.mode === "spriteSheet" ? { sheet: sheetFromLayout(sheetLayout) } : {}),
   });
   if (!normalized.ok) {
@@ -732,6 +749,72 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     warnings,
     support: definition.support,
   }, warnings);
+}
+
+function detectBakedTransparencyForSuggestion(
+  image: RGBAImage,
+  gridCandidates: GridCandidate[],
+  sheetLayout: SheetLayoutDetection,
+  overrides: AutomationFixOptionsInput | undefined,
+): boolean {
+  const report = analyzeQualityReport(image, {
+    assetType: "sprite",
+    maxColors: overrides?.maxColors ?? 24,
+    alpha: "backgroundFloodFill",
+    gridCandidates,
+    sheetLayout,
+  });
+  return report.findings.some((finding) => finding.id === "baked-transparency-background");
+}
+
+function resolveSuggestionGridCandidates(
+  image: RGBAImage,
+  fallbackCandidates: GridCandidate[],
+  assetType: AssetType,
+  bakedTransparencyDetected: boolean,
+  overrides: AutomationFixOptionsInput | undefined,
+): GridCandidate[] {
+  if (!shouldCleanBakedBackground(assetType, bakedTransparencyDetected) || overrides?.grid?.detect === "manual") {
+    return fallbackCandidates;
+  }
+
+  const cleaned = applyAlphaMode(image, "backgroundFloodFill", alphaSettingsFromOverrides(overrides)).image;
+  return withFallbackGridCandidates(cleaned);
+}
+
+function shouldCleanBakedBackground(assetType: AssetType, bakedTransparencyDetected: boolean): boolean {
+  return bakedTransparencyDetected && (assetType === "sprite" || assetType === "icon");
+}
+
+function alphaSettingsFromOverrides(overrides: AutomationFixOptionsInput | undefined): NonNullable<FixOptions["alphaSettings"]> {
+  return {
+    threshold: overrides?.alphaThreshold ?? 128,
+    tolerance: overrides?.alphaTolerance ?? 18,
+    colorKey: overrides?.alphaColorKey ?? "#ffffff",
+    decontaminateRgb: overrides?.decontaminateRgb ?? true,
+    transparentRgb: overrides?.transparentRgb ?? "#000000",
+  };
+}
+
+function suggestAutomationCleanupOverrides(
+  overrides: Partial<FixOptions["cleanup"]> | undefined,
+  assetType: AssetType,
+  bakedTransparencyDetected: boolean,
+  grid: GridCandidate,
+): Partial<FixOptions["cleanup"]> | undefined {
+  const selectedScale = Math.min(grid.scaleX, grid.scaleY);
+  const lowScaleBakedSprite = shouldCleanBakedBackground(assetType, bakedTransparencyDetected) && selectedScale < 4;
+  if (!lowScaleBakedSprite) {
+    return overrides;
+  }
+
+  return {
+    removeOrphans: false,
+    jaggyCleanup: false,
+    removeHalos: false,
+    denoiseStrength: 0,
+    ...overrides,
+  };
 }
 
 function normalizeQualityReportAssets(request: CreateQualityReportRequest): QualityReportAssetRequest[] {
@@ -782,7 +865,8 @@ function mergeSeverity(
 function classifyAssetType(
   image: RGBAImage,
   sheetLayout: SheetLayoutDetection,
-  tilemapDiagnostics: ReturnType<typeof analyzeTilemapDiagnostics>
+  tilemapDiagnostics: ReturnType<typeof analyzeTilemapDiagnostics>,
+  bakedTransparencyDetected = false,
 ): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {
   const tilemapCandidate = tilemapDiagnostics.selected;
   if (
@@ -803,6 +887,10 @@ function classifyAssetType(
   const ratio = image.width / image.height;
   if (ratio >= 2 || ratio <= 0.5) {
     return parseAutomationAssetType("spriteSheet");
+  }
+
+  if (bakedTransparencyDetected) {
+    return parseAutomationAssetType("sprite");
   }
 
   const isSquare = Math.abs(ratio - 1) <= 0.08;

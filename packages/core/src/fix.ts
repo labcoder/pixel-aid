@@ -31,10 +31,13 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     return fixSheetFrames(image, options, runtime);
   }
 
+  const sourceAlphaResult =
+    options.alpha === "backgroundFloodFill" ? applyAlphaMode(image, options.alpha, options.alphaSettings) : undefined;
+  const processingSource = sourceAlphaResult?.image ?? image;
   reportProgress(runtime, "grid-detection", 5, "Resolving pixel grid");
   assertNotCancelled(runtime?.signal);
-  const grid = resolveGrid(image, options);
-  const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(image, grid) : undefined;
+  const grid = resolveGrid(processingSource, options);
+  const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(processingSource, grid) : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
   assertNotCancelled(runtime?.signal);
   const localDriftBoundaries = localDrift?.used && localDrift.xBoundaryRows && localDrift.yBoundaryColumns
@@ -43,9 +46,6 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
-  const sourceAlphaResult =
-    options.alpha === "backgroundFloodFill" ? applyAlphaMode(image, options.alpha, options.alphaSettings) : undefined;
-  const processingSource = sourceAlphaResult?.image ?? image;
   const contrastExpanded = applyContrastExpansion(processingSource, options.cleanup.contrastExpansion);
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);

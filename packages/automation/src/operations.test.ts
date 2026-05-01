@@ -55,6 +55,31 @@ describe("automation operations", () => {
     });
   });
 
+  it("suggests foreground-cleaned grid and non-destructive cleanup for low-scale baked checkerboard sprites", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-baked-sprite-"));
+    const input = path.join(dir, "baked-sprite.png");
+    try {
+      await encodePngFile(createLowScaleBakedCheckerboardSprite(), input);
+
+      const result = await suggestFixSettings({ inputPath: input, options: { assetType: "sprite" } });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.options.assetType).toBe("sprite");
+      expect(result.value.options.alpha).toBe("backgroundFloodFill");
+      expect(result.value.options.downscale).toBe("dominant");
+      expect(result.value.options.targetWidth).toBeLessThan(80);
+      expect(result.value.options.targetHeight).toBeLessThan(90);
+      expect(result.value.options.grid.scaleX).toBeLessThanOrEqual(3.25);
+      expect(result.value.options.cleanup.removeOrphans).toBe(false);
+      expect(result.value.options.cleanup.jaggyCleanup).toBe(false);
+      expect(result.value.options.cleanup.removeHalos).toBe(false);
+      expect(result.value.options.cleanup.denoiseStrength).toBe(0);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("creates a deterministic non-destructive batch quality report", async () => {
     await withFixture(async ({ dir, input }) => {
       const second = path.join(dir, "background.png");
@@ -310,4 +335,62 @@ function createRepeatedTilemapImage(columns: number, rows: number, tileSize: num
   }
 
   return image;
+}
+
+function createLowScaleBakedCheckerboardSprite(): RGBAImage {
+  const scale = 3;
+  const nativeWidth = 91;
+  const nativeHeight = 96;
+  const image = {
+    width: nativeWidth * scale,
+    height: nativeHeight * scale,
+    data: new Uint8ClampedArray(nativeWidth * nativeHeight * scale * scale * 4)
+  } satisfies RGBAImage;
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const darkCell = (Math.floor(x / 24) + Math.floor(y / 24)) % 2 === 1;
+      const value = darkCell ? 202 : 250;
+      const offset = (y * image.width + x) * 4;
+      image.data[offset] = value;
+      image.data[offset + 1] = value;
+      image.data[offset + 2] = value;
+      image.data[offset + 3] = 255;
+    }
+  }
+
+  fillScaledRect(image, scale, 31, 12, 29, 6, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 25, 18, 41, 20, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 28, 17, 35, 31, [253, 247, 219, 255]);
+  fillScaledRect(image, scale, 20, 37, 16, 29, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 55, 37, 16, 29, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 37, 45, 17, 30, [253, 247, 219, 255]);
+  fillScaledRect(image, scale, 30, 70, 13, 10, [114, 80, 65, 255]);
+  fillScaledRect(image, scale, 49, 70, 13, 10, [114, 80, 65, 255]);
+  fillScaledRect(image, scale, 32, 29, 7, 8, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 52, 29, 7, 8, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 43, 37, 5, 3, [22, 20, 31, 255]);
+  fillScaledRect(image, scale, 39, 42, 13, 3, [22, 20, 31, 255]);
+
+  return image;
+}
+
+function fillScaledRect(
+  image: RGBAImage,
+  scale: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rgba: readonly [number, number, number, number],
+): void {
+  for (let py = y * scale; py < (y + height) * scale; py += 1) {
+    for (let px = x * scale; px < (x + width) * scale; px += 1) {
+      const offset = (py * image.width + px) * 4;
+      image.data[offset] = rgba[0];
+      image.data[offset + 1] = rgba[1];
+      image.data[offset + 2] = rgba[2];
+      image.data[offset + 3] = rgba[3];
+    }
+  }
 }

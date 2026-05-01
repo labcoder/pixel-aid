@@ -428,6 +428,17 @@ function darkPixelRatioInRect(image: RGBAImage, rect: Rect): number {
   return dark / Math.max(1, total);
 }
 
+function projectNativeRectToOutput(grid: GridCandidate, nativeScale: number, rect: Rect): Rect {
+  const sourceX = grid.sourceRect?.x ?? grid.phaseX;
+  const sourceY = grid.sourceRect?.y ?? grid.phaseY;
+  return {
+    x: Math.max(0, Math.floor((rect.x * nativeScale - sourceX) / grid.scaleX)),
+    y: Math.max(0, Math.floor((rect.y * nativeScale - sourceY) / grid.scaleY)),
+    w: Math.max(1, Math.ceil((rect.w * nativeScale) / grid.scaleX)),
+    h: Math.max(1, Math.ceil((rect.h * nativeScale) / grid.scaleY))
+  };
+}
+
 function hasTransparentNeighbor(image: RGBAImage, x: number, y: number): boolean {
   const offsets = [
     [-1, 0],
@@ -519,7 +530,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
     expect(suggestion.downscale).toBe("dominant");
-    expect(suggestion.contrastExpansionEnabled).toBe(true);
+    expect(suggestion.contrastExpansionEnabled).toBe(false);
     expect(suggestion.outlineMode).toBe("repairExisting");
     expect(suggestion.outlineSize).toBe(1);
     expect(suggestion.outlineSourceColors).toHaveLength(1);
@@ -535,7 +546,7 @@ describe("fix setting suggestions", () => {
     const edgeMetrics = exteriorEdgeColorMetrics(result.image);
 
     expect(result.settings.downscale).toBe("dominant");
-    expect(result.settings.cleanup.contrastExpansion?.enabled).toBe(true);
+    expect(result.settings.cleanup.contrastExpansion?.enabled).not.toBe(true);
     expect(result.settings.cleanup.outlineMode).toBe("repairExisting");
     expect(result.settings.cleanup.outlineSize).toBe(1);
     expect(countSoftAlphaPixels(result.image)).toBe(0);
@@ -553,6 +564,10 @@ describe("fix setting suggestions", () => {
     expect(suggestion.alpha).toBe("backgroundFloodFill");
     expect(suggestion.downscale).toBe("dominant");
     expect(suggestion.gridScaleX).toBeLessThanOrEqual(3.25);
+    expect(suggestion.removeOrphans).toBe(false);
+    expect(suggestion.jaggyCleanup).toBe(false);
+    expect(suggestion.removeHalos).toBe(false);
+    expect(suggestion.denoiseStrength).toBe(0);
     expect(suggestion.contrastExpansionEnabled).toBe(false);
     expect(suggestion.outlineMode).toBe("repairExisting");
     expect(suggestion.outlineSize).toBe(1);
@@ -562,11 +577,12 @@ describe("fix setting suggestions", () => {
   test("suggested low-scale baked checkerboard cleanup does not spread dark pixels across the face", () => {
     const source = lowScaleBakedCheckerboardPandaSource();
     const result = fixImage(source, buildSuggestedSingleFixOptions(source));
+    const faceRect = projectNativeRectToOutput(result.grid, 3, { x: 28, y: 17, w: 35, h: 31 });
 
     expect(result.settings.cleanup.contrastExpansion?.enabled).not.toBe(true);
     expect(result.settings.cleanup.outlineSize).toBe(1);
     expect(result.settings.cleanup.outlineSourceColors).toHaveLength(1);
-    expect(darkPixelRatioInRect(result.image, { x: 28, y: 18, w: 35, h: 30 })).toBeLessThan(0.45);
+    expect(darkPixelRatioInRect(result.image, faceRect)).toBeLessThan(0.45);
   });
 
   test("suggests local correction for high-resolution single sprites", () => {
