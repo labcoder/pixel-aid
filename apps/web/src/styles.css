@@ -327,6 +327,109 @@ button:disabled {
   padding: 0;
 }
 
+.palette-library-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+
+.palette-library-actions button,
+.palette-color-row button,
+.palette-add-row button,
+.palette-export-row button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  min-height: 32px;
+  padding: 0 0.45rem;
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.palette-library-actions button:hover,
+.palette-color-row button:hover,
+.palette-add-row button:hover,
+.palette-export-row button:hover {
+  color: var(--text);
+  border-color: var(--accent-muted);
+}
+
+.palette-library-actions button:disabled,
+.palette-color-row button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.palette-library-list,
+.palette-color-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.palette-library-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 0.45rem;
+}
+
+.palette-library-entry.active .preset-row {
+  border-color: var(--accent-muted);
+  color: var(--text);
+}
+
+.palette-library-editor {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.85rem;
+}
+
+.palette-color-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) 28px 28px 28px;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.palette-color-row input[type="color"],
+.palette-add-row input[type="color"] {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.palette-color-row code {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-add-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.palette-add-row input[type="text"] {
+  min-width: 0;
+}
+
+.palette-export-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
 .asset-list .asset-row {
   min-height: 52px;
   padding: 0.4rem;

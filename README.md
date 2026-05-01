@@ -63,7 +63,7 @@ See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for p
 3. Use the guided recommendation card for a first pass. Auto Suggest classifies the selected asset type, shows confidence and support warnings, and caches the grid candidates used by the preview cards. The manual Asset type selector is stored per imported asset.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Inspect the result in mode-specific views. Single sprites use Input, Compare, and Output; sheet-like modes use Input, Output, and Timeline. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
-6. Save a local editor preset when the current cleanup settings are useful for future imports. Local presets and editor defaults persist in browser/desktop storage without changing per-asset classification.
+6. Save local editor presets and reusable palettes when the current cleanup settings or extracted palette should carry into future imports. Local presets, palette libraries, and editor defaults persist in browser/desktop storage without changing per-asset classification.
 7. Export a ZIP containing the fixed PNG and generic JSON manifest.
 
 Automation workflow:
@@ -80,11 +80,12 @@ Editor:
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
 - Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri.
-- Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, and saved user presets across web and desktop sessions. Manual asset type remains per imported asset.
+- Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, saved user presets, and saved palette libraries across web and desktop sessions. Manual asset type remains per imported asset.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
 - Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.
 - Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, palette count, quantizer strategy, and dithering mode.
+- Palette library panel that can save fixed/output palettes, import `.hex`, `.gpl`, and JSON palette text, edit palette names and colors, reorder/remove/add colors, export palette sidecars, and apply a saved palette as the fixed palette for future fixes and exports.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
 - Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, active-view native size readouts, and draggable single-sprite split comparison.
 - Crop-aware input/output alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
@@ -126,7 +127,7 @@ Automation:
 
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
-- Palette editing is not yet a full "palette studio"; reusable palette libraries and richer manual palette editing are planned for 0.5.0.
+- Palette libraries and basic palette editing are implemented. Advanced palette harmonization, project-wide palette governance, and richer palette-analysis views remain future work.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently supports generic manifests plus Godot, Unity, and Phaser helper files. TexturePacker, Tiled, and LDtk adapters are future work.
 - Tilesets are inspect-only until seam diagnostics and tile-engine metadata exist. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
@@ -138,7 +139,7 @@ Automation:
 1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
 2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
 3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
-4. Palette workflow: add extracted-palette editing, fixed palettes, palette locking across frames, and palette export formats such as `.hex`, `.gpl`, and JSON.
+4. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
 5. Exporters: deepen Godot, Unity, and Phaser import helpers, then add TexturePacker, Tiled, and LDtk adapters, including tileset seam diagnostics and tilemap metadata when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
 7. Automation hardening: turn the MCP-ready handlers into a server process, add a local HTTP API, add non-PNG codecs, and support progress events for long batch jobs.
