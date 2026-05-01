@@ -742,6 +742,7 @@ function drawFrameOverlays(
     ctx.moveTo(geometry.pivotX + 0.5, geometry.pivotY - 5);
     ctx.lineTo(geometry.pivotX + 0.5, geometry.pivotY + 5);
     ctx.stroke();
+    drawFrameMetadataOverlays(ctx, frame, geometry, zoom);
 
     if (selected) {
       ctx.fillRect(geometry.x, geometry.y - 16, Math.max(46, frame.name.length * 6), 14);
@@ -751,6 +752,48 @@ function drawFrameOverlays(
         drawFrameResizeHandles(ctx, geometry);
       }
     }
+  }
+  ctx.restore();
+}
+
+function drawFrameMetadataOverlays(
+  ctx: CanvasRenderingContext2D,
+  frame: SpriteFrame,
+  geometry: ReturnType<typeof getFrameOverlayGeometry>,
+  zoom: number
+): void {
+  if (!frame.boxes && !frame.anchors) {
+    return;
+  }
+
+  ctx.save();
+  ctx.setLineDash([]);
+  for (const box of frame.boxes ?? []) {
+    ctx.strokeStyle = box.color;
+    ctx.fillStyle = `${box.color}22`;
+    ctx.lineWidth = 2;
+    const x = geometry.x + box.rect.x * zoom;
+    const y = geometry.y + box.rect.y * zoom;
+    const width = Math.max(1, box.rect.w * zoom - 1);
+    const height = Math.max(1, box.rect.h * zoom - 1);
+    ctx.fillRect(x, y, width, height);
+    ctx.strokeRect(x + 0.5, y + 0.5, width, height);
+  }
+
+  for (const anchor of frame.anchors ?? []) {
+    const x = geometry.x + anchor.point.x * zoom;
+    const y = geometry.y + anchor.point.y * zoom;
+    ctx.strokeStyle = anchor.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, 4, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x - 6, y + 0.5);
+    ctx.lineTo(x + 6, y + 0.5);
+    ctx.moveTo(x + 0.5, y - 6);
+    ctx.lineTo(x + 0.5, y + 6);
+    ctx.stroke();
   }
   ctx.restore();
 }

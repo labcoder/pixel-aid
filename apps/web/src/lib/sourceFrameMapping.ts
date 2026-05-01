@@ -8,7 +8,9 @@ export function mapFrameToSource(frame: SpriteFrame, scaleX: number, scaleY: num
       pivot: {
         x: Math.round(frame.pivot.x * scaleX),
         y: Math.round(frame.pivot.y * scaleY)
-      }
+      },
+      ...(frame.anchors ? { anchors: scaleAnchors(frame.anchors, scaleX, scaleY) } : {}),
+      ...(frame.boxes ? { boxes: scaleBoxes(frame.boxes, scaleX, scaleY) } : {})
     };
   }
 
@@ -23,6 +25,30 @@ export function mapFrameToSource(frame: SpriteFrame, scaleX: number, scaleY: num
     pivot: {
       x: Math.round(frame.pivot.x * scaleX),
       y: Math.round(frame.pivot.y * scaleY)
-    }
+    },
+    ...(frame.anchors ? { anchors: scaleAnchors(frame.anchors, scaleX, scaleY) } : {}),
+    ...(frame.boxes ? { boxes: scaleBoxes(frame.boxes, scaleX, scaleY) } : {})
   };
+}
+
+function scaleAnchors(anchors: NonNullable<SpriteFrame["anchors"]>, scaleX: number, scaleY: number): NonNullable<SpriteFrame["anchors"]> {
+  return anchors.map((anchor) => ({
+    ...anchor,
+    point: {
+      x: Math.round(anchor.point.x * scaleX),
+      y: Math.round(anchor.point.y * scaleY)
+    }
+  }));
+}
+
+function scaleBoxes(boxes: NonNullable<SpriteFrame["boxes"]>, scaleX: number, scaleY: number): NonNullable<SpriteFrame["boxes"]> {
+  return boxes.map((box) => ({
+    ...box,
+    rect: {
+      x: Math.round(box.rect.x * scaleX),
+      y: Math.round(box.rect.y * scaleY),
+      w: Math.max(1, Math.round(box.rect.w * scaleX)),
+      h: Math.max(1, Math.round(box.rect.h * scaleY))
+    }
+  }));
 }

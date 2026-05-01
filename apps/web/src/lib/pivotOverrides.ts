@@ -34,7 +34,9 @@ export function applyPivotOverrides({
       rect: { ...frame.rect },
       ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
       pivot: pivot ? { ...pivot } : { ...frame.pivot },
-      ...(frame.tags ? { tags: [...frame.tags] } : {})
+      ...(frame.tags ? { tags: [...frame.tags] } : {}),
+      ...(frame.anchors ? { anchors: frame.anchors.map((anchor) => ({ ...anchor, point: { ...anchor.point } })) } : {}),
+      ...(frame.boxes ? { boxes: frame.boxes.map((box) => ({ ...box, rect: { ...box.rect } })) } : {})
     };
   });
 }

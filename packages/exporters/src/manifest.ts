@@ -127,6 +127,25 @@ export function validateManifest(manifest: PixelAssetManifest): string[] {
     if (exceedsX || exceedsY) {
       problems.push(`Frame ${frame.name} exceeds sheet bounds`);
     }
+
+    for (const box of frame.boxes ?? []) {
+      const boxExceedsFrame =
+        box.rect.x < 0 ||
+        box.rect.y < 0 ||
+        box.rect.w < 1 ||
+        box.rect.h < 1 ||
+        box.rect.x + box.rect.w > frame.rect.w ||
+        box.rect.y + box.rect.h > frame.rect.h;
+      if (boxExceedsFrame) {
+        problems.push(`Box ${box.name} on frame ${frame.name} exceeds frame bounds`);
+      }
+    }
+
+    for (const anchor of frame.anchors ?? []) {
+      if (anchor.point.x < 0 || anchor.point.y < 0 || anchor.point.x > frame.rect.w || anchor.point.y > frame.rect.h) {
+        problems.push(`Anchor ${anchor.name} on frame ${frame.name} exceeds frame bounds`);
+      }
+    }
   }
 
   for (const [animationName, animation] of Object.entries(manifest.animations)) {
