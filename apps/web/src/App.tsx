@@ -3084,7 +3084,7 @@ export function App() {
     [appendLog, detectedRowAnimations, selectedAnimationName]
   );
 
-  const updateDetectedAnimationCellSize = useCallback(
+  const updateDetectedAnimationOutputCellSize = useCallback(
     (animationName: string, dimension: "width" | "height", value: number) => {
       const nextValue = clampSheetInteger(value, 1, 1024);
       setDetectedSheetFrames((current) => {
@@ -3103,16 +3103,13 @@ export function App() {
           cellWidth: dimension === "width" ? nextValue : row?.cellWidth ?? frameWidth,
           cellHeight: dimension === "height" ? nextValue : row?.cellHeight ?? frameHeight,
           margin: sheetMargin,
-          spacing: sheetSpacing,
-          scaleX: gridScaleX,
-          scaleY: gridScaleY,
-          ...(selectedAsset ? { sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height } } : {})
+          spacing: sheetSpacing
         });
       });
       setFixResult(null);
       setIsPlaying(false);
     },
-    [detectedRowAnimations, frameHeight, frameWidth, gridScaleX, gridScaleY, selectedAsset, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
 
   const changePlaybackDirection = useCallback(
@@ -4484,12 +4481,12 @@ export function App() {
           </div>
         ) : null}
         {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
-          <div className="animation-cell-controls" aria-label="Animation row cell sizes">
+          <div className="animation-cell-controls" aria-label="Animation row output cell sizes">
             <div className="animation-cell-header">
               <span>Animation</span>
               <span>Frames</span>
-              <span>Cell W</span>
-              <span>Cell H</span>
+              <span>Output W</span>
+              <span>Output H</span>
             </div>
             {detectedRowAnimations.map((animation) => {
               const row = plannedSheetLayout.rows.find((item) => item.name === animation.name);
@@ -4498,20 +4495,20 @@ export function App() {
                   <strong>{animation.name}</strong>
                   <span>{animation.frameNames.length}</span>
                   <input
-                    aria-label={`${animation.name} cell width`}
+                    aria-label={`${animation.name} output cell width`}
                     type="number"
                     min="1"
                     max="1024"
                     value={row?.cellWidth ?? frameWidth}
-                    onChange={(event) => updateDetectedAnimationCellSize(animation.name, "width", Number(event.currentTarget.value))}
+                    onChange={(event) => updateDetectedAnimationOutputCellSize(animation.name, "width", Number(event.currentTarget.value))}
                   />
                   <input
-                    aria-label={`${animation.name} cell height`}
+                    aria-label={`${animation.name} output cell height`}
                     type="number"
                     min="1"
                     max="1024"
                     value={row?.cellHeight ?? frameHeight}
-                    onChange={(event) => updateDetectedAnimationCellSize(animation.name, "height", Number(event.currentTarget.value))}
+                    onChange={(event) => updateDetectedAnimationOutputCellSize(animation.name, "height", Number(event.currentTarget.value))}
                   />
                 </div>
               );

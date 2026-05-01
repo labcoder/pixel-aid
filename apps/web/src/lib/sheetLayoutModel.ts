@@ -109,7 +109,8 @@ export function resizeAnimationCells({
   spacing,
   scaleX,
   scaleY,
-  sourceSize
+  sourceSize,
+  resizeSourceFootprints
 }: {
   frames: readonly SpriteFrame[];
   animations: readonly AnimationTag[];
@@ -121,6 +122,7 @@ export function resizeAnimationCells({
   scaleX?: number;
   scaleY?: number;
   sourceSize?: { width: number; height: number };
+  resizeSourceFootprints?: boolean;
 }): SpriteFrame[] {
   return repackAnimationRows({
     frames,
@@ -130,6 +132,7 @@ export function resizeAnimationCells({
     ...(scaleX !== undefined ? { scaleX } : {}),
     ...(scaleY !== undefined ? { scaleY } : {}),
     ...(sourceSize !== undefined ? { sourceSize } : {}),
+    ...(resizeSourceFootprints !== undefined ? { resizeSourceFootprints } : {}),
     rowOverrides: {
       [animationName]: {
         cellWidth: Math.max(1, Math.round(cellWidth)),
@@ -147,7 +150,8 @@ export function repackAnimationRows({
   rowOverrides = {},
   scaleX,
   scaleY,
-  sourceSize
+  sourceSize,
+  resizeSourceFootprints = false
 }: {
   frames: readonly SpriteFrame[];
   animations: readonly AnimationTag[];
@@ -157,6 +161,7 @@ export function repackAnimationRows({
   scaleX?: number;
   scaleY?: number;
   sourceSize?: { width: number; height: number };
+  resizeSourceFootprints?: boolean;
 }): SpriteFrame[] {
   const framesByName = new Map(frames.map((frame) => [frame.name, frame]));
   const packedFrames: SpriteFrame[] = [];
@@ -186,7 +191,7 @@ export function repackAnimationRows({
             w: rowWidth,
             h: rowHeight
           },
-          override && scaleX && scaleY && sourceSize
+          override && resizeSourceFootprints && scaleX && scaleY && sourceSize
             ? resizeSourceRectAroundCenter(frame.sourceRect ?? frame.rect, rowWidth * scaleX, rowHeight * scaleY, sourceSize)
             : undefined
         )
