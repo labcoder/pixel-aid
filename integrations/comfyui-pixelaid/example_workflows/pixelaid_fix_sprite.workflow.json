@@ -1,0 +1,36 @@
+{
+  "last_node_id": 3,
+  "last_link_id": 2,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "LoadImage",
+      "pos": [80, 160],
+      "size": [315, 314],
+      "widgets_values": ["generated_sprite.png", "image"]
+    },
+    {
+      "id": 2,
+      "type": "PixelAidFixSprite",
+      "pos": [460, 160],
+      "size": [360, 360],
+      "inputs": [
+        { "name": "image", "type": "IMAGE", "link": 1 }
+      ],
+      "widgets_values": [
+        "pixelaid_outputs",
+        "pixelaid",
+        "sprite",
+        "64x64",
+        24,
+        "detailPreserving",
+        "backgroundFloodFill",
+        true
+      ]
+    }
+  ],
+  "links": [
+    [1, 1, 0, 2, 0, "IMAGE"]
+  ],
+  "version": 0.4
+}

@@ -7,6 +7,8 @@ coverage/
 docs/internal/
 packages/core/.visual-regression-diffs/
 apps/desktop/src-tauri/target/
+__pycache__/
+*.pyc
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/Cargo.lock
 *.local
