@@ -29,6 +29,28 @@ export type {
 } from "./engineTypes";
 export { createPhaserAtlasExport } from "./phaser";
 export type { PhaserAtlas } from "./phaser";
+export { createAsepriteCompanionExport, importAsepriteWorkflow } from "./aseprite";
+export type {
+  AsepriteCompanionExport,
+  AsepriteFrameData,
+  AsepriteFrameEntry,
+  AsepriteFrameTag,
+  AsepriteJson,
+  AsepriteRect,
+  AsepriteSlice,
+  AsepriteSliceKey,
+  EditorWorkflowImport,
+  EditorWorkflowWarning
+} from "./aseprite";
+export { createPixeloramaCompanionExport, importPixeloramaWorkflow } from "./pixelorama";
+export type {
+  PixeloramaAnimationTag,
+  PixeloramaCompanionExport,
+  PixeloramaCompanionMetadata,
+  PixeloramaFrameMetadata,
+  PixeloramaPaletteMetadata,
+  PixeloramaProjectMetadata
+} from "./pixelorama";
 export { createGodotImportExport } from "./godot";
 export { createUnityExport, createUnityImportExport, createUnityImporterScript, toUnityPivot } from "./unity";
 export type { UnityExportOptions, UnityImportExportOptions } from "./unity";
