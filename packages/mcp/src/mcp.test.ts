@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { encodePngFile } from "@pixelaid/automation";
 import {
+  handlePixelAidMcpRequest,
   handlePixelAidTool,
   pixelaidMcpTools,
   validateToolInput,
@@ -22,6 +23,85 @@ async function withFixture<T>(run: (paths: { dir: string; input: string; frames:
 }
 
 describe("PixelAid MCP-ready handlers", () => {
+  it("handles tools/list JSON-RPC requests", async () => {
+    const response = await handlePixelAidMcpRequest({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/list",
+    });
+
+    expect(response).toMatchObject({ jsonrpc: "2.0", id: 1 });
+    expect(response).not.toHaveProperty("error");
+
+    const result = response?.result as { tools: typeof pixelaidMcpTools };
+    expect(result.tools.map((tool) => tool.name)).toEqual(pixelaidMcpTools.map((tool) => tool.name));
+    expect(result.tools[0]?.inputSchema.type).toBe("object");
+  });
+
+  it("handles tools/call JSON-RPC requests with progress-aware structured content", async () => {
+    await withFixture(async ({ input }) => {
+      const response = await handlePixelAidMcpRequest({
+        jsonrpc: "2.0",
+        id: "inspect-1",
+        method: "tools/call",
+        params: {
+          name: "inspect_image",
+          arguments: { inputPath: input },
+        },
+      });
+
+      expect(response).toMatchObject({ jsonrpc: "2.0", id: "inspect-1" });
+      expect(response).not.toHaveProperty("error");
+
+      const result = response?.result as {
+        content: Array<{ type: "text"; text: string }>;
+        structuredContent: {
+          ok: true;
+          result: { image: { width: number; height: number } };
+          progress: Array<{ operation: string; stage: string; percent: number }>;
+        };
+        isError: boolean;
+      };
+      expect(result.isError).toBe(false);
+      expect(result.content[0]?.text).toBe("inspect_image completed.");
+      expect(result.structuredContent.result.image).toEqual({ width: 4, height: 4 });
+      expect(result.structuredContent.progress[0]).toMatchObject({
+        operation: "inspect_image",
+        stage: "input-read",
+        percent: 5,
+      });
+      expect(result.structuredContent.progress.at(-1)).toMatchObject({
+        operation: "inspect_image",
+        stage: "complete",
+        percent: 100,
+      });
+    });
+  });
+
+  it("returns machine-readable JSON-RPC error envelopes", async () => {
+    const response = await handlePixelAidMcpRequest({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "missing/method",
+    });
+
+    expect(response).toMatchObject({
+      jsonrpc: "2.0",
+      id: 2,
+      error: {
+        code: -32601,
+        message: "Method not found",
+        data: {
+          ok: false,
+          error: {
+            code: "method_not_found",
+            message: 'Unsupported MCP method "missing/method".',
+          },
+        },
+      },
+    });
+  });
+
   it("declares the expected automation tools", () => {
     expect(pixelaidMcpTools.map((tool) => tool.name)).toEqual([
       "inspect_image",

@@ -8,6 +8,8 @@ import {
   inspectImage,
   suggestFixSettings,
   type AutomationResult,
+  type AutomationProgressEvent,
+  type AutomationRuntimeOptions,
   type CreateQualityReportRequest,
   type ExportEngineBundleRequest,
   type ExtractPaletteFileRequest,
@@ -45,6 +47,42 @@ export type PixelAidMcpResponse = {
   structuredContent: Record<string, unknown>;
   isError: boolean;
 };
+
+export type PixelAidMcpJsonRpcId = string | number | null;
+
+export type PixelAidMcpJsonRpcRequest = {
+  jsonrpc?: "2.0";
+  id?: PixelAidMcpJsonRpcId;
+  method: string;
+  params?: unknown;
+};
+
+export type PixelAidMcpJsonRpcSuccessResponse = {
+  jsonrpc: "2.0";
+  id: PixelAidMcpJsonRpcId;
+  result: unknown;
+};
+
+export type PixelAidMcpJsonRpcErrorResponse = {
+  jsonrpc: "2.0";
+  id: PixelAidMcpJsonRpcId;
+  error: {
+    code: number;
+    message: string;
+    data: {
+      ok: false;
+      error: {
+        code: string;
+        message: string;
+        details?: Record<string, unknown>;
+      };
+    };
+  };
+};
+
+export type PixelAidMcpJsonRpcResponse =
+  | PixelAidMcpJsonRpcSuccessResponse
+  | PixelAidMcpJsonRpcErrorResponse;
 
 type ToolInput = Record<string, unknown>;
 
@@ -157,7 +195,85 @@ export function validateToolInput(toolName: PixelAidMcpToolName, input: unknown)
   return { ok: true, value: record, warnings: [] };
 }
 
-export async function handlePixelAidTool(toolName: PixelAidMcpToolName, input: unknown): Promise<PixelAidMcpResponse> {
+export async function handlePixelAidMcpRequest(request: unknown): Promise<PixelAidMcpJsonRpcResponse | undefined> {
+  const id = getJsonRpcId(request);
+  if (!isJsonRpcRequest(request)) {
+    return createJsonRpcErrorResponse(
+      id,
+      -32600,
+      "Invalid Request",
+      "invalid_request",
+      "MCP requests must be JSON-RPC 2.0 objects with a string method.",
+    );
+  }
+
+  try {
+    switch (request.method) {
+      case "initialize":
+        return createJsonRpcSuccessResponse(id, createInitializeResult(request.params));
+      case "notifications/initialized":
+        return undefined;
+      case "ping":
+        return createJsonRpcSuccessResponse(id, {});
+      case "tools/list":
+        return createJsonRpcSuccessResponse(id, { tools: pixelaidMcpTools });
+      case "tools/call":
+        return handleToolsCallRequest(id, request.params);
+      default:
+        return createJsonRpcErrorResponse(
+          id,
+          -32601,
+          "Method not found",
+          "method_not_found",
+          `Unsupported MCP method "${request.method}".`,
+        );
+    }
+  } catch (error) {
+    return createJsonRpcErrorResponse(
+      id,
+      -32000,
+      "Server error",
+      "server_error",
+      error instanceof Error ? error.message : "Unexpected MCP server error.",
+    );
+  }
+}
+
+export function createJsonRpcErrorResponse(
+  id: PixelAidMcpJsonRpcId,
+  rpcCode: number,
+  rpcMessage: string,
+  errorCode: string,
+  errorMessage: string,
+  details?: Record<string, unknown>,
+): PixelAidMcpJsonRpcErrorResponse {
+  const error: PixelAidMcpJsonRpcErrorResponse["error"]["data"]["error"] = {
+    code: errorCode,
+    message: errorMessage,
+  };
+  if (details) {
+    error.details = details;
+  }
+
+  return {
+    jsonrpc: "2.0",
+    id,
+    error: {
+      code: rpcCode,
+      message: rpcMessage,
+      data: {
+        ok: false,
+        error,
+      },
+    },
+  };
+}
+
+export async function handlePixelAidTool(
+  toolName: PixelAidMcpToolName,
+  input: unknown,
+  runtime?: AutomationRuntimeOptions,
+): Promise<PixelAidMcpResponse> {
   const validated = validateToolInput(toolName, input);
   if (!validated.ok) {
     return toMcpResponse(toolName, validated);
@@ -166,17 +282,17 @@ export async function handlePixelAidTool(toolName: PixelAidMcpToolName, input: u
   const request = validated.value;
   switch (toolName) {
     case "inspect_image":
-      return toMcpResponse(toolName, await inspectImage(toInspectRequest(request)));
+      return toMcpResponse(toolName, await inspectImage(toInspectRequest(request), runtime));
     case "quality_report":
-      return toMcpResponse(toolName, await createQualityReport(toQualityReportRequest(request)));
+      return toMcpResponse(toolName, await createQualityReport(toQualityReportRequest(request), runtime));
     case "suggest_fix_settings":
-      return toMcpResponse(toolName, await suggestFixSettings(toSuggestRequest(request)));
+      return toMcpResponse(toolName, await suggestFixSettings(toSuggestRequest(request), runtime));
     case "fix_sprite":
-      return toMcpResponse(toolName, await fixSprite(toFixSpriteRequest(request)));
+      return toMcpResponse(toolName, await fixSprite(toFixSpriteRequest(request), runtime));
     case "fix_sprite_sheet":
-      return toMcpResponse(toolName, await fixSpriteSheet(toFixSpriteSheetRequest(request)));
+      return toMcpResponse(toolName, await fixSpriteSheet(toFixSpriteSheetRequest(request), runtime));
     case "detect_sprite_sheet": {
-      const inspection = await inspectImage(toInspectRequest(request));
+      const inspection = await inspectImage(toInspectRequest(request), runtime);
       if (!inspection.ok) {
         return toMcpResponse(toolName, inspection);
       }
@@ -191,10 +307,108 @@ export async function handlePixelAidTool(toolName: PixelAidMcpToolName, input: u
       });
     }
     case "extract_palette":
-      return toMcpResponse(toolName, await extractPaletteFile(toExtractPaletteRequest(request)));
+      return toMcpResponse(toolName, await extractPaletteFile(toExtractPaletteRequest(request), runtime));
     case "export_engine_bundle":
-      return toMcpResponse(toolName, await exportEngineBundle(toExportEngineBundleRequest(request)));
+      return toMcpResponse(toolName, await exportEngineBundle(toExportEngineBundleRequest(request), runtime));
   }
+}
+
+function createJsonRpcSuccessResponse(id: PixelAidMcpJsonRpcId, result: unknown): PixelAidMcpJsonRpcSuccessResponse {
+  return {
+    jsonrpc: "2.0",
+    id,
+    result,
+  };
+}
+
+async function handleToolsCallRequest(
+  id: PixelAidMcpJsonRpcId,
+  params: unknown,
+): Promise<PixelAidMcpJsonRpcResponse> {
+  if (!isObject(params) || typeof params.name !== "string") {
+    return createJsonRpcErrorResponse(
+      id,
+      -32602,
+      "Invalid params",
+      "invalid_params",
+      "tools/call requires params.name to be a PixelAid MCP tool name.",
+    );
+  }
+  if (!isPixelAidMcpToolName(params.name)) {
+    return createJsonRpcErrorResponse(
+      id,
+      -32602,
+      "Invalid params",
+      "invalid_tool",
+      `Unknown PixelAid MCP tool "${params.name}".`,
+    );
+  }
+  if ("arguments" in params && params.arguments !== undefined && !isObject(params.arguments)) {
+    return createJsonRpcErrorResponse(
+      id,
+      -32602,
+      "Invalid params",
+      "invalid_params",
+      "tools/call params.arguments must be an object when provided.",
+    );
+  }
+
+  const progress: AutomationProgressEvent[] = [];
+  const runtime: AutomationRuntimeOptions = {
+    onProgress: (event) => {
+      progress.push(event);
+    },
+  };
+  if (id !== null) {
+    runtime.jobId = String(id);
+  }
+
+  const toolResponse = await handlePixelAidTool(params.name, params.arguments ?? {}, runtime);
+  return createJsonRpcSuccessResponse(id, {
+    ...toolResponse,
+    structuredContent: {
+      ...toolResponse.structuredContent,
+      progress,
+    },
+  });
+}
+
+function createInitializeResult(params: unknown): Record<string, unknown> {
+  const protocolVersion = isObject(params) && typeof params.protocolVersion === "string"
+    ? params.protocolVersion
+    : "2024-11-05";
+  return {
+    protocolVersion,
+    serverInfo: {
+      name: "PixelAid MCP",
+      version: "0.1.0",
+    },
+    capabilities: {
+      tools: {},
+    },
+  };
+}
+
+function getJsonRpcId(request: unknown): PixelAidMcpJsonRpcId {
+  if (!isObject(request) || !("id" in request)) {
+    return null;
+  }
+  return isJsonRpcId(request.id) ? request.id : null;
+}
+
+function isJsonRpcRequest(request: unknown): request is PixelAidMcpJsonRpcRequest {
+  return isObject(request)
+    && typeof request.method === "string"
+    && (request.jsonrpc === undefined || request.jsonrpc === "2.0")
+    && (!("id" in request) || isJsonRpcId(request.id));
+}
+
+function isJsonRpcId(value: unknown): value is PixelAidMcpJsonRpcId {
+  return value === null || typeof value === "string" || typeof value === "number";
+}
+
+function isPixelAidMcpToolName(value: string): value is PixelAidMcpToolName {
+  return pixelaidMcpTools.some((tool) => tool.name === value);
 }
 
 function toMcpResponse<T>(toolName: PixelAidMcpToolName, result: AutomationResult<T>): PixelAidMcpResponse {
@@ -297,7 +511,7 @@ function toExportEngineBundleRequest(input: ToolInput): ExportEngineBundleReques
   };
 }
 
-function isObject(value: unknown): value is Record<string, never> {
+function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);
 }
 
