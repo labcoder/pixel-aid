@@ -84,7 +84,7 @@ Editor:
 - Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, saved user presets, and saved palette libraries across web and desktop sessions. Manual asset type remains per imported asset.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
-- Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.
+- Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings. Repeated map-like images can be classified as tilemaps by tile-size candidates instead of falling through to tilesets.
 - Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, palette count, quantizer strategy, and dithering mode.
 - Palette library panel that can save fixed/output palettes, import `.hex`, `.gpl`, and JSON palette text, edit palette names and colors, reorder/remove/add colors, export palette sidecars, and apply a saved palette as the fixed palette for future fixes and exports.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
@@ -116,6 +116,7 @@ Processing:
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects. Selected engine sidecars now include Godot, Unity, Phaser, TexturePacker-compatible atlas metadata, and Tiled/LDtk tileset metadata; Godot, Unity, and Phaser also include compact import recipe JSON for automation-friendly texture settings, frames, pivots, durations, and animation tags.
+- Tilemap inspect workflow ranks candidate tile sizes by repeated tile signatures, dimension fit, and grid consistency, then adds non-destructive quality-report recommendations for reviewing map grids before cleanup.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 Automation:
@@ -131,7 +132,7 @@ Automation:
 - Palette libraries and basic palette editing are implemented. Advanced palette harmonization, project-wide palette governance, and richer palette-analysis views remain future work.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently supports generic manifests plus Godot, Unity, Phaser, TexturePacker-compatible, Tiled, and LDtk helper files.
-- Tilesets support seam diagnostics and tile-engine metadata sidecars. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
+- Tilesets support seam diagnostics and tile-engine metadata sidecars. Tilemaps support inspect-first classification and tile-size candidates, while full map-data import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 - CLI and MCP-ready automation currently support PNG only. Quality reports are handler-ready, but a long-running MCP server, local HTTP API, non-PNG codecs, and streaming progress are future work.
 

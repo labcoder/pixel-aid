@@ -1,6 +1,6 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "./assetTypes";
-import type { AssetMode, AssetType, SceneAssetDiagnostics, TilesetSeamDiagnostics } from "./types";
+import type { AssetMode, AssetType, SceneAssetDiagnostics, TilemapDiagnostics, TilesetSeamDiagnostics } from "./types";
 
 const assetTypes: AssetType[] = [
   "sprite",
@@ -82,8 +82,27 @@ describe("asset type taxonomy", () => {
       paletteRiskScore: 0.2,
       warnings: []
     };
+    const tilemapDiagnostics: TilemapDiagnostics = {
+      candidates: [
+        {
+          tileWidth: 16,
+          tileHeight: 16,
+          rows: 8,
+          columns: 8,
+          tileCount: 64,
+          uniqueTileSignatures: 12,
+          repeatedTileRatio: 0.8,
+          dimensionFitScore: 1,
+          gridConsistencyScore: 1,
+          confidence: 0.9,
+          reason: "test"
+        }
+      ],
+      warnings: []
+    };
 
     expect(tileDiagnostics.issues).toEqual([]);
     expect(sceneDiagnostics.detailDensityLabel).toBe("medium");
+    expect(tilemapDiagnostics.candidates[0]?.tileWidth).toBe(16);
   });
 });

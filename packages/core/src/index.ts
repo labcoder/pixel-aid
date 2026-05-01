@@ -11,7 +11,9 @@ export type {
   RGBAImage,
   SceneAssetDiagnostics,
   SheetLayoutDetection,
-  SheetSliceOptions
+  SheetSliceOptions,
+  TilemapDiagnostics,
+  TilemapGridCandidate,
 } from "@pixelaid/shared";
 
 export { applyAlphaMode } from "./alpha";
@@ -46,3 +48,5 @@ export type { SheetConditioningOptions } from "./sheetConditioning";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
 export { analyzeTilesetSeams } from "./tileDiagnostics";
 export type { TilesetSeamAnalysisOptions } from "./tileDiagnostics";
+export { analyzeTilemapDiagnostics, detectTilemapGridCandidates } from "./tilemapDiagnostics";
+export type { TilemapDiagnosticsOptions } from "./tilemapDiagnostics";

@@ -174,6 +174,32 @@ describe("automation operations", () => {
       expect(paths).toContain("ldtk/input_fixed.ldtk-tileset.json");
     });
   });
+
+  it("classifies repeated map-like images as tilemaps and surfaces tile candidates", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-tilemap-"));
+    const input = path.join(dir, "map.png");
+    try {
+      await encodePngFile(createRepeatedTilemapImage(8, 8, 16), input);
+
+      const inspection = await inspectImage({ inputPath: input });
+      const report = await createQualityReport({ inputPaths: [input] });
+
+      expect(inspection.ok).toBe(true);
+      expect(report.ok).toBe(true);
+      if (!inspection.ok || !report.ok) return;
+      expect(inspection.value.suggestion.options.assetType).toBe("tilemap");
+      expect(inspection.value.diagnostics.tilemap?.selected).toMatchObject({
+        tileWidth: 16,
+        tileHeight: 16,
+        rows: 8,
+        columns: 8
+      });
+      expect(report.value.reports[0]?.assetType).toBe("tilemap");
+      expect(report.value.reports[0]?.findings.map((finding) => finding.id)).toContain("tilemap-grid-candidate");
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
 
 function createFixtureImage(): RGBAImage {
@@ -187,4 +213,55 @@ function createFixtureImage(): RGBAImage {
       0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255,
     ]),
   };
+}
+
+function createRepeatedTilemapImage(columns: number, rows: number, tileSize: number): RGBAImage {
+  const patterns = [
+    [
+      [38, 92, 48, 255],
+      [48, 112, 58, 255],
+      [30, 74, 42, 255],
+      [72, 140, 80, 255]
+    ],
+    [
+      [42, 98, 140, 255],
+      [64, 126, 176, 255],
+      [28, 72, 120, 255],
+      [84, 150, 196, 255]
+    ],
+    [
+      [120, 110, 66, 255],
+      [150, 136, 82, 255],
+      [96, 88, 54, 255],
+      [176, 158, 96, 255]
+    ],
+    [
+      [88, 88, 96, 255],
+      [116, 118, 128, 255],
+      [62, 64, 72, 255],
+      [146, 148, 156, 255]
+    ]
+  ] as const;
+  const data = new Uint8ClampedArray(columns * rows * tileSize * tileSize * 4);
+  const image: RGBAImage = { width: columns * tileSize, height: rows * tileSize, data };
+  const half = Math.floor(tileSize / 2);
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const pattern = patterns[(row + column * 3) % patterns.length]!;
+      for (let y = 0; y < tileSize; y += 1) {
+        for (let x = 0; x < tileSize; x += 1) {
+          const index = (x < half ? 0 : 1) + (y < half ? 0 : 2);
+          const color = pattern[index]!;
+          const offset = ((row * tileSize + y) * image.width + column * tileSize + x) * 4;
+          image.data[offset] = color[0];
+          image.data[offset + 1] = color[1];
+          image.data[offset + 2] = color[2];
+          image.data[offset + 3] = color[3];
+        }
+      }
+    }
+  }
+
+  return image;
 }

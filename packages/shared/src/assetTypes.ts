@@ -58,7 +58,7 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
       {
         code: "tileset-engine-metadata-next",
         severity: "info",
-        message: "Tileset seam diagnostics are available; engine-specific tileset metadata arrives with export adapters."
+        message: "Tileset seam diagnostics and tile-engine metadata sidecars are available; validate map-editor imports before shipping."
       }
     ]
   },
@@ -73,7 +73,7 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
       {
         code: "tilemap-inspect-only",
         severity: "warning",
-        message: "Tilemap data import/export is inspect-only until map metadata support is scoped."
+        message: "Tilemap data import/export is inspect-only; use tile candidates and scene diagnostics before destructive cleanup."
       }
     ]
   },
