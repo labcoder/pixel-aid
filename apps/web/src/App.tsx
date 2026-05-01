@@ -1603,6 +1603,11 @@ export function App() {
     const preset = getAssetTypeCleanupPreset(resolvedAssetType);
     const cleanupDefaults = targetAssetSource === "manual" ? preset : suggestion;
     const definition = getAssetTypeDefinition(resolvedAssetType);
+    const usesSpriteCleanup = resolvedAssetType === "sprite" || resolvedAssetType === "icon";
+    const resolvedDownscale = targetAssetSource === "manual" && !usesSpriteCleanup ? preset.downscale : suggestion.downscale;
+    const resolvedOutlineMode = usesSpriteCleanup ? suggestion.outlineMode : "none";
+    const resolvedOutlineSourceColors = usesSpriteCleanup ? suggestion.outlineSourceColors : [];
+    const resolvedContrastExpansionEnabled = usesSpriteCleanup ? suggestion.contrastExpansionEnabled : false;
     const resolvedWarnings = targetAssetSource === "manual" ? getAssetTypeWarnings(resolvedAssetType) : suggestion.categoryWarnings;
     const resolvedCategoryReason =
       targetAssetSource === "manual"
@@ -1677,15 +1682,25 @@ export function App() {
     setGridDetect(suggestion.gridDetect);
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
-    setDownscale(targetAssetSource === "manual" ? preset.downscale : suggestion.downscale);
+    setDownscale(resolvedDownscale);
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
     setPaletteBudget(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
+    if (paletteMode === "fixed" && fixedPaletteColors.length === 0) {
+      setPaletteMode("auto");
+      setCustomPaletteText("");
+    }
     setRemoveOrphans(cleanupDefaults.removeOrphans);
     setJaggyCleanup(cleanupDefaults.jaggyCleanup);
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
+    setOutlineMode(resolvedOutlineMode);
+    setOutlineSize(suggestion.outlineSize);
+    setOutlineColorEdited(false);
+    setOutlineSourceMode(resolvedOutlineSourceColors.length > 0 ? "manual" : "auto");
+    setSelectedOutlineSourceColors(resolvedOutlineSourceColors);
+    setContrastExpansionEnabled(resolvedContrastExpansionEnabled);
     setRecommendationConfidence(suggestion.confidence);
     setViewMode(resolvedMode === "single" ? "before" : "timeline");
     setSuggestionReason(
@@ -1698,7 +1713,7 @@ export function App() {
         resolvedWarnings
       )
     );
-  }, [applyAlphaSettings, selectedAsset, setPaletteBudget]);
+  }, [applyAlphaSettings, fixedPaletteColors.length, paletteMode, selectedAsset, setPaletteBudget]);
 
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
