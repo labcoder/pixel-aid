@@ -1,6 +1,8 @@
 # Launch QA And Beta Feedback
 
-This checklist is the release-owner playbook for PixelAid 1.0 release candidates. It should be run against a clean checkout, the packaged desktop app when available, and a small set of real beta assets only when the asset owner has agreed to share them.
+This checklist is PixelAid's living release-owner playbook. Run it for every public release candidate against a clean checkout, the packaged desktop app when available, and a small set of real beta assets only when the asset owner has agreed to share them.
+
+The gates and manual QA matrix should evolve with the product. The known limitations section is a per-release snapshot; update it before each release so unresolved launch constraints have clear follow-up issues.
 
 ## Release Candidate Gates
 
@@ -71,7 +73,7 @@ Every beta report should include:
 
 Do not ask beta users to share proprietary prompts or private source assets by default. Ask for a reduced reproduction, cropped sample, or synthetic replacement first.
 
-## Known Limitations For 1.0
+## Current Known Limitations For 1.0
 
 | Limitation | User-facing note | Follow-up |
 | --- | --- | --- |
