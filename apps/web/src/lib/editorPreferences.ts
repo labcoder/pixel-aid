@@ -16,6 +16,8 @@ import { defaultInspectorGroupOrder, type InspectorGroupId } from "./inspectorGr
 import type { EditorPreset, EditorSettingsState } from "./presets";
 import type { OutlineSourceMode } from "./outlineControls";
 import type { TimelineViewportSourceMode } from "./timelineViewportSources";
+import type { PaletteImportFormat, PaletteLibraryEntry } from "./paletteLibrary";
+import { normalizePaletteHex } from "./paletteControls";
 
 export const editorPreferencesStorageKey = "pixelaid.editorPreferences.v1";
 export const editorPreferencesVersion = 1;
@@ -84,6 +86,7 @@ export type EditorPreferences = {
   version: typeof editorPreferencesVersion;
   settings: EditorPreferenceSettings;
   savedPresets: EditorPreset[];
+  savedPaletteLibrary: PaletteLibraryEntry[];
 };
 
 export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
@@ -154,7 +157,8 @@ export function createDefaultEditorPreferences(): EditorPreferences {
       engineExportTargets: [...defaultEditorPreferenceSettings.engineExportTargets],
       inspectorGroupOrder: [...defaultEditorPreferenceSettings.inspectorGroupOrder]
     },
-    savedPresets: []
+    savedPresets: [],
+    savedPaletteLibrary: []
   };
 }
 
@@ -254,7 +258,8 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       showAdvancedControls: booleanSetting(settings.showAdvancedControls, defaults.settings.showAdvancedControls),
       inspectorGroupOrder: inspectorOrderSetting(settings.inspectorGroupOrder, defaults.settings.inspectorGroupOrder)
     },
-    savedPresets: savedPresetsSetting(value.savedPresets)
+    savedPresets: savedPresetsSetting(value.savedPresets),
+    savedPaletteLibrary: paletteLibrarySetting(value.savedPaletteLibrary)
   };
 }
 
@@ -337,6 +342,59 @@ function savedPresetsSetting(value: unknown): EditorPreset[] {
       }
     ];
   });
+}
+
+function paletteLibrarySetting(value: unknown): PaletteLibraryEntry[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const seen = new Set<string>();
+  return value.flatMap((candidate, index) => {
+    if (!isRecord(candidate) || typeof candidate.name !== "string" || !Array.isArray(candidate.colors)) {
+      return [];
+    }
+
+    const colors = candidate.colors.flatMap((color) => {
+      if (typeof color !== "string") {
+        return [];
+      }
+
+      const normalized = normalizePaletteHex(color);
+      return normalized ? [normalized] : [];
+    });
+    if (!candidate.name.trim() || colors.length === 0) {
+      return [];
+    }
+
+    const sourceFormat = unionSetting<PaletteImportFormat>(candidate.sourceFormat, ["hex", "gpl", "json"], "hex");
+    const rawId = typeof candidate.id === "string" && candidate.id.trim() ? candidate.id.trim() : `palette-${index}`;
+    const id = uniquePaletteId(rawId, seen);
+    return [
+      {
+        id,
+        name: candidate.name.trim(),
+        colors: [...new Set(colors)],
+        sourceFormat
+      }
+    ];
+  });
+}
+
+function uniquePaletteId(id: string, seen: Set<string>): string {
+  const base = id
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "palette";
+  let next = base;
+  let suffix = 2;
+  while (seen.has(next)) {
+    next = `${base}-${suffix}`;
+    suffix += 1;
+  }
+  seen.add(next);
+  return next;
 }
 
 function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSettingsState> {

@@ -84,4 +84,22 @@ describe("editor preferences", () => {
     expect(ordered.settings.paletteDithering).toBe("ordered");
     expect(invalid.settings.paletteDithering).toBe("none");
   });
+
+  test("normalizes saved palette library entries", () => {
+    const preferences = normalizeEditorPreferences({
+      savedPaletteLibrary: [
+        { id: "hero", name: "Hero", colors: ["#ABCDEF", "nope", "123456"], sourceFormat: "gpl" },
+        { id: "", name: "", colors: [], sourceFormat: "bad" },
+      ],
+    });
+
+    expect(preferences.savedPaletteLibrary).toEqual([
+      {
+        id: "hero",
+        name: "Hero",
+        colors: ["#abcdef", "#123456"],
+        sourceFormat: "gpl",
+      },
+    ]);
+  });
 });

@@ -117,6 +117,8 @@ Fixed and preset modes treat the active palette as a hard output contract: visib
 
 For sheet-like assets, palette locking can use the whole sheet or the first frame. The fix result stores palette settings plus diagnostics, including drift warnings when frame-local palettes differ from the active locked palette.
 
+The editor palette library builds on that same contract instead of creating a separate color path. Saved palettes are normalized RGB hex arrays that can be imported from `.hex`, `.gpl`, or JSON text, edited in the Palettes panel, exported back to those sidecar formats, and applied by switching the active palette mode to `fixed`. That means the next Fix run, export manifest, palette sidecars, CLI-equivalent settings, and diagnostics all describe the same explicit palette.
+
 ## Denoise
 
 `applyDenoise` is a native-resolution cleanup pass that runs after alpha cleanup and before outline cleanup and palette extraction.

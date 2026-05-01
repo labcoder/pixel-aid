@@ -140,7 +140,19 @@ import {
   type OutlineSourceMode
 } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
-import { normalizePaletteBudget, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
+import { formatPaletteText, normalizePaletteBudget, normalizePaletteHex, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
+import {
+  addPaletteColor,
+  exportPaletteLibraryEntry,
+  importPaletteLibraryEntry,
+  removePaletteColor,
+  renamePalette,
+  reorderPaletteColor,
+  updatePaletteColor,
+  validatePaletteLibraryEntry,
+  type PaletteImportFormat,
+  type PaletteLibraryEntry
+} from "./lib/paletteLibrary";
 import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
 import {
   clampFps,
@@ -215,6 +227,54 @@ const palettePresetOptions = [
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
   ["pixelaid-ui-8", "PixelAid UI 8"]
 ] as const;
+const paletteExportExtensions: Record<PaletteImportFormat, string> = {
+  hex: "hex",
+  gpl: "gpl",
+  json: "json"
+};
+
+function paletteBudgetAtLeast(colorCount: number): number {
+  for (const budget of paletteBudgets) {
+    if (budget >= colorCount) {
+      return budget;
+    }
+  }
+
+  return paletteBudgets[paletteBudgets.length - 1] ?? 64;
+}
+
+function createPaletteDownloadName(entry: PaletteLibraryEntry, format: PaletteImportFormat): string {
+  const baseName =
+    entry.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || entry.id || "palette";
+  return `${baseName}.${paletteExportExtensions[format]}`;
+}
+
+function createUniquePaletteLibraryId(
+  requestedId: string,
+  entries: readonly PaletteLibraryEntry[],
+  currentId: string
+): string {
+  const baseId =
+    requestedId
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "palette";
+  const usedIds = new Set(entries.filter((entry) => entry.id !== currentId).map((entry) => entry.id));
+  let nextId = baseId;
+  let suffix = 2;
+
+  while (usedIds.has(nextId)) {
+    nextId = `${baseId}-${suffix}`;
+    suffix += 1;
+  }
+
+  return nextId;
+}
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
@@ -401,6 +461,9 @@ export function App() {
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
   const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
+  const [savedPaletteLibrary, setSavedPaletteLibrary] = useState<PaletteLibraryEntry[]>(initialPreferences.savedPaletteLibrary);
+  const [selectedPaletteLibraryId, setSelectedPaletteLibraryId] = useState(initialPreferences.savedPaletteLibrary[0]?.id ?? "");
+  const [newPaletteColor, setNewPaletteColor] = useState("#ffffff");
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
@@ -556,7 +619,8 @@ export function App() {
         showAdvancedControls,
         inspectorGroupOrder
       },
-      savedPresets: savedEditorPresets
+      savedPresets: savedEditorPresets,
+      savedPaletteLibrary
     };
     saveEditorPreferences(preferences);
   }, [
@@ -606,6 +670,7 @@ export function App() {
     removeHalos,
     removeOrphans,
     savedEditorPresets,
+    savedPaletteLibrary,
     sheetColumns,
     sheetExtrude,
     sheetMargin,
@@ -659,6 +724,23 @@ export function App() {
   const paletteWarningMessages = summarizePaletteWarnings(paletteDiagnostics);
   const outputPalettePreview = outputPalette.slice(0, Math.min(outputPalette.length, 16));
   const outputPaletteLabel = paletteDiagnostics ? `Output (${paletteDiagnostics.mode})` : "Output";
+  const selectedPaletteLibraryEntry = useMemo(
+    () => savedPaletteLibrary.find((entry) => entry.id === selectedPaletteLibraryId) ?? savedPaletteLibrary[0] ?? null,
+    [savedPaletteLibrary, selectedPaletteLibraryId]
+  );
+  const selectedPaletteLibraryIssues = useMemo(
+    () => (selectedPaletteLibraryEntry ? validatePaletteLibraryEntry(selectedPaletteLibraryEntry) : []),
+    [selectedPaletteLibraryEntry]
+  );
+  useEffect(() => {
+    setSelectedPaletteLibraryId((current) => {
+      if (current && savedPaletteLibrary.some((entry) => entry.id === current)) {
+        return current;
+      }
+
+      return savedPaletteLibrary[0]?.id ?? "";
+    });
+  }, [savedPaletteLibrary]);
   const sheetPivot = useMemo(
     () => getPivotForPreset(pivotPreset, frameWidth, frameHeight, { x: customPivotX, y: customPivotY }),
     [customPivotX, customPivotY, frameHeight, frameWidth, pivotPreset]
@@ -990,6 +1072,133 @@ export function App() {
   const appendLog = useCallback((line: string) => {
     setLogs((current) => [line, ...current].slice(0, 8));
   }, []);
+
+  const savePaletteLibraryEntry = useCallback(
+    (entry: PaletteLibraryEntry, logLabel = "Saved palette") => {
+      setSavedPaletteLibrary((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
+      setSelectedPaletteLibraryId(entry.id);
+      appendLog(`${logLabel}: ${entry.name}`);
+    },
+    [appendLog]
+  );
+
+  const savePaletteColorsToLibrary = useCallback(
+    (defaultName: string, colors: readonly string[]) => {
+      if (colors.length === 0) {
+        appendLog("No palette colors available to save");
+        return;
+      }
+
+      const name = window.prompt("Palette name", defaultName);
+      const trimmed = name?.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      const result = importPaletteLibraryEntry(trimmed, formatPaletteText(colors), "hex", { duplicates: "dedupe" });
+      const hasErrors = result.issues.some((issue) => issue.severity === "error");
+      if (hasErrors) {
+        appendLog(result.issues.find((issue) => issue.severity === "error")?.message ?? "Palette could not be saved");
+        return;
+      }
+
+      savePaletteLibraryEntry(result.entry);
+      for (const issue of result.issues.filter((item) => item.severity === "warning")) {
+        appendLog(issue.message);
+      }
+    },
+    [appendLog, savePaletteLibraryEntry]
+  );
+
+  const importPaletteToLibrary = useCallback(() => {
+    const formatValue = window.prompt("Palette format", "hex")?.trim().toLowerCase();
+    if (!formatValue) {
+      return;
+    }
+
+    if (formatValue !== "hex" && formatValue !== "gpl" && formatValue !== "json") {
+      appendLog("Palette import supports hex, gpl, or json");
+      return;
+    }
+
+    const text = window.prompt("Palette text");
+    if (!text?.trim()) {
+      return;
+    }
+
+    const name = window.prompt("Palette name", "Imported palette") ?? "Imported palette";
+    const result = importPaletteLibraryEntry(name, text, formatValue, { duplicates: "dedupe" });
+    const hasErrors = result.issues.some((issue) => issue.severity === "error");
+    if (hasErrors) {
+      appendLog(result.issues.find((issue) => issue.severity === "error")?.message ?? "Palette could not be imported");
+      return;
+    }
+
+    savePaletteLibraryEntry(result.entry, "Imported palette");
+    for (const issue of result.issues.filter((item) => item.severity === "warning")) {
+      appendLog(issue.message);
+    }
+  }, [appendLog, savePaletteLibraryEntry]);
+
+  const exportPaletteFromLibrary = useCallback(
+    (entry: PaletteLibraryEntry, format: PaletteImportFormat) => {
+      const text = exportPaletteLibraryEntry(entry, format);
+      const type = format === "json" ? "application/json" : "text/plain";
+      downloadBlob(new Blob([text], { type }), createPaletteDownloadName(entry, format));
+      appendLog(`Exported ${entry.name} palette as ${format.toUpperCase()}`);
+    },
+    [appendLog]
+  );
+
+  const applyPaletteLibraryEntry = useCallback(
+    (entry: PaletteLibraryEntry) => {
+      setPaletteMode("fixed");
+      setCustomPaletteText(formatPaletteText(entry.colors));
+      setPaletteBudget(paletteBudgetAtLeast(entry.colors.length));
+      appendLog(`Applied fixed palette: ${entry.name}`);
+    },
+    [appendLog, setPaletteBudget]
+  );
+
+  const updateSelectedPaletteLibraryEntry = useCallback(
+    (nextEntry: PaletteLibraryEntry) => {
+      if (!selectedPaletteLibraryEntry) {
+        return;
+      }
+
+      setSavedPaletteLibrary((current) => {
+        const uniqueId = createUniquePaletteLibraryId(nextEntry.id, current, selectedPaletteLibraryEntry.id);
+        setSelectedPaletteLibraryId(uniqueId);
+        return current.map((entry) =>
+          entry.id === selectedPaletteLibraryEntry.id ? { ...nextEntry, id: uniqueId } : entry
+        );
+      });
+    },
+    [selectedPaletteLibraryEntry]
+  );
+
+  const removePaletteLibraryEntry = useCallback(
+    (entry: PaletteLibraryEntry) => {
+      setSavedPaletteLibrary((current) => current.filter((item) => item.id !== entry.id));
+      appendLog(`Removed palette: ${entry.name}`);
+    },
+    [appendLog]
+  );
+
+  const addColorToSelectedPalette = useCallback(() => {
+    if (!selectedPaletteLibraryEntry) {
+      return;
+    }
+
+    const normalized = normalizePaletteHex(newPaletteColor);
+    if (!normalized) {
+      appendLog("Enter a valid RGB hex color");
+      return;
+    }
+
+    updateSelectedPaletteLibraryEntry(addPaletteColor(selectedPaletteLibraryEntry, normalized));
+    setNewPaletteColor(normalized);
+  }, [appendLog, newPaletteColor, selectedPaletteLibraryEntry, updateSelectedPaletteLibraryEntry]);
 
   const clearDetectedSheetLayout = useCallback(() => {
     setDetectedSheetFrames([]);
@@ -1494,6 +1703,8 @@ export function App() {
     const defaults = createDefaultEditorPreferences();
     applyPreferenceSettings(defaults.settings);
     setSavedEditorPresets([]);
+    setSavedPaletteLibrary([]);
+    setSelectedPaletteLibraryId("");
     appendLog("Reset local editor preferences");
   }, [appendLog, applyPreferenceSettings]);
 
@@ -3455,6 +3666,138 @@ export function App() {
             totalColors={paletteDiagnostics?.outputColorCount ?? outputPalette.length}
             emptyText="Run Fix"
           />
+          <div className="palette-library-actions">
+            <button
+              type="button"
+              disabled={outputPalette.length === 0}
+              onClick={() =>
+                savePaletteColorsToLibrary(
+                  selectedAsset ? `${assetBaseName(selectedAsset.name)} output` : "Output palette",
+                  outputPalette
+                )
+              }
+            >
+              <Sparkles size={14} />
+              Save output
+            </button>
+            <button
+              type="button"
+              disabled={fixedPaletteColors.length === 0}
+              onClick={() => savePaletteColorsToLibrary("Fixed palette", fixedPaletteColors)}
+            >
+              <Sparkles size={14} />
+              Save fixed
+            </button>
+            <button type="button" onClick={importPaletteToLibrary}>
+              <Upload size={14} />
+              Import
+            </button>
+          </div>
+          <div className="palette-library-list">
+            {savedPaletteLibrary.length === 0 ? (
+              <p className="field-note">No saved palettes.</p>
+            ) : (
+              savedPaletteLibrary.map((entry) => (
+                <div key={entry.id} className={entry.id === selectedPaletteLibraryEntry?.id ? "palette-library-entry active" : "palette-library-entry"}>
+                  <button type="button" className="preset-row" onClick={() => setSelectedPaletteLibraryId(entry.id)}>
+                    <span>
+                      <strong>{entry.name}</strong>
+                      <small>{entry.colors.length} colors</small>
+                    </span>
+                  </button>
+                  <button type="button" className="preset-remove-button" aria-label={`Apply ${entry.name}`} onClick={() => applyPaletteLibraryEntry(entry)}>
+                    <WandSparkles size={14} />
+                  </button>
+                  <button type="button" className="preset-remove-button" aria-label={`Remove ${entry.name}`} onClick={() => removePaletteLibraryEntry(entry)}>
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+          {selectedPaletteLibraryEntry ? (
+            <div className="palette-library-editor">
+              <label className="field-row field-row-stack">
+                <span>Name</span>
+                <input
+                  type="text"
+                  value={selectedPaletteLibraryEntry.name}
+                  onChange={(event) => updateSelectedPaletteLibraryEntry(renamePalette(selectedPaletteLibraryEntry, event.currentTarget.value))}
+                />
+              </label>
+              <div className="palette-color-list">
+                {selectedPaletteLibraryEntry.colors.map((color, index) => (
+                  <div key={`${selectedPaletteLibraryEntry.id}-${index}-${color}`} className="palette-color-row">
+                    <input
+                      type="color"
+                      value={normalizePaletteHex(color) ?? "#000000"}
+                      aria-label={`Palette color ${index + 1}`}
+                      onChange={(event) =>
+                        updateSelectedPaletteLibraryEntry(updatePaletteColor(selectedPaletteLibraryEntry, index, event.currentTarget.value))
+                      }
+                    />
+                    <code>{color}</code>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      aria-label={`Move ${color} up`}
+                      onClick={() => updateSelectedPaletteLibraryEntry(reorderPaletteColor(selectedPaletteLibraryEntry, index, index - 1))}
+                    >
+                      <ArrowUp size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === selectedPaletteLibraryEntry.colors.length - 1}
+                      aria-label={`Move ${color} down`}
+                      onClick={() => updateSelectedPaletteLibraryEntry(reorderPaletteColor(selectedPaletteLibraryEntry, index, index + 1))}
+                    >
+                      <ArrowDown size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedPaletteLibraryEntry.colors.length <= 1}
+                      aria-label={`Remove ${color}`}
+                      onClick={() => updateSelectedPaletteLibraryEntry(removePaletteColor(selectedPaletteLibraryEntry, index))}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="palette-add-row">
+                <input
+                  type="color"
+                  value={normalizePaletteHex(newPaletteColor) ?? "#ffffff"}
+                  aria-label="New palette color"
+                  onChange={(event) => setNewPaletteColor(event.currentTarget.value)}
+                />
+                <input
+                  type="text"
+                  value={newPaletteColor}
+                  aria-label="New palette hex"
+                  onChange={(event) => setNewPaletteColor(event.currentTarget.value)}
+                />
+                <button type="button" onClick={addColorToSelectedPalette}>
+                  Add
+                </button>
+              </div>
+              <div className="palette-export-row">
+                {(["hex", "gpl", "json"] as const).map((format) => (
+                  <button key={format} type="button" onClick={() => exportPaletteFromLibrary(selectedPaletteLibraryEntry, format)}>
+                    <Download size={13} />
+                    {format.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              {selectedPaletteLibraryIssues.length > 0 ? (
+                <div className="asset-type-warning-list" aria-label="Palette library warnings">
+                  {selectedPaletteLibraryIssues.map((issue) => (
+                    <p key={`${issue.code}-${issue.message}`}>{issue.message}</p>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </section>
         <section className="panel-section">
           <h2>Presets</h2>
