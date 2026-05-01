@@ -15,7 +15,10 @@ export function formatTilesetDiagnosticsSummary(diagnostics: TilesetSeamDiagnost
     };
   }
 
-  const warnings = diagnostics.issues.map((issue) => issue.message);
+  const warnings = [
+    ...diagnostics.issues.map((issue) => issue.message),
+    ...diagnostics.repairSuggestions.map((suggestion) => `Repair preview: ${suggestion.message}`)
+  ];
 
   return {
     status: warnings.length > 0 ? "Review" : "OK",

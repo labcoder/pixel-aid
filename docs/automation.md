@@ -135,6 +135,8 @@ A typical local AI workflow should avoid guessing settings:
 
 For tilemap-like images, `inspect`, `suggest`, and `quality_report` include repeated-tile candidates when the source appears to be a map rather than a tileset. Candidates include tile size, row/column count, repeated signature ratio, dimension fit, grid consistency, confidence, and warnings. PixelAid keeps tilemaps inspect-first; use those candidates as manual tile-size guidance before applying destructive cleanup.
 
+For tilesets, seam diagnostics now include preview-only repair suggestions. A quality report can flag edge mismatch or lighting discontinuity and attach a repair strategy such as edge color harmonization, lighting harmonization, crop/phase review, or manual repaint guidance. These suggestions are metadata for review and automation planning; they do not mutate the source image.
+
 For outline-sensitive assets, pass source outline colors when known:
 
 ```sh

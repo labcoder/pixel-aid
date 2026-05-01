@@ -3,6 +3,7 @@ import type { AlphaMode, AssetType, FixOptions, GridCandidate, RGBAImage, SheetL
 import { detectGridCandidates } from "./grid";
 import { detectOutlineColorCandidates, type OutlineColorCandidate } from "./outline";
 import { detectSheetLayout } from "./sheet";
+import { analyzeTilesetSeams } from "./tileDiagnostics";
 import { analyzeTilemapDiagnostics } from "./tilemapDiagnostics";
 
 export type QualityFindingSeverity = "error" | "warning" | "info";
@@ -36,6 +37,12 @@ export type QualityReportOptions = {
   alpha?: AlphaMode;
   gridCandidates?: GridCandidate[];
   sheetLayout?: SheetLayoutDetection;
+  tile?: {
+    tileWidth: number;
+    tileHeight: number;
+    margin?: number;
+    spacing?: number;
+  };
 };
 
 export type QualityReport = {
@@ -77,6 +84,7 @@ export type QualityReport = {
       selected?: ReturnType<typeof analyzeTilemapDiagnostics>["selected"];
       warnings: string[];
     };
+    tileset?: ReturnType<typeof analyzeTilesetSeams>;
     exportReadiness: {
       support: ReturnType<typeof getAssetTypeDefinition>["support"];
       ready: boolean;
@@ -109,6 +117,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const sheetLayout = options.sheetLayout ?? detectSheetLayout(image);
   const outlineCandidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
   const tilemapDiagnostics = assetType === "tilemap" ? analyzeTilemapDiagnostics(image) : undefined;
+  const tilesetDiagnostics = assetType === "tileset" ? analyzeTilesetSeams(image, resolveTileOptions(image, options, sheetLayout)) : undefined;
   const findings: QualityFinding[] = [];
   const recommendations: QualityRecommendation[] = [];
 
@@ -257,6 +266,23 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
     }
   }
 
+  if (assetType === "tileset" && tilesetDiagnostics && tilesetDiagnostics.issues.length > 0) {
+    const firstSuggestion = tilesetDiagnostics.repairSuggestions[0];
+    findings.push({
+      id: "tileset-seam-risk",
+      severity: tilesetDiagnostics.issues.some((issue) => issue.severity === "error") ? "warning" : "info",
+      category: "sheet",
+      title: "Tileset seam risk",
+      detail: `${tilesetDiagnostics.issues.length} seam issue(s) found. ${firstSuggestion ? firstSuggestion.message : "Use repeat preview before editing source pixels."}`,
+      recommendationId: "preview-seam-repair"
+    });
+    recommendations.push({
+      id: "preview-seam-repair",
+      label: "Preview seam repair",
+      rationale: "Tileset seam repair should be reviewed in the repeat preview before any automated harmonization or repaint work changes source pixels."
+    });
+  }
+
   findings.sort((left, right) => severityRank[left.severity] - severityRank[right.severity]);
 
   return {
@@ -292,6 +318,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
         ...(tilemapDiagnostics?.selected ? { selected: tilemapDiagnostics.selected } : {}),
         warnings: tilemapDiagnostics?.warnings.map((warning) => warning.code) ?? []
       },
+      ...(tilesetDiagnostics ? { tileset: tilesetDiagnostics } : {}),
       exportReadiness: {
         support: definition.support,
         ready: definition.support === "full" && !findings.some((finding) => finding.severity === "error")
@@ -305,6 +332,27 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       findingCount: findings.length,
       recommendationCount: recommendations.length
     }
+  };
+}
+
+function resolveTileOptions(
+  image: RGBAImage,
+  options: QualityReportOptions,
+  sheetLayout: SheetLayoutDetection
+): { tileWidth: number; tileHeight: number; margin?: number; spacing?: number } {
+  if (options.tile) {
+    return {
+      tileWidth: Math.max(1, Math.round(options.tile.tileWidth)),
+      tileHeight: Math.max(1, Math.round(options.tile.tileHeight)),
+      ...(options.tile.margin !== undefined ? { margin: Math.max(0, Math.round(options.tile.margin)) } : {}),
+      ...(options.tile.spacing !== undefined ? { spacing: Math.max(0, Math.round(options.tile.spacing)) } : {})
+    };
+  }
+
+  return {
+    tileWidth: Math.max(1, sheetLayout.confidence > 0 ? sheetLayout.frameWidth : Math.floor(image.width / 4)),
+    tileHeight: Math.max(1, sheetLayout.confidence > 0 ? sheetLayout.frameHeight : Math.floor(image.height / 4)),
+    ...(sheetLayout.confidence > 0 ? { margin: sheetLayout.margin, spacing: sheetLayout.spacing } : {})
   };
 }
 

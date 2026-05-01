@@ -59,6 +59,8 @@ export type {
   TilesetSeamEdge,
   TilesetSeamIssue,
   TilesetSeamIssueCode,
+  TilesetSeamRepairStrategy,
+  TilesetSeamRepairSuggestion,
   TransferableImage,
   WorkerProgress,
   WorkerProgressStage

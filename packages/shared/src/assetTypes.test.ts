@@ -71,7 +71,8 @@ describe("asset type taxonomy", () => {
       maxEdgeDelta: 0,
       seamRiskScore: 0,
       lightingRiskScore: 0,
-      issues: []
+      issues: [],
+      repairSuggestions: []
     };
     const sceneDiagnostics: SceneAssetDiagnostics = {
       assetType: "background",

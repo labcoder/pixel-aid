@@ -66,6 +66,23 @@ export type TilesetSeamIssue = {
   score: number;
 };
 
+export type TilesetSeamRepairStrategy =
+  | "edgeColorHarmonization"
+  | "lightingHarmonization"
+  | "cropPhaseReview"
+  | "manualRepaint";
+
+export type TilesetSeamRepairSuggestion = {
+  issueCode: TilesetSeamIssueCode;
+  strategy: TilesetSeamRepairStrategy;
+  previewOnly: true;
+  edge: TilesetSeamEdge;
+  tileA: { row: number; column: number };
+  tileB: { row: number; column: number };
+  confidence: number;
+  message: string;
+};
+
 export type TilesetSeamDiagnostics = {
   tileWidth: number;
   tileHeight: number;
@@ -77,6 +94,7 @@ export type TilesetSeamDiagnostics = {
   seamRiskScore: number;
   lightingRiskScore: number;
   issues: TilesetSeamIssue[];
+  repairSuggestions: TilesetSeamRepairSuggestion[];
 };
 
 export type SceneAssetDiagnostics = {

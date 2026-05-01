@@ -1,4 +1,11 @@
-import type { RGBAImage, TilesetSeamDiagnostics, TilesetSeamEdge, TilesetSeamIssue } from "@pixelaid/shared";
+import type {
+  RGBAImage,
+  TilesetSeamDiagnostics,
+  TilesetSeamEdge,
+  TilesetSeamIssue,
+  TilesetSeamRepairSuggestion,
+  TilesetSeamRepairStrategy
+} from "@pixelaid/shared";
 
 export type TilesetSeamAnalysisOptions = {
   tileWidth: number;
@@ -77,7 +84,8 @@ export function analyzeTilesetSeams(image: RGBAImage, options: TilesetSeamAnalys
     maxEdgeDelta,
     seamRiskScore: maxEdgeDelta,
     lightingRiskScore: maxLightingDelta,
-    issues
+    issues,
+    repairSuggestions: createRepairSuggestions(issues)
   };
 }
 
@@ -225,6 +233,45 @@ function createIssue(
     tileB: { row: stats.rowB, column: stats.columnB },
     score
   };
+}
+
+function createRepairSuggestions(issues: readonly TilesetSeamIssue[]): TilesetSeamRepairSuggestion[] {
+  return issues.map((issue) => {
+    const strategy = chooseRepairStrategy(issue);
+    return {
+      issueCode: issue.code,
+      strategy,
+      previewOnly: true,
+      edge: issue.edge,
+      tileA: { ...issue.tileA },
+      tileB: { ...issue.tileB },
+      confidence: issue.score,
+      message: repairMessage(strategy)
+    };
+  });
+}
+
+function chooseRepairStrategy(issue: TilesetSeamIssue): TilesetSeamRepairStrategy {
+  if (issue.code === "lighting-discontinuity") {
+    return "lightingHarmonization";
+  }
+  if (issue.score >= 0.6) {
+    return "manualRepaint";
+  }
+  return "edgeColorHarmonization";
+}
+
+function repairMessage(strategy: TilesetSeamRepairStrategy): string {
+  if (strategy === "lightingHarmonization") {
+    return "Preview brightness and ramp harmonization across the seam before editing tile pixels.";
+  }
+  if (strategy === "manualRepaint") {
+    return "Preview manual repaint guidance before changing source pixels.";
+  }
+  if (strategy === "cropPhaseReview") {
+    return "Preview crop, phase, margin, and spacing changes before resampling the tileset.";
+  }
+  return "Preview conservative edge color harmonization before committing a repaired tile edge.";
 }
 
 function deriveTileCount(size: number, tileSize: number, margin: number, spacing: number): number {
