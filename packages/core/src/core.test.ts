@@ -42,6 +42,50 @@ function imageFromPixels(width: number, pixels: readonly (readonly [number, numb
   return { width, height: pixels.length / width, data };
 }
 
+function createBakedCheckerboardSpriteSource(): RGBAImage {
+  const scale = 2;
+  const image = createImage(144, 160);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const darkCell = (Math.floor(x / 16) + Math.floor(y / 16)) % 2 === 1;
+      const value = darkCell ? 204 : 250;
+      writePixel(image, x, y, value, value, value, 255);
+    }
+  }
+
+  const outline = [22, 20, 31, 255] as const;
+  const cream = [252, 246, 220, 255] as const;
+  const shadow = [48, 44, 52, 255] as const;
+
+  fillScaledRectForTest(image, scale, 28, 14, 28, 8, outline);
+  fillScaledRectForTest(image, scale, 22, 20, 40, 26, outline);
+  fillScaledRectForTest(image, scale, 25, 19, 34, 34, cream);
+  fillScaledRectForTest(image, scale, 18, 48, 13, 24, outline);
+  fillScaledRectForTest(image, scale, 54, 48, 13, 24, outline);
+  fillScaledRectForTest(image, scale, 34, 50, 18, 28, cream);
+  fillScaledRectForTest(image, scale, 30, 33, 7, 8, shadow);
+  fillScaledRectForTest(image, scale, 48, 33, 7, 8, shadow);
+  fillScaledRectForTest(image, scale, 40, 42, 6, 3, shadow);
+
+  return image;
+}
+
+function fillScaledRectForTest(
+  image: RGBAImage,
+  scale: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rgbaValue: readonly [number, number, number, number]
+): void {
+  for (let py = y * scale; py < (y + height) * scale; py += 1) {
+    for (let px = x * scale; px < (x + width) * scale; px += 1) {
+      writePixel(image, px, py, rgbaValue[0], rgbaValue[1], rgbaValue[2], rgbaValue[3]);
+    }
+  }
+}
+
 function blockySource(): RGBAImage {
   return imageFromPixels(4, [
     rgba(255, 0, 0),
@@ -2463,6 +2507,44 @@ describe("fix pipeline", () => {
     expect(readPixel(result.image, 0, 0)[3]).toBe(0);
     expect(readPixel(result.image, 47, 0)).toEqual([16, 17, 18, 255]);
     expect(haloPixels).toBeLessThanOrEqual(32);
+  });
+
+  test("detects auto grid from source after removing a baked checkerboard background", () => {
+    const source = createBakedCheckerboardSpriteSource();
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      maxColors: 24,
+      grid: {
+        detect: "auto",
+        cropToBounds: true,
+        localCorrection: false
+      },
+      downscale: "dominant",
+      alpha: "backgroundFloodFill",
+      alphaSettings: {
+        threshold: 128,
+        tolerance: 18,
+        decontaminateRgb: true,
+        transparentRgb: "#000000"
+      },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        outlineMode: "none"
+      }
+    });
+
+    expect(result.grid.sourceRect).toBeDefined();
+    expect(result.grid.diagnostics).toMatchObject({
+      cropUsed: true
+    });
+    expect(result.image.width).toBeLessThan(Math.floor(source.width / 2));
+    expect(result.image.height).toBeLessThan(Math.floor(source.height / 2));
   });
 
   test("passes orphan and gap cleanup into the outline stage", () => {

@@ -1,4 +1,4 @@
-import { analyzeQualityReport, analyzeSheetConditioning, detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
+import { analyzeQualityReport, analyzeSheetConditioning, applyAlphaMode, detectGridCandidates, detectSheetLayout } from "@pixelaid/core";
 import type { QualityReport } from "@pixelaid/core";
 import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type {
@@ -55,7 +55,7 @@ export type FixSettingSuggestion = {
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
-  const candidates = detectGridCandidates(image, { maxScale: 32 });
+  let candidates = detectGridCandidates(image, { maxScale: 32 });
   const initial = candidates[0];
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
@@ -63,9 +63,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const sheetConditioning = detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
   const sheetLayoutScore = Math.max(estimateSheetLayoutScore(image), detectedSheetLayout.confidence);
   const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, sheetLayoutScore);
-  const candidate = chooseSuggestionGrid(image, candidates, initialMode);
-  const outputWidth = candidate?.outputWidth ?? image.width;
-  const outputHeight = candidate?.outputHeight ?? image.height;
+  let candidate = chooseSuggestionGrid(image, candidates, initialMode);
+  let outputWidth = candidate?.outputWidth ?? image.width;
+  let outputHeight = candidate?.outputHeight ?? image.height;
   const sourceRatio = image.width / image.height;
   const classifiedMode = classifyMode(image.width, image.height, outputWidth, outputHeight, sheetLayoutScore);
   const classification = classifyAssetType({
@@ -80,9 +80,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
-  const cleanup = suggestCleanupSettings(preset, mode, sheetConditioning.recommendFrameFirst);
   const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
-  const qualityReport = analyzeQualityReport(image, {
+  let qualityReport = analyzeQualityReport(image, {
     assetType: classification.assetType,
     maxColors: preset.maxColors,
     alpha: suggestedAlpha,
@@ -90,6 +89,31 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     sheetLayout: detectedSheetLayout
   });
   const bakedTransparencyDetected = qualityReport.findings.some((finding) => finding.id === "baked-transparency-background");
+  if (shouldUseBackgroundCleanedGrid(mode, classification.assetType, bakedTransparencyDetected, suggestedAlpha)) {
+    const cleaned = applyAlphaMode(image, "backgroundFloodFill", preset.alphaSettings).image;
+    const cleanedCandidates = detectGridCandidates(cleaned, { maxScale: 32 });
+    if (cleanedCandidates.length > 0) {
+      candidates = cleanedCandidates;
+      candidate = chooseSuggestionGrid(cleaned, candidates, mode);
+      outputWidth = candidate?.outputWidth ?? image.width;
+      outputHeight = candidate?.outputHeight ?? image.height;
+      qualityReport = analyzeQualityReport(image, {
+        assetType: classification.assetType,
+        maxColors: preset.maxColors,
+        alpha: suggestedAlpha,
+        gridCandidates: candidates,
+        sheetLayout: detectedSheetLayout
+      });
+    }
+  }
+  const cleanup = suggestCleanupSettings(
+    preset,
+    mode,
+    sheetConditioning.recommendFrameFirst,
+    bakedTransparencyDetected,
+    classification.assetType,
+    candidate
+  );
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
     mode,
@@ -159,6 +183,15 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   };
 }
 
+function shouldUseBackgroundCleanedGrid(
+  mode: AssetMode,
+  assetType: AssetType,
+  bakedTransparencyDetected: boolean,
+  alpha: AlphaMode
+): boolean {
+  return mode === "single" && (assetType === "sprite" || assetType === "icon") && bakedTransparencyDetected && alpha === "backgroundFloodFill";
+}
+
 function suggestDownscaleMethod(input: {
   mode: AssetMode;
   assetType: AssetType;
@@ -226,12 +259,30 @@ function suggestOutlineRepair(
 function suggestCleanupSettings(
   preset: ReturnType<typeof getAssetTypeCleanupPreset>,
   mode: AssetMode,
-  recommendFrameFirst: boolean
+  recommendFrameFirst: boolean,
+  bakedTransparencyDetected = false,
+  assetType?: AssetType,
+  candidate?: GridCandidate
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "denoiseStrength"> {
   if (mode === "spriteSheet" && recommendFrameFirst) {
     return {
       removeOrphans: preset.removeOrphans,
       jaggyCleanup: preset.jaggyCleanup,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: false,
+      denoiseStrength: 0
+    };
+  }
+
+  const lowScaleBakedSprite =
+    mode === "single" &&
+    (assetType === "sprite" || assetType === "icon") &&
+    bakedTransparencyDetected &&
+    Math.min(candidate?.scaleX ?? 1, candidate?.scaleY ?? candidate?.scaleX ?? 1) < 4;
+  if (lowScaleBakedSprite) {
+    return {
+      removeOrphans: false,
+      jaggyCleanup: false,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
       denoiseStrength: 0
