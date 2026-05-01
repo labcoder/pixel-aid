@@ -3,6 +3,7 @@ import architectureMarkdown from "../../../../docs/architecture.md?raw";
 import algorithmsMarkdown from "../../../../docs/algorithms.md?raw";
 import performanceMarkdown from "../../../../docs/performance.md?raw";
 import licensingMarkdown from "../../../../docs/licensing.md?raw";
+import onboardingSamplesMarkdown from "../../../../docs/onboarding-samples.md?raw";
 
 export type DocsSection = {
   id: string;
@@ -59,6 +60,12 @@ export const docsSections: DocsSection[] = [
     title: "Export",
     tooltip: "Downloads the fixed image and manifest for engine workflows.",
     markdown: extractMarkdownSection(editorMarkdown, "Export")
+  },
+  {
+    id: "onboarding-samples",
+    title: "Samples",
+    tooltip: "Release sample workflows for fake-grid sprites, alpha cleanup, sheets, tilesets, and backgrounds.",
+    markdown: onboardingSamplesMarkdown
   },
   {
     id: "architecture",

@@ -215,6 +215,12 @@ button:focus-visible {
   padding: 0;
 }
 
+.sample-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
 .import-status {
   display: flex;
   align-items: center;
@@ -491,6 +497,48 @@ button:focus-visible {
 .asset-meta small {
   color: var(--amber);
   font-size: 0.72rem;
+}
+
+.sample-row {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  color: var(--muted);
+  background: #131818;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: left;
+}
+
+.sample-row:hover:not(:disabled),
+.sample-row:focus-visible {
+  color: var(--text);
+  border-color: #385f5a;
+  background: #17201f;
+}
+
+.sample-row span {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.sample-row strong,
+.sample-row small {
+  overflow-wrap: anywhere;
+}
+
+.sample-row strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.sample-row small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.25;
 }
 
 .asset-list .asset-row.active-asset {

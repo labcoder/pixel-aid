@@ -182,6 +182,7 @@ import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import { moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
+import { createOnboardingSampleImport, getOnboardingSampleCards, type OnboardingSampleImport } from "./lib/onboardingSamples";
 import {
   getOutlineSourceColorsForFix,
   isOutlineColorEditable,
@@ -277,6 +278,7 @@ import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type Edito
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
+const onboardingSampleCards = getOnboardingSampleCards();
 const palettePresetOptions = [
   ["pixelaid-mono-4", "PixelAid Mono 4"],
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
@@ -339,6 +341,14 @@ function createUniquePaletteLibraryId(
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function createSampleAnimationName(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32) || "sample_animation";
 }
 
 function clampBottomPanelHeight(value: number): number {
@@ -1581,6 +1591,140 @@ export function App() {
       }
     },
     [appendLog, applyFixSuggestion, nextBusyOperation]
+  );
+
+  const applyOnboardingSampleSettings = useCallback(
+    (sampleImport: OnboardingSampleImport, gridCandidatesForSample: GridCandidate[]) => {
+      const { asset, sample, settings } = sampleImport;
+      const targetSampleWidth = settings.targetWidth ?? asset.image.width;
+      const targetSampleHeight = settings.targetHeight ?? asset.image.height;
+      const sheetOptions = settings.sheet;
+      const sampleFrames = sheetOptions ? sliceSheetFrames(sheetOptions) : [];
+      const sampleAnimationName = createSampleAnimationName(sample.title);
+      const sampleAnimations: AnimationTag[] =
+        sampleFrames.length > 0
+          ? [
+              {
+                name: sampleAnimationName,
+                frameNames: sampleFrames.map((frame) => frame.name),
+                loop: true,
+                fps: Math.round(1000 / Math.max(1, sampleFrames[0]?.durationMs ?? 120))
+              }
+            ]
+          : [];
+      const selectedSampleFrameIndex = sampleFrames.length > 0 ? 0 : -1;
+      const selectedSampleAnimationName = sampleAnimations[0]?.name ?? ALL_ANIMATIONS;
+      const paletteColors = settings.paletteSettings?.colors ?? settings.palette ?? [];
+      const outlineSourceColors = normalizeOutlineSourceColors(settings.cleanup.outlineSourceColors ?? []);
+      const cleanupContrast = settings.cleanup.contrastExpansion;
+
+      setMode(settings.mode);
+      setTargetWidth(targetSampleWidth);
+      setTargetHeight(targetSampleHeight);
+      setFrameWidth(sheetOptions?.frameWidth ?? targetSampleWidth);
+      setFrameHeight(sheetOptions?.frameHeight ?? targetSampleHeight);
+      setSheetRows(sheetOptions?.rows ?? 1);
+      setSheetColumns(sheetOptions?.columns ?? (settings.mode === "single" ? 1 : Math.max(1, sampleFrames.length)));
+      setSheetMargin(sheetOptions?.margin ?? 0);
+      setSheetSpacing(sheetOptions?.spacing ?? 0);
+      setSheetExtrude(sheetOptions?.extrude ?? 0);
+      setDetectedSheetFrames(sampleFrames);
+      detectedSheetFramesRef.current = sampleFrames;
+      setDetectedRowAnimations(sampleAnimations);
+      detectedRowAnimationsRef.current = sampleAnimations;
+      setDetectedSheetWarnings([]);
+      setDetectedSheetDiagnostics(undefined);
+      setFrameDurationOverrides({});
+      setPivotOverrides(emptyPivotOverrides);
+      setFrameMetadataOverrides(emptyFrameMetadata);
+      setFrameMetadataHistory(createFrameMetadataHistoryState(createEmptyFrameMetadataSnapshot()));
+      selectedFrameIndexRef.current = selectedSampleFrameIndex;
+      setSelectedFrameIndex(selectedSampleFrameIndex);
+      selectedAnimationNameRef.current = selectedSampleAnimationName;
+      setSelectedAnimationName(selectedSampleAnimationName);
+      setFrameEditHistory(
+        resetFrameEditHistory(
+          createFrameEditSnapshot({
+            frames: sampleFrames,
+            animations: sampleAnimations,
+            selectedFrameIndex: selectedSampleFrameIndex,
+            selectedAnimationName: selectedSampleAnimationName
+          })
+        )
+      );
+      setIsPlaying(false);
+      setPivotPreset("bottomCenter");
+      setCustomPivotX(sheetOptions?.pivot?.x ?? Math.floor((sheetOptions?.frameWidth ?? targetSampleWidth) / 2));
+      setCustomPivotY(sheetOptions?.pivot?.y ?? sheetOptions?.frameHeight ?? targetSampleHeight);
+      setGridScaleX(settings.grid.scaleX ?? settings.grid.scale ?? gridCandidatesForSample[0]?.scaleX ?? 1);
+      setGridScaleY(settings.grid.scaleY ?? settings.grid.scale ?? gridCandidatesForSample[0]?.scaleY ?? 1);
+      setGridPhaseX(settings.grid.phaseX ?? gridCandidatesForSample[0]?.phaseX ?? 0);
+      setGridPhaseY(settings.grid.phaseY ?? gridCandidatesForSample[0]?.phaseY ?? 0);
+      setGridDetect(settings.grid.detect);
+      setCropToBounds(settings.grid.cropToBounds ?? (settings.mode === "single"));
+      setLocalCorrection(settings.grid.localCorrection ?? false);
+      setDownscale(settings.downscale);
+      setAlpha(settings.alpha);
+      applyAlphaSettings(settings.alphaSettings ?? {});
+      setPaletteBudget(settings.paletteSettings?.maxColors ?? settings.maxColors);
+      setPaletteMode(settings.paletteSettings?.mode ?? (paletteColors.length > 0 ? "fixed" : "auto"));
+      setPaletteStrategy(settings.paletteSettings?.strategy ?? "frequency");
+      setPaletteLockScope(settings.paletteSettings?.lockScope ?? (settings.mode === "single" ? "single" : "sheet"));
+      setPaletteDithering(settings.paletteSettings?.dithering ?? "none");
+      setPalettePreset(settings.paletteSettings?.preset ?? initialSettings.palettePreset);
+      setCustomPaletteText(paletteColors.join("\n"));
+      setRemoveOrphans(settings.cleanup.removeOrphans);
+      setJaggyCleanup(settings.cleanup.jaggyCleanup);
+      setPreserveSinglePixelDetails(settings.cleanup.preserveSinglePixelDetails);
+      setRemoveHalos(settings.cleanup.removeHalos ?? false);
+      setDenoiseStrength(settings.cleanup.denoiseStrength ?? 0);
+      setOutlineMode(settings.cleanup.outlineMode ?? "none");
+      setOutlineSize(settings.cleanup.outlineSize ?? initialSettings.outlineSize);
+      setOutlineColor(settings.cleanup.outlineColor ?? initialSettings.outlineColor);
+      setOutlineAlpha(settings.cleanup.outlineAlpha ?? initialSettings.outlineAlpha);
+      setOutlineColorEdited(settings.cleanup.outlineColor !== undefined);
+      setOutlineSourceMode(outlineSourceColors.length > 0 ? "manual" : "auto");
+      setSelectedOutlineSourceColors(outlineSourceColors);
+      setContrastExpansionEnabled(cleanupContrast?.enabled ?? false);
+      setRecommendationConfidence(1);
+      setViewMode(settings.mode === "single" ? "before" : "timeline");
+      setSuggestionReason(`Loaded sample workflow: ${sample.failureMode}`);
+    },
+    [applyAlphaSettings, initialSettings.outlineAlpha, initialSettings.outlineColor, initialSettings.outlineSize, initialSettings.palettePreset, setPaletteBudget]
+  );
+
+  const loadOnboardingSample = useCallback(
+    async (sampleId: string) => {
+      if (isImporting || isAnalyzing || isFixing) {
+        return;
+      }
+
+      const operation = nextBusyOperation("import", "Loading sample workflow...");
+      setImportOperation(operation);
+      await waitForNextPaint();
+
+      try {
+        const sampleImport = createOnboardingSampleImport(sampleId);
+        const suggestion = suggestFixSettings(sampleImport.asset.image);
+
+        setAssets((current) => {
+          const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
+          return [sampleImport.asset, ...withoutDuplicate];
+        });
+        setSelectedAssetId(sampleImport.asset.id);
+        setFixResult(null);
+        setLastExportValidation(null);
+        setShowAdvancedControls(false);
+        setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
+        applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
+        appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
+      } catch (error) {
+        appendLog(error instanceof Error ? error.message : "Failed to load onboarding sample");
+      } finally {
+        setImportOperation((current) => clearBusyOperation(current, operation.id));
+      }
+    },
+    [appendLog, applyOnboardingSampleSettings, isAnalyzing, isFixing, isImporting, nextBusyOperation]
   );
 
   const openImportPicker = useCallback(() => {
@@ -4408,6 +4552,32 @@ export function App() {
               </button>
             </div>
           ) : null}
+        </section>
+        <section className="panel-section">
+          <SectionTitle
+            title="Samples"
+            docsId="onboarding-samples"
+            tooltip="Load release demo assets with recommended settings."
+            onDocs={openDocs}
+          />
+          <div className="sample-list" aria-label="Release sample workflows">
+            {onboardingSampleCards.map((sample) => (
+              <button
+                key={sample.id}
+                type="button"
+                className="sample-row"
+                disabled={isImporting || isAnalyzing || isFixing}
+                onClick={() => void loadOnboardingSample(sample.id)}
+              >
+                <span>
+                  <strong>{sample.title}</strong>
+                  <small>
+                    {getAssetTypeDefinition(sample.assetType).shortLabel} / {sample.expectedOutput}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
