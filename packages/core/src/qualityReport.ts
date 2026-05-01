@@ -116,6 +116,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const maxColors = normalizeMaxColors(options.maxColors);
   const exactColorCount = countVisibleExactColors(image);
   const alpha = countAlphaPixels(image);
+  const bakedTransparency = detectBakedTransparencyBackground(image, alpha.transparentPixels);
   const morphologyArtifacts = analyzeMaskArtifacts(buildAlphaMask(image), image.width, image.height, {
     maxHolePixels: 1,
     maxComponentPixels: 2
@@ -176,6 +177,30 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       label: "Use binary alpha",
       rationale: "Sprites, icons, and many sheet frames usually export more predictably with fully transparent or fully opaque pixels.",
       settings: { alpha: "binary" }
+    });
+  }
+
+  if (bakedTransparency.detected && (assetType === "sprite" || assetType === "icon")) {
+    findings.push({
+      id: "baked-transparency-background",
+      severity: "warning",
+      category: "alpha",
+      title: "Baked transparency background",
+      detail: `The border looks like a two-tone checkerboard matte (${Math.round(bakedTransparency.coverage * 100)}% edge coverage), so it can inflate palette counts and damage downsampling if left opaque.`,
+      recommendationId: "remove-baked-background"
+    });
+    recommendations.push({
+      id: "remove-baked-background",
+      label: "Remove baked background",
+      rationale: "Connected background flood-fill can remove the fake checkerboard before block downsampling while preserving enclosed off-white sprite colors.",
+      settings: {
+        alpha: "backgroundFloodFill",
+        alphaSettings: {
+          tolerance: 18,
+          decontaminateRgb: true,
+          transparentRgb: "#000000"
+        }
+      }
     });
   }
 
@@ -461,6 +486,73 @@ function countAlphaPixels(image: RGBAImage): { transparentPixels: number; softAl
     }
   }
   return { transparentPixels, softAlphaPixels };
+}
+
+function detectBakedTransparencyBackground(
+  image: RGBAImage,
+  transparentPixels: number
+): { detected: boolean; coverage: number } {
+  if (transparentPixels > 0 || image.width < 8 || image.height < 8) {
+    return { detected: false, coverage: 0 };
+  }
+
+  const counts = new Uint32Array(4096);
+  let sampleCount = 0;
+  const sample = (x: number, y: number): void => {
+    const offset = (y * image.width + x) * 4;
+    const bucket = ((image.data[offset]! >> 4) << 8) | ((image.data[offset + 1]! >> 4) << 4) | (image.data[offset + 2]! >> 4);
+    counts[bucket] = counts[bucket]! + 1;
+    sampleCount += 1;
+  };
+
+  for (let x = 0; x < image.width; x += 1) {
+    sample(x, 0);
+    sample(x, image.height - 1);
+  }
+  for (let y = 1; y < image.height - 1; y += 1) {
+    sample(0, y);
+    sample(image.width - 1, y);
+  }
+
+  let first = 0;
+  let second = 0;
+  for (let bucket = 0; bucket < counts.length; bucket += 1) {
+    if (counts[bucket]! > counts[first]!) {
+      second = first;
+      first = bucket;
+    } else if (bucket !== first && counts[bucket]! > counts[second]!) {
+      second = bucket;
+    }
+  }
+
+  const firstColor = bucketCenter(first);
+  const secondColor = bucketCenter(second);
+  const firstBrightness = firstColor.r + firstColor.g + firstColor.b;
+  const secondBrightness = secondColor.r + secondColor.g + secondColor.b;
+  const coverage = sampleCount > 0 ? (counts[first]! + counts[second]!) / sampleCount : 0;
+  const secondRatio = counts[first]! > 0 ? counts[second]! / counts[first]! : 0;
+  const neutral =
+    colorSpread(firstColor.r, firstColor.g, firstColor.b) <= 24 &&
+    colorSpread(secondColor.r, secondColor.g, secondColor.b) <= 24;
+  const bright = firstBrightness > 540 && secondBrightness > 540;
+  const contrast = Math.abs(firstBrightness - secondBrightness);
+
+  return {
+    detected: neutral && bright && coverage >= 0.72 && secondRatio >= 0.2 && contrast >= 40 && contrast <= 220,
+    coverage
+  };
+}
+
+function bucketCenter(bucket: number): { r: number; g: number; b: number } {
+  return {
+    r: ((bucket >> 8) & 0xf) * 16 + 8,
+    g: ((bucket >> 4) & 0xf) * 16 + 8,
+    b: (bucket & 0xf) * 16 + 8
+  };
+}
+
+function colorSpread(r: number, g: number, b: number): number {
+  return Math.max(r, g, b) - Math.min(r, g, b);
 }
 
 function analyzeDetailDensityLinework(image: RGBAImage): {

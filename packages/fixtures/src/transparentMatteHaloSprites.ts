@@ -1,5 +1,5 @@
 import type { CleanupFixture } from "./types";
-import { createImage, fillEllipse, fillRect } from "./imagePrimitives";
+import { createImage, fillEllipse, fillRect, type Color } from "./imagePrimitives";
 
 export const transparentMatteHaloSprites: CleanupFixture[] = [
   {
@@ -53,6 +53,24 @@ export const transparentMatteHaloSprites: CleanupFixture[] = [
         transparentPixelsAtLeast: 2_800,
         visibleNearWhitePixelsAtMost: 18,
         sampleTransparentPixels: ["0,0", "63,63"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
+  },
+  {
+    id: "high-contrast-checkerboard-panda",
+    title: "High-contrast baked checkerboard panda",
+    category: "transparentMatteHaloSprite",
+    assetType: "sprite",
+    description: "Opaque cream sprite on a high-contrast fake transparency checkerboard similar to AI outputs that bake alpha previews into JPEGs.",
+    catches: ["high-contrast checkerboard removal", "pre-downsample alpha cleanup", "off-white foreground preservation"],
+    createImage: createHighContrastCheckerboardPandaImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 8, requiredColors: ["#fff3c8"] },
+      alpha: {
+        transparentPixelsAtLeast: 130,
+        sampleTransparentPixels: ["0,0", "1,0", "15,15"],
         transparentRgb: [0, 0, 0]
       }
     }
@@ -153,6 +171,60 @@ function createCheckerboardMatteImage() {
   fillEllipse(image.data, image.width, image.height, 32, 34, 16, 18, [88, 72, 150, 255]);
   fillRect(image.data, image.width, image.height, 25, 19, 14, 10, [34, 26, 60, 255]);
   fillRect(image.data, image.width, image.height, 29, 22, 7, 3, [226, 188, 90, 255]);
+  return image;
+}
+
+function createHighContrastCheckerboardPandaImage() {
+  const scale = 4;
+  const image = createImage(64, 64, [250, 250, 250, 255]);
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const darkCell = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 1;
+      const offset = (y * image.width + x) * 4;
+      const value = darkCell ? 202 : 250;
+      image.data[offset] = value;
+      image.data[offset + 1] = value;
+      image.data[offset + 2] = value;
+      image.data[offset + 3] = 255;
+    }
+  }
+
+  const black: Color = [24, 22, 30, 255];
+  const cream: Color = [255, 243, 200, 255];
+  const brown: Color = [112, 74, 52, 255];
+  const mask = [
+    "0000000000000000",
+    "0000011001100000",
+    "0000111111110000",
+    "0001122222110000",
+    "0011222222211000",
+    "0012212212221000",
+    "0012222222221000",
+    "0001222222210000",
+    "0001111111110000",
+    "0000122222100000",
+    "0001122222110000",
+    "0011122221110000",
+    "0011110011110000",
+    "0001100001100000",
+    "0003300000330000",
+    "0000000000000000"
+  ];
+
+  for (let y = 0; y < mask.length; y += 1) {
+    const row = mask[y]!;
+    for (let x = 0; x < row.length; x += 1) {
+      const value = row[x];
+      if (value === "0") {
+        continue;
+      }
+
+      const color = value === "2" ? cream : value === "3" ? brown : black;
+      fillRect(image.data, image.width, image.height, x * scale, y * scale, scale, scale, color);
+    }
+  }
+
   return image;
 }
 

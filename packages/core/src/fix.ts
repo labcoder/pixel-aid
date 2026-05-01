@@ -43,7 +43,10 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
-  const contrastExpanded = applyContrastExpansion(image, options.cleanup.contrastExpansion);
+  const sourceAlphaResult =
+    options.alpha === "backgroundFloodFill" ? applyAlphaMode(image, options.alpha, options.alphaSettings) : undefined;
+  const processingSource = sourceAlphaResult?.image ?? image;
+  const contrastExpanded = applyContrastExpansion(processingSource, options.cleanup.contrastExpansion);
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);
   const downsampled = downsampleBlocks(
@@ -70,6 +73,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   assertNotCancelled(runtime?.signal);
   const alphaResult = applyAlphaMode(downsampled, options.alpha, options.alphaSettings);
+  const alphaDiagnostics = sourceAlphaResult ? mergeAlphaDiagnostics(sourceAlphaResult.diagnostics, alphaResult.diagnostics) : alphaResult.diagnostics;
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
@@ -124,7 +128,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     },
     settings: options,
     diagnostics: {
-      alpha: alphaResult.diagnostics,
+      alpha: alphaDiagnostics,
       contrastExpansion: contrastExpanded.diagnostics,
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
       palette: paletteResult.diagnostics
