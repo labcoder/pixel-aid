@@ -29,11 +29,15 @@ See `docs/desktop-release.md` for the release packaging checklist, artifact note
 
 The desktop shell wraps the web editor and enables native image import plus ZIP bundle export through the operating system's open/save dialogs. Drag/drop and paste still use the browser path, and the browser build still uses the web file picker and download behavior.
 
-Editor settings and user presets persist through the same local preference store used by the web app. App icons, signing, and installer artifacts are tracked as separate follow-up issues.
+Editor settings and user presets persist through the same local preference store used by the web app. App icons are generated from the first-party PixelAid brand source and referenced by the Tauri bundle config. Signing and installer artifact publication are tracked as separate release-owner steps.
 
 ## Filesystem Permissions
 
 The desktop shell registers Tauri's dialog and filesystem plugins. The open/save dialogs temporarily add selected paths to the filesystem scope, and the app enables read-file and write-file permissions for those selected paths. PixelAid does not grant broad recursive filesystem access by default.
+
+## Brand Icons
+
+Desktop app icons live in `apps/desktop/src-tauri/icons/` and are regenerated with `npm run brand:sync`. See `docs/brand.md` for source files, generated outputs, and verification commands.
 
 ## License Notes
 

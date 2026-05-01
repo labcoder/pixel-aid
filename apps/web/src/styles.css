@@ -102,16 +102,16 @@ button:disabled {
   min-width: 220px;
 }
 
-.brand-mark {
-  width: 34px;
+.brand-logo {
+  width: 100px;
   height: 34px;
-  display: grid;
-  place-items: center;
-  color: #101112;
-  background: linear-gradient(135deg, var(--amber), var(--cyan));
-  border: 1px solid #ffffff55;
-  font-weight: 800;
-  font-size: 0.78rem;
+  flex: 0 0 auto;
+  object-fit: contain;
+  image-rendering: auto;
+}
+
+.brand-copy {
+  min-width: 0;
 }
 
 .brand-lockup h1,

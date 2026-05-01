@@ -14,6 +14,7 @@
     "desktop:check": "npm run check -w @pixelaid/desktop",
     "desktop:build": "npm run check -w @pixelaid/desktop && npm run desktop:build -w @pixelaid/desktop",
     "desktop:info": "npm run info -w @pixelaid/desktop",
+    "brand:sync": "node scripts/sync-brand-assets.mjs",
     "build": "npm run build --workspaces --if-present",
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

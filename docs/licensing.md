@@ -54,3 +54,7 @@ No image quantization, Three.js, desktop, AI SDK, native, or WASM dependency has
 MIG-8 palette workflows add no new runtime or build dependency. The quantizer and safe palette presets are implemented in-repo to avoid GPL/AGPL/LGPL, commercial licensing, attribution, and bundle-size risk. Third-party named palettes should be added only after license/attribution review.
 
 MIG-14 engine adapters add no dependencies. Godot, Unity, and Phaser files are generated text/JSON helpers maintained in-repo.
+
+## First-Party Brand Assets
+
+PixelAid logo, favicon, header, and desktop app icon assets in `docs/brand/pixelaid-c-assets`, `apps/web/public`, and `apps/desktop/src-tauri/icons` are first-party project artwork. Keep logo and trademark permissions separate from dependency licensing, and review final public trademark/brand usage language before release.

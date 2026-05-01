@@ -26,15 +26,18 @@ The current development machine has Node/npm and Windows WebView/MSVC support, b
 2. Run `npm run desktop:check`.
 3. Run `npm run desktop:build` on a machine with Rust/Cargo installed.
 4. Launch the packaged app.
-5. Import a PNG through the native open dialog.
-6. Run Auto Suggest and Fix on the sample asset.
-7. Export a ZIP bundle through the native save dialog.
-8. Confirm the ZIP contains the fixed PNG, manifest, palette files, validation report, frame sequence files when applicable, and selected engine sidecars.
-9. Confirm the web app still imports and exports through the browser path.
+5. Confirm the packaged app/window/installer metadata uses the PixelAid icon from `apps/desktop/src-tauri/icons/`.
+6. Import a PNG through the native open dialog.
+7. Run Auto Suggest and Fix on the sample asset.
+8. Export a ZIP bundle through the native save dialog.
+9. Confirm the ZIP contains the fixed PNG, manifest, palette files, validation report, frame sequence files when applicable, and selected engine sidecars.
+10. Confirm the web app still imports and exports through the browser path.
 
 ## Artifact Notes
 
 Generated Tauri artifacts live under `apps/desktop/src-tauri/target/` and stay ignored. Release owners should copy installers/bundles into the external release system rather than committing them.
+
+Generated app icons live under `apps/desktop/src-tauri/icons/` and are committed. Regenerate them with `npm run brand:sync` whenever the source brand artwork changes.
 
 ## Signing And Updates
 

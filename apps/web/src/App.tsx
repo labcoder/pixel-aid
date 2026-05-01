@@ -3853,16 +3853,16 @@ export function App() {
           }
           event.currentTarget.value = "";
         }}
-      />
+        />
 
-      <header className="top-toolbar">
-        <div className="brand-lockup">
-          <span className="brand-mark">PA</span>
-          <div>
-            <h1>PixelAid</h1>
-            <p>Fake-pixel fixer</p>
+        <header className="top-toolbar">
+          <div className="brand-lockup">
+            <img className="brand-logo" src="/brand/header-logo-compact-dark.png" width="100" height="34" alt="PixelAid" />
+            <div className="brand-copy">
+              <h1>PixelAid</h1>
+              <p>Fake-pixel fixer</p>
+            </div>
           </div>
-        </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
           <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={openImportPicker}>
             <Upload size={16} />
