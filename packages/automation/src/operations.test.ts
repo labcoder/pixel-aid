@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
 import { decodePngFile, encodePngFile } from "./imageIo";
 import {
+  createAutomationCancellationController,
   exportEngineBundle,
   extractPaletteFile,
   fixSprite,
@@ -12,6 +13,7 @@ import {
   createQualityReport,
   inspectImage,
   suggestFixSettings,
+  type AutomationProgressEvent,
 } from "./operations";
 
 async function withFixture<T>(run: (paths: { dir: string; input: string }) => Promise<T>): Promise<T> {
@@ -81,6 +83,7 @@ describe("automation operations", () => {
     await withFixture(async ({ dir, input }) => {
       const out = path.join(dir, "out", "fixed.png");
       const manifest = path.join(dir, "out", "fixed.json");
+      const events: AutomationProgressEvent[] = [];
 
       const result = await fixSprite({
         inputPath: input,
@@ -92,6 +95,9 @@ describe("automation operations", () => {
           maxColors: 4,
           grid: { detect: "manual", scale: 2 },
         },
+      }, {
+        jobId: "fix-job-1",
+        onProgress: (event) => events.push(event),
       });
 
       expect(result.ok).toBe(true);
@@ -101,6 +107,46 @@ describe("automation operations", () => {
       expect((await decodePngFile(out)).ok).toBe(true);
       const manifestJson = JSON.parse(await readFile(manifest, "utf8")) as { meta: { assetType: string } };
       expect(manifestJson.meta.assetType).toBe("sprite");
+      expect(events[0]).toMatchObject({ operation: "fix_sprite", stage: "input-read", jobId: "fix-job-1" });
+      expect(events.map((event) => event.stage)).toContain("downsampling");
+      expect(events.at(-1)).toMatchObject({ operation: "fix_sprite", stage: "complete", percent: 100 });
+    });
+  });
+
+  it("cancels a fix cooperatively before writing partial output", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const out = path.join(dir, "out", "cancelled.png");
+      const controller = createAutomationCancellationController();
+      const events: AutomationProgressEvent[] = [];
+
+      const result = await fixSprite({
+        inputPath: input,
+        outputPath: out,
+        options: {
+          assetType: "sprite",
+          target: "2x2",
+          maxColors: 4,
+          grid: { detect: "manual", scale: 2 },
+        },
+      }, {
+        signal: controller.signal,
+        onProgress: (event) => {
+          events.push(event);
+          if (event.stage === "downsampling") {
+            controller.cancel("Stop after first downsample progress");
+          }
+        },
+      });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error).toMatchObject({
+        code: "cancelled",
+        exitCode: 5,
+      });
+      expect(result.error.message).toContain("Stop after first downsample progress");
+      await expect(stat(out)).rejects.toBeTruthy();
+      expect(events.at(-1)).toMatchObject({ operation: "fix_sprite", stage: "cancelled", percent: 100 });
     });
   });
 
