@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { strToU8, zipSync } from "fflate";
 import {
   automationError,
+  createDiagnosticReport,
   createQualityReport,
   exportEngineBundle,
   extractPaletteFile,
@@ -13,6 +14,7 @@ import {
   planOutputFile,
   relativeToDirectory,
   suggestFixSettings,
+  writeJsonOutput,
   type AutomationFileRecord,
   type AutomationProgressEvent,
   type AutomationResult,
@@ -38,6 +40,7 @@ type CliCommandResult = {
   code: number;
   payload: unknown;
   human: string;
+  diagnostics?: CliDiagnosticMetadata;
 };
 
 type CliContext = {
@@ -77,15 +80,32 @@ type BatchResult = {
 
 type EngineExportTarget = ExportEngineBundleRequest["targets"][number];
 
+type CliDiagnosticMetadata = {
+  operation?: string;
+  options?: unknown;
+  paths?: unknown;
+  metadata?: Record<string, unknown>;
+  warnings?: string[];
+};
+
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
+const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "@pixelaid/cli" };
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
-  const json = takeBooleanFlag(args, "--json");
-  const progressJson = takeBooleanFlag(args, "--progress-json");
-  const context: CliContext = { io, progressJson };
+  let json = false;
+  let diagnosticsPath: string | undefined;
+  let diagnosticArgv = [...args];
+  let attemptedCommand: string | undefined;
   try {
+    diagnosticsPath = takeValue(args, "--diagnostics");
+    diagnosticArgv = [...args];
+    json = takeBooleanFlag(args, "--json");
+    const progressJson = takeBooleanFlag(args, "--progress-json");
+    attemptedCommand = commandFromArgv(args);
+    const context: CliContext = { io, progressJson };
     const result = await runParsedCommand(args, context);
+    await writeCliDiagnostics(diagnosticsPath, result, diagnosticArgv, io);
     emit(io.stdout, json ? `${JSON.stringify(result.payload, null, 2)}\n` : result.human);
     return result.code;
   } catch (error) {
@@ -94,7 +114,14 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): 
       : automationError("unexpected_error", "Unexpected CLI failure.", 1, {
           cause: error instanceof Error ? error.message : String(error),
         });
-    const payload = { ok: false, command: args[0] ?? "unknown", error: failure.error };
+    const command = attemptedCommand ?? commandFromArgv(diagnosticArgv) ?? "unknown";
+    const payload = { ok: false, command, error: failure.error };
+    await writeCliDiagnostics(diagnosticsPath, {
+      code: failure.error.exitCode,
+      payload,
+      human: `${failure.error.message}\n`,
+      diagnostics: { metadata: { argv: diagnosticArgv } },
+    }, diagnosticArgv, io);
     emit(json ? io.stdout : io.stderr, json ? `${JSON.stringify(payload, null, 2)}\n` : `${failure.error.message}\n`);
     return failure.error.exitCode;
   }
@@ -107,6 +134,7 @@ async function runParsedCommand(args: string[], context: CliContext): Promise<Cl
       code: command ? 0 : 2,
       payload: { ok: command ? true : false, command: command ?? "help", usage: usageText() },
       human: usageText(),
+      diagnostics: { operation: "help" },
     };
   }
 
@@ -136,21 +164,33 @@ async function runInspectCommand(command: string, args: string[], context: CliCo
   const inputPath = readInput(args);
   const options = parseFixOptions(args);
   assertNoExtraArgs(args);
-  return emitAutomation(command, await inspectImage({ inputPath, options }, createCliRuntime(command, context, { inputPath })));
+  return emitAutomation(
+    command,
+    await inspectImage({ inputPath, options }, createCliRuntime(command, context, { inputPath })),
+    { operation: "inspect_image", options, paths: { inputPath } },
+  );
 }
 
 async function runSuggestCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const options = parseFixOptions(args);
   assertNoExtraArgs(args);
-  return emitAutomation(command, await suggestFixSettings({ inputPath, options }, createCliRuntime(command, context, { inputPath })));
+  return emitAutomation(
+    command,
+    await suggestFixSettings({ inputPath, options }, createCliRuntime(command, context, { inputPath })),
+    { operation: "suggest_fix_settings", options, paths: { inputPath } },
+  );
 }
 
 async function runReportCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const options = parseFixOptions(args);
   const inputPaths = readInputs(args);
   assertNoExtraArgs(args);
-  return emitAutomation(command, await createQualityReport({ inputPaths, options }, createCliRuntime(command, context)));
+  return emitAutomation(
+    command,
+    await createQualityReport({ inputPaths, options }, createCliRuntime(command, context)),
+    { operation: "quality_report", options, paths: { inputPaths } },
+  );
 }
 
 async function runFixCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
@@ -169,6 +209,7 @@ async function runFixCommand(command: string, args: string[], context: CliContex
       options,
       overwrite,
     }, createCliRuntime(command, context, { inputPath, outputPath })),
+    { operation: "fix_sprite", options: { ...options, overwrite }, paths: { inputPath, outputPath, ...(manifestPath ? { manifestPath } : {}) } },
   );
 }
 
@@ -197,7 +238,15 @@ async function runFixSheetCommand(command: string, args: string[], context: CliC
     options,
     overwrite,
   };
-  return emitAutomation(command, await fixSpriteSheet(request, createCliRuntime(command, context, { inputPath, outputPath: outputPath ?? outDir })));
+  return emitAutomation(
+    command,
+    await fixSpriteSheet(request, createCliRuntime(command, context, { inputPath, outputPath: outputPath ?? outDir })),
+    {
+      operation: "fix_sprite_sheet",
+      options: { ...options, detectSheet: request.detectSheet, overwrite },
+      paths: { inputPath, outDir, ...(outputPath ? { outputPath } : {}), ...(manifestPath ? { manifestPath } : {}), ...(framesPath ? { framesPath } : {}) },
+    },
+  );
 }
 
 async function runPaletteCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
@@ -206,7 +255,11 @@ async function runPaletteCommand(command: string, args: string[], context: CliCo
   const maxColors = readNumberFlag(args, "--max-colors", readNumberFlag(args, "--colors", 24));
   const overwrite = takeBooleanFlag(args, "--overwrite");
   assertNoExtraArgs(args);
-  return emitAutomation(command, await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }, createCliRuntime(command, context, { inputPath, outputPath })));
+  return emitAutomation(
+    command,
+    await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }, createCliRuntime(command, context, { inputPath, outputPath })),
+    { operation: "extract_palette", options: { maxColors, overwrite }, paths: { inputPath, outputPath } },
+  );
 }
 
 async function runExportCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
@@ -220,16 +273,28 @@ async function runExportCommand(command: string, args: string[], context: CliCon
   const request: ExportEngineBundleRequest = { inputPath, outDir, targets, options, overwrite };
   const result = await exportEngineBundle(request, createCliRuntime(command, context, { inputPath, outputPath: outDir }));
   if (!result.ok || bundle !== "zip") {
-    return emitAutomation(command, result);
+    return emitAutomation(
+      command,
+      result,
+      { operation: "export_engine_bundle", options: { ...options, targets, overwrite, ...(bundle ? { bundle } : {}) }, paths: { inputPath, outDir } },
+    );
   }
 
   const zipResult = await writeZipBundle(outDir, result.value.files, { overwrite });
   if (!zipResult.ok) {
-    return emitAutomation(command, zipResult);
+    return emitAutomation(
+      command,
+      zipResult,
+      { operation: "export_engine_bundle", options: { ...options, targets, overwrite, bundle }, paths: { inputPath, outDir } },
+    );
   }
 
   result.value.files.push(zipResult.value);
-  return emitAutomation(command, result);
+  return emitAutomation(
+    command,
+    result,
+    { operation: "export_engine_bundle", options: { ...options, targets, overwrite, bundle }, paths: { inputPath, outDir } },
+  );
 }
 
 async function runBatchCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
@@ -321,15 +386,26 @@ async function runBatchCommand(command: string, args: string[], context: CliCont
       `${batch.summary.successCount} succeeded, ${batch.summary.failureCount} failed, ${batch.summary.skippedCount} skipped`,
       "",
     ].join("\n"),
+    diagnostics: {
+      operation: "batch_fix_sprite",
+      options: { ...options, dryRun, continueOnError, overwrite, recursive },
+      paths: { inputPatterns, inputPaths, outDir },
+      warnings: items.flatMap((item) => item.warnings),
+    },
   };
 }
 
-function emitAutomation<T>(command: string, result: AutomationResult<T>): CliCommandResult {
+function emitAutomation<T>(
+  command: string,
+  result: AutomationResult<T>,
+  diagnostics: CliDiagnosticMetadata = {},
+): CliCommandResult {
   if (!result.ok) {
     return {
       code: result.error.exitCode,
       payload: { ok: false, command, error: result.error },
       human: `${result.error.message}\n`,
+      diagnostics,
     };
   }
 
@@ -337,7 +413,64 @@ function emitAutomation<T>(command: string, result: AutomationResult<T>): CliCom
     code: 0,
     payload: { ok: true, command, result: result.value, warnings: result.warnings },
     human: `${command} complete\n`,
+    diagnostics: { ...diagnostics, warnings: result.warnings },
   };
+}
+
+async function writeCliDiagnostics(
+  diagnosticsPath: string | undefined,
+  result: CliCommandResult,
+  argv: readonly string[],
+  io: CliIo,
+): Promise<void> {
+  if (!diagnosticsPath) {
+    return;
+  }
+
+  const payload = result.payload as { error?: unknown };
+  const error = isAutomationError(payload.error) ? payload.error : undefined;
+  const report = createDiagnosticReport({
+    app: cliApp,
+    command: commandFromPayload(result.payload) ?? commandFromArgv(argv) ?? "unknown",
+    ...(result.diagnostics?.operation ? { operation: result.diagnostics.operation } : {}),
+    status: result.code === 0 ? "success" : "failure",
+    exitCode: result.code as 0 | 1 | 2 | 3 | 4 | 5 | 6 | 8,
+    ...(error ? { error } : {}),
+    ...(result.diagnostics?.options !== undefined ? { options: result.diagnostics.options } : {}),
+    ...(result.diagnostics?.paths !== undefined ? { paths: result.diagnostics.paths } : {}),
+    metadata: {
+      argv,
+      ...(result.diagnostics?.metadata ?? {}),
+    },
+    warnings: result.diagnostics?.warnings ?? [],
+  });
+
+  const write = await writeJsonOutput(diagnosticsPath, report, { overwrite: true });
+  if (!write.ok) {
+    emit(io.stderr, `Could not write diagnostics: ${write.error.message}\n`);
+  }
+}
+
+function commandFromPayload(payload: unknown): string | undefined {
+  if (payload && typeof payload === "object" && "command" in payload) {
+    const command = (payload as { command?: unknown }).command;
+    return typeof command === "string" ? command : undefined;
+  }
+  return undefined;
+}
+
+function commandFromArgv(argv: readonly string[]): string | undefined {
+  return argv.find((arg) => !arg.startsWith("-"));
+}
+
+function isAutomationError(value: unknown): value is NonNullable<ReturnType<typeof automationError>["error"]> {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    "code" in value &&
+    "message" in value &&
+    "exitCode" in value,
+  );
 }
 
 function createCliRuntime(
