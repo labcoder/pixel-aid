@@ -1,4 +1,5 @@
-import type { AssetMode, AssetType, Rect, RGBAImage, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, Rect, RGBAImage, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { GoldenSignatureOptions } from "./goldenSignature";
 
 export const cleanupFixtureCategories = [
   "highResolutionPseudoPixelSprite",
@@ -20,6 +21,23 @@ export type FixtureGoldenSignature = {
   transparentPixels: number;
   palette: string[];
   samplePixels: Record<string, readonly [number, number, number, number]>;
+};
+
+export type FixtureGoldenSignatureDiff = {
+  field: string;
+  expected: unknown;
+  actual: unknown;
+};
+
+export type VisualRegressionCase = {
+  id: string;
+  title: string;
+  fixtureId: string;
+  category: CleanupFixtureCategory;
+  description: string;
+  options: FixOptions;
+  signatureOptions: GoldenSignatureOptions;
+  expected: FixtureGoldenSignature;
 };
 
 export type CleanupFixtureExpected = {

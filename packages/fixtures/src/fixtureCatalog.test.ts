@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { benchmarkFixtureCatalog, cleanupFixtureCatalog, cleanupFixtureCategories } from "./index";
+import { benchmarkFixtureCatalog, cleanupFixtureCatalog, cleanupFixtureCategories, visualRegressionCases } from "./index";
 import { assetTypeDefinitions } from "@pixelaid/shared";
 
 const expectedCategories = [
@@ -39,6 +39,7 @@ describe("cleanup fixture catalog", () => {
         "single-knight-8x-noisy",
         "halo-transparent-edge",
         "matte-opaque-white-edge",
+        "outline-repair-dual-tone",
         "palette-drift-walk-4f",
         "uneven-gutter-labeled-sheet",
         "drifted-effect-sheet",
@@ -85,5 +86,18 @@ describe("cleanup fixture catalog", () => {
       expect(fixture.sourcePixels).toBeGreaterThan(fixture.nativePixels);
       expect(typeof fixture.createImage).toBe("function");
     }
+  });
+
+  test("maps visual regression cases to existing fixtures and key categories", () => {
+    const fixtureIds = new Set(cleanupFixtureCatalog.map((fixture) => fixture.id));
+    const categories = new Set(visualRegressionCases.map((fixture) => fixture.category));
+
+    for (const fixture of visualRegressionCases) {
+      expect(fixtureIds.has(fixture.fixtureId)).toBe(true);
+      expect(fixture.expected.checksum.length).toBeGreaterThan(0);
+    }
+    expect(categories).toEqual(
+      new Set(["highResolutionPseudoPixelSprite", "transparentMatteHaloSprite", "paletteDriftAnimationFrames", "unevenSpriteSheet", "tilesetSeams"])
+    );
   });
 });
