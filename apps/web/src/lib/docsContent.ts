@@ -5,6 +5,7 @@ import performanceMarkdown from "../../../../docs/performance.md?raw";
 import licensingMarkdown from "../../../../docs/licensing.md?raw";
 import onboardingSamplesMarkdown from "../../../../docs/onboarding-samples.md?raw";
 import troubleshootingMarkdown from "../../../../docs/troubleshooting.md?raw";
+import launchQaMarkdown from "../../../../docs/launch-qa.md?raw";
 
 export type DocsSection = {
   id: string;
@@ -97,6 +98,12 @@ export const docsSections: DocsSection[] = [
     title: "Troubleshooting",
     tooltip: "Diagnostics export and common recovery paths.",
     markdown: troubleshootingMarkdown
+  },
+  {
+    id: "launch-qa",
+    title: "Launch QA",
+    tooltip: "Release-candidate smoke tests, beta feedback, and privacy guidance.",
+    markdown: launchQaMarkdown
   }
 ];
 

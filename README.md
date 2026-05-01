@@ -56,6 +56,7 @@ See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 See `docs/automation.md` for CLI and MCP-ready workflows.
 See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for packaging and release checklist notes.
 See `docs/licensing.md` for release licensing notes.
+See `docs/launch-qa.md` for the 1.0 release-candidate QA matrix and beta feedback loop.
 
 ## License
 
