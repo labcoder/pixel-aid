@@ -8,7 +8,6 @@ import {
   inspectImage,
   unknownAutomationError,
   type AutomationError,
-  type AutomationFailure,
   type AutomationOperation,
   type AutomationProgressEvent,
   type AutomationResult,
