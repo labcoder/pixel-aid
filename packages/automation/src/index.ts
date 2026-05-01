@@ -22,6 +22,7 @@ export {
   type PlannedOutputFile,
 } from "./paths";
 export {
+  createAutomationCancellationController,
   exportEngineBundle,
   extractPaletteFile,
   fixSprite,
@@ -44,6 +45,14 @@ export {
   type QualityReportBatch,
   type SuggestFixSettingsRequest,
 } from "./operations";
+export type {
+  AutomationCancellationController,
+  AutomationCancellationSignal,
+  AutomationOperation,
+  AutomationProgressEvent,
+  AutomationProgressStage,
+  AutomationRuntimeOptions,
+} from "./progress";
 export {
   automationError,
   automationOk,
