@@ -100,7 +100,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     bakedTransparencyDetected,
     blockPurity
   });
-  const contrastExpansionEnabled = suggestContrastExpansionEnabled(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
+  const contrastExpansionEnabled = suggestContrastExpansionEnabled(
+    qualityReport,
+    mode,
+    classification.assetType,
+    bakedTransparencyDetected,
+    candidate
+  );
   const outline = suggestOutlineRepair(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
@@ -174,9 +180,20 @@ function suggestDownscaleMethod(input: {
   return input.preset;
 }
 
-function suggestContrastExpansionEnabled(report: QualityReport, mode: AssetMode, assetType: AssetType, bakedTransparencyDetected: boolean): boolean {
+function suggestContrastExpansionEnabled(
+  report: QualityReport,
+  mode: AssetMode,
+  assetType: AssetType,
+  bakedTransparencyDetected: boolean,
+  candidate: GridCandidate | undefined
+): boolean {
   const spriteLike = mode === "single" && (assetType === "sprite" || assetType === "icon");
   if (!spriteLike) {
+    return false;
+  }
+
+  const selectedScale = Math.min(candidate?.scaleX ?? 1, candidate?.scaleY ?? candidate?.scaleX ?? 1);
+  if (bakedTransparencyDetected && selectedScale < 4) {
     return false;
   }
 
@@ -196,14 +213,14 @@ function suggestOutlineRepair(
 
   const sourceColors = report.metrics.outline.candidates
     .filter((candidate) => candidate.luma <= 96)
-    .slice(0, 2)
+    .slice(0, bakedTransparencyDetected ? 1 : 2)
     .map((candidate) => candidate.color);
 
   if (sourceColors.length === 0) {
     return { mode: "none", size: 1, sourceColors: [] };
   }
 
-  return { mode: "repairExisting", size: bakedTransparencyDetected ? 2 : 1, sourceColors };
+  return { mode: "repairExisting", size: 1, sourceColors };
 }
 
 function suggestCleanupSettings(
