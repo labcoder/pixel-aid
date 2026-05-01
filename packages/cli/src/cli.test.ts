@@ -103,6 +103,91 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("fixes a sprite with auto-suggested settings", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "auto-fixed.png");
+      const manifest = path.join(dir, "auto-fixed.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--auto",
+        "--asset-type",
+        "icon",
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.ok).toBe(true);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.assetType).toBe("icon");
+      expect(manifestJson.meta.operation.settings.targetWidth).toBe(2);
+      await expect(stat(output)).resolves.toBeTruthy();
+    });
+  });
+
+  it("accepts cleanup controls for validation variants", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "cleanup-fixed.png");
+      const manifest = path.join(dir, "cleanup-fixed.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--alpha",
+        "backgroundFloodFill",
+        "--alpha-tolerance",
+        "24",
+        "--downscale",
+        "dominant",
+        "--outline-mode",
+        "repairExisting",
+        "--outline-size",
+        "1",
+        "--outline-source-colors",
+        "#000000",
+        "--no-contrast-expansion",
+        "--keep-halos",
+        "--denoise-strength",
+        "0",
+        "--json",
+      ], capture);
+
+      expect(code).toBe(0);
+      expect(parseStdout(capture).ok).toBe(true);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.operation.settings.alphaSettings.tolerance).toBe(24);
+      expect(manifestJson.meta.operation.settings.cleanup).toMatchObject({
+        outlineMode: "repairExisting",
+        outlineSize: 1,
+        denoiseStrength: 0,
+        removeHalos: false,
+        contrastExpansion: { enabled: false },
+      });
+    });
+  });
+
   it("fixes a sprite sheet from frame metadata", async () => {
     await withFixture(async ({ dir, input, frames }) => {
       const capture = createCapture();

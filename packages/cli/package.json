@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "pixelaid": "./dist/bin.js"
+    "pixelaid": "./dist/bin.cjs"
   },
   "exports": {
     ".": {
@@ -13,7 +13,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').rmSync('dist/bin.js',{force:true})\" && esbuild src/bin.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/bin.cjs",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
@@ -23,6 +23,7 @@
     "fflate": "^0.8.2"
   },
   "devDependencies": {
-    "@types/node": "^25.6.0"
+    "@types/node": "^25.6.0",
+    "esbuild": "^0.28.0"
   }
 }

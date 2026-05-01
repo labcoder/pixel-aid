@@ -154,6 +154,7 @@ export type FixSpriteRequest = {
   outputPath: string;
   manifestPath?: string;
   options?: AutomationFixOptionsInput;
+  autoSuggest?: boolean;
   overwrite?: boolean;
 };
 
@@ -379,12 +380,25 @@ export async function fixSprite(
 
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "analysis", 15, "Resolving fix settings");
-    const options = normalizeFixOptions(request.options ?? {});
-    if (!options.ok) {
-      return options;
+    let fixOptions: FixOptions;
+    let optionWarnings: string[];
+    if (request.autoSuggest) {
+      const suggestion = createFixSuggestion(imageResult.value, request.options);
+      if (!suggestion.ok) {
+        return suggestion;
+      }
+      fixOptions = suggestion.value.options;
+      optionWarnings = suggestion.warnings;
+    } else {
+      const options = normalizeFixOptions(request.options ?? {});
+      if (!options.ok) {
+        return options;
+      }
+      fixOptions = options.value;
+      optionWarnings = options.warnings;
     }
 
-    const fixed = runFix(imageResult.value, options.value, scopedRuntime, operation);
+    const fixed = runFix(imageResult.value, fixOptions, scopedRuntime, operation);
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "output-write", 92, "Writing fixed PNG");
     const imageWrite = await encodePngFile(fixed.image, output.value.path);
@@ -419,8 +433,8 @@ export async function fixSprite(
       result: fixed,
       manifest: pixelManifest,
       files,
-      warnings: [...options.warnings],
-    }, options.warnings);
+      warnings: [...optionWarnings],
+    }, optionWarnings);
   } catch (error) {
     const cancelled = cancellationFailure(error, scopedRuntime, operation);
     if (cancelled) {

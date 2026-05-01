@@ -4,7 +4,7 @@ PixelAid automation exposes the same deterministic fix/export pipeline used by t
 
 The automation surface is split into three packages:
 
-- `@pixelaid/automation`: shared Node-safe operations, PNG IO, option normalization, safe output planning, and JSON result envelopes.
+- `@pixelaid/automation`: shared Node-safe operations, PNG/JPEG input IO, PNG output encoding, option normalization, safe output planning, and JSON result envelopes.
 - `@pixelaid/cli`: the `pixelaid` command-line interface.
 - `@pixelaid/mcp`: MCP-ready tool definitions and direct handlers. A long-running MCP server process is intentionally deferred.
 
@@ -16,7 +16,7 @@ Build the workspace before using the compiled binary directly:
 
 ```sh
 npm run build
-node packages/cli/dist/bin.js inspect input.png --json
+node packages/cli/dist/bin.cjs inspect input.png --json
 ```
 
 During development, tests import `runCli` directly. Published packaging can expose the `pixelaid` binary from `packages/cli/dist/bin.js`.
@@ -28,6 +28,7 @@ pixelaid inspect input.png --json
 pixelaid report input.png more.png --colors 24 --json
 pixelaid suggest input.png --asset-type sprite --target 64x64 --json
 pixelaid fix input.png --out hero.png --manifest hero.json --target 64x64 --colors 24
+pixelaid fix generated.jpg --out hero.png --manifest hero.json --auto --asset-type sprite --json
 pixelaid fix-sheet sheet.png --out-dir ./out --frames frames.json --asset-type animation
 pixelaid palette input.png --max-colors 24 --out palette.hex
 pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip
@@ -36,6 +37,7 @@ pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texture
 Useful fix flags:
 
 - `--asset-type sprite|sprite-sheet|animation|character|tileset|tilemap|portrait|icon|ui|background`
+- `--auto` or `--auto-suggest` on `fix` to inspect the source and use suggested settings before writing output
 - `--target WIDTHxHEIGHT`
 - `--colors N` or `--max-colors N`
 - `--palette-strategy medianCut|perceptual|frequency`
@@ -45,9 +47,17 @@ Useful fix flags:
 - `--phase-x N`, `--phase-y N`
 - `--downscale dominant|detailPreserving|median|adaptive|averageThenPalette`
 - `--alpha preserve|binary|backgroundFloodFill|colorKey`
+- `--alpha-tolerance N`, `--alpha-threshold N`, `--alpha-color-key #ffffff`
 - `--outline-mode none|repairExisting|add`
 - `--outline-color #101112`
 - `--outline-source-colors #102020,#203030`
+- `--outline-size N`, `--outline-alpha N`
+- `--remove-orphans` / `--no-remove-orphans`
+- `--jaggy-cleanup` / `--no-jaggy-cleanup`
+- `--preserve-single-pixel-details` / `--no-preserve-single-pixel-details`
+- `--remove-halos` / `--keep-halos`
+- `--contrast-expansion` / `--no-contrast-expansion`
+- `--denoise-strength N`
 
 Diagnostics:
 
@@ -135,7 +145,7 @@ A typical local AI workflow should avoid guessing settings:
 2. Run `report` when an agent needs ranked quality findings across one or more assets before changing files. Reports include grid confidence, palette budget fit, alpha risks, sheet consistency, outline candidates, export readiness, and recommended setting changes.
 3. Run `suggest` with an explicit `--asset-type` if the user already knows the asset category.
 4. For sprite sheets, use detected frames or supply corrected frame metadata through `--frames`.
-5. Run `fix` or `fix-sheet`.
+5. Run `fix --auto` for the current suggested path, or pass explicit fix flags when validating variants.
 6. Run `export` for generic manifest plus engine sidecars.
 7. Keep the source image and generated manifest together so pivots, frame rects, animations, palette, and provenance remain inspectable.
 
@@ -150,6 +160,19 @@ pixelaid fix robot.png --out robot-fixed.png --outline-mode repairExisting --out
 ```
 
 This prevents automation from treating only black as the existing outline.
+
+For quick visual regression loops against AI outputs with baked backgrounds, use the compiled CLI directly and write into an ignored scratch folder:
+
+```powershell
+npm run build -w @pixelaid/cli
+node packages\cli\dist\bin.cjs fix generated.jpg `
+  --out docs\internal\scratch\generated-fixed.png `
+  --manifest docs\internal\scratch\generated-fixed.manifest.json `
+  --auto `
+  --asset-type sprite `
+  --json `
+  --overwrite
+```
 
 ## MCP-Ready Tools
 
@@ -182,6 +205,6 @@ Errors keep the same PixelAid automation envelope as the CLI.
 
 - A long-running MCP server process.
 - Local HTTP API.
-- Non-PNG codecs.
+- Additional non-PNG codecs beyond JPEG input.
 - Direct AI-provider generation or editing calls.
 - Streaming progress events for CLI/MCP jobs.

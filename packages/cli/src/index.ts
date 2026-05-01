@@ -197,6 +197,7 @@ async function runFixCommand(command: string, args: string[], context: CliContex
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const manifestPath = takeValue(args, "--manifest");
+  const autoSuggest = takeBooleanFlag(args, "--auto") || takeBooleanFlag(args, "--auto-suggest");
   const overwrite = takeBooleanFlag(args, "--overwrite");
   const options = parseFixOptions(args);
   assertNoExtraArgs(args);
@@ -207,9 +208,10 @@ async function runFixCommand(command: string, args: string[], context: CliContex
       outputPath,
       ...(manifestPath ? { manifestPath } : {}),
       options,
+      autoSuggest,
       overwrite,
     }, createCliRuntime(command, context, { inputPath, outputPath })),
-    { operation: "fix_sprite", options: { ...options, overwrite }, paths: { inputPath, outputPath, ...(manifestPath ? { manifestPath } : {}) } },
+    { operation: "fix_sprite", options: { ...options, autoSuggest, overwrite }, paths: { inputPath, outputPath, ...(manifestPath ? { manifestPath } : {}) } },
   );
 }
 
@@ -635,10 +637,38 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (alpha) options.alpha = alpha as NonNullable<AutomationFixOptionsInput["alpha"]>;
   const alphaThreshold = readOptionalNumberFlag(args, "--alpha-threshold");
   if (alphaThreshold !== undefined) options.alphaThreshold = alphaThreshold;
+  const alphaTolerance = readOptionalNumberFlag(args, "--alpha-tolerance");
+  if (alphaTolerance !== undefined) options.alphaTolerance = alphaTolerance;
+  const alphaColorKey = takeValue(args, "--alpha-color-key");
+  if (alphaColorKey) options.alphaColorKey = alphaColorKey;
+  const transparentRgb = takeValue(args, "--transparent-rgb");
+  if (transparentRgb) options.transparentRgb = transparentRgb;
+  const decontaminateRgb = takeBooleanChoice(args, "--decontaminate-rgb", "--keep-transparent-rgb");
+  if (decontaminateRgb !== undefined) options.decontaminateRgb = decontaminateRgb;
   const outlineMode = takeValue(args, "--outline-mode");
   const outlineSourceColors = takeValue(args, "--outline-source-colors");
   const outlineColor = takeValue(args, "--outline-color");
-  if (outlineMode || outlineSourceColors || outlineColor) {
+  const outlineSize = readOptionalNumberFlag(args, "--outline-size");
+  const outlineAlpha = readOptionalNumberFlag(args, "--outline-alpha");
+  const removeOrphans = takeBooleanChoice(args, "--remove-orphans", "--no-remove-orphans");
+  const jaggyCleanup = takeBooleanChoice(args, "--jaggy-cleanup", "--no-jaggy-cleanup");
+  const preserveSinglePixelDetails = takeBooleanChoice(args, "--preserve-single-pixel-details", "--no-preserve-single-pixel-details");
+  const removeHalos = takeBooleanChoice(args, "--remove-halos", "--keep-halos");
+  const denoiseStrength = readOptionalNumberFlag(args, "--denoise-strength");
+  const contrastExpansion = takeBooleanChoice(args, "--contrast-expansion", "--no-contrast-expansion");
+  if (
+    outlineMode ||
+    outlineSourceColors ||
+    outlineColor ||
+    outlineSize !== undefined ||
+    outlineAlpha !== undefined ||
+    removeOrphans !== undefined ||
+    jaggyCleanup !== undefined ||
+    preserveSinglePixelDetails !== undefined ||
+    removeHalos !== undefined ||
+    denoiseStrength !== undefined ||
+    contrastExpansion !== undefined
+  ) {
     const cleanup: NonNullable<AutomationFixOptionsInput["cleanup"]> = {};
     if (outlineMode) {
       cleanup.outlineMode = outlineMode as OutlineMode;
@@ -648,6 +678,30 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
     }
     if (outlineColor) {
       cleanup.outlineColor = outlineColor;
+    }
+    if (outlineSize !== undefined) {
+      cleanup.outlineSize = outlineSize;
+    }
+    if (outlineAlpha !== undefined) {
+      cleanup.outlineAlpha = outlineAlpha;
+    }
+    if (removeOrphans !== undefined) {
+      cleanup.removeOrphans = removeOrphans;
+    }
+    if (jaggyCleanup !== undefined) {
+      cleanup.jaggyCleanup = jaggyCleanup;
+    }
+    if (preserveSinglePixelDetails !== undefined) {
+      cleanup.preserveSinglePixelDetails = preserveSinglePixelDetails;
+    }
+    if (removeHalos !== undefined) {
+      cleanup.removeHalos = removeHalos;
+    }
+    if (denoiseStrength !== undefined) {
+      cleanup.denoiseStrength = denoiseStrength;
+    }
+    if (contrastExpansion !== undefined) {
+      cleanup.contrastExpansion = { enabled: contrastExpansion };
     }
     options.cleanup = cleanup;
   }
@@ -771,6 +825,17 @@ function takeBooleanFlag(args: string[], name: string): boolean {
   return true;
 }
 
+function takeBooleanChoice(args: string[], truthyName: string, falsyName: string): boolean | undefined {
+  const truthy = takeBooleanFlag(args, truthyName);
+  const falsy = takeBooleanFlag(args, falsyName);
+  if (truthy && falsy) {
+    throw new CliUsageError(`Use either ${truthyName} or ${falsyName}, not both.`);
+  }
+  if (truthy) return true;
+  if (falsy) return false;
+  return undefined;
+}
+
 function takeValue(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
   if (index < 0) return undefined;
@@ -841,13 +906,13 @@ function usageText(): string {
     "PixelAid automation CLI",
     "",
     "Commands:",
-    "  pixelaid inspect <input.png> --json",
-    "  pixelaid report <input.png> [more.png] --json",
-    "  pixelaid suggest <input.png> --json",
-    "  pixelaid fix <input.png> --out <fixed.png> --manifest <manifest.json>",
-    "  pixelaid fix-sheet <input.png> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
-    "  pixelaid palette <input.png> --max-colors <n> --out <palette.hex|palette.json>",
-    "  pixelaid export <input.png> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
+    "  pixelaid inspect <input.png|input.jpg> --json",
+    "  pixelaid report <input.png|input.jpg> [more.png|more.jpg] --json",
+    "  pixelaid suggest <input.png|input.jpg> --json",
+    "  pixelaid fix <input.png|input.jpg> --out <fixed.png> --manifest <manifest.json> [--auto]",
+    "  pixelaid fix-sheet <input.png|input.jpg> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
+    "  pixelaid palette <input.png|input.jpg> --max-colors <n> --out <palette.hex|palette.json>",
+    "  pixelaid export <input.png|input.jpg> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
     "",
     "Palette options:",
     "  --palette-strategy medianCut|perceptual|frequency",

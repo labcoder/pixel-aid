@@ -1,9 +1,11 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { encode as encodeJpeg } from "jpeg-js";
 import { describe, expect, it } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
 import {
+  decodeJpegFile,
   decodePngFile,
   encodePngFile,
   readRgbaImageFile,
@@ -61,16 +63,50 @@ describe("image IO", () => {
     });
   });
 
-  it("returns unsupported_format for non-PNG files", async () => {
+  it("reads supported JPEG files through the generic image reader", async () => {
     await withTempDir(async (dir) => {
       const filePath = path.join(dir, "asset.jpg");
-      await writeFile(filePath, "not a png");
+      const jpeg = encodeJpeg({
+        width: sampleImage.width,
+        height: sampleImage.height,
+        data: Buffer.from(sampleImage.data),
+      }, 100);
+      await writeFile(filePath, jpeg.data);
+
+      const result = await readRgbaImageFile(filePath);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.width).toBe(2);
+      expect(result.value.height).toBe(2);
+      expect(result.value.data).toHaveLength(sampleImage.width * sampleImage.height * 4);
+    });
+  });
+
+  it("returns unsupported_format for unsupported image extensions", async () => {
+    await withTempDir(async (dir) => {
+      const filePath = path.join(dir, "asset.gif");
+      await writeFile(filePath, "not a supported image");
 
       const result = await readRgbaImageFile(filePath);
 
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe("unsupported_format");
+      expect(result.error.exitCode).toBe(3);
+    });
+  });
+
+  it("returns decode_failed for malformed JPEG files", async () => {
+    await withTempDir(async (dir) => {
+      const filePath = path.join(dir, "broken.jpg");
+      await writeFile(filePath, "not a real jpg");
+
+      const result = await decodeJpegFile(filePath);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("decode_failed");
       expect(result.error.exitCode).toBe(3);
     });
   });

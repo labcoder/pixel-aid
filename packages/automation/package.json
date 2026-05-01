@@ -18,6 +18,7 @@
     "@pixelaid/core": "0.1.0",
     "@pixelaid/exporters": "0.1.0",
     "@pixelaid/shared": "0.1.0",
+    "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0"
   },
   "devDependencies": {
