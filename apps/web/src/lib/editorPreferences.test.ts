@@ -91,6 +91,14 @@ describe("editor preferences", () => {
     expect(preferences.settings.playbackDirection).toBe("hold");
   });
 
+  test("preserves contrast expansion cleanup preference", () => {
+    const enabled = normalizeEditorPreferences({ settings: { contrastExpansionEnabled: true } });
+    const defaults = createDefaultEditorPreferences();
+
+    expect(defaults.settings.contrastExpansionEnabled).toBe(false);
+    expect(enabled.settings.contrastExpansionEnabled).toBe(true);
+  });
+
   test("preserves tile and atlas engine export targets", () => {
     const preferences = normalizeEditorPreferences({ settings: { engineExportTargets: ["texturepacker", "tiled", "ldtk", "phaser", "bad"] } });
 

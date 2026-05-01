@@ -226,6 +226,26 @@ export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
   morphology?: MorphologyDiagnostics;
   palette?: PaletteDiagnostics;
+  contrastExpansion?: ContrastExpansionDiagnostics;
+};
+
+export type ContrastExpansionSettings = {
+  enabled?: boolean;
+  radius?: number;
+  minContrast?: number;
+  darkThreshold?: number;
+  lightThreshold?: number;
+  alphaThreshold?: number;
+};
+
+export type ContrastExpansionDiagnostics = {
+  enabled: boolean;
+  radius: number;
+  minContrast: number;
+  changedPixels: number;
+  darkFeaturePixels: number;
+  lightFeaturePixels: number;
+  skippedTransparentPixels: number;
 };
 
 export type OutlineMode = "none" | "repairExisting" | "add";
@@ -280,7 +300,17 @@ export type GridCandidateDiagnostics = {
   sourceCoverage: number;
   confidenceLabel: "low" | "medium" | "high";
   notes: string[];
+  sobelTileVoting?: GridSobelTileVotingDiagnostics;
   drift?: GridDriftDiagnostics;
+};
+
+export type GridSobelTileVotingDiagnostics = {
+  selectedTileCount: number;
+  selectedTiles: { x: number; y: number; w: number; h: number; score: number }[];
+  scaleHistogram: { scale: number; votes: number; score: number }[];
+  phaseConfidenceX: number;
+  phaseConfidenceY: number;
+  fallbackReason?: string;
 };
 
 export type GridDriftDiagnostics = {
@@ -325,14 +355,15 @@ export type FixOptions = {
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     denoiseStrength?: number;
-      morphology?: MorphologyCleanupSettings;
-      removeHalos?: boolean;
-      outlineMode?: OutlineMode;
-      outlineSize?: number;
-      outlineColor?: string;
-      outlineSourceColors?: string[];
-      outlineAlpha?: number;
-    };
+    morphology?: MorphologyCleanupSettings;
+    removeHalos?: boolean;
+    outlineMode?: OutlineMode;
+    outlineSize?: number;
+    outlineColor?: string;
+    outlineSourceColors?: string[];
+    outlineAlpha?: number;
+    contrastExpansion?: ContrastExpansionSettings;
+  };
   sheet?: SheetSliceOptions;
   sheetFrames?: SpriteFrame[];
 };

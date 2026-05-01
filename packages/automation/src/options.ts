@@ -345,6 +345,11 @@ function normalizeCleanup(
   if (input?.outlineSourceColors) {
     cleanup.outlineSourceColors = normalizeHexColors(input.outlineSourceColors);
   }
+  const contrastExpansion = normalizeContrastExpansion(input?.contrastExpansion ?? fallback.contrastExpansion);
+  if (contrastExpansion) {
+    cleanup.contrastExpansion = contrastExpansion;
+  }
+
   const morphology = normalizeMorphology(input?.morphology ?? fallback.morphology);
   if (!morphology.ok) {
     return morphology;
@@ -354,6 +359,23 @@ function normalizeCleanup(
   }
 
   return automationOk(cleanup);
+}
+
+function normalizeContrastExpansion(
+  input: FixOptions["cleanup"]["contrastExpansion"] | undefined,
+): FixOptions["cleanup"]["contrastExpansion"] | undefined {
+  if (!input) {
+    return undefined;
+  }
+
+  return {
+    enabled: input.enabled ?? false,
+    radius: normalizeIntegerOrDefault(input.radius, 1),
+    minContrast: normalizeIntegerOrDefault(input.minContrast, 56),
+    darkThreshold: normalizeIntegerOrDefault(input.darkThreshold, 64),
+    lightThreshold: normalizeIntegerOrDefault(input.lightThreshold, 208),
+    alphaThreshold: normalizeIntegerOrDefault(input.alphaThreshold, 16),
+  };
 }
 
 function normalizeMorphology(input: MorphologyCleanupSettings | undefined): AutomationResult<MorphologyCleanupSettings | undefined> {
