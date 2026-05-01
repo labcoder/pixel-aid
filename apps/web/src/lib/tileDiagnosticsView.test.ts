@@ -14,7 +14,8 @@ describe("tile diagnostics view formatting", () => {
       maxEdgeDelta: 0.08,
       seamRiskScore: 0.05,
       lightingRiskScore: 0.02,
-      issues: []
+      issues: [],
+      repairSuggestions: []
     };
 
     expect(formatTilesetDiagnosticsSummary(diagnostics)).toEqual({
@@ -22,6 +23,48 @@ describe("tile diagnostics view formatting", () => {
       summary: "4 seams checked / 5% seam risk / 2% lighting risk",
       warnings: []
     });
+  });
+
+  test("includes seam repair preview suggestions in tileset warnings", () => {
+    const diagnostics: TilesetSeamDiagnostics = {
+      tileWidth: 16,
+      tileHeight: 16,
+      rows: 1,
+      columns: 2,
+      checkedSeams: 1,
+      averageEdgeDelta: 0.7,
+      maxEdgeDelta: 0.7,
+      seamRiskScore: 0.7,
+      lightingRiskScore: 0.1,
+      issues: [
+        {
+          code: "edge-mismatch",
+          severity: "error",
+          message: "Adjacent tile edges do not match.",
+          edge: "right-left",
+          tileA: { row: 0, column: 0 },
+          tileB: { row: 0, column: 1 },
+          score: 0.7
+        }
+      ],
+      repairSuggestions: [
+        {
+          issueCode: "edge-mismatch",
+          strategy: "manualRepaint",
+          previewOnly: true,
+          edge: "right-left",
+          tileA: { row: 0, column: 0 },
+          tileB: { row: 0, column: 1 },
+          confidence: 0.7,
+          message: "Preview manual repaint guidance before changing source pixels."
+        }
+      ]
+    };
+
+    expect(formatTilesetDiagnosticsSummary(diagnostics).warnings).toEqual([
+      "Adjacent tile edges do not match.",
+      "Repair preview: Preview manual repaint guidance before changing source pixels."
+    ]);
   });
 
   test("formats scene diagnostics warnings", () => {

@@ -54,7 +54,7 @@ Manual Asset type overrides are stored per imported asset. A character import ca
 
 Auto Suggest can classify obvious large landscape animation sheets by detecting repeated horizontal content bands, even when the sheet is not extremely wide. This is a first-pass mode suggestion, not full cell detection.
 
-Tilesets use conservative cleanup defaults because a clean repeated tile matters more than removing every small mark. The Asset inspector reports seam risk and lighting risk from adjacent tile edges. Backgrounds and tilemaps get scene diagnostics for coarse color-bin count, detail density, and preservation warnings so sprite-style crop, binary alpha, and denoise choices are easier to review before Fix. Tilemaps also get repeated-pattern tile candidates so the user can review likely tile sizes before applying a tile-sheet cleanup path.
+Tilesets use conservative cleanup defaults because a clean repeated tile matters more than removing every small mark. The Asset inspector reports seam risk and lighting risk from adjacent tile edges, then adds preview-only repair suggestions such as edge color harmonization, lighting harmonization, crop/phase review, or manual repaint guidance. Backgrounds and tilemaps get scene diagnostics for coarse color-bin count, detail density, and preservation warnings so sprite-style crop, binary alpha, and denoise choices are easier to review before Fix. Tilemaps also get repeated-pattern tile candidates so the user can review likely tile sizes before applying a tile-sheet cleanup path.
 
 For clear row-based sprite sheets, Auto Suggest also runs sheet layout detection. When successful, it fills Frame W/H, Rows, Columns, Margin, and Spacing, stores the detected frame rectangles, and creates row clips for the timeline player. It can split bordered row grids by vertical cell separators when continuous row borders would otherwise look like one wide frame, normalize first-pass unboxed rows where different poses create uneven visible gutters inside a regular cell pitch, recover faint presentation-cell outlines around tight sprite silhouettes, ignore footer-like metadata bands, merge nearby disconnected body/effect components when mild drift still points to a shared column grid, and name row clips from confident blocky left-side labels such as `idle`, `walk`, or `jump`.
 
@@ -165,7 +165,7 @@ Cleanup controls run after block downsampling and alpha handling.
 
 The timeline and sprite player are enabled when a sheet-like mode has frame metadata. Single sprites do not have animation frames, so the editor omits the player panel and gives the bottom area to logs and metrics.
 
-Tilesets replace the sprite player with a canvas repeat preview. The preview draws the selected tile in a 3x3 grid with smoothing disabled and overlays seam guides when diagnostics find repeat risk. This keeps tile inspection separate from animation playback while still sharing the same bottom logs and metrics area.
+Tilesets replace the sprite player with a canvas repeat preview. The preview draws the selected tile in a 3x3 grid with smoothing disabled and overlays seam guides when diagnostics find repeat risk. Repair suggestions stay preview-first: PixelAid names the likely repair strategy, but does not silently overwrite source pixels. This keeps tile inspection separate from animation playback while still sharing the same bottom logs and metrics area.
 
 The Timeline viewport player uses the selected row clip or all generated sheet frames. Its live playback loop runs inside the viewport canvas so React state is only updated when the user scrubs, steps, stops, or changes clip/source. It can:
 
@@ -196,7 +196,7 @@ Clicking a frame, dragging or resizing a detected source box, scrubbing, steppin
 
 Metrics are split between source and output. Source metrics describe the imported image. Output metrics describe the fixed result and the operation settings that produced it.
 
-Tileset diagnostics surface seam risk and lighting risk in the Asset inspector and repeat-preview panel. Scene diagnostics for backgrounds and tilemaps report color-bin density, detail density, and preservation warnings so broad scene assets are not judged by sprite cleanup expectations. Tilemap diagnostics rank candidate tile sizes by dimension fit, grid consistency, and repeated tile signatures; low-repeat candidates keep the asset in inspect-first mode.
+Tileset diagnostics surface seam risk, lighting risk, and preview-only repair suggestions in the Asset inspector and repeat-preview panel. Scene diagnostics for backgrounds and tilemaps report color-bin density, detail density, and preservation warnings so broad scene assets are not judged by sprite cleanup expectations. Tilemap diagnostics rank candidate tile sizes by dimension fit, grid consistency, and repeated tile signatures; low-repeat candidates keep the asset in inspect-first mode.
 
 The bottom panel can be dragged upward from its top handle when logs, metrics, or the frame list need more room.
 

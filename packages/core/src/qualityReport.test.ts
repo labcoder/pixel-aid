@@ -94,6 +94,31 @@ describe("quality report", () => {
       })
     );
   });
+
+  test("exports tileset seam repair suggestions into quality reports", () => {
+    const image = createImage(4, 2, [0, 0, 0, 255]);
+    fillRect(image, 0, 0, 2, 2, [0, 0, 0, 255]);
+    fillRect(image, 2, 0, 2, 2, [255, 255, 255, 255]);
+
+    const report = analyzeQualityReport(image, {
+      assetType: "tileset",
+      maxColors: 8,
+      tile: { tileWidth: 2, tileHeight: 2 }
+    });
+
+    expect(report.metrics.tileset?.issues.length).toBeGreaterThan(0);
+    expect(report.metrics.tileset?.repairSuggestions).toContainEqual(expect.objectContaining({
+      strategy: "manualRepaint",
+      previewOnly: true
+    }));
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        id: "tileset-seam-risk",
+        category: "sheet",
+        recommendationId: "preview-seam-repair"
+      })
+    );
+  });
 });
 
 function createRepeatedTilemap(columns: number, rows: number, tileSize: number) {
@@ -137,4 +162,19 @@ function createRepeatedTilemap(columns: number, rows: number, tileSize: number) 
     }
   }
   return image;
+}
+
+function fillRect(
+  image: ReturnType<typeof createImage>,
+  startX: number,
+  startY: number,
+  width: number,
+  height: number,
+  color: readonly [number, number, number, number]
+): void {
+  for (let y = startY; y < startY + height; y += 1) {
+    for (let x = startX; x < startX + width; x += 1) {
+      writePixel(image, x, y, ...color);
+    }
+  }
 }

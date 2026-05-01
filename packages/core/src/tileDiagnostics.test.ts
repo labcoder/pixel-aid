@@ -66,6 +66,16 @@ describe("tileset seam diagnostics", () => {
         score: expect.closeTo(1, 6)
       })
     );
+    expect(diagnostics.repairSuggestions).toContainEqual(
+      expect.objectContaining({
+        strategy: "manualRepaint",
+        previewOnly: true,
+        issueCode: "edge-mismatch",
+        edge: "right-left",
+        tileA: { row: 0, column: 0 },
+        tileB: { row: 0, column: 1 }
+      })
+    );
   });
 
   test("flags lighting discontinuity independently from edge mismatch threshold", () => {
@@ -85,6 +95,10 @@ describe("tileset seam diagnostics", () => {
       code: "lighting-discontinuity",
       severity: "warning",
       edge: "right-left"
+    });
+    expect(diagnostics.repairSuggestions[0]).toMatchObject({
+      strategy: "lightingHarmonization",
+      message: expect.stringContaining("brightness")
     });
     expect(diagnostics.lightingRiskScore).toBeCloseTo(40 / 255, 6);
   });
