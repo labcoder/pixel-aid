@@ -218,6 +218,26 @@ export type PaletteDiagnostics = {
 export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
   palette?: PaletteDiagnostics;
+  contrastExpansion?: ContrastExpansionDiagnostics;
+};
+
+export type ContrastExpansionSettings = {
+  enabled?: boolean;
+  radius?: number;
+  minContrast?: number;
+  darkThreshold?: number;
+  lightThreshold?: number;
+  alphaThreshold?: number;
+};
+
+export type ContrastExpansionDiagnostics = {
+  enabled: boolean;
+  radius: number;
+  minContrast: number;
+  changedPixels: number;
+  darkFeaturePixels: number;
+  lightFeaturePixels: number;
+  skippedTransparentPixels: number;
 };
 
 export type OutlineMode = "none" | "repairExisting" | "add";
@@ -306,6 +326,7 @@ export type FixOptions = {
       outlineColor?: string;
       outlineSourceColors?: string[];
       outlineAlpha?: number;
+      contrastExpansion?: ContrastExpansionSettings;
     };
   sheet?: SheetSliceOptions;
   sheetFrames?: SpriteFrame[];

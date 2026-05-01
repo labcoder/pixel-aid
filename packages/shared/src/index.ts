@@ -14,6 +14,8 @@ export type {
   AssetTypeClassification,
   AssetTypeSupport,
   AssetTypeWarning,
+  ContrastExpansionDiagnostics,
+  ContrastExpansionSettings,
   DiagnosticSeverity,
   DownscaleMethod,
   FixMetrics,

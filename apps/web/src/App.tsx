@@ -533,6 +533,7 @@ export function App() {
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(initialSettings.preserveSinglePixelDetails);
   const [removeHalos, setRemoveHalos] = useState(initialSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(initialSettings.denoiseStrength);
+  const [contrastExpansionEnabled, setContrastExpansionEnabled] = useState(initialSettings.contrastExpansionEnabled);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
@@ -627,6 +628,7 @@ export function App() {
       setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
       setRemoveHalos(settings.removeHalos);
       setDenoiseStrength(settings.denoiseStrength);
+      setContrastExpansionEnabled(settings.contrastExpansionEnabled);
       setEngineExportTargets(settings.engineExportTargets);
       setShowAdvancedControls(settings.showAdvancedControls);
       setInspectorGroupOrder(settings.inspectorGroupOrder);
@@ -703,6 +705,7 @@ export function App() {
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        contrastExpansionEnabled,
         engineExportTargets,
         showAdvancedControls,
         inspectorGroupOrder
@@ -724,6 +727,7 @@ export function App() {
     customPivotY,
     decontaminateRgb,
     denoiseStrength,
+    contrastExpansionEnabled,
     downscale,
     engineExportTargets,
     frameHeight,
@@ -1642,6 +1646,7 @@ export function App() {
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        ...(contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
         outlineMode,
         outlineSize,
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
@@ -1659,6 +1664,7 @@ export function App() {
     alphaThreshold,
     alphaTolerance,
     assetType,
+    contrastExpansionEnabled,
     decontaminateRgb,
     denoiseStrength,
     downscale,
@@ -3718,6 +3724,10 @@ export function App() {
           labelValue={denoiseStrengthLabel(denoiseStrength)}
           onChange={setDenoiseStrength}
         />
+        <label className="toggle-row">
+          <input type="checkbox" checked={contrastExpansionEnabled} onChange={(event) => setContrastExpansionEnabled(event.currentTarget.checked)} />
+          Expand high-contrast details
+        </label>
         <SelectField
           label="Downscale"
           value={downscale}
@@ -5201,6 +5211,7 @@ export function App() {
                   ],
                   ["Downscale", downscale],
                   ["Denoise", denoiseStrengthLabel(denoiseStrength)],
+                  ["Detail expansion", contrastExpansionEnabled ? "on" : "off"],
                   ["Halos", removeHalos ? "remove" : "keep"],
                   ["Progress", formatBusyOperationLabel(visibleFixOperation) ?? "--"],
                   [
