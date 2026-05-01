@@ -95,7 +95,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     runtime,
     stage: "palette-remap",
     startPercent: 78,
-    endPercent: 90
+    endPercent: 90,
+    dithering: paletteResult.diagnostics.dithering
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
@@ -215,7 +216,8 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     runtime,
     stage: "palette-remap",
     startPercent: 82,
-    endPercent: 92
+    endPercent: 92,
+    dithering: paletteResult.diagnostics.dithering
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");

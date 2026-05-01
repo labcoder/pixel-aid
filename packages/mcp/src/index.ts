@@ -47,7 +47,7 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType, target, maxColors, grid, downscale, alpha, cleanup, and sheet settings.",
+  description: "PixelAid automation options such as assetType, target, maxColors, paletteStrategy, paletteDithering, grid, downscale, alpha, cleanup, and sheet settings.",
   additionalProperties: true,
 };
 

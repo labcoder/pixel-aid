@@ -66,6 +66,10 @@ describe("pixelaid CLI", () => {
         "2x2",
         "--colors",
         "4",
+        "--palette-strategy",
+        "perceptual",
+        "--dither",
+        "ordered",
         "--grid",
         "manual",
         "--scale",
@@ -77,7 +81,12 @@ describe("pixelaid CLI", () => {
       expect(code).toBe(0);
       expect(body.result.files.map((file: { kind: string }) => file.kind)).toEqual(["image", "manifest"]);
       await expect(stat(output)).resolves.toBeTruthy();
-      expect(JSON.parse(await readFile(manifest, "utf8")).meta.assetType).toBe("sprite");
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.assetType).toBe("sprite");
+      expect(manifestJson.meta.operation.settings.paletteSettings).toMatchObject({
+        strategy: "perceptual",
+        dithering: "ordered",
+      });
     });
   });
 

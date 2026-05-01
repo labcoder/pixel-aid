@@ -38,6 +38,10 @@ type ColorBox = {
   maxB: number;
 };
 
+export type PaletteRemapOptions = Partial<LoopProgressOptions> & {
+  dithering?: PaletteDitheringMode;
+};
+
 type NormalizedPaletteSettings = {
   mode: PaletteMode;
   strategy: PaletteStrategy;
@@ -113,6 +117,9 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
   if (drift && drift.warnings.length > 0) {
     warnings.push(...drift.warnings);
   }
+  if (settings.dithering !== "none" && options.frames && options.frames.length > 1) {
+    warnings.push("Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed.");
+  }
 
   return {
     palette: outputPalette,
@@ -146,7 +153,12 @@ export function extractAutoPalette(
     return [];
   }
 
-  const palette = strategy === "frequency" ? extractFrequencyPalette(image, autoBudget) : extractMedianCutPalette(image, autoBudget);
+  const palette =
+    strategy === "frequency"
+      ? extractFrequencyPalette(image, autoBudget)
+      : strategy === "perceptual"
+        ? extractPerceptualPalette(image, autoBudget)
+        : extractMedianCutPalette(image, autoBudget);
   const reservedExact = new Set(reserved);
   const reservedQuantized = new Set(reserved.map(quantizedHexColor));
   const filtered = palette.filter((color) => !reservedExact.has(color) && !reservedQuantized.has(color));
@@ -227,6 +239,59 @@ function extractMedianCutPalette(image: RGBAImage, maxColors: number): string[] 
   const seen = new Set<string>();
   for (const box of boxes) {
     addUniquePaletteColor(palette, seen, rgbToHex(weightedAverageColor(box)), maxColors);
+  }
+
+  for (const entry of ranked) {
+    addUniquePaletteColor(palette, seen, rgbToHex(entry.color), maxColors);
+    if (palette.length >= maxColors) {
+      break;
+    }
+  }
+
+  return palette.length > 0 ? palette : ["#000000"];
+}
+
+function extractPerceptualPalette(image: RGBAImage, maxColors: number): string[] {
+  if (!Number.isInteger(maxColors) || maxColors <= 0) {
+    throw new Error("maxColors must be a positive integer");
+  }
+
+  const counts = collectVisibleColorCounts(image);
+  if (counts.size === 0) {
+    return ["#000000"];
+  }
+
+  const ranked = rankCounts(counts);
+  if (ranked.length <= maxColors) {
+    return ranked.map((entry) => rgbToHex(entry.color));
+  }
+
+  const entries = ranked.map((entry) => {
+    const [r, g, b] = unpackRgb(entry.color);
+    return { ...entry, r, g, b };
+  });
+  const boxes = [createColorBox(entries)];
+
+  while (boxes.length < maxColors) {
+    const splitIndex = selectSplitBox(boxes);
+    if (splitIndex < 0) {
+      break;
+    }
+
+    const split = splitColorBox(boxes[splitIndex]!);
+    if (!split) {
+      break;
+    }
+
+    boxes.splice(splitIndex, 1, split[0], split[1]);
+  }
+
+  boxes.sort((a, b) => b.count - a.count || a.firstSeen - b.firstSeen);
+
+  const palette: string[] = [];
+  const seen = new Set<string>();
+  for (const box of boxes) {
+    addUniquePaletteColor(palette, seen, rgbToHex(weightedMedoidColor(box)), maxColors);
   }
 
   for (const entry of ranked) {
@@ -395,6 +460,36 @@ function weightedAverageColor(box: ColorBox): number {
   return (clampByte(r / total) << 16) | (clampByte(g / total) << 8) | clampByte(b / total);
 }
 
+function weightedMedoidColor(box: ColorBox): number {
+  const average = weightedAverageColor(box);
+  let best = box.entries[0]?.color ?? average;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const entry of box.entries) {
+    const distance = perceptualColorDistanceSq(entry.color, average);
+    if (distance < bestDistance) {
+      best = entry.color;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+function perceptualColorDistanceSq(a: number, b: number): number {
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const br = (b >> 16) & 0xff;
+  const bg = (b >> 8) & 0xff;
+  const bb = b & 0xff;
+  const dr = ar - br;
+  const dg = ag - bg;
+  const db = ab - bb;
+  const dl = (ar * 0.299 + ag * 0.587 + ab * 0.114) - (br * 0.299 + bg * 0.587 + bb * 0.114);
+  return dr * dr * 0.45 + dg * dg * 0.95 + db * db * 0.25 + dl * dl * 0.35;
+}
+
 function addUniquePaletteColor(palette: string[], seen: Set<string>, color: string, maxColors: number): void {
   if (palette.length >= maxColors || seen.has(color)) {
     return;
@@ -407,13 +502,21 @@ function addUniquePaletteColor(palette: string[], seen: Set<string>, color: stri
 function normalizePaletteSettings(requested: PaletteSettings | undefined, fallbackMaxColors: number): NormalizedPaletteSettings {
   return {
     mode: requested?.mode ?? "auto",
-    strategy: requested?.strategy ?? "medianCut",
+    strategy: normalizePaletteStrategy(requested?.strategy),
     maxColors: normalizeMaxColors(requested?.maxColors ?? fallbackMaxColors),
     lockScope: requested?.lockScope ?? "single",
-    dithering: requested?.dithering ?? "none",
+    dithering: normalizeDitheringMode(requested?.dithering),
     ...(requested?.colors ? { colors: requested.colors } : {}),
     ...(requested?.preset ? { preset: requested.preset } : {})
   };
+}
+
+function normalizePaletteStrategy(value: PaletteStrategy | undefined): PaletteStrategy {
+  return value === "frequency" || value === "perceptual" || value === "medianCut" ? value : "medianCut";
+}
+
+function normalizeDitheringMode(value: PaletteDitheringMode | undefined): PaletteDitheringMode {
+  return value === "ordered" || value === "errorDiffusion" || value === "none" ? value : "none";
 }
 
 function normalizeMaxColors(value: number): number {
@@ -638,7 +741,7 @@ function quantizedHexColor(hex: string): string {
   return rgbToHex(packQuantizedRgb(r, g, b));
 }
 
-export function remapToPalette(image: RGBAImage, palette: readonly string[], progress?: LoopProgressOptions): RGBAImage {
+export function remapToPalette(image: RGBAImage, palette: readonly string[], progress?: PaletteRemapOptions): RGBAImage {
   if (palette.length === 0) {
     throw new Error("palette must contain at least one color");
   }
@@ -646,9 +749,20 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
   const colors = palette.map(parseHexColor);
   assertNotCancelled(progress?.runtime?.signal);
   const output = cloneImage(image);
+  const dithering = normalizeDitheringMode(progress?.dithering);
+
+  if (dithering === "ordered") {
+    remapOrderedDither(output, colors, progress);
+    return output;
+  }
+
+  if (dithering === "errorDiffusion") {
+    remapErrorDiffusion(output, colors, progress);
+    return output;
+  }
 
   for (let y = 0; y < output.height; y += 1) {
-    if (progress && shouldReportRow(y, output.height)) {
+    if (hasProgress(progress) && shouldReportRow(y, output.height)) {
       assertNotCancelled(progress.runtime?.signal);
       reportProgress(progress.runtime, progress.stage, phasePercent(progress.startPercent, progress.endPercent, y, output.height));
       assertNotCancelled(progress.runtime?.signal);
@@ -661,17 +775,7 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
       }
 
       const source = packQuantizedRgb(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!);
-      let best = colors[0]!;
-      let bestDistance = Number.POSITIVE_INFINITY;
-
-      for (let i = 0; i < colors.length; i += 1) {
-        const color = colors[i]!;
-        const distance = colorDistanceSq(source, color);
-        if (distance < bestDistance) {
-          best = color;
-          bestDistance = distance;
-        }
-      }
+      const best = nearestPaletteColor(source, colors);
 
       output.data[offset] = (best >> 16) & 0xff;
       output.data[offset + 1] = (best >> 8) & 0xff;
@@ -680,10 +784,125 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
   }
 
   assertNotCancelled(progress?.runtime?.signal);
-  if (progress) {
+  if (hasProgress(progress)) {
     reportProgress(progress.runtime, progress.stage, progress.endPercent);
     assertNotCancelled(progress.runtime?.signal);
   }
 
   return output;
+}
+
+function remapOrderedDither(output: RGBAImage, colors: readonly number[], progress?: PaletteRemapOptions): void {
+  const bayer4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5] as const;
+  const strength = 96;
+
+  for (let y = 0; y < output.height; y += 1) {
+    if (hasProgress(progress) && shouldReportRow(y, output.height)) {
+      assertNotCancelled(progress.runtime?.signal);
+      reportProgress(progress.runtime, progress.stage, phasePercent(progress.startPercent, progress.endPercent, y, output.height));
+      assertNotCancelled(progress.runtime?.signal);
+    }
+
+    const rowEnd = (y * output.width + output.width) * 4;
+    for (let offset = y * output.width * 4, x = 0; offset < rowEnd; offset += 4, x += 1) {
+      if (output.data[offset + 3]! < 16) {
+        continue;
+      }
+
+      const matrixValue = bayer4[(y & 3) * 4 + (x & 3)]!;
+      const adjustment = ((matrixValue + 0.5) / 16 - 0.5) * strength;
+      const source = packRgb(output.data[offset]! + adjustment, output.data[offset + 1]! + adjustment, output.data[offset + 2]! + adjustment);
+      const best = nearestPaletteColor(source, colors);
+      output.data[offset] = (best >> 16) & 0xff;
+      output.data[offset + 1] = (best >> 8) & 0xff;
+      output.data[offset + 2] = best & 0xff;
+    }
+  }
+
+  finishPaletteProgress(progress);
+}
+
+function remapErrorDiffusion(output: RGBAImage, colors: readonly number[], progress?: PaletteRemapOptions): void {
+  const currentErrors = new Float32Array((output.width + 2) * 3);
+  const nextErrors = new Float32Array((output.width + 2) * 3);
+
+  for (let y = 0; y < output.height; y += 1) {
+    if (hasProgress(progress) && shouldReportRow(y, output.height)) {
+      assertNotCancelled(progress.runtime?.signal);
+      reportProgress(progress.runtime, progress.stage, phasePercent(progress.startPercent, progress.endPercent, y, output.height));
+      assertNotCancelled(progress.runtime?.signal);
+    }
+
+    const rowEnd = (y * output.width + output.width) * 4;
+    for (let offset = y * output.width * 4, x = 0; offset < rowEnd; offset += 4, x += 1) {
+      if (output.data[offset + 3]! < 16) {
+        continue;
+      }
+
+      const errorIndex = (x + 1) * 3;
+      const r = clampByte(output.data[offset]! + currentErrors[errorIndex]!);
+      const g = clampByte(output.data[offset + 1]! + currentErrors[errorIndex + 1]!);
+      const b = clampByte(output.data[offset + 2]! + currentErrors[errorIndex + 2]!);
+      const best = nearestPaletteColor(packRgb(r, g, b), colors);
+      const nextR = (best >> 16) & 0xff;
+      const nextG = (best >> 8) & 0xff;
+      const nextB = best & 0xff;
+      output.data[offset] = nextR;
+      output.data[offset + 1] = nextG;
+      output.data[offset + 2] = nextB;
+
+      diffuseError(currentErrors, errorIndex + 3, r - nextR, g - nextG, b - nextB, 7 / 16);
+      diffuseError(nextErrors, errorIndex - 3, r - nextR, g - nextG, b - nextB, 3 / 16);
+      diffuseError(nextErrors, errorIndex, r - nextR, g - nextG, b - nextB, 5 / 16);
+      diffuseError(nextErrors, errorIndex + 3, r - nextR, g - nextG, b - nextB, 1 / 16);
+    }
+
+    currentErrors.set(nextErrors);
+    nextErrors.fill(0);
+  }
+
+  finishPaletteProgress(progress);
+}
+
+function diffuseError(errors: Float32Array, index: number, r: number, g: number, b: number, weight: number): void {
+  errors[index] = errors[index]! + r * weight;
+  errors[index + 1] = errors[index + 1]! + g * weight;
+  errors[index + 2] = errors[index + 2]! + b * weight;
+}
+
+function nearestPaletteColor(source: number, colors: readonly number[]): number {
+  let best = colors[0]!;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let i = 0; i < colors.length; i += 1) {
+    const color = colors[i]!;
+    const distance = colorDistanceSq(source, color);
+    if (distance < bestDistance) {
+      best = color;
+      bestDistance = distance;
+    }
+  }
+
+  return best;
+}
+
+function packRgb(r: number, g: number, b: number): number {
+  return (clampByte(r) << 16) | (clampByte(g) << 8) | clampByte(b);
+}
+
+function hasProgress(progress: PaletteRemapOptions | undefined): progress is LoopProgressOptions {
+  return (
+    progress !== undefined &&
+    progress.stage !== undefined &&
+    progress.startPercent !== undefined &&
+    progress.endPercent !== undefined
+  );
+}
+
+function finishPaletteProgress(progress: PaletteRemapOptions | undefined): void {
+  assertNotCancelled(progress?.runtime?.signal);
+  if (hasProgress(progress)) {
+    reportProgress(progress.runtime, progress.stage, progress.endPercent);
+    assertNotCancelled(progress.runtime?.signal);
+  }
 }

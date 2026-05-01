@@ -97,4 +97,18 @@ describe("automation option normalization", () => {
     expect(result.value.downscale).toBe("averageThenPalette");
     expect(result.value.alpha).toBe("preserve");
   });
+
+  it("normalizes perceptual quantization and explicit dithering for automation callers", () => {
+    const result = normalizeFixOptions({
+      paletteStrategy: "perceptual",
+      paletteDithering: "ordered",
+    } as Parameters<typeof normalizeFixOptions>[0]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.paletteSettings).toMatchObject({
+      strategy: "perceptual",
+      dithering: "ordered",
+    });
+  });
 });

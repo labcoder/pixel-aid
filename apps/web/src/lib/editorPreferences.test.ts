@@ -76,4 +76,12 @@ describe("editor preferences", () => {
     expect(preferences.savedPresets).toHaveLength(1);
     expect(preferences.savedPresets[0]?.settings.maxColors).toBe(24);
   });
+
+  test("normalizes palette dithering preferences to safe supported modes", () => {
+    const ordered = normalizeEditorPreferences({ settings: { paletteDithering: "ordered" } });
+    const invalid = normalizeEditorPreferences({ settings: { paletteDithering: "sparkle" } });
+
+    expect(ordered.settings.paletteDithering).toBe("ordered");
+    expect(invalid.settings.paletteDithering).toBe("none");
+  });
 });

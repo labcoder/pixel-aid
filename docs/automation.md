@@ -37,6 +37,8 @@ Useful fix flags:
 - `--asset-type sprite|sprite-sheet|animation|character|tileset|tilemap|portrait|icon|ui|background`
 - `--target WIDTHxHEIGHT`
 - `--colors N` or `--max-colors N`
+- `--palette-strategy medianCut|perceptual|frequency`
+- `--dither none|ordered|errorDiffusion`
 - `--grid auto|manual`
 - `--scale N`, `--scale-x N`, `--scale-y N`
 - `--phase-x N`, `--phase-y N`

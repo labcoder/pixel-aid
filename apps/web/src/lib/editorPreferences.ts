@@ -1,4 +1,14 @@
-import type { AlphaMode, AssetMode, AssetType, DownscaleMethod, OutlineMode, PaletteLockScope, PaletteMode, PaletteStrategy } from "@pixelaid/shared";
+import type {
+  AlphaMode,
+  AssetMode,
+  AssetType,
+  DownscaleMethod,
+  OutlineMode,
+  PaletteDitheringMode,
+  PaletteLockScope,
+  PaletteMode,
+  PaletteStrategy
+} from "@pixelaid/shared";
 import type { EngineExportTarget } from "@pixelaid/exporters";
 import type { PlaybackDirection } from "./playbackModel";
 import type { PivotPreset } from "./sheetControls";
@@ -20,6 +30,7 @@ export type EditorPreferenceSettings = {
   paletteMode: PaletteMode;
   paletteStrategy: PaletteStrategy;
   paletteLockScope: PaletteLockScope;
+  paletteDithering: PaletteDitheringMode;
   palettePreset: string;
   customPaletteText: string;
   gridDetect: "auto" | "manual";
@@ -85,6 +96,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   paletteMode: "auto",
   paletteStrategy: "medianCut",
   paletteLockScope: "sheet",
+  paletteDithering: "none",
   palettePreset: "pixelaid-arcade-8",
   customPaletteText: "",
   gridDetect: "auto",
@@ -191,8 +203,9 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       targetHeight: integerSetting(settings.targetHeight, defaults.settings.targetHeight, 1, 4096),
       maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 256),
       paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
-      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency"], defaults.settings.paletteStrategy),
+      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency", "perceptual"], defaults.settings.paletteStrategy),
       paletteLockScope: unionSetting(settings.paletteLockScope, ["single", "firstFrame", "sheet", "project"], defaults.settings.paletteLockScope),
+      paletteDithering: unionSetting(settings.paletteDithering, ["none", "ordered", "errorDiffusion"], defaults.settings.paletteDithering),
       palettePreset: stringSetting(settings.palettePreset, defaults.settings.palettePreset),
       customPaletteText: stringSetting(settings.customPaletteText, defaults.settings.customPaletteText),
       gridDetect: unionSetting(settings.gridDetect, ["auto", "manual"], defaults.settings.gridDetect),

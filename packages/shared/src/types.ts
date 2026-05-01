@@ -138,11 +138,11 @@ export type AlphaCleanupDiagnostics = {
 
 export type PaletteMode = "auto" | "fixed" | "preset";
 
-export type PaletteStrategy = "medianCut" | "frequency";
+export type PaletteStrategy = "medianCut" | "frequency" | "perceptual";
 
 export type PaletteLockScope = "single" | "firstFrame" | "sheet" | "project";
 
-export type PaletteDitheringMode = "none";
+export type PaletteDitheringMode = "none" | "ordered" | "errorDiffusion";
 
 export type PaletteSettings = {
   mode?: PaletteMode;

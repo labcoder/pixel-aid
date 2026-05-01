@@ -84,7 +84,7 @@ Editor:
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
 - Asset type taxonomy for sprites, icons, sprite sheets, animation sheets, character sheets, tilesets, tilemaps, portraits, UI elements, and backgrounds, with per-asset manual overrides and support warnings.
-- Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, and palette count.
+- Simple single-sprite controls for resize presets, background cleanup, denoise strength, outline mode, palette count, quantizer strategy, and dithering mode.
 - Assets panel with thumbnails, filename, source dimensions, selection, delete action, and context-menu delete.
 - Canvas viewport with `imageSmoothingEnabled = false`, checkerboard background, auto-fit on view changes, pan, mouse-wheel zoom, rulers, grid overlay, active-view native size readouts, and draggable single-sprite split comparison.
 - Crop-aware input/output alignment so cropped output is centered and shown at the same source-derived scale instead of being stretched.
@@ -102,7 +102,7 @@ Editor:
 Processing:
 
 - Browser decode adapter from image file to `RGBAImage`.
-- Core grid candidate API, block downsampling, palette remapping, alpha cleanup, manual sheet slicing, and fix pipeline.
+- Core grid candidate API, block downsampling, perceptual/frequency/median-cut palette remapping, optional ordered/error-diffusion dithering, alpha cleanup, manual sheet slicing, and fix pipeline.
 - Frame-aware sheet fixing: sprite sheets and tile sheets send the current frame metadata to the worker, fix each cell from its own source rectangle, then apply a shared palette to the packed sheet. Detected sheets preserve source rectangles for sampling but pack generated output rectangles into clean native cells with no imported label/gutter margin.
 - Runs-assisted grid detection with background-aware source crops for single-sprite cleanup cases.
 - Fixture-driven cleanup catalog and benchmarks for pseudo-pixel sprites, alpha halos, palette drift animation frames, uneven sheets, tilesets, large backgrounds, and large generated sources.
@@ -119,14 +119,14 @@ Processing:
 Automation:
 
 - `@pixelaid/automation` wraps core/exporter operations for Node: PNG decode/encode, inspect, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
-- `@pixelaid/cli` provides `inspect`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, explicit frame metadata support, outline source color options, engine targets, and optional ZIP bundling.
+- `@pixelaid/cli` provides `inspect`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, explicit frame metadata support, palette strategy/dithering options, outline source color options, engine targets, and optional ZIP bundling.
 - `@pixelaid/mcp` provides MCP-ready tool definitions and direct handlers for `inspect_image`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
 
 ## Known Limitations
 
 - Single-sprite cleanup now includes conservative mask repair, halo removal, and outline padding, but broader real-image golden tests are still needed.
 - Grid detection handles the first single-sprite fixture and exposes candidate previews/confidence explanations, but still needs local drift correction and stronger sprite-sheet-specific detection.
-- Palette reduction is frequency-based, not a full production quantizer, and fixed palette workflows are not exposed yet.
+- Palette editing is not yet a full "palette studio"; reusable palette libraries and richer manual palette editing are planned for 0.5.0.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently supports generic manifests plus Godot, Unity, and Phaser helper files. TexturePacker, Tiled, and LDtk adapters are future work.
 - Tilesets are inspect-only until seam diagnostics and tile-engine metadata exist. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
