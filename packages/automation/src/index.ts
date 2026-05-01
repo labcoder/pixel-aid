@@ -7,6 +7,7 @@ export {
   type DiagnosticStatus,
 } from "./diagnostics";
 export {
+  decodeJpegFile,
   decodePngFile,
   encodePngFile,
   readRgbaImageFile,

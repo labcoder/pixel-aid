@@ -4,7 +4,7 @@ Generated from `package-lock.json` by `npm run license:report`.
 
 ## Policy Summary
 
-- Allowed packages: 175
+- Allowed packages: 203
 - Review-required packages: 13
 - Blocked packages: 0
 - Unknown-license packages: 0
@@ -44,6 +44,32 @@ None.
 | @emnapi/core | 1.10.0 | MIT | allowed |
 | @emnapi/runtime | 1.10.0 | MIT | allowed |
 | @emnapi/wasi-threads | 1.2.1 | MIT | allowed |
+| @esbuild/aix-ppc64 | 0.28.0 | MIT | allowed |
+| @esbuild/android-arm | 0.28.0 | MIT | allowed |
+| @esbuild/android-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/android-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/darwin-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/darwin-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/freebsd-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/freebsd-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-arm | 0.28.0 | MIT | allowed |
+| @esbuild/linux-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-ia32 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-loong64 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-mips64el | 0.28.0 | MIT | allowed |
+| @esbuild/linux-ppc64 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-riscv64 | 0.28.0 | MIT | allowed |
+| @esbuild/linux-s390x | 0.28.0 | MIT | allowed |
+| @esbuild/linux-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/netbsd-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/netbsd-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/openbsd-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/openbsd-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/openharmony-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/sunos-x64 | 0.28.0 | MIT | allowed |
+| @esbuild/win32-arm64 | 0.28.0 | MIT | allowed |
+| @esbuild/win32-ia32 | 0.28.0 | MIT | allowed |
+| @esbuild/win32-x64 | 0.28.0 | MIT | allowed |
 | @eslint-community/eslint-utils | 3.4.3 | Apache-2.0 | allowed |
 | @eslint-community/eslint-utils | 4.9.1 | MIT | allowed |
 | @eslint-community/regexpp | 4.12.2 | MIT | allowed |
@@ -136,6 +162,7 @@ None.
 | deep-is | 0.1.4 | MIT | allowed |
 | detect-libc | 2.1.2 | Apache-2.0 | allowed |
 | es-module-lexer | 2.0.0 | MIT | allowed |
+| esbuild | 0.28.0 | MIT | allowed |
 | escape-string-regexp | 4.0.0 | MIT | allowed |
 | eslint | 10.2.1 | MIT | allowed |
 | eslint-scope | 9.1.2 | BSD-2-Clause | allowed |
@@ -163,6 +190,7 @@ None.
 | is-extglob | 2.1.1 | MIT | allowed |
 | is-glob | 4.0.3 | MIT | allowed |
 | isexe | 2.0.0 | ISC | allowed |
+| jpeg-js | 0.4.4 | BSD-3-Clause | allowed |
 | json-buffer | 3.0.1 | MIT | allowed |
 | json-schema-traverse | 0.4.1 | MIT | allowed |
 | json-stable-stringify-without-jsonify | 1.0.1 | MIT | allowed |
