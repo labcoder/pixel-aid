@@ -13,9 +13,51 @@ export function createGodotImportExport(
   return {
     files: [
       { path: GODOT_README_PATH, kind: "text", contents: createGodotReadme(manifest, texturePath) },
-      { path: GODOT_IMPORTER_PATH, kind: "text", contents: createGodotImporterScript(manifest, texturePath) }
+      { path: GODOT_IMPORTER_PATH, kind: "text", contents: createGodotImporterScript(manifest, texturePath) },
+      { path: "godot/import.recipe.json", kind: "json", contents: createGodotImportRecipe(manifest, texturePath) }
     ],
     warnings: [...collectCommonEngineWarnings(manifest, "godot"), ...collectGodotWarnings(manifest)]
+  };
+}
+
+function createGodotImportRecipe(manifest: PixelAssetManifest, texturePath: string): Record<string, unknown> {
+  return {
+    app: manifest.meta.app,
+    version: manifest.meta.version,
+    engine: "godot",
+    image: manifest.meta.image,
+    texturePath,
+    helper: GODOT_IMPORTER_PATH,
+    textureSettings: {
+      filter: "nearest",
+      mipmaps: false,
+      compression: "lossless"
+    },
+    sheet: {
+      width: manifest.sheet.width,
+      height: manifest.sheet.height,
+      frameWidth: manifest.sheet.frameWidth,
+      frameHeight: manifest.sheet.frameHeight,
+      margin: manifest.sheet.margin,
+      spacing: manifest.sheet.spacing,
+      extrude: manifest.sheet.extrude
+    },
+    frames: manifest.frames.map((frame) => ({
+      name: frame.name,
+      rect: { ...frame.rect },
+      pivot: { ...frame.pivot },
+      pivotNormalized: {
+        x: roundRatio(frame.pivot.x, frame.rect.w),
+        y: roundRatio(frame.pivot.y, frame.rect.h)
+      },
+      pivotMode: "metadata",
+      durationMs: frame.durationMs
+    })),
+    animations: animationRecipes(manifest),
+    unsupportedMetadata: [
+      "per-frame pivots require PixelAid metadata-aware gameplay scripts",
+      "reverse, ping-pong, or hold playback may need project script handling"
+    ]
   };
 }
 
@@ -149,6 +191,34 @@ function serializeGodotAnimation(animation: Pick<SpriteAnimation, "frames" | "fp
   ].join(", ")}}`;
 }
 
+function animationRecipes(manifest: PixelAssetManifest): Array<Record<string, unknown>> {
+  return Object.entries(resolveAnimations(manifest))
+    .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+    .map(([name, animation]) => ({
+      name,
+      frames: [...animation.frames],
+      ...(animation.fps !== undefined ? { fps: animation.fps } : {}),
+      ...(animation.durationMs !== undefined ? { durationMs: animation.durationMs } : {}),
+      loop: animation.loop,
+      direction: animation.direction ?? "forward"
+    }));
+}
+
+function resolveAnimations(manifest: PixelAssetManifest): PixelAssetManifest["animations"] {
+  if (Object.keys(manifest.animations).length > 0) {
+    return manifest.animations;
+  }
+
+  return {
+    default: {
+      frames: manifest.frames.map((frame) => frame.name),
+      fps: 8,
+      loop: true,
+      direction: "forward"
+    }
+  };
+}
+
 function serializeGodotRect(rect: { x: number; y: number; w: number; h: number }): string {
   return `{"x": ${rect.x}, "y": ${rect.y}, "w": ${rect.w}, "h": ${rect.h}}`;
 }
@@ -181,4 +251,8 @@ function collectGodotWarnings(manifest: PixelAssetManifest): EngineExportWarning
 
 function toGodotString(value: string): string {
   return JSON.stringify(value);
+}
+
+function roundRatio(value: number, size: number): number {
+  return Number((value / Math.max(1, size)).toFixed(6));
 }

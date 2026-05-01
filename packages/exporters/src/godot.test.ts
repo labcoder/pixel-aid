@@ -10,9 +10,10 @@ describe("Godot import export adapter", () => {
 
     expect(exportResult.files.map((file) => file.path)).toEqual([
       "godot/README.md",
-      "godot/PixelAidSpriteFramesImporter.gd"
+      "godot/PixelAidSpriteFramesImporter.gd",
+      "godot/import.recipe.json"
     ]);
-    expect(exportResult.files.map((file) => file.kind)).toEqual(["text", "text"]);
+    expect(exportResult.files.map((file) => file.kind)).toEqual(["text", "text", "json"]);
   });
 
   test("documents Godot import guidance and texture settings", () => {
@@ -49,6 +50,53 @@ describe("Godot import export adapter", () => {
     expect(script).toContain('atlas.set_meta("pixelaid_duration_ms", frame.get("duration_ms", 120))');
   });
 
+  test("emits a Godot import recipe with texture settings and pivot metadata guidance", () => {
+    const recipe = getJsonFile(createGodotImportExport(manifest), "godot/import.recipe.json");
+
+    expect(recipe).toMatchObject({
+      app: "PixelAid",
+      engine: "godot",
+      image: "hero_sheet.png",
+      textureSettings: {
+        filter: "nearest",
+        mipmaps: false,
+        compression: "lossless"
+      },
+      sheet: {
+        width: 32,
+        height: 16,
+        frameWidth: 16,
+        frameHeight: 16,
+        extrude: 1
+      },
+      frames: [
+        {
+          name: "idle_000",
+          pivotMode: "metadata",
+          pivot: { x: 8, y: 14 },
+          pivotNormalized: { x: 0.5, y: 0.875 },
+          durationMs: 120
+        },
+        {
+          name: "idle_001",
+          pivotMode: "metadata",
+          pivotNormalized: { x: 0.5, y: 0.875 },
+          durationMs: 90
+        }
+      ],
+      animations: [
+        {
+          name: "idle",
+          frames: ["idle_000", "idle_001"],
+          fps: 8,
+          loop: true,
+          direction: "ping-pong"
+        }
+      ]
+    });
+    expect(recipe.unsupportedMetadata).toContain("per-frame pivots require PixelAid metadata-aware gameplay scripts");
+  });
+
   test("serializes hold-frame animation direction explicitly", () => {
     const holdManifest: PixelAssetManifest = {
       ...manifest,
@@ -81,6 +129,14 @@ function getTextFile(exportResult: ReturnType<typeof createGodotImportExport>, p
     throw new Error(`Missing text file: ${path}`);
   }
   return file.contents;
+}
+
+function getJsonFile(exportResult: ReturnType<typeof createGodotImportExport>, path: string): Record<string, unknown> {
+  const file = exportResult.files.find((candidate) => candidate.path === path);
+  if (file?.kind !== "json") {
+    throw new Error(`Missing JSON file: ${path}`);
+  }
+  return file.contents as Record<string, unknown>;
 }
 
 function createManifest(): PixelAssetManifest {

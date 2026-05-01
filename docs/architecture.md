@@ -7,7 +7,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 - `apps/web`: owns React state, editor panels, browser image decode/encode, downloads, and canvas rendering.
 - `packages/core`: owns deterministic image algorithms. It has no React or DOM dependency.
 - `packages/worker`: owns worker protocol and orchestration around core algorithms.
-- `packages/exporters`: owns the generic manifest, validation, and engine adapter files for Godot, Unity, Phaser, and TexturePacker-compatible atlas workflows. Engine adapters never replace the generic manifest; they emit deterministic sidecars and warnings for unsupported target fields.
+- `packages/exporters`: owns the generic manifest, validation, and engine adapter files for Godot, Unity, Phaser, and TexturePacker-compatible atlas workflows. Engine adapters never replace the generic manifest; they emit deterministic sidecars, import recipe JSON, and warnings for unsupported target fields.
 - `packages/automation`: owns Node-safe PNG IO, option normalization, safe output planning, and reusable inspect/fix/sheet/palette/export operations for scripts and agents.
 - `packages/cli`: owns the `pixelaid` command parser and JSON/human CLI output, built on `packages/automation`.
 - `packages/mcp`: owns MCP-ready tool definitions, input validation, and direct handler dispatch, built on `packages/automation`.
@@ -33,7 +33,7 @@ PixelAid is split into a browser editor and pure packages so the image-processin
 15. Detected source frame rectangles can be selected, drag-moved, and resized in the canvas. The web app updates explicit source and native frame metadata while preserving frame names, pivots, and row tags.
 16. The timeline player uses those frame records to scrub, step, and play frames with a `requestAnimationFrame` loop. Detected row animations can be selected, renamed, and given per-clip FPS/loop/direction metadata. Selected frames can also receive explicit `durationMs` overrides, which take priority over clip FPS. Web-side normalization helpers preview frames in a shared pivot-aligned canvas and compute preview-only onion-skin neighbors.
 17. Export passes the selected asset type, current frame metadata, per-frame durations, playback direction, detected row animations, and optional sanitized provenance metadata to `packages/exporters`. Manifests include both `meta.assetType` and `meta.operation.settings.assetType`. When provenance is present, `meta.provenance` can record origin, provider, model, prompt, seed, source image, generation date, non-secret settings, and post-processing notes. When Normalize is enabled for sheet modes, the app packs frames into a normalized pivot-aligned PNG and matching manifest rects before bundling the PNG and JSON into a ZIP. Otherwise it exports the current fixed PNG.
-18. Selected engine adapters generate Godot, Unity, Phaser, and TexturePacker-compatible sidecar files from the same manifest. Adapter warnings are folded into the export validation report so unsupported fields are visible without blocking generic exports.
+18. Selected engine adapters generate Godot, Unity, Phaser, and TexturePacker-compatible sidecar files from the same manifest. Godot, Unity, and Phaser also emit compact `import.recipe.json` files that capture known-good texture settings, frame rects, pivots, durations, animation tags, and manual import limits for automation consumers. Adapter warnings are folded into the export validation report so unsupported fields are visible without blocking generic exports.
 
 ## Documentation Flow
 

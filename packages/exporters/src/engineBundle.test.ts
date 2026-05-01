@@ -12,8 +12,10 @@ describe("engine export bundle coordinator", () => {
     expect(bundle.files.map((file) => file.path)).toEqual([
       "phaser/hero_sheet.json",
       "phaser/README.md",
+      "phaser/import.recipe.json",
       "unity/README.md",
       "unity/Editor/PixelAidUnityImporter.cs",
+      "unity/import.recipe.json",
       "texturepacker/hero_sheet.json",
       "texturepacker/README.md",
       "engines/README.md"
