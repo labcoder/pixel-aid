@@ -116,7 +116,7 @@ import {
   type EditorPreferenceSettings,
   type EditorPreferences
 } from "./lib/editorPreferences";
-import { getEditorShortcutAction, isEditableShortcutTarget } from "./lib/editorShortcuts";
+import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
 import {
   clearBusyOperation,
   createBusyOperation,
@@ -3379,7 +3379,8 @@ export function App() {
         metaKey: event.metaKey,
         shiftKey: event.shiftKey,
         altKey: event.altKey,
-        isEditableTarget: isEditableShortcutTarget(event.target)
+        isEditableTarget: isEditableShortcutTarget(event.target),
+        isInteractiveTarget: isInteractiveShortcutTarget(event.target)
       });
 
       if (!action) {

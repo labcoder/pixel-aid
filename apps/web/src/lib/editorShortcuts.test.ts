@@ -26,6 +26,18 @@ describe("editor shortcuts", () => {
     expect(getEditorShortcutAction({ key: "z", ctrlKey: true, isEditableTarget: true })).toBeNull();
   });
 
+  test("ignores unmodified single-key shortcuts on interactive controls", () => {
+    for (const key of [" ", "g", "ArrowLeft", "ArrowRight"]) {
+      expect(getEditorShortcutAction({ key, isInteractiveTarget: true })).toBeNull();
+    }
+  });
+
+  test("keeps command-modified global shortcuts available on non-editable controls", () => {
+    expect(getEditorShortcutAction({ key: "o", ctrlKey: true, isInteractiveTarget: true })).toBe("import");
+    expect(getEditorShortcutAction({ key: "Enter", metaKey: true, isInteractiveTarget: true })).toBe("fix");
+    expect(getEditorShortcutAction({ key: "E", ctrlKey: true, shiftKey: true, isInteractiveTarget: true })).toBe("export");
+  });
+
   test("does not treat modified playback keys as shortcuts", () => {
     expect(getEditorShortcutAction({ key: "ArrowRight", ctrlKey: true })).toBeNull();
     expect(getEditorShortcutAction({ key: " ", altKey: true })).toBeNull();
