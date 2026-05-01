@@ -11,6 +11,7 @@ import type {
 } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { parseHexColor, rgbToHex } from "./color";
+import { applyContrastExpansion } from "./contrastExpansion";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { planLocalGridDrift } from "./gridDrift";
@@ -40,10 +41,11 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
+  const contrastExpanded = applyContrastExpansion(image, options.cleanup.contrastExpansion);
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);
   const downsampled = downsampleBlocks(
-    image,
+    contrastExpanded.image,
     {
       outputWidth: gridWithDrift.outputWidth,
       outputHeight: gridWithDrift.outputHeight,
@@ -119,6 +121,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     settings: options,
     diagnostics: {
       alpha: alphaResult.diagnostics,
+      contrastExpansion: contrastExpanded.diagnostics,
       palette: paletteResult.diagnostics
     }
   };
@@ -163,6 +166,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   const phaseX = options.grid.phaseX ?? 0;
   const phaseY = options.grid.phaseY ?? 0;
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
+  const contrastExpanded = applyContrastExpansion(image, options.cleanup.contrastExpansion);
 
   reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
   assertNotCancelled(runtime?.signal);
@@ -174,7 +178,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     const frameStartPercent = phasePercent(20, 65, index, frames.length);
     const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
     const fixedFrame = downsampleBlocks(
-      image,
+      contrastExpanded.image,
       {
         outputWidth: frame.rect.w,
         outputHeight: frame.rect.h,
@@ -253,6 +257,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     settings: options,
     diagnostics: {
       ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
+      contrastExpansion: contrastExpanded.diagnostics,
       palette: paletteResult.diagnostics
     }
   };

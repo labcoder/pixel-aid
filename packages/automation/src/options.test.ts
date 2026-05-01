@@ -59,6 +59,11 @@ describe("automation option normalization", () => {
         denoiseStrength: 20,
         outlineMode: "repairExisting",
         outlineSourceColors: ["#102020", "#203030"],
+        contrastExpansion: {
+          enabled: true,
+          radius: 1,
+          minContrast: 64,
+        },
       },
     });
 
@@ -84,6 +89,11 @@ describe("automation option normalization", () => {
     });
     expect(result.value.alphaSettings).toMatchObject({ threshold: 96 });
     expect(result.value.cleanup.outlineSourceColors).toEqual(["#102020", "#203030"]);
+    expect(result.value.cleanup.contrastExpansion).toMatchObject({
+      enabled: true,
+      radius: 1,
+      minContrast: 64,
+    });
   });
 
   it("uses asset-specific conservative defaults for inspect-only asset classes", () => {
