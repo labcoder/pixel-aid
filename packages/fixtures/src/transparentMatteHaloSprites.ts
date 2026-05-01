@@ -182,7 +182,8 @@ function createHighContrastCheckerboardPandaImage() {
     for (let x = 0; x < image.width; x += 1) {
       const darkCell = (Math.floor(x / 8) + Math.floor(y / 8)) % 2 === 1;
       const offset = (y * image.width + x) * 4;
-      const value = darkCell ? 202 : 250;
+      const hasInteriorCompressionSeam = x > 0 && y > 0 && x < image.width - 1 && y < image.height - 1 && (x % 8 === 3 || y % 8 === 3);
+      const value = hasInteriorCompressionSeam ? 226 : darkCell ? 202 : 250;
       image.data[offset] = value;
       image.data[offset + 1] = value;
       image.data[offset + 2] = value;

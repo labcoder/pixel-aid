@@ -152,6 +152,8 @@ function backgroundFloodFill(
     enqueue(x, y - 1);
   }
 
+  binarizeFloodFillAlpha(output, threshold);
+
   if (decontaminateRgb) {
     decontaminateTransparentRgb(output, transparentRgb, threshold, diagnostics);
   } else {
@@ -164,6 +166,11 @@ function backgroundFloodFill(
 type BackgroundModel = {
   colors: Uint8Array;
   count: number;
+  neutralRange?: {
+    minBrightness: number;
+    maxBrightness: number;
+    maxSpread: number;
+  };
 };
 
 function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
@@ -172,17 +179,29 @@ function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
   const bucketG = new Uint32Array(4096);
   const bucketB = new Uint32Array(4096);
   const step = Math.max(1, Math.floor(Math.min(image.width, image.height) / 32));
+  let sampleCount = 0;
+  let brightNeutralCount = 0;
+  let minNeutralBrightness = Number.POSITIVE_INFINITY;
+  let maxNeutralBrightness = 0;
 
   const sample = (x: number, y: number): void => {
     const offset = (y * image.width + x) * 4;
     const r = image.data[offset]!;
     const g = image.data[offset + 1]!;
     const b = image.data[offset + 2]!;
+    const brightness = r + g + b;
+    const spread = Math.max(r, g, b) - Math.min(r, g, b);
     const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
     bucketCounts[bucket] = bucketCounts[bucket]! + 1;
     bucketR[bucket] = bucketR[bucket]! + r;
     bucketG[bucket] = bucketG[bucket]! + g;
     bucketB[bucket] = bucketB[bucket]! + b;
+    sampleCount += 1;
+    if (brightness > 540 && spread <= 24) {
+      brightNeutralCount += 1;
+      minNeutralBrightness = Math.min(minNeutralBrightness, brightness);
+      maxNeutralBrightness = Math.max(maxNeutralBrightness, brightness);
+    }
   };
 
   for (let x = 0; x < image.width; x += step) {
@@ -227,7 +246,27 @@ function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
     count = 2;
   }
 
-  return { colors, count };
+  const neutralRange = createNeutralBackgroundRange(sampleCount, brightNeutralCount, minNeutralBrightness, maxNeutralBrightness);
+
+  return { colors, count, ...(neutralRange ? { neutralRange } : {}) };
+}
+
+function createNeutralBackgroundRange(
+  sampleCount: number,
+  brightNeutralCount: number,
+  minBrightness: number,
+  maxBrightness: number
+): BackgroundModel["neutralRange"] {
+  const brightnessRange = maxBrightness - minBrightness;
+  if (sampleCount === 0 || brightNeutralCount < sampleCount * 0.55 || brightnessRange < 40 || brightnessRange > 220) {
+    return undefined;
+  }
+
+  return {
+    minBrightness,
+    maxBrightness,
+    maxSpread: 24
+  };
 }
 
 function shouldIncludeSecondBackground(
@@ -270,7 +309,29 @@ function matchesBackgroundModel(data: Uint8ClampedArray, offset: number, model: 
     }
   }
 
+  if (model.neutralRange) {
+    const r = data[offset]!;
+    const g = data[offset + 1]!;
+    const b = data[offset + 2]!;
+    const brightness = r + g + b;
+    const spread = Math.max(r, g, b) - Math.min(r, g, b);
+    const brightnessTolerance = Math.round(Math.sqrt(toleranceSq / 3)) * 3;
+    if (
+      spread <= model.neutralRange.maxSpread &&
+      brightness >= model.neutralRange.minBrightness - brightnessTolerance &&
+      brightness <= model.neutralRange.maxBrightness + brightnessTolerance
+    ) {
+      return true;
+    }
+  }
+
   return false;
+}
+
+function binarizeFloodFillAlpha(image: RGBAImage, threshold: number): void {
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset + 3] = image.data[offset + 3]! >= threshold ? 255 : 0;
+  }
 }
 
 function createDiagnostics(mode: AlphaMode, threshold: number, tolerance: number, colorKey: string | undefined): AlphaCleanupDiagnostics {
