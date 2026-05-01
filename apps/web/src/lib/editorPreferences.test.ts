@@ -91,10 +91,10 @@ describe("editor preferences", () => {
     expect(preferences.settings.playbackDirection).toBe("hold");
   });
 
-  test("preserves TexturePacker as an engine export target", () => {
-    const preferences = normalizeEditorPreferences({ settings: { engineExportTargets: ["texturepacker", "phaser", "bad"] } });
+  test("preserves tile and atlas engine export targets", () => {
+    const preferences = normalizeEditorPreferences({ settings: { engineExportTargets: ["texturepacker", "tiled", "ldtk", "phaser", "bad"] } });
 
-    expect(preferences.settings.engineExportTargets).toEqual(["texturepacker", "phaser"]);
+    expect(preferences.settings.engineExportTargets).toEqual(["texturepacker", "tiled", "ldtk", "phaser"]);
   });
 
   test("normalizes saved palette library entries", () => {

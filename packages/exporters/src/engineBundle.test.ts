@@ -30,6 +30,22 @@ describe("engine export bundle coordinator", () => {
     });
   });
 
+  test("routes Tiled and LDtk tileset metadata targets into the bundle", () => {
+    const bundle = createEngineExportBundle({
+      manifest: createManifest(),
+      targets: ["tiled", "ldtk"]
+    });
+
+    expect(bundle.files.map((file) => file.path)).toEqual([
+      "tiled/hero_sheet.tileset.json",
+      "tiled/README.md",
+      "ldtk/hero_sheet.ldtk-tileset.json",
+      "ldtk/README.md",
+      "engines/README.md"
+    ]);
+    expect(bundle.warnings.map((warning) => warning.target)).toEqual(["tiled", "ldtk"]);
+  });
+
   test("combines warnings from every selected target", () => {
     const bundle = createEngineExportBundle({
       manifest: createManifest(),

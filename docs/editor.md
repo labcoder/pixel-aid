@@ -38,7 +38,7 @@ Supported asset types in 0.1.0:
 | Sprite sheet | Sprite sheet | Full | Generic sheet/frame workflow. |
 | Animation sheet | Sprite sheet | Full | Animation is stored as frames and timeline clips, not a separate processing mode. |
 | Character sheet | Sprite sheet | Full | Character semantics stay in editable frame rows and clip metadata. |
-| Tileset | Tile sheet | Full | Existing grid/cell controls work; repeat preview and seam diagnostics are available. Engine-specific tile metadata is future export work. |
+| Tileset | Tile sheet | Full | Existing grid/cell controls work; repeat preview and seam diagnostics are available. Tiled and LDtk metadata sidecars are available during export. |
 | Portrait | Single | Inspect-only | Uses generic PNG/manifest export with preservation-oriented cleanup. |
 | UI element | Single | Inspect-only | Uses conservative alpha/effect cleanup. |
 | Background | Single | Inspect-only | Uses a larger palette budget and avoids aggressive cleanup by default. |
@@ -204,7 +204,7 @@ The bottom panel can be dragged upward from its top handle when logs, metrics, o
 
 The first export target is a generic engine-ready bundle.
 
-Engine export targets can be selected in the Export inspector. When enabled, the ZIP includes Godot, Unity, Phaser, and/or TexturePacker-compatible folders beside the generic PixelAid manifest. The generic manifest remains the source of truth; engine files are adapters, helper scripts, atlas metadata, or import instructions generated from that manifest.
+Engine export targets can be selected in the Export inspector. When enabled, the ZIP includes Godot, Unity, Phaser, TexturePacker-compatible, Tiled, and/or LDtk folders beside the generic PixelAid manifest. The generic manifest remains the source of truth; engine files are adapters, helper scripts, atlas metadata, tileset metadata, or import instructions generated from that manifest.
 
 - The ZIP layout is deterministic:
   - `images/<base>_fixed.png` or `images/<base>_normalized.png`
@@ -213,7 +213,7 @@ Engine export targets can be selected in the Export inspector. When enabled, the
   - `palettes/<base>.gpl`
   - `palettes/<base>.palette.json`
   - `reports/<base>_validation.json`
-  - `godot/`, `unity/`, `phaser/`, `texturepacker/`, and `engines/` helper files when their targets are selected
+  - `godot/`, `unity/`, `phaser/`, `texturepacker/`, `tiled/`, `ldtk/`, and `engines/` helper files when their targets are selected
   - `frames/<frame-name>.png` for sheet-like exports
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest remains the canonical metadata file. It includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, animation clips, and operation settings.
@@ -233,3 +233,7 @@ Engine export targets can be selected in the Export inspector. When enabled, the
 ## TexturePacker-Compatible Atlas
 
 TexturePacker export writes `texturepacker/<name>.json` in JSON Hash style. The atlas includes frame rectangles, source sizes, normalized pivots, per-frame durations, and a `meta.pixelAid` block with margin, spacing, extrusion, animation IDs, and palette metadata. TexturePacker JSON has no standard place for PixelAid anchors, collision boxes, hurtboxes, hitboxes, cleanup diagnostics, or provenance, so those remain in the generic manifest and appear as export validation warnings when present.
+
+## Tiled And LDtk Tileset Metadata
+
+Tiled export writes `tiled/<name>.tileset.json` with tile width/height, spacing, margin, tile count, columns, image dimensions, image path, and PixelAid custom properties for palette, asset type, source size, grid confidence, and provenance. LDtk export writes `ldtk/<identifier>.ldtk-tileset.json` as a companion definition with identifier, relative image path, tile grid size, image dimensions, spacing, padding, palette, source, grid confidence, provenance, and notes. LDtk project files are still created manually because project IDs and layer structure are project-specific.

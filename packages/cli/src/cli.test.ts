@@ -151,7 +151,7 @@ describe("pixelaid CLI", () => {
         "--out-dir",
         outDir,
         "--engine",
-        "godot,unity,phaser,texturepacker",
+        "godot,unity,phaser,texturepacker,tiled,ldtk",
         "--bundle",
         "zip",
         "--target",
@@ -169,6 +169,8 @@ describe("pixelaid CLI", () => {
       expect(code).toBe(0);
       expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "pixelaid-export.zip")).toBe(true);
       expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "texturepacker/input.fixed.json")).toBe(true);
+      expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "tiled/input.fixed.tileset.json")).toBe(true);
+      expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "ldtk/input_fixed.ldtk-tileset.json")).toBe(true);
       await expect(stat(path.join(outDir, "pixelaid-export.zip"))).resolves.toBeTruthy();
     });
   });

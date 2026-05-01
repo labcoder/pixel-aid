@@ -108,7 +108,7 @@ describe("PixelAid MCP-ready handlers", () => {
       const exported = await handlePixelAidTool("export_engine_bundle", {
         inputPath: input,
         outDir: path.join(dir, "export"),
-        targets: ["godot", "unity", "texturepacker"],
+        targets: ["godot", "unity", "texturepacker", "tiled", "ldtk"],
         options: { target: "2x2", maxColors: 4, grid: { detect: "manual", scale: 2 } },
       });
       const missing = await handlePixelAidTool("inspect_image", { inputPath: path.join(dir, "missing.png") });
@@ -116,6 +116,8 @@ describe("PixelAid MCP-ready handlers", () => {
       expect(exported.isError).toBe(false);
       expect(exported.structuredContent.result.files.some((file: { relativePath: string }) => file.relativePath === "engines/README.md")).toBe(true);
       expect(exported.structuredContent.result.files.some((file: { relativePath: string }) => file.relativePath === "texturepacker/input.fixed.json")).toBe(true);
+      expect(exported.structuredContent.result.files.some((file: { relativePath: string }) => file.relativePath === "tiled/input.fixed.tileset.json")).toBe(true);
+      expect(exported.structuredContent.result.files.some((file: { relativePath: string }) => file.relativePath === "ldtk/input_fixed.ldtk-tileset.json")).toBe(true);
       expect(missing.isError).toBe(true);
       expect(missing.structuredContent.error.code).toBe("input_not_found");
     });

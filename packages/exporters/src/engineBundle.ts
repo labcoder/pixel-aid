@@ -1,6 +1,8 @@
 import type { PixelAssetManifest } from "@pixelaid/shared";
 import { createGodotImportExport } from "./godot";
+import { createLdtkTilesetExport } from "./ldtk";
 import { createPhaserAtlasExport } from "./phaser";
+import { createTiledTilesetExport } from "./tiled";
 import { createTexturePackerAtlasExport } from "./texturePacker";
 import { createUnityImportExport } from "./unity";
 import type { EngineExportBundle, EngineExportTarget } from "./engineTypes";
@@ -42,6 +44,12 @@ function createTargetBundle(target: EngineExportTarget, manifest: PixelAssetMani
   if (target === "texturepacker") {
     return createTexturePackerAtlasExport(manifest);
   }
+  if (target === "tiled") {
+    return createTiledTilesetExport(manifest);
+  }
+  if (target === "ldtk") {
+    return createLdtkTilesetExport(manifest);
+  }
   return createPhaserAtlasExport(manifest);
 }
 
@@ -55,6 +63,7 @@ function createEngineReadme(targets: readonly EngineExportTarget[]): string {
     "- Engine files are adapters or helper scripts generated from that manifest.",
     "- Keep the PNG, manifest, palette files, frame sequence, and validation report together.",
     "- Engine helpers avoid brittle Unity .meta files and project-specific Godot resource assumptions.",
+    "- Tiled and LDtk outputs are tileset metadata companions; LDtk project import is still a manual step.",
     ""
   ].join("\n");
 }
