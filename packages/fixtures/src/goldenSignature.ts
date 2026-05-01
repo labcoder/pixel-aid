@@ -1,4 +1,4 @@
-import type { FixtureGoldenSignature } from "./types";
+import type { FixtureGoldenSignature, FixtureGoldenSignatureDiff } from "./types";
 import type { RGBAImage } from "@pixelaid/shared";
 
 export type GoldenSignatureOptions = {
@@ -53,6 +53,24 @@ export function createGoldenSignature(image: RGBAImage, options: GoldenSignature
     palette: [...colors].sort().slice(0, paletteLimit),
     samplePixels
   };
+}
+
+export function compareGoldenSignatures(expected: FixtureGoldenSignature, actual: FixtureGoldenSignature): FixtureGoldenSignatureDiff[] {
+  const diffs: FixtureGoldenSignatureDiff[] = [];
+  compareField(diffs, "width", expected.width, actual.width);
+  compareField(diffs, "height", expected.height, actual.height);
+  compareField(diffs, "checksum", expected.checksum, actual.checksum);
+  compareField(diffs, "visiblePixels", expected.visiblePixels, actual.visiblePixels);
+  compareField(diffs, "transparentPixels", expected.transparentPixels, actual.transparentPixels);
+  compareField(diffs, "palette", expected.palette, actual.palette);
+  compareField(diffs, "samplePixels", expected.samplePixels, actual.samplePixels);
+  return diffs;
+}
+
+function compareField(diffs: FixtureGoldenSignatureDiff[], field: string, expected: unknown, actual: unknown): void {
+  if (JSON.stringify(expected) !== JSON.stringify(actual)) {
+    diffs.push({ field, expected, actual });
+  }
 }
 
 function updateChecksum(current: number, value: number): number {

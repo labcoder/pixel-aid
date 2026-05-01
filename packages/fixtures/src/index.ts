@@ -1,7 +1,7 @@
 export { createSingleSpriteCleanupFixture } from "./singleSprite";
 export type { SingleSpriteCleanupFixture } from "./singleSprite";
 export { benchmarkFixtureCatalog } from "./benchmarkFixtures";
-export { createGoldenSignature } from "./goldenSignature";
+export { compareGoldenSignatures, createGoldenSignature } from "./goldenSignature";
 export type { GoldenSignatureOptions } from "./goldenSignature";
 export { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";
 export { largeBackgroundFixtures } from "./largeBackgrounds";
@@ -9,13 +9,16 @@ export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
 export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 export { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
+export { visualRegressionCases } from "./visualRegression";
 export { cleanupFixtureCategories } from "./types";
 export type {
   BenchmarkFixture,
   CleanupFixture,
   CleanupFixtureCategory,
   CleanupFixtureExpected,
-  FixtureGoldenSignature
+  FixtureGoldenSignature,
+  FixtureGoldenSignatureDiff,
+  VisualRegressionCase
 } from "./types";
 
 import { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";

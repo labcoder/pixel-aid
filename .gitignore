@@ -5,6 +5,7 @@ coverage/
 .playwright-cli/
 .worktrees/
 docs/internal/
+packages/core/.visual-regression-diffs/
 apps/desktop/src-tauri/target/
 apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/Cargo.lock

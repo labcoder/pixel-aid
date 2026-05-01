@@ -95,6 +95,24 @@ export const transparentMatteHaloSprites: CleanupFixture[] = [
         transparentRgb: [0, 0, 0]
       }
     }
+  },
+  {
+    id: "outline-repair-dual-tone",
+    title: "Dual-tone existing outline repair",
+    category: "transparentMatteHaloSprite",
+    assetType: "sprite",
+    description: "Transparent sprite with two intentional dark outline colors and a small missing edge segment.",
+    catches: ["outline source color selection", "repair existing outline", "outline thickening regression"],
+    createImage: createDualToneOutlineImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 12, requiredColors: ["#101112", "#183f3c"] },
+      alpha: {
+        transparentPixelsAtLeast: 160,
+        sampleTransparentPixels: ["0,0", "15,15"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
   }
 ];
 
@@ -155,5 +173,19 @@ function createSemiTransparentGlowImage() {
   fillEllipse(image.data, image.width, image.height, 32, 34, 13, 15, [78, 80, 180, 255]);
   fillRect(image.data, image.width, image.height, 26, 20, 13, 9, [30, 28, 70, 255]);
   fillRect(image.data, image.width, image.height, 30, 23, 6, 3, [148, 236, 255, 255]);
+  return image;
+}
+
+function createDualToneOutlineImage() {
+  const image = createImage(16, 16, [0, 0, 0, 0]);
+  fillRect(image.data, image.width, image.height, 5, 3, 6, 1, [16, 17, 18, 255]);
+  fillRect(image.data, image.width, image.height, 4, 4, 1, 7, [16, 17, 18, 255]);
+  fillRect(image.data, image.width, image.height, 11, 4, 1, 7, [24, 63, 60, 255]);
+  fillRect(image.data, image.width, image.height, 5, 11, 6, 1, [24, 63, 60, 255]);
+  fillRect(image.data, image.width, image.height, 5, 4, 6, 7, [92, 176, 156, 255]);
+  fillRect(image.data, image.width, image.height, 6, 5, 4, 2, [150, 216, 196, 255]);
+  fillRect(image.data, image.width, image.height, 7, 8, 3, 2, [44, 120, 112, 255]);
+  image.data[(3 * image.width + 8) * 4 + 3] = 0;
+  image.data[(11 * image.width + 7) * 4 + 3] = 0;
   return image;
 }
