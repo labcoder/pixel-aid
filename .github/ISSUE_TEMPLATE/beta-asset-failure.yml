@@ -1,0 +1,88 @@
+name: Beta asset failure
+description: Report a PixelAid cleanup, detection, timeline, export, CLI, or desktop issue from a beta asset.
+title: "[Beta Asset]: "
+labels: ["beta-feedback"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing PixelAid. Do not attach proprietary assets, private prompts, or unredacted diagnostics unless you have permission to share them.
+  - type: input
+    id: version
+    attributes:
+      label: PixelAid version or commit
+      description: Include the release candidate, commit SHA, or desktop build label.
+      placeholder: "1.0.0-rc.1 / abc1234"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options:
+        - Web editor
+        - Desktop app
+        - CLI
+        - MCP-ready handler
+        - Exported bundle
+    validations:
+      required: true
+  - type: dropdown
+    id: asset_type
+    attributes:
+      label: Asset type
+      options:
+        - Sprite
+        - Icon
+        - Sprite sheet
+        - Animation sheet
+        - Character sheet
+        - Tileset
+        - Tilemap
+        - Portrait
+        - UI element
+        - Background
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What should PixelAid have detected, fixed, previewed, or exported?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include visible artifacts, wrong frame counts, palette issues, alpha problems, export errors, or CLI output.
+    validations:
+      required: true
+  - type: textarea
+    id: settings
+    attributes:
+      label: Settings and diagnostics
+      description: Paste sanitized diagnostics JSON or summarize target size, palette budget, downscale, alpha, grid scale/phase, sheet rows/columns, and export target.
+      render: json
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include whether a first-party sample reproduces the same issue.
+  - type: dropdown
+    id: asset_permission
+    attributes:
+      label: Asset sharing permission
+      options:
+        - Cannot share asset
+        - Can share cropped/reduced reproduction
+        - Can share privately for debugging only
+        - Can share publicly
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional notes
+      description: Platform, browser, desktop OS, GPU/display scaling, or engine import details.
