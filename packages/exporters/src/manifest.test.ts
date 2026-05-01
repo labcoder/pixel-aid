@@ -166,6 +166,37 @@ describe("generic manifest export", () => {
     ]);
   });
 
+  test("serializes frame anchors and gameplay boxes in the generic manifest", () => {
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png",
+      frames: [
+        {
+          name: "attack_000",
+          rect: { x: 0, y: 0, w: 16, h: 16 },
+          pivot: { x: 8, y: 14 },
+          durationMs: 90,
+          anchors: [{ id: "muzzle", name: "Muzzle", point: { x: 13, y: 7 }, color: "#21f4ff" }],
+          boxes: [
+            {
+              id: "hitbox_01",
+              name: "Sword",
+              type: "hitbox",
+              color: "#ff4f7a",
+              rect: { x: 10, y: 4, w: 6, h: 5 }
+            }
+          ]
+        }
+      ]
+    });
+
+    expect(manifest.frames[0]).toMatchObject({
+      anchors: [{ id: "muzzle", name: "Muzzle", point: { x: 13, y: 7 }, color: "#21f4ff" }],
+      boxes: [{ id: "hitbox_01", name: "Sword", type: "hitbox", color: "#ff4f7a", rect: { x: 10, y: 4, w: 6, h: 5 } }]
+    });
+    expect(validateManifest(manifest)).toEqual([]);
+  });
+
   test("preserves alpha cleanup settings and diagnostics in operation metadata", () => {
     const alphaResult: PixelFixResult = {
       ...result,

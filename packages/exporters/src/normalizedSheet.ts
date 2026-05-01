@@ -71,7 +71,7 @@ export function createNormalizedSheetPacking({
         y: pivot.y - frame.pivot.y
       };
 
-      packedFrames.push(copyFrameWithRect(frame, targetRect, pivot));
+      packedFrames.push(copyFrameWithRect(frame, targetRect, pivot, offset));
       placements.push({
         frameName: frame.name,
         sourceRect: { ...frame.rect },
@@ -109,12 +109,36 @@ function normalizeRowCounts(frameCount: number, columns: number | undefined, row
   return Array.from({ length: rows }, (_, row) => (row === rows - 1 ? frameCount - row * safeColumns : safeColumns)).filter((count) => count > 0);
 }
 
-function copyFrameWithRect(frame: SpriteFrame, rect: Rect, pivot: { x: number; y: number }): SpriteFrame {
+function copyFrameWithRect(frame: SpriteFrame, rect: Rect, pivot: { x: number; y: number }, offset: { x: number; y: number }): SpriteFrame {
   return {
     ...frame,
     rect,
     pivot: { ...pivot },
     ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
-    ...(frame.tags ? { tags: [...frame.tags] } : {})
+    ...(frame.tags ? { tags: [...frame.tags] } : {}),
+    ...(frame.anchors
+      ? {
+          anchors: frame.anchors.map((anchor) => ({
+            ...anchor,
+            point: {
+              x: anchor.point.x + offset.x,
+              y: anchor.point.y + offset.y
+            }
+          }))
+        }
+      : {}),
+    ...(frame.boxes
+      ? {
+          boxes: frame.boxes.map((box) => ({
+            ...box,
+            rect: {
+              x: box.rect.x + offset.x,
+              y: box.rect.y + offset.y,
+              w: box.rect.w,
+              h: box.rect.h
+            }
+          }))
+        }
+      : {})
   };
 }

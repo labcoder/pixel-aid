@@ -68,4 +68,41 @@ describe("normalized sheet packing", () => {
       { x: 0, y: 34, w: 30, h: 34 }
     ]);
   });
+
+  test("offsets anchors and boxes when frames are normalized around a shared pivot", () => {
+    const packing = createNormalizedSheetPacking({
+      frames: [
+        {
+          ...frames[0]!,
+          anchors: [{ id: "feet", name: "Feet", point: { x: 12, y: 28 }, color: "#f1c75b" }],
+          boxes: [
+            {
+              id: "hurtbox_01",
+              name: "Body",
+              type: "hurtbox",
+              color: "#f1c75b",
+              rect: { x: 4, y: 6, w: 14, h: 22 }
+            }
+          ]
+        },
+        frames[1]!
+      ],
+      rowFrameCounts: [2],
+      margin: 0,
+      spacing: 0,
+      extrude: 0
+    });
+
+    expect(packing.placements[0]?.offset).toEqual({ x: 4, y: 0 });
+    expect(packing.frames[0]?.anchors).toEqual([{ id: "feet", name: "Feet", point: { x: 16, y: 28 }, color: "#f1c75b" }]);
+    expect(packing.frames[0]?.boxes).toEqual([
+      {
+        id: "hurtbox_01",
+        name: "Body",
+        type: "hurtbox",
+        color: "#f1c75b",
+        rect: { x: 8, y: 6, w: 14, h: 22 }
+      }
+    ]);
+  });
 });

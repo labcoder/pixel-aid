@@ -27,6 +27,16 @@ export function collectCommonEngineWarnings(
     });
   }
 
+  if (manifest.frames.some((frame) => (frame.boxes?.length ?? 0) > 0 || (frame.anchors?.length ?? 0) > 0)) {
+    warnings.push({
+      target,
+      code: `engine-${target}-gameplay-metadata-generic-only`,
+      severity: "info",
+      message:
+        "Frame anchors and gameplay boxes are preserved in the generic manifest; this engine adapter does not emit native collision or hitbox assets yet."
+    });
+  }
+
   if (manifest.meta.assetType === "tilemap") {
     warnings.push({
       target,

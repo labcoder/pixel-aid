@@ -325,11 +325,54 @@ function drawFrameGuides(
   context.moveTo(pivotX + 0.5, pivotY - 6);
   context.lineTo(pivotX + 0.5, pivotY + 6);
   context.stroke();
+  drawMetadataGuides(context, pane, placement);
 
   context.fillStyle = "#f1c75b";
   context.font = "10px Consolas, monospace";
   context.textBaseline = "bottom";
   context.fillText(`${frameIndex + 1}/${frameCount} ${placement.frame.name}`, pane.drawRect.x, pane.drawRect.y + pane.drawRect.h + 16);
+}
+
+function drawMetadataGuides(context: CanvasRenderingContext2D, pane: TimelineViewportPane, placement: FramePreviewPlacement): void {
+  if (!placement.frame.boxes && !placement.frame.anchors) {
+    return;
+  }
+
+  const drawRect = placement.drawRect ?? placement.frame.rect;
+  const targetRect = getPlacementTargetRect(placement, pane.drawRect.x, pane.drawRect.y, pane.scale, drawRect);
+  const scaleX = targetRect.w / Math.max(1, placement.frame.rect.w);
+  const scaleY = targetRect.h / Math.max(1, placement.frame.rect.h);
+
+  context.save();
+  context.setLineDash([]);
+  for (const box of placement.frame.boxes ?? []) {
+    const x = targetRect.x + box.rect.x * scaleX;
+    const y = targetRect.y + box.rect.y * scaleY;
+    const width = Math.max(1, box.rect.w * scaleX);
+    const height = Math.max(1, box.rect.h * scaleY);
+    context.strokeStyle = box.color;
+    context.fillStyle = `${box.color}22`;
+    context.lineWidth = 2;
+    context.fillRect(x, y, width, height);
+    context.strokeRect(x + 0.5, y + 0.5, width, height);
+  }
+
+  for (const anchor of placement.frame.anchors ?? []) {
+    const x = targetRect.x + anchor.point.x * scaleX;
+    const y = targetRect.y + anchor.point.y * scaleY;
+    context.strokeStyle = anchor.color;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.arc(x, y, 4, 0, Math.PI * 2);
+    context.stroke();
+    context.beginPath();
+    context.moveTo(x - 6, y + 0.5);
+    context.lineTo(x + 6, y + 0.5);
+    context.moveTo(x + 0.5, y - 6);
+    context.lineTo(x + 0.5, y + 6);
+    context.stroke();
+  }
+  context.restore();
 }
 
 function getPlacementTargetRect(

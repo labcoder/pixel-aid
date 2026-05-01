@@ -2099,6 +2099,132 @@ button:disabled {
   min-height: 28px;
 }
 
+.frame-metadata-editor {
+  display: grid;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.frame-metadata-heading,
+.frame-anchor-title,
+.frame-box-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.frame-metadata-heading {
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+}
+
+.frame-metadata-heading strong,
+.frame-anchor-title strong {
+  color: var(--cyan);
+}
+
+.frame-metadata-heading span {
+  margin-right: auto;
+  color: #78837e;
+}
+
+.frame-metadata-heading button,
+.frame-anchor-title button,
+.frame-box-toolbar button,
+.frame-box-row button {
+  min-height: 26px;
+  padding: 0 0.4rem;
+}
+
+.frame-anchor-editor {
+  display: grid;
+  grid-template-columns: minmax(92px, 1fr) 70px repeat(2, minmax(86px, 1fr));
+  gap: 0.35rem;
+  align-items: end;
+}
+
+.frame-anchor-title {
+  grid-column: 1 / -1;
+  justify-content: space-between;
+}
+
+.frame-anchor-editor label,
+.frame-box-row label {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.frame-anchor-editor input[type="text"],
+.frame-anchor-editor input[type="color"],
+.frame-box-row input[type="text"],
+.frame-box-row input[type="color"],
+.frame-box-row input[type="number"],
+.frame-box-row select {
+  min-width: 0;
+  width: 100%;
+  height: 28px;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0 0.35rem;
+}
+
+.frame-anchor-editor input[type="color"],
+.frame-box-row input[type="color"] {
+  padding: 2px;
+}
+
+.frame-box-toolbar {
+  flex-wrap: wrap;
+}
+
+.frame-box-list {
+  display: grid;
+  gap: 0.4rem;
+}
+
+.frame-box-row {
+  display: grid;
+  grid-template-columns: minmax(90px, 1fr) 86px 42px repeat(4, minmax(52px, 0.5fr)) 30px;
+  gap: 0.3rem;
+  align-items: end;
+  padding: 0.4rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+}
+
+.frame-box-row.is-collision {
+  border-color: #31504c;
+}
+
+.frame-box-row.is-hurtbox {
+  border-color: #76583a;
+}
+
+.frame-box-row.is-hitbox {
+  border-color: #6b3348;
+}
+
+.frame-box-row .field-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.18rem;
+}
+
+.frame-box-row .field-row span {
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.frame-box-row .field-row input {
+  text-align: right;
+}
+
 .clip-editor {
   display: grid;
   gap: 5px;

@@ -3,10 +3,13 @@ import {
   ArrowDown,
   ArrowUp,
   CircleHelp,
+  Copy,
+  Crosshair,
   Download,
   FileImage,
   Gauge,
   Layers,
+  Plus,
   Play,
   Redo2,
   SlidersHorizontal,
@@ -40,6 +43,9 @@ import type {
   PixelFixResult,
   RGBAImage,
   SheetLayoutDiagnostics,
+  SpriteFrameAnchor,
+  SpriteFrameBox,
+  SpriteFrameBoxType,
   SpriteFrame,
   WorkerProgress,
   WorkerProgressStage
@@ -132,6 +138,26 @@ import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
+import {
+  addFrameMetadataBox,
+  applyFrameMetadataOverrides,
+  canRedoFrameMetadataHistory,
+  canUndoFrameMetadataHistory,
+  copyFrameMetadata,
+  createFrameMetadataHistoryState,
+  deleteFrameAnchor,
+  deleteFrameMetadataBox,
+  emptyFrameMetadata,
+  pushFrameMetadataHistoryEntry,
+  redoFrameMetadataHistory,
+  renameFrameMetadata,
+  setFrameAnchor,
+  undoFrameMetadataHistory,
+  updateFrameMetadataBox,
+  type FrameMetadataHistoryState,
+  type FrameMetadataSnapshot,
+  type FrameMetadataState
+} from "./lib/frameMetadata";
 import {
   canRedoFrameEditHistory,
   canUndoFrameEditHistory,
@@ -259,6 +285,12 @@ const paletteExportExtensions: Record<PaletteImportFormat, string> = {
   gpl: "gpl",
   json: "json"
 };
+const frameBoxTypeOptions: Array<[SpriteFrameBoxType, string]> = [
+  ["collision", "Collision"],
+  ["hurtbox", "Hurtbox"],
+  ["hitbox", "Hitbox"]
+];
+const primaryAnchorId = "anchor_01";
 
 function paletteBudgetAtLeast(colorCount: number): number {
   for (const budget of paletteBudgets) {
@@ -340,6 +372,26 @@ function createEmptyFrameEditSnapshot(): FrameEditSnapshot {
     animations: [],
     selectedFrameIndex: -1,
     selectedAnimationName: ALL_ANIMATIONS
+  };
+}
+
+function createEmptyFrameMetadataSnapshot(): FrameMetadataSnapshot {
+  return {
+    pivotOverrides: emptyPivotOverrides,
+    metadata: emptyFrameMetadata
+  };
+}
+
+function createFrameMetadataSnapshot({
+  pivotOverrides,
+  metadata
+}: {
+  pivotOverrides: PivotOverrideState;
+  metadata: FrameMetadataState;
+}): FrameMetadataSnapshot {
+  return {
+    pivotOverrides,
+    metadata
   };
 }
 
@@ -446,6 +498,10 @@ export function App() {
   const [detectedSheetDiagnostics, setDetectedSheetDiagnostics] = useState<SheetLayoutDiagnostics | undefined>(undefined);
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [pivotOverrides, setPivotOverrides] = useState<PivotOverrideState>(emptyPivotOverrides);
+  const [frameMetadataOverrides, setFrameMetadataOverrides] = useState<FrameMetadataState>(emptyFrameMetadata);
+  const [frameMetadataHistory, setFrameMetadataHistory] = useState<FrameMetadataHistoryState>(() =>
+    createFrameMetadataHistoryState(createEmptyFrameMetadataSnapshot())
+  );
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(initialSettings.bottomPanelHeight);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -792,7 +848,7 @@ export function App() {
     () => applyFrameDurationOverrides(baseSheetFrames, frameDurationOverrides),
     [baseSheetFrames, frameDurationOverrides]
   );
-  const sheetFrames = useMemo(
+  const pivotedSheetFrames = useMemo(
     () =>
       applyPivotOverrides({
         frames: timedSheetFrames,
@@ -801,7 +857,19 @@ export function App() {
       }),
     [detectedRowAnimations, pivotOverrides, timedSheetFrames]
   );
+  const sheetFrames = useMemo(
+    () =>
+      applyFrameMetadataOverrides({
+        frames: pivotedSheetFrames,
+        metadata: frameMetadataOverrides
+      }),
+    [frameMetadataOverrides, pivotedSheetFrames]
+  );
   const currentFrame = selectedFrameIndex >= 0 ? sheetFrames[selectedFrameIndex] : undefined;
+  const currentFrameAnchor = currentFrame?.anchors?.[0];
+  const currentFrameBoxes = currentFrame?.boxes ?? [];
+  const canUndoFrameMetadata = canUndoFrameMetadataHistory(frameMetadataHistory);
+  const canRedoFrameMetadata = canRedoFrameMetadataHistory(frameMetadataHistory);
   const plannedSheetLayout = useMemo(
     () =>
       deriveSheetOutputLayout({
@@ -1335,6 +1403,8 @@ export function App() {
     setDetectedSheetDiagnostics(undefined);
     setFrameDurationOverrides({});
     setPivotOverrides(emptyPivotOverrides);
+    setFrameMetadataOverrides(emptyFrameMetadata);
+    setFrameMetadataHistory(createFrameMetadataHistoryState(createEmptyFrameMetadataSnapshot()));
     selectedFrameIndexRef.current = -1;
     setSelectedFrameIndex(-1);
     selectedAnimationNameRef.current = ALL_ANIMATIONS;
@@ -1404,6 +1474,8 @@ export function App() {
     setDetectedSheetDiagnostics(layout?.diagnostics);
     setFrameDurationOverrides({});
     setPivotOverrides(emptyPivotOverrides);
+    setFrameMetadataOverrides(emptyFrameMetadata);
+    setFrameMetadataHistory(createFrameMetadataHistoryState(createEmptyFrameMetadataSnapshot()));
     selectedFrameIndexRef.current = layoutSelectedFrameIndex;
     setSelectedFrameIndex(layoutSelectedFrameIndex);
     selectedAnimationNameRef.current = layoutSelectedAnimationName;
@@ -2347,17 +2419,30 @@ export function App() {
       setDetectedRowAnimations(result.animations);
       setDetectedSheetFrames(result.frames);
       setFrameDurationOverrides((current) => renameFrameDurationOverrides({ overrides: current, frameNames: result.frameNameMap }));
-      setPivotOverrides((current) =>
-        renamePivotOverrides({
+      setPivotOverrides((current) => {
+        const nextPivotOverrides = renamePivotOverrides({
           overrides: current,
           frameNames: result.frameNameMap,
           animationNames: new Map([[fromName, result.selectedAnimationName]])
-        })
-      );
+        });
+        setFrameMetadataOverrides((metadata) => {
+          const nextMetadata = renameFrameMetadata(metadata, result.frameNameMap);
+          setFrameMetadataHistory(createFrameMetadataHistoryState(createFrameMetadataSnapshot({ pivotOverrides: nextPivotOverrides, metadata: nextMetadata })));
+          return nextMetadata;
+        });
+        return nextPivotOverrides;
+      });
       setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
     },
     [detectedRowAnimations, detectedSheetFrames]
   );
+
+  const commitFrameMetadataEdit = useCallback((snapshot: FrameMetadataSnapshot) => {
+    setFrameMetadataHistory((current) => pushFrameMetadataHistoryEntry(current, snapshot));
+    setPivotOverrides(snapshot.pivotOverrides);
+    setFrameMetadataOverrides(snapshot.metadata);
+    setIsPlaying(false);
+  }, []);
 
   const updateCurrentFramePivot = useCallback(
     (axis: "x" | "y", value: number) => {
@@ -2369,10 +2454,14 @@ export function App() {
         x: axis === "x" ? value : currentFrame.pivot.x,
         y: axis === "y" ? value : currentFrame.pivot.y
       };
-      setPivotOverrides((current) => setFramePivotOverride(current, currentFrame.name, nextPivot));
-      setIsPlaying(false);
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides: setFramePivotOverride(pivotOverrides, currentFrame.name, nextPivot),
+          metadata: frameMetadataOverrides
+        })
+      );
     },
-    [currentFrame]
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
   );
 
   const resetCurrentFramePivot = useCallback(() => {
@@ -2380,27 +2469,181 @@ export function App() {
       return;
     }
 
-    setPivotOverrides((current) => clearFramePivotOverride(current, currentFrame.name));
-    setIsPlaying(false);
-  }, [currentFrame]);
+    commitFrameMetadataEdit(
+      createFrameMetadataSnapshot({
+        pivotOverrides: clearFramePivotOverride(pivotOverrides, currentFrame.name),
+        metadata: frameMetadataOverrides
+      })
+    );
+  }, [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]);
 
   const applyCurrentPivotToSelectedAnimation = useCallback(() => {
     if (!currentFrame || selectedAnimationName === ALL_ANIMATIONS) {
       return;
     }
 
-    setPivotOverrides((current) => setAnimationPivotOverride(current, selectedAnimationName, currentFrame.pivot));
-    setIsPlaying(false);
-  }, [currentFrame, selectedAnimationName]);
+    commitFrameMetadataEdit(
+      createFrameMetadataSnapshot({
+        pivotOverrides: setAnimationPivotOverride(pivotOverrides, selectedAnimationName, currentFrame.pivot),
+        metadata: frameMetadataOverrides
+      })
+    );
+  }, [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides, selectedAnimationName]);
 
   const resetSelectedAnimationPivot = useCallback(() => {
     if (selectedAnimationName === ALL_ANIMATIONS) {
       return;
     }
 
-    setPivotOverrides((current) => clearAnimationPivotOverride(current, selectedAnimationName));
+    commitFrameMetadataEdit(
+      createFrameMetadataSnapshot({
+        pivotOverrides: clearAnimationPivotOverride(pivotOverrides, selectedAnimationName),
+        metadata: frameMetadataOverrides
+      })
+    );
+  }, [commitFrameMetadataEdit, frameMetadataOverrides, pivotOverrides, selectedAnimationName]);
+
+  const updateCurrentFrameAnchor = useCallback(
+    (patch: Partial<SpriteFrameAnchor>) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      const existing = currentFrame.anchors?.[0] ?? {
+        id: primaryAnchorId,
+        name: "Anchor",
+        point: { ...currentFrame.pivot },
+        color: "#f1c75b"
+      };
+      const nextAnchor = {
+        ...existing,
+        ...patch,
+        point: patch.point ?? existing.point
+      };
+
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides,
+          metadata: setFrameAnchor(frameMetadataOverrides, currentFrame.name, nextAnchor)
+        })
+      );
+    },
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
+  );
+
+  const clearCurrentFrameAnchor = useCallback(() => {
+    if (!currentFrameAnchor || !currentFrame) {
+      return;
+    }
+
+    commitFrameMetadataEdit(
+      createFrameMetadataSnapshot({
+        pivotOverrides,
+        metadata: deleteFrameAnchor(frameMetadataOverrides, currentFrame.name, currentFrameAnchor.id)
+      })
+    );
+  }, [commitFrameMetadataEdit, currentFrame, currentFrameAnchor, frameMetadataOverrides, pivotOverrides]);
+
+  const addCurrentFrameBox = useCallback(
+    (type: SpriteFrameBoxType) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides,
+          metadata: addFrameMetadataBox(frameMetadataOverrides, currentFrame.name, type, currentFrame.rect)
+        })
+      );
+    },
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
+  );
+
+  const updateCurrentFrameBox = useCallback(
+    (boxId: string, patch: Partial<Omit<SpriteFrameBox, "id">>) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides,
+          metadata: updateFrameMetadataBox(frameMetadataOverrides, currentFrame.name, boxId, currentFrame.rect, patch)
+        })
+      );
+    },
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
+  );
+
+  const deleteCurrentFrameBox = useCallback(
+    (boxId: string) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides,
+          metadata: deleteFrameMetadataBox(frameMetadataOverrides, currentFrame.name, boxId)
+        })
+      );
+    },
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
+  );
+
+  const copyCurrentMetadataToFrameNames = useCallback(
+    (frameNames: readonly string[]) => {
+      if (!currentFrame) {
+        return;
+      }
+
+      commitFrameMetadataEdit(
+        createFrameMetadataSnapshot({
+          pivotOverrides,
+          metadata: copyFrameMetadata(frameMetadataOverrides, currentFrame.name, frameNames)
+        })
+      );
+    },
+    [commitFrameMetadataEdit, currentFrame, frameMetadataOverrides, pivotOverrides]
+  );
+
+  const copyCurrentMetadataToSelectedAnimation = useCallback(() => {
+    if (!currentFrame || selectedAnimationName === ALL_ANIMATIONS) {
+      return;
+    }
+
+    const animation = detectedRowAnimations.find((item) => item.name === selectedAnimationName);
+    if (!animation) {
+      return;
+    }
+
+    copyCurrentMetadataToFrameNames(animation.frameNames);
+  }, [copyCurrentMetadataToFrameNames, currentFrame, detectedRowAnimations, selectedAnimationName]);
+
+  const copyCurrentMetadataToAllFrames = useCallback(() => {
+    if (!currentFrame) {
+      return;
+    }
+
+    copyCurrentMetadataToFrameNames(sheetFrames.map((frame) => frame.name));
+  }, [copyCurrentMetadataToFrameNames, currentFrame, sheetFrames]);
+
+  const undoFrameMetadataEdit = useCallback(() => {
+    const next = undoFrameMetadataHistory(frameMetadataHistory);
+    setFrameMetadataHistory(next);
+    setPivotOverrides(next.present.pivotOverrides);
+    setFrameMetadataOverrides(next.present.metadata);
     setIsPlaying(false);
-  }, [selectedAnimationName]);
+  }, [frameMetadataHistory]);
+
+  const redoFrameMetadataEdit = useCallback(() => {
+    const next = redoFrameMetadataHistory(frameMetadataHistory);
+    setFrameMetadataHistory(next);
+    setPivotOverrides(next.present.pivotOverrides);
+    setFrameMetadataOverrides(next.present.metadata);
+    setIsPlaying(false);
+  }, [frameMetadataHistory]);
 
   const updateDetectedAnimationTiming = useCallback(
     (name: string, timing: { fps?: number; loop?: boolean; direction?: PlaybackDirection }) => {
@@ -4558,6 +4801,153 @@ export function App() {
                             </button>
                           </>
                         ) : null}
+                      </div>
+                    ) : null}
+                    {currentFrame ? (
+                      <div className="frame-metadata-editor" aria-label="Frame gameplay metadata">
+                        <div className="frame-metadata-heading">
+                          <strong>Gameplay metadata</strong>
+                          <span>{currentFrameBoxes.length} box{currentFrameBoxes.length === 1 ? "" : "es"}</span>
+                          <button type="button" disabled={!canUndoFrameMetadata} onClick={undoFrameMetadataEdit} title="Undo metadata edit">
+                            <Undo2 size={13} />
+                          </button>
+                          <button type="button" disabled={!canRedoFrameMetadata} onClick={redoFrameMetadataEdit} title="Redo metadata edit">
+                            <Redo2 size={13} />
+                          </button>
+                        </div>
+                        <div className="frame-anchor-editor">
+                          <div className="frame-anchor-title">
+                            <Crosshair size={13} />
+                            <strong>Anchor</strong>
+                            <button type="button" onClick={clearCurrentFrameAnchor} disabled={!currentFrameAnchor}>
+                              Clear
+                            </button>
+                          </div>
+                          <label>
+                            <span>Name</span>
+                            <input
+                              type="text"
+                              value={currentFrameAnchor?.name ?? "Anchor"}
+                              onChange={(event) => updateCurrentFrameAnchor({ name: event.currentTarget.value })}
+                            />
+                          </label>
+                          <label>
+                            <span>Color</span>
+                            <input
+                              type="color"
+                              value={currentFrameAnchor?.color ?? "#f1c75b"}
+                              onChange={(event) => updateCurrentFrameAnchor({ color: event.currentTarget.value })}
+                            />
+                          </label>
+                          <NumberField
+                            label="Anchor X"
+                            value={currentFrameAnchor?.point.x ?? currentFrame.pivot.x}
+                            min={0}
+                            max={currentFrame.rect.w}
+                            onChange={(value) =>
+                              updateCurrentFrameAnchor({
+                                point: {
+                                  x: clampSheetInteger(value, 0, currentFrame.rect.w),
+                                  y: currentFrameAnchor?.point.y ?? currentFrame.pivot.y
+                                }
+                              })
+                            }
+                          />
+                          <NumberField
+                            label="Anchor Y"
+                            value={currentFrameAnchor?.point.y ?? currentFrame.pivot.y}
+                            min={0}
+                            max={currentFrame.rect.h}
+                            onChange={(value) =>
+                              updateCurrentFrameAnchor({
+                                point: {
+                                  x: currentFrameAnchor?.point.x ?? currentFrame.pivot.x,
+                                  y: clampSheetInteger(value, 0, currentFrame.rect.h)
+                                }
+                              })
+                            }
+                          />
+                        </div>
+                        <div className="frame-box-toolbar" aria-label="Add metadata boxes">
+                          {frameBoxTypeOptions.map(([type, label]) => (
+                            <button key={type} type="button" onClick={() => addCurrentFrameBox(type)}>
+                              <Plus size={13} />
+                              {label}
+                            </button>
+                          ))}
+                          <button type="button" onClick={copyCurrentMetadataToSelectedAnimation} disabled={selectedAnimationName === ALL_ANIMATIONS}>
+                            <Copy size={13} />
+                            Clip
+                          </button>
+                          <button type="button" onClick={copyCurrentMetadataToAllFrames} disabled={sheetFrames.length <= 1}>
+                            <Copy size={13} />
+                            All
+                          </button>
+                        </div>
+                        <div className="frame-box-list">
+                          {currentFrameBoxes.length > 0 ? (
+                            currentFrameBoxes.map((box) => (
+                              <div key={box.id} className={`frame-box-row is-${box.type}`}>
+                                <input
+                                  aria-label={`${box.id} name`}
+                                  type="text"
+                                  value={box.name}
+                                  onChange={(event) => updateCurrentFrameBox(box.id, { name: event.currentTarget.value })}
+                                />
+                                <select
+                                  aria-label={`${box.id} type`}
+                                  value={box.type}
+                                  onChange={(event) => updateCurrentFrameBox(box.id, { type: event.currentTarget.value as SpriteFrameBoxType })}
+                                >
+                                  {frameBoxTypeOptions.map(([type, label]) => (
+                                    <option key={type} value={type}>
+                                      {label}
+                                    </option>
+                                  ))}
+                                </select>
+                                <input
+                                  aria-label={`${box.id} color`}
+                                  type="color"
+                                  value={box.color}
+                                  onChange={(event) => updateCurrentFrameBox(box.id, { color: event.currentTarget.value })}
+                                />
+                                <NumberField
+                                  label="X"
+                                  value={box.rect.x}
+                                  min={0}
+                                  max={currentFrame.rect.w}
+                                  onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, x: value } })}
+                                />
+                                <NumberField
+                                  label="Y"
+                                  value={box.rect.y}
+                                  min={0}
+                                  max={currentFrame.rect.h}
+                                  onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, y: value } })}
+                                />
+                                <NumberField
+                                  label="W"
+                                  value={box.rect.w}
+                                  min={1}
+                                  max={currentFrame.rect.w}
+                                  onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, w: value } })}
+                                />
+                                <NumberField
+                                  label="H"
+                                  value={box.rect.h}
+                                  min={1}
+                                  max={currentFrame.rect.h}
+                                  onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, h: value } })}
+                                />
+                                <button type="button" onClick={() => deleteCurrentFrameBox(box.id)} title={`Delete ${box.name}`}>
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                            ))
+                          ) : (
+                            <small>No collision, hurtbox, or hitbox rectangles.</small>
+                          )}
+                        </div>
                       </div>
                     ) : null}
                   </div>

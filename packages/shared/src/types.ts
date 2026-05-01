@@ -294,6 +294,23 @@ export type Pivot = {
   y: number;
 };
 
+export type SpriteFrameBoxType = "collision" | "hurtbox" | "hitbox";
+
+export type SpriteFrameBox = {
+  id: string;
+  name: string;
+  type: SpriteFrameBoxType;
+  color: string;
+  rect: Rect;
+};
+
+export type SpriteFrameAnchor = {
+  id: string;
+  name: string;
+  point: Pivot;
+  color: string;
+};
+
 export type SheetSliceOptions = {
   frameWidth: number;
   frameHeight: number;
@@ -312,6 +329,8 @@ export type SpriteFrame = {
   pivot: Pivot;
   durationMs: number;
   tags?: string[];
+  anchors?: SpriteFrameAnchor[];
+  boxes?: SpriteFrameBox[];
 };
 
 export type AnimationTag = {
