@@ -1,6 +1,7 @@
 import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type { AlphaMode, AssetType, FixOptions, GridCandidate, RGBAImage, SheetLayoutDetection } from "@pixelaid/shared";
 import { detectGridCandidates } from "./grid";
+import { analyzeMaskArtifacts } from "./morphology";
 import { detectOutlineColorCandidates, type OutlineColorCandidate } from "./outline";
 import { detectSheetLayout } from "./sheet";
 import { analyzeTilesetSeams } from "./tileDiagnostics";
@@ -78,6 +79,7 @@ export type QualityReport = {
       candidateCount: number;
       candidates: OutlineColorCandidate[];
     };
+    morphology: ReturnType<typeof analyzeMaskArtifacts>;
     tilemap: {
       detected: boolean;
       candidates: ReturnType<typeof analyzeTilemapDiagnostics>["candidates"];
@@ -114,6 +116,10 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const maxColors = normalizeMaxColors(options.maxColors);
   const exactColorCount = countVisibleExactColors(image);
   const alpha = countAlphaPixels(image);
+  const morphologyArtifacts = analyzeMaskArtifacts(buildAlphaMask(image), image.width, image.height, {
+    maxHolePixels: 1,
+    maxComponentPixels: 2
+  });
   const sheetLayout = options.sheetLayout ?? detectSheetLayout(image);
   const outlineCandidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
   const detailAnalysis = analyzeDetailDensityLinework(image);
@@ -206,6 +212,39 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       label: "Review outline source colors",
       rationale: "Choosing the existing outline colors avoids accidentally adding a second or thicker outline.",
       settings: { cleanup: { outlineSourceColors: outlineCandidates.slice(0, 2).map((candidate) => candidate.color) } }
+    });
+  }
+
+  if (
+    morphologyArtifacts.pinholePixels > 0 ||
+    morphologyArtifacts.tinyComponentPixels > 0 ||
+    morphologyArtifacts.brokenOutlinePixels > 0
+  ) {
+    findings.push({
+      id: "morphology-artifacts",
+      severity: "info",
+      category: "alpha",
+      title: "Mask artifacts detected",
+      detail: `${morphologyArtifacts.pinholePixels} pinhole pixel(s), ${morphologyArtifacts.tinyComponentPixels} tiny component pixel(s), and ${morphologyArtifacts.brokenOutlinePixels} closeable gap pixel(s) were found in the alpha mask.`,
+      recommendationId: "morphology-cleanup"
+    });
+    recommendations.push({
+      id: "morphology-cleanup",
+      label: "Review morphology cleanup",
+      rationale: "Mask-scoped cleanup can repair tiny alpha holes and loose components without color blurring source pixels.",
+      settings: {
+        cleanup: {
+          morphology: {
+            enabled: true,
+            fillTinyHoles: morphologyArtifacts.pinholePixels > 0,
+            removeTinyComponents: morphologyArtifacts.tinyComponentPixels > 0,
+            close: morphologyArtifacts.brokenOutlinePixels > morphologyArtifacts.pinholePixels,
+            maxHolePixels: 1,
+            maxComponentPixels: 2,
+            preserveSinglePixelDetails: true
+          }
+        }
+      }
     });
   }
 
@@ -330,6 +369,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
         candidateCount: outlineCandidates.length,
         candidates: outlineCandidates
       },
+      morphology: morphologyArtifacts,
       tilemap: {
         detected: tilemapDiagnostics?.selected !== undefined,
         candidates: tilemapDiagnostics?.candidates ?? [],
@@ -499,6 +539,14 @@ function luminance(r: number, g: number, b: number): number {
 
 function supportsContrastRecommendation(assetType: AssetType): boolean {
   return assetType === "sprite" || assetType === "spriteSheet" || assetType === "animationSheet" || assetType === "characterSheet" || assetType === "icon";
+}
+
+function buildAlphaMask(image: RGBAImage): Uint8Array {
+  const mask = new Uint8Array(image.width * image.height);
+  for (let index = 0; index < mask.length; index += 1) {
+    mask[index] = image.data[index * 4 + 3]! > 0 ? 1 : 0;
+  }
+  return mask;
 }
 
 function isSheetAsset(assetType: AssetType): boolean {
