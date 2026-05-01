@@ -127,11 +127,11 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   },
   {
     name: "export_engine_bundle",
-    description: "Fix an asset and write generic PixelAid outputs plus Godot, Unity, and/or Phaser helper files.",
+    description: "Fix an asset and write generic PixelAid outputs plus Godot, Unity, Phaser, and/or TexturePacker helper files.",
     inputSchema: objectSchema(["inputPath", "outDir"], {
       inputPath: stringSchema("Path to a PNG image."),
       outDir: stringSchema("Output directory."),
-      targets: { type: "array", items: { type: "string", enum: ["godot", "unity", "phaser"] }, default: ["godot", "unity", "phaser"] },
+      targets: { type: "array", items: { type: "string", enum: ["godot", "unity", "phaser", "texturepacker"] }, default: ["godot", "unity", "phaser"] },
       options: commonOptionsSchema,
       overwrite: booleanSchema("Allow replacing existing output files."),
     }),

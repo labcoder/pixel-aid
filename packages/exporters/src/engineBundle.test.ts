@@ -6,7 +6,7 @@ describe("engine export bundle coordinator", () => {
   test("returns deterministic files for selected targets only", () => {
     const bundle = createEngineExportBundle({
       manifest: createManifest(),
-      targets: ["phaser", "unity"]
+      targets: ["phaser", "unity", "texturepacker"]
     });
 
     expect(bundle.files.map((file) => file.path)).toEqual([
@@ -14,6 +14,8 @@ describe("engine export bundle coordinator", () => {
       "phaser/README.md",
       "unity/README.md",
       "unity/Editor/PixelAidUnityImporter.cs",
+      "texturepacker/hero_sheet.json",
+      "texturepacker/README.md",
       "engines/README.md"
     ]);
     expect(bundle.files.some((file) => file.path.startsWith("godot/"))).toBe(false);

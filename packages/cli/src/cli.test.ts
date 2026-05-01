@@ -151,7 +151,7 @@ describe("pixelaid CLI", () => {
         "--out-dir",
         outDir,
         "--engine",
-        "godot,unity,phaser",
+        "godot,unity,phaser,texturepacker",
         "--bundle",
         "zip",
         "--target",
@@ -168,6 +168,7 @@ describe("pixelaid CLI", () => {
 
       expect(code).toBe(0);
       expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "pixelaid-export.zip")).toBe(true);
+      expect(body.result.files.some((file: { relativePath: string }) => file.relativePath === "texturepacker/input.fixed.json")).toBe(true);
       await expect(stat(path.join(outDir, "pixelaid-export.zip"))).resolves.toBeTruthy();
     });
   });

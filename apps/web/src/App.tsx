@@ -4173,7 +4173,7 @@ export function App() {
           text
         />
         <div className="engine-export-targets" aria-label="Engine export targets">
-          {(["godot", "unity", "phaser"] as const).map((target) => (
+          {(["godot", "unity", "phaser", "texturepacker"] as const).map((target) => (
             <label key={target} className="toggle-row">
               <input
                 type="checkbox"
@@ -5672,6 +5672,9 @@ function targetLabel(target: EngineExportTarget): string {
   }
   if (target === "unity") {
     return "Unity";
+  }
+  if (target === "texturepacker") {
+    return "TexturePacker";
   }
   return "Phaser";
 }

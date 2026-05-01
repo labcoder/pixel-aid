@@ -204,7 +204,7 @@ The bottom panel can be dragged upward from its top handle when logs, metrics, o
 
 The first export target is a generic engine-ready bundle.
 
-Engine export targets can be selected in the Export inspector. When enabled, the ZIP includes Godot, Unity, and/or Phaser folders beside the generic PixelAid manifest. The generic manifest remains the source of truth; engine files are adapters, helper scripts, or import instructions generated from that manifest.
+Engine export targets can be selected in the Export inspector. When enabled, the ZIP includes Godot, Unity, Phaser, and/or TexturePacker-compatible folders beside the generic PixelAid manifest. The generic manifest remains the source of truth; engine files are adapters, helper scripts, atlas metadata, or import instructions generated from that manifest.
 
 - The ZIP layout is deterministic:
   - `images/<base>_fixed.png` or `images/<base>_normalized.png`
@@ -213,7 +213,7 @@ Engine export targets can be selected in the Export inspector. When enabled, the
   - `palettes/<base>.gpl`
   - `palettes/<base>.palette.json`
   - `reports/<base>_validation.json`
-  - `godot/`, `unity/`, `phaser/`, and `engines/` helper files when their targets are selected
+  - `godot/`, `unity/`, `phaser/`, `texturepacker/`, and `engines/` helper files when their targets are selected
   - `frames/<frame-name>.png` for sheet-like exports
 - Fixed PNG contains the native-size pixel-art output.
 - JSON manifest remains the canonical metadata file. It includes asset type, source dimensions, output dimensions, palette, grid metadata, frame rects, pivots, animation clips, and operation settings.
@@ -227,4 +227,8 @@ Engine export targets can be selected in the Export inspector. When enabled, the
 - Pivot overrides from the Sprite Player are applied before normalized export, so corrected baseline/pivot decisions are reflected in the exported PNG and manifest.
 - Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting. If a detected clip is renamed, matching frame names and per-frame duration overrides are renamed with it before export.
 - Normalized export uses the MIG-11 corrected frame list, including duration, clip rename, and pivot override metadata, rather than recalculating animation structure during bundle assembly.
-- Engine adapters preserve unsupported target details as validation warnings. Godot pivots are kept as helper metadata, Unity clip generation stays manual, and Phaser receives atlas/animation JSON derived from the same manifest frames.
+- Engine adapters preserve unsupported target details as validation warnings. Godot pivots are kept as helper metadata, Unity clip generation stays manual, Phaser receives atlas/animation JSON, and TexturePacker receives JSON Hash-style atlas metadata derived from the same manifest frames.
+
+## TexturePacker-Compatible Atlas
+
+TexturePacker export writes `texturepacker/<name>.json` in JSON Hash style. The atlas includes frame rectangles, source sizes, normalized pivots, per-frame durations, and a `meta.pixelAid` block with margin, spacing, extrusion, animation IDs, and palette metadata. TexturePacker JSON has no standard place for PixelAid anchors, collision boxes, hurtboxes, hitboxes, cleanup diagnostics, or provenance, so those remain in the generic manifest and appear as export validation warnings when present.
