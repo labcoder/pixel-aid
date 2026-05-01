@@ -111,4 +111,12 @@ describe("automation option normalization", () => {
       dithering: "ordered",
     });
   });
+
+  it.each(["contrast", "kCentroid"] as const)("accepts %s downscale mode for automation callers", (downscale) => {
+    const result = normalizeFixOptions({ downscale });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.downscale).toBe(downscale);
+  });
 });

@@ -412,7 +412,7 @@ function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSe
   if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
   if (typeof value.gridScaleX === "number") settings.gridScaleX = numberSetting(value.gridScaleX, 8, 0.01, 1024);
   if (typeof value.gridScaleY === "number") settings.gridScaleY = numberSetting(value.gridScaleY, 8, 0.01, 1024);
-  if (typeof value.downscale === "string") settings.downscale = unionSetting(value.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"], "dominant");
+  if (typeof value.downscale === "string") settings.downscale = unionSetting(value.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving", "contrast", "kCentroid"], "dominant");
   if (typeof value.alpha === "string") settings.alpha = unionSetting(value.alpha, ["preserve", "binary", "backgroundFloodFill", "colorKey"], "preserve");
   return settings;
 }

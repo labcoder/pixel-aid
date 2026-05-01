@@ -151,7 +151,14 @@ export type SheetConditioningDiagnostics = {
   issues: SheetConditioningIssue[];
 };
 
-export type DownscaleMethod = "dominant" | "median" | "adaptive" | "averageThenPalette" | "detailPreserving";
+export type DownscaleMethod =
+  | "dominant"
+  | "median"
+  | "adaptive"
+  | "averageThenPalette"
+  | "detailPreserving"
+  | "contrast"
+  | "kCentroid";
 
 export type AlphaMode = "preserve" | "binary" | "backgroundFloodFill" | "colorKey";
 
