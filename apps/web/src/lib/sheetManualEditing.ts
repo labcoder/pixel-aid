@@ -8,6 +8,16 @@ export type ManualSheetEditResult = {
   selectedAnimationName: string;
 };
 
+type SheetEditBaseOptions = {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  margin: number;
+  spacing: number;
+  scaleX: number;
+  scaleY: number;
+  sourceSize: { width: number; height: number };
+};
+
 export function insertFrameNearSelection({
   frames,
   animations,
@@ -64,6 +74,129 @@ export function insertFrameNearSelection({
     animations: nextAnimations,
     selectedFrameIndex: findFrameIndexByName(repacked, insertedFrame.name),
     selectedAnimationName: row.name
+  };
+}
+
+export function insertFrameAtRowEdge({
+  frames,
+  animations,
+  selectedAnimationName,
+  edge,
+  margin,
+  spacing,
+  scaleX,
+  scaleY,
+  sourceSize
+}: SheetEditBaseOptions & {
+  selectedAnimationName: string;
+  edge: "start" | "end";
+}): ManualSheetEditResult {
+  const row = animations[findAnimationIndex(selectedAnimationName, animations)];
+  if (!row || row.frameNames.length === 0) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  const templateName = edge === "start" ? row.frameNames[0] : row.frameNames[row.frameNames.length - 1];
+  const selectedFrameIndex = templateName ? findFrameIndexByName(frames, templateName) : -1;
+  if (selectedFrameIndex < 0) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  return insertFrameNearSelection({
+    frames,
+    animations,
+    selectedFrameIndex,
+    placement: edge === "start" ? "before" : "after",
+    margin,
+    spacing,
+    scaleX,
+    scaleY,
+    sourceSize
+  });
+}
+
+export function fillRowToFrameCount({
+  frames,
+  animations,
+  selectedAnimationName,
+  targetFrameCount,
+  margin,
+  spacing,
+  scaleX,
+  scaleY,
+  sourceSize
+}: SheetEditBaseOptions & {
+  selectedAnimationName: string;
+  targetFrameCount: number;
+}): ManualSheetEditResult {
+  const filled = appendFramesForRowsToTarget({
+    frames,
+    animations,
+    targetFrameCount,
+    rowNames: new Set([selectedAnimationName]),
+    scaleX,
+    scaleY,
+    sourceSize
+  });
+
+  if (filled.inserted.length === 0) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  const repacked = repackAnimationRows({
+    frames: filled.frames,
+    animations: filled.animations,
+    margin,
+    spacing
+  });
+  const selectedName = filled.inserted[filled.inserted.length - 1]?.frameName;
+
+  return {
+    frames: repacked,
+    animations: filled.animations,
+    selectedFrameIndex: selectedName ? findFrameIndexByName(repacked, selectedName) : 0,
+    selectedAnimationName
+  };
+}
+
+export function fillSparseRowsToFrameCount({
+  frames,
+  animations,
+  targetFrameCount,
+  margin,
+  spacing,
+  scaleX,
+  scaleY,
+  sourceSize
+}: SheetEditBaseOptions & {
+  targetFrameCount: number;
+}): ManualSheetEditResult {
+  const filled = appendFramesForRowsToTarget({
+    frames,
+    animations,
+    targetFrameCount,
+    scaleX,
+    scaleY,
+    sourceSize
+  });
+
+  if (filled.inserted.length === 0) {
+    return unchangedForRow(frames, animations, animations[0]?.name ?? "all");
+  }
+
+  const repacked = repackAnimationRows({
+    frames: filled.frames,
+    animations: filled.animations,
+    margin,
+    spacing
+  });
+  const selected = filled.inserted[0]!;
+
+  return {
+    frames: repacked,
+    animations: filled.animations,
+    selectedFrameIndex: findFrameIndexByName(repacked, selected.frameName),
+    selectedAnimationName: selected.rowName
   };
 }
 
@@ -310,6 +443,74 @@ function shiftSourceRect(rect: Rect, deltaX: number, deltaY: number, sourceSize:
   };
 }
 
+function appendFramesForRowsToTarget({
+  frames,
+  animations,
+  targetFrameCount,
+  rowNames,
+  scaleX,
+  scaleY,
+  sourceSize
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  targetFrameCount: number;
+  rowNames?: ReadonlySet<string>;
+  scaleX: number;
+  scaleY: number;
+  sourceSize: { width: number; height: number };
+}): {
+  frames: SpriteFrame[];
+  animations: AnimationTag[];
+  inserted: { rowName: string; frameName: string }[];
+} {
+  let nextFrames = frames.map(copyFrame);
+  const inserted: { rowName: string; frameName: string }[] = [];
+  const safeTarget = Math.max(0, Math.round(targetFrameCount));
+
+  const nextAnimations = animations.map((animation) => {
+    if (rowNames && !rowNames.has(animation.name)) {
+      return copyAnimation(animation);
+    }
+    if (animation.frameNames.length >= safeTarget || animation.frameNames.length === 0) {
+      return copyAnimation(animation);
+    }
+
+    const nextFrameNames = [...animation.frameNames];
+    let template = findFrameByName(nextFrames, nextFrameNames[nextFrameNames.length - 1]!);
+    if (!template) {
+      return copyAnimation(animation);
+    }
+
+    while (nextFrameNames.length < safeTarget) {
+      const name = nextFrameName(animation.name, nextFrames);
+      const insertedFrame = createInsertedFrame({
+        template,
+        name,
+        placement: "after",
+        scaleX,
+        scaleY,
+        sourceSize
+      });
+      nextFrames = [...nextFrames, insertedFrame];
+      nextFrameNames.push(name);
+      inserted.push({ rowName: animation.name, frameName: name });
+      template = insertedFrame;
+    }
+
+    return {
+      ...copyAnimation(animation),
+      frameNames: nextFrameNames
+    };
+  });
+
+  return {
+    frames: nextFrames,
+    animations: nextAnimations,
+    inserted
+  };
+}
+
 function findAnimationForFrame(frame: SpriteFrame, animations: readonly AnimationTag[]): AnimationTag | undefined {
   return animations.find((animation) => animation.frameNames.includes(frame.name) || frame.tags?.includes(animation.name));
 }
@@ -407,6 +608,10 @@ function selectAfterRemoval({
 
 function findFrameIndexByName(frames: readonly SpriteFrame[], name: string): number {
   return frames.findIndex((frame) => frame.name === name);
+}
+
+function findFrameByName(frames: readonly SpriteFrame[], name: string): SpriteFrame | undefined {
+  return frames.find((frame) => frame.name === name);
 }
 
 function copyFrame(frame: SpriteFrame): SpriteFrame {
