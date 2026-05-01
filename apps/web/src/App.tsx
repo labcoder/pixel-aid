@@ -3724,6 +3724,8 @@ export function App() {
           options={[
             ["dominant", "Dominant"],
             ["detailPreserving", "Detail preserving"],
+            ["contrast", "Contrast"],
+            ["kCentroid", "K-centroid"],
             ["median", "Median"],
             ["adaptive", "Adaptive"],
             ["averageThenPalette", "Average + palette"]

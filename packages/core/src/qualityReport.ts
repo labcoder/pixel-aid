@@ -116,6 +116,7 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const alpha = countAlphaPixels(image);
   const sheetLayout = options.sheetLayout ?? detectSheetLayout(image);
   const outlineCandidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
+  const detailAnalysis = analyzeDetailDensityLinework(image);
   const tilemapDiagnostics = assetType === "tilemap" ? analyzeTilemapDiagnostics(image) : undefined;
   const tilesetDiagnostics = assetType === "tileset" ? analyzeTilesetSeams(image, resolveTileOptions(image, options, sheetLayout)) : undefined;
   const findings: QualityFinding[] = [];
@@ -205,6 +206,23 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       label: "Review outline source colors",
       rationale: "Choosing the existing outline colors avoids accidentally adding a second or thicker outline.",
       settings: { cleanup: { outlineSourceColors: outlineCandidates.slice(0, 2).map((candidate) => candidate.color) } }
+    });
+  }
+
+  if (supportsContrastRecommendation(assetType) && detailAnalysis.shouldRecommendContrast) {
+    findings.push({
+      id: "detail-density-linework",
+      severity: "info",
+      category: "palette",
+      title: "Dense detail and thin linework detected",
+      detail: `Detail density is ${Math.round(detailAnalysis.detailDensity * 100)}% with sparse dark linework at ${Math.round(detailAnalysis.darkLineRatio * 100)}% of visible pixels.`,
+      recommendationId: "use-contrast-downscale"
+    });
+    recommendations.push({
+      id: "use-contrast-downscale",
+      label: "Use contrast-aware downscale",
+      rationale: "Contrast-aware block selection separates luminance from color so thin dark strokes survive blocks where dominant and detail-preserving modes can wash them out.",
+      settings: { downscale: "contrast" }
     });
   }
 
@@ -403,6 +421,84 @@ function countAlphaPixels(image: RGBAImage): { transparentPixels: number; softAl
     }
   }
   return { transparentPixels, softAlphaPixels };
+}
+
+function analyzeDetailDensityLinework(image: RGBAImage): {
+  detailDensity: number;
+  darkLineRatio: number;
+  shouldRecommendContrast: boolean;
+} {
+  let visiblePixels = 0;
+  let edgeComparisons = 0;
+  let edgeCount = 0;
+  let darkLinePixels = 0;
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      if (alpha < 16) {
+        continue;
+      }
+
+      visiblePixels += 1;
+      const lumaValue = luminance(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
+      let brightNeighborCount = 0;
+
+      if (x + 1 < image.width) {
+        const rightOffset = offset + 4;
+        if (image.data[rightOffset + 3]! >= 16) {
+          const rightLuma = luminance(image.data[rightOffset]!, image.data[rightOffset + 1]!, image.data[rightOffset + 2]!);
+          edgeComparisons += 1;
+          if (Math.abs(lumaValue - rightLuma) >= 36) edgeCount += 1;
+          if (rightLuma - lumaValue >= 72) brightNeighborCount += 1;
+        }
+      }
+      if (y + 1 < image.height) {
+        const belowOffset = offset + image.width * 4;
+        if (image.data[belowOffset + 3]! >= 16) {
+          const belowLuma = luminance(image.data[belowOffset]!, image.data[belowOffset + 1]!, image.data[belowOffset + 2]!);
+          edgeComparisons += 1;
+          if (Math.abs(lumaValue - belowLuma) >= 36) edgeCount += 1;
+          if (belowLuma - lumaValue >= 72) brightNeighborCount += 1;
+        }
+      }
+      if (x > 0) {
+        const leftOffset = offset - 4;
+        if (image.data[leftOffset + 3]! >= 16) {
+          const leftLuma = luminance(image.data[leftOffset]!, image.data[leftOffset + 1]!, image.data[leftOffset + 2]!);
+          if (leftLuma - lumaValue >= 72) brightNeighborCount += 1;
+        }
+      }
+      if (y > 0) {
+        const aboveOffset = offset - image.width * 4;
+        if (image.data[aboveOffset + 3]! >= 16) {
+          const aboveLuma = luminance(image.data[aboveOffset]!, image.data[aboveOffset + 1]!, image.data[aboveOffset + 2]!);
+          if (aboveLuma - lumaValue >= 72) brightNeighborCount += 1;
+        }
+      }
+
+      if (lumaValue < 72 && brightNeighborCount >= 1) {
+        darkLinePixels += 1;
+      }
+    }
+  }
+
+  const detailDensity = edgeComparisons > 0 ? edgeCount / edgeComparisons : 0;
+  const darkLineRatio = visiblePixels > 0 ? darkLinePixels / visiblePixels : 0;
+  return {
+    detailDensity,
+    darkLineRatio,
+    shouldRecommendContrast: detailDensity >= 0.08 && darkLineRatio >= 0.01 && darkLineRatio <= 0.18
+  };
+}
+
+function luminance(r: number, g: number, b: number): number {
+  return r * 0.299 + g * 0.587 + b * 0.114;
+}
+
+function supportsContrastRecommendation(assetType: AssetType): boolean {
+  return assetType === "sprite" || assetType === "spriteSheet" || assetType === "animationSheet" || assetType === "characterSheet" || assetType === "icon";
 }
 
 function isSheetAsset(assetType: AssetType): boolean {
