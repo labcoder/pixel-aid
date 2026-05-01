@@ -26,6 +26,8 @@ export type {
   GridCandidate,
   GridCandidateDiagnostics,
   GridDriftDiagnostics,
+  MorphologyCleanupSettings,
+  MorphologyDiagnostics,
   OutlineMode,
   PaletteDiagnostics,
   PaletteDitheringMode,

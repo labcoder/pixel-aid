@@ -224,10 +224,38 @@ export type PaletteDiagnostics = {
 
 export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
+  morphology?: MorphologyDiagnostics;
   palette?: PaletteDiagnostics;
 };
 
 export type OutlineMode = "none" | "repairExisting" | "add";
+
+export type MorphologyCleanupSettings = {
+  enabled?: boolean;
+  open?: boolean;
+  close?: boolean;
+  fillTinyHoles?: boolean;
+  removeTinyComponents?: boolean;
+  maxHolePixels?: number;
+  maxComponentPixels?: number;
+  preserveSinglePixelDetails?: boolean;
+  alphaThreshold?: number;
+  connectivity?: 4 | 8;
+};
+
+export type MorphologyDiagnostics = {
+  enabled: boolean;
+  target: "alpha";
+  operationCount: number;
+  openedPixels: number;
+  closedPixels: number;
+  filledHolePixels: number;
+  removedComponentPixels: number;
+  pinholePixels: number;
+  tinyComponentPixels: number;
+  brokenOutlinePixels: number;
+  warnings: string[];
+};
 
 export type GridCandidate = {
   outputWidth: number;
@@ -297,6 +325,7 @@ export type FixOptions = {
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     denoiseStrength?: number;
+      morphology?: MorphologyCleanupSettings;
       removeHalos?: boolean;
       outlineMode?: OutlineMode;
       outlineSize?: number;
