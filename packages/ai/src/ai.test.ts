@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
-  AiProviderError,
   buildPixelArtPrompt,
   createMockAiImageProvider,
   createOpenAiImageProvider,
   validateGeneratedImage,
 } from "./index";
+import type { AiProviderError } from "./index";
 
 describe("AI provider adapters", () => {
   it("builds a pixel-art prompt that preserves production constraints", () => {
