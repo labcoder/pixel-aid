@@ -55,6 +55,21 @@ docs                  Architecture, algorithms, performance, and licensing notes
 See `docs/fixtures.md` for generated cleanup fixtures and benchmark sources.
 See `docs/automation.md` for CLI and MCP-ready workflows.
 See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for packaging and release checklist notes.
+See `docs/licensing.md` for release licensing notes.
+
+## License
+
+PixelAid source code is licensed under the GNU Affero General Public License version 3.0 only. See `LICENSE`, `LICENSES.md`, and `NOTICE`.
+
+Assets, images, sprite sheets, palettes, manifests, metadata, and other outputs produced by running PixelAid are not subject to the AGPL solely because they were created with PixelAid. You may use PixelAid outputs in personal, commercial, open-source, or proprietary projects.
+
+Attribution is appreciated, but not required, for projects that use PixelAid-generated or PixelAid-cleaned assets:
+
+```txt
+Asset cleanup powered by PixelAid by Oscar Sanchez.
+```
+
+Separate commercial terms may be available from Oscar Sanchez for closed-source embedding, white-labeling, hosted commercial services, or other use cases that need terms different from the public AGPL license.
 
 ## Current Workflow
 
