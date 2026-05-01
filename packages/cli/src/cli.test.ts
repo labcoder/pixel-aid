@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -175,6 +175,127 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("batch fixes all pngs from a folder", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const assetsDir = path.join(dir, "assets");
+      await mkdir(assetsDir);
+      await writeFile(path.join(assetsDir, "hero.png"), await readFile(input));
+      await writeFile(path.join(assetsDir, "enemy.png"), await readFile(input));
+
+      const capture = createCapture();
+      const outDir = path.join(dir, "batch-out");
+      const code = await runCli([
+        "batch",
+        assetsDir,
+        "--out-dir",
+        outDir,
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.command).toBe("batch");
+      expect(body.result.summary).toMatchObject({ inputCount: 2, successCount: 2, failureCount: 0 });
+      expect(body.result.items.map((item: { inputPath: string }) => path.basename(item.inputPath))).toEqual(["enemy.png", "hero.png"]);
+      await expect(stat(path.join(outDir, "enemy.fixed.png"))).resolves.toBeTruthy();
+      await expect(stat(path.join(outDir, "hero.fixed.png"))).resolves.toBeTruthy();
+    });
+  });
+
+  it("batch dry-run expands globs without writing outputs", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const assetsDir = path.join(dir, "glob-assets");
+      await mkdir(assetsDir);
+      await writeFile(path.join(assetsDir, "hero.png"), await readFile(input));
+
+      const capture = createCapture();
+      const outDir = path.join(dir, "dry-run-out");
+      const code = await runCli([
+        "batch",
+        path.join(assetsDir, "*.png"),
+        "--out-dir",
+        outDir,
+        "--dry-run",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.result.summary).toMatchObject({ inputCount: 1, successCount: 0, skippedCount: 1, dryRun: true });
+      expect(body.result.items[0]).toMatchObject({ status: "skipped" });
+      await expect(stat(path.join(outDir, "hero.fixed.png"))).rejects.toBeTruthy();
+    });
+  });
+
+  it("batch continue-on-error keeps successful outputs and reports failures", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const outDir = path.join(dir, "partial-out");
+      const missing = path.join(dir, "missing.png");
+      const code = await runCli([
+        "batch",
+        input,
+        missing,
+        "--out-dir",
+        outDir,
+        "--continue-on-error",
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(1);
+      expect(body.ok).toBe(false);
+      expect(body.result.summary).toMatchObject({ inputCount: 2, successCount: 1, failureCount: 1 });
+      expect(body.result.items.some((item: { status: string }) => item.status === "failed")).toBe(true);
+      await expect(stat(path.join(outDir, "input.fixed.png"))).resolves.toBeTruthy();
+    });
+  });
+
+  it("emits progress JSON lines to stderr without corrupting stdout JSON", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "progress.png");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--progress-json",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+      const progressLines = capture.stderr.map((line) => JSON.parse(line) as { type: string; stage: string });
+
+      expect(code).toBe(0);
+      expect(body.ok).toBe(true);
+      expect(progressLines.some((line) => line.type === "progress" && line.stage === "downsampling")).toBe(true);
+    });
+  });
+
   it("returns stable errors for invalid args and missing inputs", async () => {
     const invalid = createCapture();
     const invalidCode = await runCli(["fix", "--json"], invalid);
@@ -201,7 +322,15 @@ type CliJson = {
     files?: Array<{ kind: string; relativePath: string }>;
     manifest?: { frames: unknown[] };
     palette?: string[];
-    summary?: { assetCount: number };
+    summary?: {
+      assetCount?: number;
+      inputCount?: number;
+      successCount?: number;
+      failureCount?: number;
+      skippedCount?: number;
+      dryRun?: boolean;
+    };
+    items?: Array<{ inputPath: string; status: string }>;
     reports?: Array<{ findings: Array<{ id: string }> }>;
   };
   error?: { code: string };

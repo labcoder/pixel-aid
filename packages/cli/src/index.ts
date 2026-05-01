@@ -1,5 +1,6 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { strToU8, zipSync } from "fflate";
 import {
   automationError,
@@ -13,7 +14,9 @@ import {
   relativeToDirectory,
   suggestFixSettings,
   type AutomationFileRecord,
+  type AutomationProgressEvent,
   type AutomationResult,
+  type AutomationRuntimeOptions,
   type ExportEngineBundleRequest,
   type FixSpriteSheetRequest,
   type AutomationFixOptionsInput,
@@ -37,6 +40,41 @@ type CliCommandResult = {
   human: string;
 };
 
+type CliContext = {
+  io: CliIo;
+  progressJson: boolean;
+};
+
+type BatchItemStatus = "succeeded" | "failed" | "skipped";
+
+type BatchItemResult = {
+  inputPath: string;
+  outputPath: string;
+  manifestPath: string;
+  status: BatchItemStatus;
+  files: AutomationFileRecord[];
+  warnings: string[];
+  durationMs: number;
+  error?: {
+    code: string;
+    message: string;
+    exitCode: number;
+  };
+};
+
+type BatchResult = {
+  items: BatchItemResult[];
+  summary: {
+    inputCount: number;
+    successCount: number;
+    failureCount: number;
+    skippedCount: number;
+    dryRun: boolean;
+    continueOnError: boolean;
+    outDir: string;
+  };
+};
+
 type EngineExportTarget = ExportEngineBundleRequest["targets"][number];
 
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
@@ -44,8 +82,10 @@ const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
   const json = takeBooleanFlag(args, "--json");
+  const progressJson = takeBooleanFlag(args, "--progress-json");
+  const context: CliContext = { io, progressJson };
   try {
-    const result = await runParsedCommand(args);
+    const result = await runParsedCommand(args, context);
     emit(io.stdout, json ? `${JSON.stringify(result.payload, null, 2)}\n` : result.human);
     return result.code;
   } catch (error) {
@@ -60,7 +100,7 @@ export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): 
   }
 }
 
-async function runParsedCommand(args: string[]): Promise<CliCommandResult> {
+async function runParsedCommand(args: string[], context: CliContext): Promise<CliCommandResult> {
   const command = args.shift();
   if (!command || command === "--help" || command === "-h") {
     return {
@@ -72,32 +112,48 @@ async function runParsedCommand(args: string[]): Promise<CliCommandResult> {
 
   switch (command) {
     case "inspect":
-      return emitAutomation(command, await inspectImage({ inputPath: readInput(args), options: parseFixOptions(args) }));
+      return runInspectCommand(command, args, context);
     case "suggest":
-      return emitAutomation(command, await suggestFixSettings({ inputPath: readInput(args), options: parseFixOptions(args) }));
+      return runSuggestCommand(command, args, context);
     case "report":
-      return runReportCommand(command, args);
+      return runReportCommand(command, args, context);
     case "fix":
-      return runFixCommand(command, args);
+      return runFixCommand(command, args, context);
     case "fix-sheet":
-      return runFixSheetCommand(command, args);
+      return runFixSheetCommand(command, args, context);
     case "palette":
-      return runPaletteCommand(command, args);
+      return runPaletteCommand(command, args, context);
     case "export":
-      return runExportCommand(command, args);
+      return runExportCommand(command, args, context);
+    case "batch":
+      return runBatchCommand(command, args, context);
     default:
       throw new CliUsageError(`Unknown command "${command}".`);
   }
 }
 
-async function runReportCommand(command: string, args: string[]): Promise<CliCommandResult> {
+async function runInspectCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
+  const inputPath = readInput(args);
+  const options = parseFixOptions(args);
+  assertNoExtraArgs(args);
+  return emitAutomation(command, await inspectImage({ inputPath, options }, createCliRuntime(command, context, { inputPath })));
+}
+
+async function runSuggestCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
+  const inputPath = readInput(args);
+  const options = parseFixOptions(args);
+  assertNoExtraArgs(args);
+  return emitAutomation(command, await suggestFixSettings({ inputPath, options }, createCliRuntime(command, context, { inputPath })));
+}
+
+async function runReportCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const options = parseFixOptions(args);
   const inputPaths = readInputs(args);
   assertNoExtraArgs(args);
-  return emitAutomation(command, await createQualityReport({ inputPaths, options }));
+  return emitAutomation(command, await createQualityReport({ inputPaths, options }, createCliRuntime(command, context)));
 }
 
-async function runFixCommand(command: string, args: string[]): Promise<CliCommandResult> {
+async function runFixCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const manifestPath = takeValue(args, "--manifest");
@@ -112,11 +168,11 @@ async function runFixCommand(command: string, args: string[]): Promise<CliComman
       ...(manifestPath ? { manifestPath } : {}),
       options,
       overwrite,
-    }),
+    }, createCliRuntime(command, context, { inputPath, outputPath })),
   );
 }
 
-async function runFixSheetCommand(command: string, args: string[]): Promise<CliCommandResult> {
+async function runFixSheetCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outDir = takeRequiredValue(args, "--out-dir");
   const outputPath = takeValue(args, "--out");
@@ -141,19 +197,19 @@ async function runFixSheetCommand(command: string, args: string[]): Promise<CliC
     options,
     overwrite,
   };
-  return emitAutomation(command, await fixSpriteSheet(request));
+  return emitAutomation(command, await fixSpriteSheet(request, createCliRuntime(command, context, { inputPath, outputPath: outputPath ?? outDir })));
 }
 
-async function runPaletteCommand(command: string, args: string[]): Promise<CliCommandResult> {
+async function runPaletteCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const maxColors = readNumberFlag(args, "--max-colors", readNumberFlag(args, "--colors", 24));
   const overwrite = takeBooleanFlag(args, "--overwrite");
   assertNoExtraArgs(args);
-  return emitAutomation(command, await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }));
+  return emitAutomation(command, await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }, createCliRuntime(command, context, { inputPath, outputPath })));
 }
 
-async function runExportCommand(command: string, args: string[]): Promise<CliCommandResult> {
+async function runExportCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outDir = takeRequiredValue(args, "--out-dir");
   const overwrite = takeBooleanFlag(args, "--overwrite");
@@ -162,7 +218,7 @@ async function runExportCommand(command: string, args: string[]): Promise<CliCom
   const options = parseFixOptions(args);
   assertNoExtraArgs(args);
   const request: ExportEngineBundleRequest = { inputPath, outDir, targets, options, overwrite };
-  const result = await exportEngineBundle(request);
+  const result = await exportEngineBundle(request, createCliRuntime(command, context, { inputPath, outputPath: outDir }));
   if (!result.ok || bundle !== "zip") {
     return emitAutomation(command, result);
   }
@@ -174,6 +230,98 @@ async function runExportCommand(command: string, args: string[]): Promise<CliCom
 
   result.value.files.push(zipResult.value);
   return emitAutomation(command, result);
+}
+
+async function runBatchCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
+  const outDir = takeRequiredValue(args, "--out-dir");
+  const dryRun = takeBooleanFlag(args, "--dry-run");
+  const continueOnError = takeBooleanFlag(args, "--continue-on-error");
+  const overwrite = takeBooleanFlag(args, "--overwrite");
+  const recursive = takeBooleanFlag(args, "--recursive");
+  const options = parseFixOptions(args);
+  const inputPatterns = readInputs(args);
+  assertNoExtraArgs(args);
+
+  const inputPaths = await expandBatchInputs(inputPatterns, { recursive });
+  const usedOutputs = new Set<string>();
+  const items: BatchItemResult[] = [];
+
+  for (let index = 0; index < inputPaths.length; index += 1) {
+    const inputPath = inputPaths[index]!;
+    const { outputPath, manifestPath } = createBatchOutputPaths(outDir, inputPath, usedOutputs);
+    const startedAt = performance.now();
+
+    if (dryRun) {
+      items.push({
+        inputPath,
+        outputPath,
+        manifestPath,
+        status: "skipped",
+        files: [],
+        warnings: [],
+        durationMs: 0,
+      });
+      continue;
+    }
+
+    const result = await fixSprite({
+      inputPath,
+      outputPath,
+      manifestPath,
+      options,
+      overwrite,
+    }, createCliRuntime(command, context, {
+      inputPath,
+      outputPath,
+      jobId: `batch-${index + 1}`,
+    }));
+    const durationMs = Math.max(0, Math.round((performance.now() - startedAt) * 100) / 100);
+
+    if (result.ok) {
+      items.push({
+        inputPath,
+        outputPath,
+        manifestPath,
+        status: "succeeded",
+        files: result.value.files,
+        warnings: result.warnings,
+        durationMs,
+      });
+      continue;
+    }
+
+    items.push({
+      inputPath,
+      outputPath,
+      manifestPath,
+      status: "failed",
+      files: [],
+      warnings: [],
+      durationMs,
+      error: result.error,
+    });
+
+    if (!continueOnError) {
+      break;
+    }
+  }
+
+  const batch = createBatchResult(items, inputPaths.length, outDir, dryRun, continueOnError);
+  const failed = batch.summary.failureCount > 0;
+  return {
+    code: failed ? 1 : 0,
+    payload: {
+      ok: !failed,
+      command,
+      result: batch,
+      ...(failed ? { error: { code: "processing_failed", message: "One or more batch items failed.", exitCode: 1 } } : {}),
+    },
+    human: [
+      `batch ${failed ? "completed with failures" : "complete"}`,
+      `${batch.summary.successCount} succeeded, ${batch.summary.failureCount} failed, ${batch.summary.skippedCount} skipped`,
+      "",
+    ].join("\n"),
+  };
 }
 
 function emitAutomation<T>(command: string, result: AutomationResult<T>): CliCommandResult {
@@ -190,6 +338,150 @@ function emitAutomation<T>(command: string, result: AutomationResult<T>): CliCom
     payload: { ok: true, command, result: result.value, warnings: result.warnings },
     human: `${command} complete\n`,
   };
+}
+
+function createCliRuntime(
+  command: string,
+  context: CliContext,
+  paths: { inputPath?: string; outputPath?: string; jobId?: string } = {},
+): AutomationRuntimeOptions | undefined {
+  if (!context.progressJson) {
+    return undefined;
+  }
+
+  return {
+    jobId: paths.jobId ?? command,
+    ...(paths.inputPath ? { inputPath: paths.inputPath } : {}),
+    ...(paths.outputPath ? { outputPath: paths.outputPath } : {}),
+    onProgress: (event) => emitProgressEvent(context.io, command, event),
+  };
+}
+
+function emitProgressEvent(io: CliIo, command: string, event: AutomationProgressEvent): void {
+  emit(io.stderr, `${JSON.stringify({
+    type: "progress",
+    command,
+    operation: event.operation,
+    stage: event.stage,
+    percent: event.percent,
+    ...(event.message ? { message: event.message } : {}),
+    ...(event.jobId ? { jobId: event.jobId } : {}),
+    ...(event.inputPath ? { inputPath: event.inputPath } : {}),
+    ...(event.outputPath ? { outputPath: event.outputPath } : {}),
+    ...(event.item ? { item: event.item } : {}),
+  })}\n`);
+}
+
+async function expandBatchInputs(patterns: readonly string[], options: { recursive: boolean }): Promise<string[]> {
+  const inputPaths: string[] = [];
+
+  for (const pattern of patterns) {
+    if (hasGlob(pattern)) {
+      inputPaths.push(...await expandGlob(pattern, options));
+      continue;
+    }
+
+    const resolved = path.resolve(pattern);
+    const info = await stat(resolved).catch(() => undefined);
+    if (info?.isDirectory()) {
+      inputPaths.push(...await listPngFiles(resolved, options.recursive));
+      continue;
+    }
+
+    inputPaths.push(resolved);
+  }
+
+  return [...new Set(inputPaths)].sort((a, b) => a.localeCompare(b));
+}
+
+async function expandGlob(pattern: string, options: { recursive: boolean }): Promise<string[]> {
+  const normalized = pattern.replaceAll("\\", "/");
+  const slash = normalized.lastIndexOf("/");
+  const directory = slash >= 0 ? normalized.slice(0, slash) : ".";
+  const filePattern = slash >= 0 ? normalized.slice(slash + 1) : normalized;
+  const baseDir = path.resolve(directory);
+  const matcher = globFileMatcher(filePattern);
+  const files = await listPngFiles(baseDir, options.recursive || filePattern.includes("**"));
+  return files.filter((filePath) => matcher(path.basename(filePath)));
+}
+
+async function listPngFiles(directory: string, recursive: boolean): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const files: string[] = [];
+
+  for (const entry of entries) {
+    const filePath = path.join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (recursive) {
+        files.push(...await listPngFiles(filePath, recursive));
+      }
+      continue;
+    }
+
+    if (entry.isFile() && entry.name.toLowerCase().endsWith(".png")) {
+      files.push(filePath);
+    }
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+function createBatchOutputPaths(
+  outDir: string,
+  inputPath: string,
+  usedOutputs: Set<string>,
+): { outputPath: string; manifestPath: string } {
+  const parsed = path.parse(inputPath);
+  let baseName = parsed.name;
+  let outputPath = path.join(outDir, `${baseName}.fixed.png`);
+  let suffix = 2;
+
+  while (usedOutputs.has(outputPath)) {
+    baseName = `${parsed.name}-${suffix}`;
+    outputPath = path.join(outDir, `${baseName}.fixed.png`);
+    suffix += 1;
+  }
+
+  usedOutputs.add(outputPath);
+  return {
+    outputPath,
+    manifestPath: path.join(outDir, `${baseName}.manifest.json`),
+  };
+}
+
+function createBatchResult(
+  items: BatchItemResult[],
+  inputCount: number,
+  outDir: string,
+  dryRun: boolean,
+  continueOnError: boolean,
+): BatchResult {
+  return {
+    items,
+    summary: {
+      inputCount,
+      successCount: items.filter((item) => item.status === "succeeded").length,
+      failureCount: items.filter((item) => item.status === "failed").length,
+      skippedCount: items.filter((item) => item.status === "skipped").length,
+      dryRun,
+      continueOnError,
+      outDir: path.resolve(outDir),
+    },
+  };
+}
+
+function hasGlob(input: string): boolean {
+  return /[*?[\]]/.test(input);
+}
+
+function globFileMatcher(pattern: string): (fileName: string) => boolean {
+  const escaped = pattern
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replaceAll("**", "*")
+    .replaceAll("*", ".*")
+    .replaceAll("?", ".");
+  const regex = new RegExp(`^${escaped}$`, "i");
+  return (fileName) => regex.test(fileName);
 }
 
 function parseFixOptions(args: string[]): AutomationFixOptionsInput {
