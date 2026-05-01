@@ -119,6 +119,34 @@ describe("quality report", () => {
       })
     );
   });
+
+  test("recommends contrast downscale for dense sprites with sparse dark linework", () => {
+    const image = createImage(24, 24, [224, 214, 188, 255]);
+    for (let y = 2; y < 22; y += 3) {
+      fillRect(image, 11, y, 1, 2, [20, 22, 28, 255]);
+    }
+    for (let y = 4; y < 20; y += 4) {
+      fillRect(image, 4, y, 16, 1, [86, 120, 146, 255]);
+    }
+
+    const report = analyzeQualityReport(image, {
+      assetType: "sprite",
+      maxColors: 16
+    });
+
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        id: "detail-density-linework",
+        recommendationId: "use-contrast-downscale"
+      })
+    );
+    expect(report.recommendations).toContainEqual(
+      expect.objectContaining({
+        id: "use-contrast-downscale",
+        settings: { downscale: "contrast" }
+      })
+    );
+  });
 });
 
 function createRepeatedTilemap(columns: number, rows: number, tileSize: number) {

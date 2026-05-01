@@ -47,6 +47,13 @@ type DetailCluster = ColorCluster & {
   maxY: number;
 };
 
+type ContrastCluster = DetailCluster & {
+  luma: number;
+  chromaRed: number;
+  chromaBlue: number;
+  firstIndex: number;
+};
+
 export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, progress?: LoopProgressOptions): RGBAImage {
   assertNotCancelled(progress?.runtime?.signal);
   const output = createImage(options.outputWidth, options.outputHeight);
@@ -70,7 +77,11 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
               ? averageBlock(image, block)
               : options.method === "detailPreserving"
                 ? detailPreservingBlock(image, block)
-              : dominantBlock(image, block).pixel;
+                : options.method === "contrast"
+                  ? contrastBlock(image, block)
+                  : options.method === "kCentroid"
+                    ? kCentroidBlock(image, block)
+                    : dominantBlock(image, block).pixel;
 
       const offset = (y * output.width + x) * 4;
       output.data[offset] = pixel[0];
@@ -278,6 +289,361 @@ function detailPreservingBlock(image: RGBAImage, block: BlockBounds): [number, n
   ];
 }
 
+function contrastBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  const clusters = new Map<number, ContrastCluster>();
+  const blockWidth = Math.max(1, block.endX - block.startX);
+  const blockHeight = Math.max(1, block.endY - block.startY);
+  let total = 0;
+  let visibleTotal = 0;
+  let alphaTotal = 0;
+  let bestCluster: ContrastCluster | null = null;
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      alphaTotal += alpha;
+      total += 1;
+      if (alpha < 16) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const lumaValue = luminance(r, g, b);
+      const color = packLooseRgb(r, g, b);
+      const existing = clusters.get(color);
+      const cluster =
+        existing ??
+        ({
+          count: 0,
+          r: 0,
+          g: 0,
+          b: 0,
+          minX: x,
+          maxX: x,
+          minY: y,
+          maxY: y,
+          luma: 0,
+          chromaRed: 0,
+          chromaBlue: 0,
+          firstIndex: y * image.width + x
+        } satisfies ContrastCluster);
+
+      cluster.count += 1;
+      cluster.r += r;
+      cluster.g += g;
+      cluster.b += b;
+      cluster.minX = Math.min(cluster.minX, x);
+      cluster.maxX = Math.max(cluster.maxX, x);
+      cluster.minY = Math.min(cluster.minY, y);
+      cluster.maxY = Math.max(cluster.maxY, y);
+      cluster.luma += lumaValue;
+      cluster.chromaRed += r - lumaValue;
+      cluster.chromaBlue += b - lumaValue;
+      visibleTotal += 1;
+
+      if (!existing) {
+        clusters.set(color, cluster);
+      }
+      if (!bestCluster || cluster.count > bestCluster.count) {
+        bestCluster = cluster;
+      }
+    }
+  }
+
+  const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
+  if (!bestCluster) {
+    return [0, 0, 0, alpha];
+  }
+
+  const selected = chooseContrastCluster(clusters, bestCluster, visibleTotal, blockWidth, blockHeight) ?? bestCluster;
+  return [
+    clampByte(selected.r / selected.count),
+    clampByte(selected.g / selected.count),
+    clampByte(selected.b / selected.count),
+    alpha
+  ];
+}
+
+function chooseContrastCluster(
+  clusters: Map<number, ContrastCluster>,
+  dominant: ContrastCluster,
+  visibleTotal: number,
+  blockWidth: number,
+  blockHeight: number
+): ContrastCluster | null {
+  const dominantLuma = dominant.luma / dominant.count;
+  const dominantChromaRed = dominant.chromaRed / dominant.count;
+  const dominantChromaBlue = dominant.chromaBlue / dominant.count;
+  const minLineSupport = Math.max(2, Math.ceil(Math.min(blockWidth, blockHeight) * 0.45));
+  const minAreaSupport = Math.max(2, Math.ceil(visibleTotal * 0.05));
+  let best: ContrastCluster | null = null;
+  let bestScore = 0;
+
+  for (const cluster of clusters.values()) {
+    if (cluster === dominant || cluster.count <= 0) {
+      continue;
+    }
+
+    const spanX = cluster.maxX - cluster.minX + 1;
+    const spanY = cluster.maxY - cluster.minY + 1;
+    const lineLike = spanX >= blockWidth * 0.45 || spanY >= blockHeight * 0.45;
+    const supported = cluster.count >= minAreaSupport || (lineLike && cluster.count >= minLineSupport);
+    if (!supported) {
+      continue;
+    }
+
+    const clusterLuma = cluster.luma / cluster.count;
+    const lumaDelta = Math.abs(clusterLuma - dominantLuma);
+    const chromaRedDelta = Math.abs(cluster.chromaRed / cluster.count - dominantChromaRed);
+    const chromaBlueDelta = Math.abs(cluster.chromaBlue / cluster.count - dominantChromaBlue);
+    const chromaDelta = chromaRedDelta + chromaBlueDelta;
+    if (lumaDelta < 48 && chromaDelta < 42) {
+      continue;
+    }
+
+    const coverage = visibleTotal > 0 ? cluster.count / visibleTotal : 0;
+    const sparseLineBonus = lineLike && coverage <= 0.2 ? 1.65 : 1;
+    const darkOnLightBonus = clusterLuma < dominantLuma - 48 ? 1.35 : 1;
+    const supportScore = Math.min(1, coverage / 0.18);
+    const score = (lumaDelta * 1.45 + chromaDelta * 0.35) * sparseLineBonus * darkOnLightBonus * Math.max(0.4, supportScore);
+    if (score > bestScore || (score === bestScore && best && cluster.firstIndex < best.firstIndex)) {
+      best = cluster;
+      bestScore = score;
+    }
+  }
+
+  return best;
+}
+
+function kCentroidBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  const capacity = Math.max(1, (block.endX - block.startX) * (block.endY - block.startY));
+  const rs = new Uint8Array(capacity);
+  const gs = new Uint8Array(capacity);
+  const bs = new Uint8Array(capacity);
+  const lumas = new Float32Array(capacity);
+  const chromaReds = new Float32Array(capacity);
+  const chromaBlues = new Float32Array(capacity);
+  let count = 0;
+  let total = 0;
+  let alphaTotal = 0;
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      alphaTotal += alpha;
+      total += 1;
+      if (alpha < 16) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const lumaValue = luminance(r, g, b);
+      rs[count] = r;
+      gs[count] = g;
+      bs[count] = b;
+      lumas[count] = lumaValue;
+      chromaReds[count] = r - lumaValue;
+      chromaBlues[count] = b - lumaValue;
+      count += 1;
+    }
+  }
+
+  const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
+  if (count === 0) {
+    return [0, 0, 0, alpha];
+  }
+  if (count === 1) {
+    return [rs[0]!, gs[0]!, bs[0]!, alpha];
+  }
+
+  const k = Math.min(3, count);
+  const centroidLumas = new Float32Array(k);
+  const centroidChromaReds = new Float32Array(k);
+  const centroidChromaBlues = new Float32Array(k);
+  seedCentroids(lumas, chromaReds, chromaBlues, count, k, centroidLumas, centroidChromaReds, centroidChromaBlues);
+
+  const clusterCounts = new Uint16Array(k);
+  const sumLumas = new Float32Array(k);
+  const sumChromaReds = new Float32Array(k);
+  const sumChromaBlues = new Float32Array(k);
+  const sumRs = new Uint32Array(k);
+  const sumGs = new Uint32Array(k);
+  const sumBs = new Uint32Array(k);
+  const firstIndices = new Uint32Array(k);
+
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    clusterCounts.fill(0);
+    sumLumas.fill(0);
+    sumChromaReds.fill(0);
+    sumChromaBlues.fill(0);
+    sumRs.fill(0);
+    sumGs.fill(0);
+    sumBs.fill(0);
+    firstIndices.fill(0xffffffff);
+
+    for (let index = 0; index < count; index += 1) {
+      const clusterIndex = nearestCentroid(lumas[index]!, chromaReds[index]!, chromaBlues[index]!, centroidLumas, centroidChromaReds, centroidChromaBlues, k);
+      clusterCounts[clusterIndex] = clusterCounts[clusterIndex]! + 1;
+      sumLumas[clusterIndex] = sumLumas[clusterIndex]! + lumas[index]!;
+      sumChromaReds[clusterIndex] = sumChromaReds[clusterIndex]! + chromaReds[index]!;
+      sumChromaBlues[clusterIndex] = sumChromaBlues[clusterIndex]! + chromaBlues[index]!;
+      sumRs[clusterIndex] = sumRs[clusterIndex]! + rs[index]!;
+      sumGs[clusterIndex] = sumGs[clusterIndex]! + gs[index]!;
+      sumBs[clusterIndex] = sumBs[clusterIndex]! + bs[index]!;
+      firstIndices[clusterIndex] = Math.min(firstIndices[clusterIndex]!, index);
+    }
+
+    for (let clusterIndex = 0; clusterIndex < k; clusterIndex += 1) {
+      const clusterCount = clusterCounts[clusterIndex]!;
+      if (clusterCount === 0) {
+        continue;
+      }
+      centroidLumas[clusterIndex] = sumLumas[clusterIndex]! / clusterCount;
+      centroidChromaReds[clusterIndex] = sumChromaReds[clusterIndex]! / clusterCount;
+      centroidChromaBlues[clusterIndex] = sumChromaBlues[clusterIndex]! / clusterCount;
+    }
+  }
+
+  let bestCluster = 0;
+  for (let clusterIndex = 1; clusterIndex < k; clusterIndex += 1) {
+    if (
+      clusterCounts[clusterIndex]! > clusterCounts[bestCluster]! ||
+      (clusterCounts[clusterIndex] === clusterCounts[bestCluster] && firstIndices[clusterIndex]! < firstIndices[bestCluster]!)
+    ) {
+      bestCluster = clusterIndex;
+    }
+  }
+
+  const bestCount = Math.max(1, clusterCounts[bestCluster]!);
+  return [
+    clampByte(sumRs[bestCluster]! / bestCount),
+    clampByte(sumGs[bestCluster]! / bestCount),
+    clampByte(sumBs[bestCluster]! / bestCount),
+    alpha
+  ];
+}
+
+function seedCentroids(
+  lumas: Float32Array,
+  chromaReds: Float32Array,
+  chromaBlues: Float32Array,
+  count: number,
+  k: number,
+  centroidLumas: Float32Array,
+  centroidChromaReds: Float32Array,
+  centroidChromaBlues: Float32Array
+): void {
+  const selected = new Uint8Array(count);
+  const darkest = indexOfExtremeLuma(lumas, count, "min");
+  setCentroid(0, darkest, lumas, chromaReds, chromaBlues, centroidLumas, centroidChromaReds, centroidChromaBlues);
+  selected[darkest] = 1;
+  if (k === 1) {
+    return;
+  }
+
+  const brightest = indexOfExtremeLuma(lumas, count, "max");
+  setCentroid(1, brightest, lumas, chromaReds, chromaBlues, centroidLumas, centroidChromaReds, centroidChromaBlues);
+  selected[brightest] = 1;
+
+  for (let centroidIndex = 2; centroidIndex < k; centroidIndex += 1) {
+    let farthest = 0;
+    let farthestDistance = -1;
+    for (let index = 0; index < count; index += 1) {
+      if (selected[index] === 1) {
+        continue;
+      }
+      const distance = nearestCentroidDistance(lumas[index]!, chromaReds[index]!, chromaBlues[index]!, centroidLumas, centroidChromaReds, centroidChromaBlues, centroidIndex);
+      if (distance > farthestDistance) {
+        farthest = index;
+        farthestDistance = distance;
+      }
+    }
+    setCentroid(centroidIndex, farthest, lumas, chromaReds, chromaBlues, centroidLumas, centroidChromaReds, centroidChromaBlues);
+    selected[farthest] = 1;
+  }
+}
+
+function indexOfExtremeLuma(lumas: Float32Array, count: number, mode: "min" | "max"): number {
+  let bestIndex = 0;
+  let bestValue = lumas[0]!;
+  for (let index = 1; index < count; index += 1) {
+    const value = lumas[index]!;
+    if ((mode === "min" && value < bestValue) || (mode === "max" && value > bestValue)) {
+      bestIndex = index;
+      bestValue = value;
+    }
+  }
+  return bestIndex;
+}
+
+function setCentroid(
+  centroidIndex: number,
+  sourceIndex: number,
+  lumas: Float32Array,
+  chromaReds: Float32Array,
+  chromaBlues: Float32Array,
+  centroidLumas: Float32Array,
+  centroidChromaReds: Float32Array,
+  centroidChromaBlues: Float32Array
+): void {
+  centroidLumas[centroidIndex] = lumas[sourceIndex]!;
+  centroidChromaReds[centroidIndex] = chromaReds[sourceIndex]!;
+  centroidChromaBlues[centroidIndex] = chromaBlues[sourceIndex]!;
+}
+
+function nearestCentroid(
+  lumaValue: number,
+  chromaRed: number,
+  chromaBlue: number,
+  centroidLumas: Float32Array,
+  centroidChromaReds: Float32Array,
+  centroidChromaBlues: Float32Array,
+  k: number
+): number {
+  let bestIndex = 0;
+  let bestDistance = featureDistance(lumaValue, chromaRed, chromaBlue, centroidLumas[0]!, centroidChromaReds[0]!, centroidChromaBlues[0]!);
+  for (let index = 1; index < k; index += 1) {
+    const distance = featureDistance(lumaValue, chromaRed, chromaBlue, centroidLumas[index]!, centroidChromaReds[index]!, centroidChromaBlues[index]!);
+    if (distance < bestDistance) {
+      bestIndex = index;
+      bestDistance = distance;
+    }
+  }
+  return bestIndex;
+}
+
+function nearestCentroidDistance(
+  lumaValue: number,
+  chromaRed: number,
+  chromaBlue: number,
+  centroidLumas: Float32Array,
+  centroidChromaReds: Float32Array,
+  centroidChromaBlues: Float32Array,
+  k: number
+): number {
+  let bestDistance = featureDistance(lumaValue, chromaRed, chromaBlue, centroidLumas[0]!, centroidChromaReds[0]!, centroidChromaBlues[0]!);
+  for (let index = 1; index < k; index += 1) {
+    const distance = featureDistance(lumaValue, chromaRed, chromaBlue, centroidLumas[index]!, centroidChromaReds[index]!, centroidChromaBlues[index]!);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+    }
+  }
+  return bestDistance;
+}
+
+function featureDistance(l1: number, cr1: number, cb1: number, l2: number, cr2: number, cb2: number): number {
+  const dl = l1 - l2;
+  const dcr = cr1 - cr2;
+  const dcb = cb1 - cb2;
+  return dl * dl * 1.35 + dcr * dcr * 0.65 + dcb * dcb * 0.65;
+}
+
 function chooseDetailCluster(
   clusters: Map<number, DetailCluster>,
   dominant: DetailCluster,
@@ -359,6 +725,10 @@ function colorDelta(r1: number, g1: number, b1: number, r2: number, g2: number, 
   const dg = g1 - g2;
   const db = b1 - b2;
   return Math.sqrt(dr * dr + dg * dg + db * db);
+}
+
+function packLooseRgb(r: number, g: number, b: number): number {
+  return ((clampByte(r) >> 6) << 4) | ((clampByte(g) >> 6) << 2) | (clampByte(b) >> 6);
 }
 
 function median(values: number[]): number {

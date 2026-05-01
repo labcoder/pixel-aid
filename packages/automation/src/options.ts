@@ -93,7 +93,15 @@ const assetTypeAliases: Record<string, AssetType> = {
   background: "background",
 };
 
-const downscaleMethods = new Set<DownscaleMethod>(["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"]);
+const downscaleMethods = new Set<DownscaleMethod>([
+  "dominant",
+  "median",
+  "adaptive",
+  "averageThenPalette",
+  "detailPreserving",
+  "contrast",
+  "kCentroid",
+]);
 const alphaModes = new Set<AlphaMode>(["preserve", "binary", "backgroundFloodFill", "colorKey"]);
 const paletteModes = new Set<PaletteMode>(["auto", "fixed", "preset"]);
 const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual"]);
