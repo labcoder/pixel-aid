@@ -4,6 +4,7 @@ import algorithmsMarkdown from "../../../../docs/algorithms.md?raw";
 import performanceMarkdown from "../../../../docs/performance.md?raw";
 import licensingMarkdown from "../../../../docs/licensing.md?raw";
 import onboardingSamplesMarkdown from "../../../../docs/onboarding-samples.md?raw";
+import troubleshootingMarkdown from "../../../../docs/troubleshooting.md?raw";
 
 export type DocsSection = {
   id: string;
@@ -90,6 +91,12 @@ export const docsSections: DocsSection[] = [
     title: "Licensing",
     tooltip: "License strategy and dependency policy.",
     markdown: licensingMarkdown
+  },
+  {
+    id: "troubleshooting",
+    title: "Troubleshooting",
+    tooltip: "Diagnostics export and common recovery paths.",
+    markdown: troubleshootingMarkdown
   }
 ];
 
