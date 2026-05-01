@@ -105,6 +105,44 @@ describe("playback model", () => {
     });
   });
 
+  test("holds the current frame without advancing when hold-frame playback is looped", () => {
+    const next = tickPlayback({
+      frameCount: 4,
+      frameIndex: 2,
+      accumulatorMs: 0,
+      deltaMs: 480,
+      fps: 10,
+      loop: true,
+      direction: "hold"
+    });
+
+    expect(next).toEqual({
+      frameIndex: 2,
+      accumulatorMs: 80,
+      playDirection: 1,
+      playing: true
+    });
+  });
+
+  test("stops hold-frame playback after one frame duration when loop is disabled", () => {
+    const next = tickPlayback({
+      frameCount: 4,
+      frameIndex: 2,
+      accumulatorMs: 0,
+      deltaMs: 120,
+      fps: 10,
+      loop: false,
+      direction: "hold"
+    });
+
+    expect(next).toEqual({
+      frameIndex: 2,
+      accumulatorMs: 0,
+      playDirection: 1,
+      playing: false
+    });
+  });
+
   test("clamps scrub and fps values", () => {
     expect(scrubPlayback({ frameCount: 4, frameIndex: 99 })).toBe(3);
     expect(scrubPlayback({ frameCount: 0, frameIndex: 2 })).toBe(-1);

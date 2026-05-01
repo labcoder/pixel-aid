@@ -106,6 +106,95 @@ export function updateFrameDuration({
   );
 }
 
+export function getAnimationFrameRange(
+  frames: readonly SpriteFrame[],
+  animation: AnimationTag
+): { startIndex: number; endIndex: number } {
+  const indexByName = new Map(frames.map((frame, index) => [frame.name, index]));
+  const indexes = animation.frameNames.map((name) => indexByName.get(name)).filter((index): index is number => index !== undefined);
+  if (indexes.length === 0) {
+    return { startIndex: -1, endIndex: -1 };
+  }
+
+  return {
+    startIndex: Math.min(...indexes),
+    endIndex: Math.max(...indexes)
+  };
+}
+
+export function createAnimationTagFromRange({
+  animations,
+  frames,
+  name,
+  startIndex,
+  endIndex,
+  fps,
+  loop,
+  direction
+}: {
+  animations: readonly AnimationTag[];
+  frames: readonly SpriteFrame[];
+  name: string;
+  startIndex: number;
+  endIndex: number;
+  fps: number;
+  loop: boolean;
+  direction?: SpriteAnimation["direction"];
+}): AnimationTag[] {
+  const frameNames = frameNamesForRange(frames, startIndex, endIndex);
+  if (frameNames.length === 0) {
+    return animations.map(copyAnimation);
+  }
+
+  const cleanName = uniqueAnimationName(
+    normalizeAnimationName(name) || "clip",
+    animations.map((animation) => animation.name)
+  );
+
+  return [
+    ...animations.map(copyAnimation),
+    {
+      name: cleanName,
+      frameNames,
+      fps: clampFps(fps),
+      loop,
+      ...(direction ? { direction } : {})
+    }
+  ];
+}
+
+export function updateAnimationTagFrameRange({
+  animations,
+  frames,
+  name,
+  startIndex,
+  endIndex
+}: {
+  animations: readonly AnimationTag[];
+  frames: readonly SpriteFrame[];
+  name: string;
+  startIndex: number;
+  endIndex: number;
+}): AnimationTag[] {
+  const frameNames = frameNamesForRange(frames, startIndex, endIndex);
+  if (frameNames.length === 0) {
+    return animations.map(copyAnimation);
+  }
+
+  return animations.map((animation) =>
+    animation.name === name
+      ? {
+          ...copyAnimation(animation),
+          frameNames
+        }
+      : copyAnimation(animation)
+  );
+}
+
+export function deleteAnimationTag({ animations, name }: { animations: readonly AnimationTag[]; name: string }): AnimationTag[] {
+  return animations.filter((animation) => animation.name !== name).map(copyAnimation);
+}
+
 export function applyFrameDurationOverrides(
   frames: readonly SpriteFrame[],
   overrides: Readonly<Record<string, number>>
@@ -158,6 +247,25 @@ function clampFps(value: number): number {
 
 function clampDurationMs(value: number): number {
   return Math.max(1, Math.min(60_000, Math.round(Number.isFinite(value) ? value : 120)));
+}
+
+function frameNamesForRange(frames: readonly SpriteFrame[], startIndex: number, endIndex: number): string[] {
+  if (frames.length === 0) {
+    return [];
+  }
+
+  const start = Math.max(0, Math.min(frames.length - 1, Math.round(Number.isFinite(startIndex) ? startIndex : 0)));
+  const end = Math.max(0, Math.min(frames.length - 1, Math.round(Number.isFinite(endIndex) ? endIndex : start)));
+  const first = Math.min(start, end);
+  const last = Math.max(start, end);
+  return frames.slice(first, last + 1).map((frame) => frame.name);
+}
+
+function copyAnimation(animation: AnimationTag): AnimationTag {
+  return {
+    ...animation,
+    frameNames: [...animation.frameNames]
+  };
 }
 
 function copyFrame(frame: SpriteFrame): SpriteFrame {

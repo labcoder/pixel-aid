@@ -1,4 +1,4 @@
-export type PlaybackDirection = "forward" | "reverse" | "ping-pong";
+export type PlaybackDirection = "forward" | "reverse" | "ping-pong" | "hold";
 export type PlaybackStepDirection = -1 | 1;
 
 export type PlaybackState = {
@@ -112,6 +112,20 @@ export function tickPlayback({
   let currentPlayDirection = direction === "reverse" ? -1 : playDirection;
   let playing = true;
 
+  if (direction === "hold") {
+    const durationMs = getFrameDurationMs(frames?.[currentIndex], fps);
+    if (remainingMs < durationMs) {
+      return { frameIndex: currentIndex, accumulatorMs: remainingMs, playDirection: currentPlayDirection, playing };
+    }
+
+    return {
+      frameIndex: currentIndex,
+      accumulatorMs: loop ? remainingMs % durationMs : 0,
+      playDirection: currentPlayDirection,
+      playing: loop
+    };
+  }
+
   if (frameCount === 1) {
     const durationMs = getFrameDurationMs(frames?.[0], fps);
     if (remainingMs < durationMs) {
@@ -162,6 +176,10 @@ function stepDirectedPlaybackFrame({
   loop: boolean;
 }): { frameIndex: number; playDirection: PlaybackStepDirection; playing: boolean } {
   if (direction !== "ping-pong") {
+    if (direction === "hold") {
+      return { frameIndex, playDirection, playing: true };
+    }
+
     const stepDirection = direction === "reverse" ? -1 : 1;
     const stepped = stepPlaybackFrame({ frameCount, frameIndex, direction: stepDirection, loop });
     return { ...stepped, playDirection: stepDirection };

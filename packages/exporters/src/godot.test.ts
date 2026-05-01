@@ -49,6 +49,21 @@ describe("Godot import export adapter", () => {
     expect(script).toContain('atlas.set_meta("pixelaid_duration_ms", frame.get("duration_ms", 120))');
   });
 
+  test("serializes hold-frame animation direction explicitly", () => {
+    const holdManifest: PixelAssetManifest = {
+      ...manifest,
+      animations: {
+        idle_hold: { frames: ["idle_000", "idle_001"], fps: 8, loop: true, direction: "hold" }
+      }
+    };
+    const exportResult = createGodotImportExport(holdManifest);
+    const script = getTextFile(exportResult, "godot/PixelAidSpriteFramesImporter.gd");
+
+    expect(script).toContain('"idle_hold": {"frames": ["idle_000", "idle_001"], "fps": 8, "loop": true, "direction": "hold"}');
+    expect(script).toContain('if animation.get("direction", "forward") == "hold":');
+    expect(exportResult.warnings.map((warning) => warning.code)).toContain("engine-godot-animation-direction");
+  });
+
   test("includes common and Godot-specific warnings", () => {
     const exportResult = createGodotImportExport(manifest);
 
