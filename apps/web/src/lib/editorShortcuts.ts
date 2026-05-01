@@ -16,6 +16,7 @@ export type EditorShortcutInput = {
   shiftKey?: boolean;
   altKey?: boolean;
   isEditableTarget?: boolean;
+  isInteractiveTarget?: boolean;
 };
 
 export function getEditorShortcutAction(input: EditorShortcutInput): EditorShortcutAction | null {
@@ -54,6 +55,10 @@ export function getEditorShortcutAction(input: EditorShortcutInput): EditorShort
     return null;
   }
 
+  if (input.isInteractiveTarget) {
+    return null;
+  }
+
   if (key === "g") {
     return "toggleGrid";
   }
@@ -76,5 +81,28 @@ export function isEditableShortcutTarget(target: EventTarget | null): boolean {
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
     (target instanceof HTMLElement && target.isContentEditable)
+  );
+}
+
+export function isInteractiveShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+
+  return (
+    isEditableShortcutTarget(target) ||
+    target.closest(
+      [
+        "button",
+        "a[href]",
+        "summary",
+        "[role='button']",
+        "[role='tab']",
+        "[role='slider']",
+        "[role='menuitem']",
+        "[role='menuitemcheckbox']",
+        "[role='menuitemradio']"
+      ].join(",")
+    ) !== null
   );
 }
