@@ -91,6 +91,51 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.error-boundary-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.error-boundary-shell section {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 0.8rem;
+  padding: 20px;
+  background: #111616;
+  border: 1px solid #385f5a;
+  border-radius: 8px;
+}
+
+.error-boundary-shell h1,
+.error-boundary-shell p {
+  margin: 0;
+}
+
+.error-boundary-shell p,
+.error-boundary-shell pre {
+  color: var(--muted);
+}
+
+.error-boundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.error-boundary-shell pre {
+  max-height: 140px;
+  overflow: auto;
+  padding: 0.7rem;
+  background: #0f1212;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+
 .editor-shell.is-drop-active .viewport-canvas-wrap::after {
   content: "";
   position: absolute;
@@ -2538,6 +2583,49 @@ button:focus-visible {
 
 .log-list li + li {
   margin-top: 0.35rem;
+}
+
+.console-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.console-heading button {
+  min-height: 28px;
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.operation-error {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.65rem;
+  padding: 0.6rem;
+  color: #ffd8d8;
+  background: #241515;
+  border: 1px solid #6b3535;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.operation-error strong {
+  color: #ff8b8b;
+}
+
+.operation-error span,
+.operation-error small {
+  overflow-wrap: anywhere;
+}
+
+.operation-error button {
+  width: fit-content;
+  min-height: 26px;
+  margin-top: 0.2rem;
+  padding: 0 0.5rem;
+  font-size: 0.68rem;
 }
 
 .metric-sections {

@@ -50,7 +50,7 @@ import type {
   WorkerProgress,
   WorkerProgressStage
 } from "@pixelaid/shared";
-import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
+import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition, PIXELAID_VERSION } from "@pixelaid/shared";
 import {
   analyzeQualityReport,
   analyzeSceneAssetDiagnostics,
@@ -264,6 +264,7 @@ import {
   type SimpleDenoiseChoice,
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
+import { createOperationErrorReport, createWebDiagnosticReport, type OperationErrorReport } from "./lib/diagnosticReport";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import {
   coerceTimelineViewportSourceMode,
@@ -472,6 +473,7 @@ export function App() {
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [logs, setLogs] = useState(defaultLogLines);
+  const [lastOperationError, setLastOperationError] = useState<OperationErrorReport | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [importOperation, setImportOperation] = useState<BusyOperation | null>(null);
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
@@ -1290,6 +1292,157 @@ export function App() {
     setLogs((current) => [line, ...current].slice(0, 8));
   }, []);
 
+  const recordOperationError = useCallback(
+    (operation: string, error: unknown, recovery: string, details?: Record<string, unknown>) => {
+      const report = createOperationErrorReport(operation, error, recovery, new Date().toISOString(), details);
+      setLastOperationError(report);
+      appendLog(`${operation} failed: ${report.message}`);
+    },
+    [appendLog]
+  );
+
+  const exportDiagnosticReport = useCallback(() => {
+    const generatedAt = new Date().toISOString();
+    const report = createWebDiagnosticReport({
+      appVersion: PIXELAID_VERSION,
+      generatedAt,
+      route,
+      logs,
+      lastError: lastOperationError,
+      selectedAsset: selectedAsset
+        ? {
+            name: selectedAsset.name,
+            width: selectedAsset.image.width,
+            height: selectedAsset.image.height,
+            assetType: selectedAsset.assetType,
+            assetTypeSource: selectedAsset.assetTypeSource,
+            importedAt: selectedAsset.importedAt,
+            provenance: selectedAsset.provenance
+          }
+        : null,
+      settings: {
+        assetType,
+        mode,
+        targetWidth,
+        targetHeight,
+        effectiveTargetWidth,
+        effectiveTargetHeight,
+        maxColors,
+        paletteMode,
+        paletteStrategy,
+        paletteLockScope: activePaletteLockScope,
+        paletteDithering,
+        gridDetect,
+        gridScaleX,
+        gridScaleY,
+        gridPhaseX,
+        gridPhaseY,
+        cropToBounds,
+        localCorrection,
+        downscale,
+        alpha,
+        cleanup: {
+          removeOrphans,
+          jaggyCleanup,
+          preserveSinglePixelDetails,
+          removeHalos,
+          denoiseStrength,
+          contrastExpansionEnabled,
+          outlineMode,
+          outlineSize,
+          outlineSourceMode
+        },
+        sheet: sheetMode
+          ? {
+              frameWidth,
+              frameHeight,
+              rows: sheetRows,
+              columns: sheetColumns,
+              margin: sheetMargin,
+              spacing: sheetSpacing,
+              extrude: sheetExtrude,
+              frameCount: sheetFrames.length
+            }
+          : undefined
+      },
+      metrics: {
+        busyStatus,
+        sourceColorCount,
+        outputPaletteCount: outputPalette.length,
+        gridCandidateCount: gridCandidates.length,
+        bestGridConfidence: gridCandidates[0]?.confidence ?? null,
+        fixMetrics: fixResult?.metrics ?? null,
+        qualitySummary: qualityReport?.summary ?? null,
+        lastExportValidation,
+        detectedSheetWarnings
+      },
+      warnings: [
+        ...assetTypeWarnings.map((warning) => warning.message),
+        ...paletteWarningMessages,
+        ...detectedSheetWarnings,
+        ...(qualityReport?.findings.slice(0, 8).map((finding) => finding.detail) ?? [])
+      ]
+    });
+    const fileSafeTimestamp = generatedAt.replace(/[:.]/g, "-");
+    downloadBlob(new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: "application/json" }), `pixelaid-diagnostics-${fileSafeTimestamp}.json`);
+    appendLog("Exported diagnostic report");
+  }, [
+    activePaletteLockScope,
+    alpha,
+    appendLog,
+    assetType,
+    assetTypeWarnings,
+    busyStatus,
+    contrastExpansionEnabled,
+    cropToBounds,
+    denoiseStrength,
+    detectedSheetWarnings,
+    downscale,
+    effectiveTargetHeight,
+    effectiveTargetWidth,
+    fixResult?.metrics,
+    frameHeight,
+    frameWidth,
+    gridCandidates,
+    gridDetect,
+    gridPhaseX,
+    gridPhaseY,
+    gridScaleX,
+    gridScaleY,
+    jaggyCleanup,
+    lastExportValidation,
+    lastOperationError,
+    localCorrection,
+    logs,
+    maxColors,
+    mode,
+    outlineMode,
+    outlineSize,
+    outlineSourceMode,
+    outputPalette.length,
+    paletteDithering,
+    paletteMode,
+    paletteStrategy,
+    paletteWarningMessages,
+    preserveSinglePixelDetails,
+    qualityReport?.findings,
+    qualityReport?.summary,
+    removeHalos,
+    removeOrphans,
+    route,
+    selectedAsset,
+    sheetColumns,
+    sheetExtrude,
+    sheetFrames.length,
+    sheetMargin,
+    sheetMode,
+    sheetRows,
+    sheetSpacing,
+    sourceColorCount,
+    targetHeight,
+    targetWidth
+  ]);
+
   const savePaletteLibraryEntry = useCallback(
     (entry: PaletteLibraryEntry, logLabel = "Saved palette") => {
       setSavedPaletteLibrary((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
@@ -1581,16 +1734,21 @@ export function App() {
             const suggestion = suggestFixSettings(asset.image);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             applyFixSuggestion(suggestion, asset);
+            setLastOperationError(null);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
-            appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
+            recordOperationError("import", error, "Check that the source file is a readable PNG, JPEG, or WebP image and try importing again.", {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size
+            });
           }
         }
       } finally {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, nextBusyOperation]
+    [appendLog, applyFixSuggestion, nextBusyOperation, recordOperationError]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -1717,14 +1875,17 @@ export function App() {
         setShowAdvancedControls(false);
         setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
         applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
+        setLastOperationError(null);
         appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
       } catch (error) {
-        appendLog(error instanceof Error ? error.message : "Failed to load onboarding sample");
+        recordOperationError("sample", error, "Reload PixelAid and try the sample again. Sample assets are deterministic and can be regenerated.", {
+          sampleId
+        });
       } finally {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyOnboardingSampleSettings, isAnalyzing, isFixing, isImporting, nextBusyOperation]
+    [appendLog, applyOnboardingSampleSettings, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError]
   );
 
   const openImportPicker = useCallback(() => {
@@ -1743,10 +1904,10 @@ export function App() {
 
         await importFiles(files);
       } catch (error) {
-        appendLog(error instanceof Error ? error.message : "Desktop import failed");
+        recordOperationError("desktop import", error, "Check desktop file permissions and try importing again.");
       }
     })();
-  }, [appendLog, importFiles]);
+  }, [appendLog, importFiles, recordOperationError]);
 
   const buildFixOptions = useCallback((): FixOptions => {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
@@ -1900,13 +2061,21 @@ export function App() {
       void job.promise
         .then((result) => {
           setFixResult(result);
+          setLastOperationError(null);
           setViewMode(sheetMode ? "timeline" : "after");
           appendLog(
             `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
           );
         })
         .catch((error) => {
-          appendLog(error instanceof Error ? error.message : "Fix failed");
+          recordOperationError("fix", error, "Try Auto Suggest, lower the target size/color count, or disable advanced cleanup before running Fix again.", {
+            asset: selectedAsset.name,
+            mode,
+            assetType,
+            frameCount,
+            targetWidth: effectiveTargetWidth,
+            targetHeight: effectiveTargetHeight
+          });
         })
         .finally(() => {
           if (activeJobRef.current?.requestId === job.requestId) {
@@ -1917,12 +2086,31 @@ export function App() {
           setFixProgress(null);
         });
     } catch (error) {
-      appendLog(error instanceof Error ? error.message : "Fix failed to start");
+      recordOperationError("fix", error, "Check the current fix settings and try again. The original source image is still available.", {
+        asset: selectedAsset.name,
+        mode,
+        assetType
+      });
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
       activeFixOperationIdRef.current = null;
     }
-  }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset, sheetFrames.length, sheetMode]);
+  }, [
+    appendLog,
+    assetType,
+    buildFixOptions,
+    effectiveTargetHeight,
+    effectiveTargetWidth,
+    isAnalyzing,
+    isFixing,
+    isImporting,
+    mode,
+    nextBusyOperation,
+    recordOperationError,
+    selectedAsset,
+    sheetFrames.length,
+    sheetMode
+  ]);
 
   const cancelFix = useCallback(() => {
     if (!activeJobRef.current) {
@@ -1959,11 +2147,18 @@ export function App() {
       const suggestion = suggestFixSettings(selectedAsset.image);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       applyFixSuggestion(suggestion, selectedAsset);
+      setLastOperationError(null);
       appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+    } catch (error) {
+      recordOperationError("analysis", error, "Select the asset again or re-import it, then rerun Auto Suggest.", {
+        asset: selectedAsset.name,
+        width: selectedAsset.image.width,
+        height: selectedAsset.image.height
+      });
     } finally {
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -3493,8 +3688,13 @@ export function App() {
       appendLog(
         `Exported ${exportPath ?? bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
       );
+      setLastOperationError(null);
     })().catch((error) => {
-      appendLog(error instanceof Error ? error.message : "Export failed");
+      recordOperationError("export", error, "Run Fix again or export to a different folder/name. The fixed preview remains available in the editor.", {
+        asset: selectedAsset.name,
+        bundleName,
+        targets: engineExportTargets
+      });
     });
   }, [
     appendLog,
@@ -3505,6 +3705,7 @@ export function App() {
     playbackDirection,
     playbackFps,
     playbackLoop,
+    recordOperationError,
     selectedAsset,
     sheetColumns,
     sheetExtrude,
@@ -5458,7 +5659,23 @@ export function App() {
             </section>
           ) : null}
           <section>
-            <h2>Console</h2>
+            <div className="console-heading">
+              <h2>Console</h2>
+              <button type="button" onClick={exportDiagnosticReport} title="Export sanitized diagnostics JSON">
+                <Download size={14} />
+                Diagnostics
+              </button>
+            </div>
+            {lastOperationError ? (
+              <div className="operation-error" role="status" aria-live="polite">
+                <strong>{lastOperationError.operation} failed</strong>
+                <span>{lastOperationError.message}</span>
+                <small>{lastOperationError.recovery}</small>
+                <button type="button" onClick={() => setLastOperationError(null)}>
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
             <ol className="log-list">
               {logs.map((line, index) => (
                 <li key={`${line}-${index}`}>{line}</li>
