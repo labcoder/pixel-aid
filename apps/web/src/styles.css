@@ -634,6 +634,7 @@ button:disabled {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.7rem;
   padding: 0 12px;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
@@ -654,7 +655,8 @@ button:disabled {
   gap: 0.35rem;
 }
 
-.view-controls button {
+.view-controls button,
+.diagnostic-overlay-select select {
   min-height: 28px;
   padding: 0 0.5rem;
   color: var(--muted);
@@ -666,6 +668,77 @@ button:disabled {
   background: var(--cyan);
   border-color: var(--cyan);
   font-weight: 800;
+}
+
+.diagnostic-overlay-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 150px;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.diagnostic-overlay-select span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.diagnostic-overlay-select select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.diagnostic-overlay-bar {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.35rem 12px;
+  color: var(--muted);
+  background: #111817;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.75rem;
+}
+
+.diagnostic-overlay-bar.inactive {
+  background: #151716;
+}
+
+.diagnostic-overlay-bar strong {
+  flex: 0 0 auto;
+  color: var(--cyan);
+}
+
+.diagnostic-overlay-bar > span:not(.diagnostic-overlay-legend) {
+  min-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.diagnostic-overlay-legend {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  min-height: 22px;
+  padding: 0 0.42rem;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.diagnostic-overlay-legend i {
+  width: 9px;
+  height: 9px;
+  display: block;
+  border: 1px solid #ffffff88;
 }
 
 .edit-history-controls {
