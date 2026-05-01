@@ -22,7 +22,7 @@ import {
   Undo2,
   WandSparkles
 } from "lucide-react";
-import type { CSSProperties, DragEvent, PointerEvent, ReactNode } from "react";
+import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlphaCleanupSettings,
@@ -50,7 +50,7 @@ import type {
   WorkerProgress,
   WorkerProgressStage
 } from "@pixelaid/shared";
-import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
+import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition, PIXELAID_VERSION } from "@pixelaid/shared";
 import {
   analyzeQualityReport,
   analyzeSceneAssetDiagnostics,
@@ -116,6 +116,7 @@ import {
   type EditorPreferenceSettings,
   type EditorPreferences
 } from "./lib/editorPreferences";
+import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
 import {
   clearBusyOperation,
   createBusyOperation,
@@ -181,6 +182,7 @@ import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import { moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
+import { createOnboardingSampleImport, getOnboardingSampleCards, type OnboardingSampleImport } from "./lib/onboardingSamples";
 import {
   getOutlineSourceColorsForFix,
   isOutlineColorEditable,
@@ -262,6 +264,7 @@ import {
   type SimpleDenoiseChoice,
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
+import { createOperationErrorReport, createWebDiagnosticReport, type OperationErrorReport } from "./lib/diagnosticReport";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import {
   coerceTimelineViewportSourceMode,
@@ -276,6 +279,7 @@ import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type Edito
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
+const onboardingSampleCards = getOnboardingSampleCards();
 const palettePresetOptions = [
   ["pixelaid-mono-4", "PixelAid Mono 4"],
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
@@ -338,6 +342,18 @@ function createUniquePaletteLibraryId(
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function createSampleAnimationName(title: string): string {
+  return title
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 32) || "sample_animation";
+}
+
+function clampBottomPanelHeight(value: number): number {
+  return Math.max(150, Math.min(460, Math.round(value)));
 }
 
 function createTimelinePlacements(
@@ -457,6 +473,7 @@ export function App() {
   const [assets, setAssets] = useState<ImportedImageAsset[]>([]);
   const [selectedAssetId, setSelectedAssetId] = useState<string | null>(null);
   const [logs, setLogs] = useState(defaultLogLines);
+  const [lastOperationError, setLastOperationError] = useState<OperationErrorReport | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [importOperation, setImportOperation] = useState<BusyOperation | null>(null);
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
@@ -1275,6 +1292,157 @@ export function App() {
     setLogs((current) => [line, ...current].slice(0, 8));
   }, []);
 
+  const recordOperationError = useCallback(
+    (operation: string, error: unknown, recovery: string, details?: Record<string, unknown>) => {
+      const report = createOperationErrorReport(operation, error, recovery, new Date().toISOString(), details);
+      setLastOperationError(report);
+      appendLog(`${operation} failed: ${report.message}`);
+    },
+    [appendLog]
+  );
+
+  const exportDiagnosticReport = useCallback(() => {
+    const generatedAt = new Date().toISOString();
+    const report = createWebDiagnosticReport({
+      appVersion: PIXELAID_VERSION,
+      generatedAt,
+      route,
+      logs,
+      lastError: lastOperationError,
+      selectedAsset: selectedAsset
+        ? {
+            name: selectedAsset.name,
+            width: selectedAsset.image.width,
+            height: selectedAsset.image.height,
+            assetType: selectedAsset.assetType,
+            assetTypeSource: selectedAsset.assetTypeSource,
+            importedAt: selectedAsset.importedAt,
+            provenance: selectedAsset.provenance
+          }
+        : null,
+      settings: {
+        assetType,
+        mode,
+        targetWidth,
+        targetHeight,
+        effectiveTargetWidth,
+        effectiveTargetHeight,
+        maxColors,
+        paletteMode,
+        paletteStrategy,
+        paletteLockScope: activePaletteLockScope,
+        paletteDithering,
+        gridDetect,
+        gridScaleX,
+        gridScaleY,
+        gridPhaseX,
+        gridPhaseY,
+        cropToBounds,
+        localCorrection,
+        downscale,
+        alpha,
+        cleanup: {
+          removeOrphans,
+          jaggyCleanup,
+          preserveSinglePixelDetails,
+          removeHalos,
+          denoiseStrength,
+          contrastExpansionEnabled,
+          outlineMode,
+          outlineSize,
+          outlineSourceMode
+        },
+        sheet: sheetMode
+          ? {
+              frameWidth,
+              frameHeight,
+              rows: sheetRows,
+              columns: sheetColumns,
+              margin: sheetMargin,
+              spacing: sheetSpacing,
+              extrude: sheetExtrude,
+              frameCount: sheetFrames.length
+            }
+          : undefined
+      },
+      metrics: {
+        busyStatus,
+        sourceColorCount,
+        outputPaletteCount: outputPalette.length,
+        gridCandidateCount: gridCandidates.length,
+        bestGridConfidence: gridCandidates[0]?.confidence ?? null,
+        fixMetrics: fixResult?.metrics ?? null,
+        qualitySummary: qualityReport?.summary ?? null,
+        lastExportValidation,
+        detectedSheetWarnings
+      },
+      warnings: [
+        ...assetTypeWarnings.map((warning) => warning.message),
+        ...paletteWarningMessages,
+        ...detectedSheetWarnings,
+        ...(qualityReport?.findings.slice(0, 8).map((finding) => finding.detail) ?? [])
+      ]
+    });
+    const fileSafeTimestamp = generatedAt.replace(/[:.]/g, "-");
+    downloadBlob(new Blob([`${JSON.stringify(report, null, 2)}\n`], { type: "application/json" }), `pixelaid-diagnostics-${fileSafeTimestamp}.json`);
+    appendLog("Exported diagnostic report");
+  }, [
+    activePaletteLockScope,
+    alpha,
+    appendLog,
+    assetType,
+    assetTypeWarnings,
+    busyStatus,
+    contrastExpansionEnabled,
+    cropToBounds,
+    denoiseStrength,
+    detectedSheetWarnings,
+    downscale,
+    effectiveTargetHeight,
+    effectiveTargetWidth,
+    fixResult?.metrics,
+    frameHeight,
+    frameWidth,
+    gridCandidates,
+    gridDetect,
+    gridPhaseX,
+    gridPhaseY,
+    gridScaleX,
+    gridScaleY,
+    jaggyCleanup,
+    lastExportValidation,
+    lastOperationError,
+    localCorrection,
+    logs,
+    maxColors,
+    mode,
+    outlineMode,
+    outlineSize,
+    outlineSourceMode,
+    outputPalette.length,
+    paletteDithering,
+    paletteMode,
+    paletteStrategy,
+    paletteWarningMessages,
+    preserveSinglePixelDetails,
+    qualityReport?.findings,
+    qualityReport?.summary,
+    removeHalos,
+    removeOrphans,
+    route,
+    selectedAsset,
+    sheetColumns,
+    sheetExtrude,
+    sheetFrames.length,
+    sheetMargin,
+    sheetMode,
+    sheetRows,
+    sheetSpacing,
+    sourceColorCount,
+    targetHeight,
+    targetWidth
+  ]);
+
   const savePaletteLibraryEntry = useCallback(
     (entry: PaletteLibraryEntry, logLabel = "Saved palette") => {
       setSavedPaletteLibrary((current) => [entry, ...current.filter((item) => item.id !== entry.id)]);
@@ -1566,16 +1734,158 @@ export function App() {
             const suggestion = suggestFixSettings(asset.image);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             applyFixSuggestion(suggestion, asset);
+            setLastOperationError(null);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
-            appendLog(error instanceof Error ? error.message : `Failed to import ${file.name}`);
+            recordOperationError("import", error, "Check that the source file is a readable PNG, JPEG, or WebP image and try importing again.", {
+              fileName: file.name,
+              fileType: file.type,
+              fileSize: file.size
+            });
           }
         }
       } finally {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, nextBusyOperation]
+    [appendLog, applyFixSuggestion, nextBusyOperation, recordOperationError]
+  );
+
+  const applyOnboardingSampleSettings = useCallback(
+    (sampleImport: OnboardingSampleImport, gridCandidatesForSample: GridCandidate[]) => {
+      const { asset, sample, settings } = sampleImport;
+      const targetSampleWidth = settings.targetWidth ?? asset.image.width;
+      const targetSampleHeight = settings.targetHeight ?? asset.image.height;
+      const sheetOptions = settings.sheet;
+      const sampleFrames = sheetOptions ? sliceSheetFrames(sheetOptions) : [];
+      const sampleAnimationName = createSampleAnimationName(sample.title);
+      const sampleAnimations: AnimationTag[] =
+        sampleFrames.length > 0
+          ? [
+              {
+                name: sampleAnimationName,
+                frameNames: sampleFrames.map((frame) => frame.name),
+                loop: true,
+                fps: Math.round(1000 / Math.max(1, sampleFrames[0]?.durationMs ?? 120))
+              }
+            ]
+          : [];
+      const selectedSampleFrameIndex = sampleFrames.length > 0 ? 0 : -1;
+      const selectedSampleAnimationName = sampleAnimations[0]?.name ?? ALL_ANIMATIONS;
+      const paletteColors = settings.paletteSettings?.colors ?? settings.palette ?? [];
+      const outlineSourceColors = normalizeOutlineSourceColors(settings.cleanup.outlineSourceColors ?? []);
+      const cleanupContrast = settings.cleanup.contrastExpansion;
+
+      setMode(settings.mode);
+      setTargetWidth(targetSampleWidth);
+      setTargetHeight(targetSampleHeight);
+      setFrameWidth(sheetOptions?.frameWidth ?? targetSampleWidth);
+      setFrameHeight(sheetOptions?.frameHeight ?? targetSampleHeight);
+      setSheetRows(sheetOptions?.rows ?? 1);
+      setSheetColumns(sheetOptions?.columns ?? (settings.mode === "single" ? 1 : Math.max(1, sampleFrames.length)));
+      setSheetMargin(sheetOptions?.margin ?? 0);
+      setSheetSpacing(sheetOptions?.spacing ?? 0);
+      setSheetExtrude(sheetOptions?.extrude ?? 0);
+      setDetectedSheetFrames(sampleFrames);
+      detectedSheetFramesRef.current = sampleFrames;
+      setDetectedRowAnimations(sampleAnimations);
+      detectedRowAnimationsRef.current = sampleAnimations;
+      setDetectedSheetWarnings([]);
+      setDetectedSheetDiagnostics(undefined);
+      setFrameDurationOverrides({});
+      setPivotOverrides(emptyPivotOverrides);
+      setFrameMetadataOverrides(emptyFrameMetadata);
+      setFrameMetadataHistory(createFrameMetadataHistoryState(createEmptyFrameMetadataSnapshot()));
+      selectedFrameIndexRef.current = selectedSampleFrameIndex;
+      setSelectedFrameIndex(selectedSampleFrameIndex);
+      selectedAnimationNameRef.current = selectedSampleAnimationName;
+      setSelectedAnimationName(selectedSampleAnimationName);
+      setFrameEditHistory(
+        resetFrameEditHistory(
+          createFrameEditSnapshot({
+            frames: sampleFrames,
+            animations: sampleAnimations,
+            selectedFrameIndex: selectedSampleFrameIndex,
+            selectedAnimationName: selectedSampleAnimationName
+          })
+        )
+      );
+      setIsPlaying(false);
+      setPivotPreset("bottomCenter");
+      setCustomPivotX(sheetOptions?.pivot?.x ?? Math.floor((sheetOptions?.frameWidth ?? targetSampleWidth) / 2));
+      setCustomPivotY(sheetOptions?.pivot?.y ?? sheetOptions?.frameHeight ?? targetSampleHeight);
+      setGridScaleX(settings.grid.scaleX ?? settings.grid.scale ?? gridCandidatesForSample[0]?.scaleX ?? 1);
+      setGridScaleY(settings.grid.scaleY ?? settings.grid.scale ?? gridCandidatesForSample[0]?.scaleY ?? 1);
+      setGridPhaseX(settings.grid.phaseX ?? gridCandidatesForSample[0]?.phaseX ?? 0);
+      setGridPhaseY(settings.grid.phaseY ?? gridCandidatesForSample[0]?.phaseY ?? 0);
+      setGridDetect(settings.grid.detect);
+      setCropToBounds(settings.grid.cropToBounds ?? (settings.mode === "single"));
+      setLocalCorrection(settings.grid.localCorrection ?? false);
+      setDownscale(settings.downscale);
+      setAlpha(settings.alpha);
+      applyAlphaSettings(settings.alphaSettings ?? {});
+      setPaletteBudget(settings.paletteSettings?.maxColors ?? settings.maxColors);
+      setPaletteMode(settings.paletteSettings?.mode ?? (paletteColors.length > 0 ? "fixed" : "auto"));
+      setPaletteStrategy(settings.paletteSettings?.strategy ?? "frequency");
+      setPaletteLockScope(settings.paletteSettings?.lockScope ?? (settings.mode === "single" ? "single" : "sheet"));
+      setPaletteDithering(settings.paletteSettings?.dithering ?? "none");
+      setPalettePreset(settings.paletteSettings?.preset ?? initialSettings.palettePreset);
+      setCustomPaletteText(paletteColors.join("\n"));
+      setRemoveOrphans(settings.cleanup.removeOrphans);
+      setJaggyCleanup(settings.cleanup.jaggyCleanup);
+      setPreserveSinglePixelDetails(settings.cleanup.preserveSinglePixelDetails);
+      setRemoveHalos(settings.cleanup.removeHalos ?? false);
+      setDenoiseStrength(settings.cleanup.denoiseStrength ?? 0);
+      setOutlineMode(settings.cleanup.outlineMode ?? "none");
+      setOutlineSize(settings.cleanup.outlineSize ?? initialSettings.outlineSize);
+      setOutlineColor(settings.cleanup.outlineColor ?? initialSettings.outlineColor);
+      setOutlineAlpha(settings.cleanup.outlineAlpha ?? initialSettings.outlineAlpha);
+      setOutlineColorEdited(settings.cleanup.outlineColor !== undefined);
+      setOutlineSourceMode(outlineSourceColors.length > 0 ? "manual" : "auto");
+      setSelectedOutlineSourceColors(outlineSourceColors);
+      setContrastExpansionEnabled(cleanupContrast?.enabled ?? false);
+      setRecommendationConfidence(1);
+      setViewMode(settings.mode === "single" ? "before" : "timeline");
+      setSuggestionReason(`Loaded sample workflow: ${sample.failureMode}`);
+    },
+    [applyAlphaSettings, initialSettings.outlineAlpha, initialSettings.outlineColor, initialSettings.outlineSize, initialSettings.palettePreset, setPaletteBudget]
+  );
+
+  const loadOnboardingSample = useCallback(
+    async (sampleId: string) => {
+      if (isImporting || isAnalyzing || isFixing) {
+        return;
+      }
+
+      const operation = nextBusyOperation("import", "Loading sample workflow...");
+      setImportOperation(operation);
+      await waitForNextPaint();
+
+      try {
+        const sampleImport = createOnboardingSampleImport(sampleId);
+        const suggestion = suggestFixSettings(sampleImport.asset.image);
+
+        setAssets((current) => {
+          const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
+          return [sampleImport.asset, ...withoutDuplicate];
+        });
+        setSelectedAssetId(sampleImport.asset.id);
+        setFixResult(null);
+        setLastExportValidation(null);
+        setShowAdvancedControls(false);
+        setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
+        applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
+        setLastOperationError(null);
+        appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
+      } catch (error) {
+        recordOperationError("sample", error, "Reload PixelAid and try the sample again. Sample assets are deterministic and can be regenerated.", {
+          sampleId
+        });
+      } finally {
+        setImportOperation((current) => clearBusyOperation(current, operation.id));
+      }
+    },
+    [appendLog, applyOnboardingSampleSettings, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError]
   );
 
   const openImportPicker = useCallback(() => {
@@ -1594,10 +1904,10 @@ export function App() {
 
         await importFiles(files);
       } catch (error) {
-        appendLog(error instanceof Error ? error.message : "Desktop import failed");
+        recordOperationError("desktop import", error, "Check desktop file permissions and try importing again.");
       }
     })();
-  }, [appendLog, importFiles]);
+  }, [appendLog, importFiles, recordOperationError]);
 
   const buildFixOptions = useCallback((): FixOptions => {
     const useCustomOutlineColor = shouldUseCustomOutlineColor({ mode: outlineMode, edited: outlineColorEdited });
@@ -1751,13 +2061,21 @@ export function App() {
       void job.promise
         .then((result) => {
           setFixResult(result);
+          setLastOperationError(null);
           setViewMode(sheetMode ? "timeline" : "after");
           appendLog(
             `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
           );
         })
         .catch((error) => {
-          appendLog(error instanceof Error ? error.message : "Fix failed");
+          recordOperationError("fix", error, "Try Auto Suggest, lower the target size/color count, or disable advanced cleanup before running Fix again.", {
+            asset: selectedAsset.name,
+            mode,
+            assetType,
+            frameCount,
+            targetWidth: effectiveTargetWidth,
+            targetHeight: effectiveTargetHeight
+          });
         })
         .finally(() => {
           if (activeJobRef.current?.requestId === job.requestId) {
@@ -1768,12 +2086,31 @@ export function App() {
           setFixProgress(null);
         });
     } catch (error) {
-      appendLog(error instanceof Error ? error.message : "Fix failed to start");
+      recordOperationError("fix", error, "Check the current fix settings and try again. The original source image is still available.", {
+        asset: selectedAsset.name,
+        mode,
+        assetType
+      });
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
       activeFixOperationIdRef.current = null;
     }
-  }, [appendLog, buildFixOptions, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset, sheetFrames.length, sheetMode]);
+  }, [
+    appendLog,
+    assetType,
+    buildFixOptions,
+    effectiveTargetHeight,
+    effectiveTargetWidth,
+    isAnalyzing,
+    isFixing,
+    isImporting,
+    mode,
+    nextBusyOperation,
+    recordOperationError,
+    selectedAsset,
+    sheetFrames.length,
+    sheetMode
+  ]);
 
   const cancelFix = useCallback(() => {
     if (!activeJobRef.current) {
@@ -1810,11 +2147,18 @@ export function App() {
       const suggestion = suggestFixSettings(selectedAsset.image);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       applyFixSuggestion(suggestion, selectedAsset);
+      setLastOperationError(null);
       appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+    } catch (error) {
+      recordOperationError("analysis", error, "Select the asset again or re-import it, then rerun Auto Suggest.", {
+        asset: selectedAsset.name,
+        width: selectedAsset.image.width,
+        height: selectedAsset.image.height
+      });
     } finally {
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -2273,44 +2617,6 @@ export function App() {
     restoreFrameEditSnapshot(nextHistory.present);
     appendLog("Redid sheet frame edit");
   }, [appendLog, frameEditHistory, restoreFrameEditSnapshot]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target;
-      if (
-        target instanceof HTMLInputElement ||
-        target instanceof HTMLTextAreaElement ||
-        target instanceof HTMLSelectElement ||
-        (target instanceof HTMLElement && target.isContentEditable)
-      ) {
-        return;
-      }
-
-      const hasModifier = event.ctrlKey || event.metaKey;
-      if (!hasModifier) {
-        return;
-      }
-
-      const key = event.key.toLowerCase();
-      if (key === "z" && event.shiftKey) {
-        event.preventDefault();
-        redoFrameEdit();
-        return;
-      }
-      if (key === "z") {
-        event.preventDefault();
-        undoFrameEdit();
-        return;
-      }
-      if (key === "y") {
-        event.preventDefault();
-        redoFrameEdit();
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [redoFrameEdit, undoFrameEdit]);
 
   const updateSelectedFrameDuration = useCallback(
     (durationMs: number) => {
@@ -3382,8 +3688,13 @@ export function App() {
       appendLog(
         `Exported ${exportPath ?? bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
       );
+      setLastOperationError(null);
     })().catch((error) => {
-      appendLog(error instanceof Error ? error.message : "Export failed");
+      recordOperationError("export", error, "Run Fix again or export to a different folder/name. The fixed preview remains available in the editor.", {
+        asset: selectedAsset.name,
+        bundleName,
+        targets: engineExportTargets
+      });
     });
   }, [
     appendLog,
@@ -3394,6 +3705,7 @@ export function App() {
     playbackDirection,
     playbackFps,
     playbackLoop,
+    recordOperationError,
     selectedAsset,
     sheetColumns,
     sheetExtrude,
@@ -3402,6 +3714,83 @@ export function App() {
     sheetMode,
     sheetOptions,
     sheetSpacing
+  ]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const action = getEditorShortcutAction({
+        key: event.key,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+        isEditableTarget: isEditableShortcutTarget(event.target),
+        isInteractiveTarget: isInteractiveShortcutTarget(event.target)
+      });
+
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (action === "import") {
+        if (!isImporting && !isAnalyzing && !isFixing) {
+          openImportPicker();
+        }
+        return;
+      }
+      if (action === "fix") {
+        if (selectedAsset && !isFixing && !isImporting && !isAnalyzing) {
+          void runFix();
+        }
+        return;
+      }
+      if (action === "export") {
+        if (fixResult) {
+          exportFixedAsset();
+        }
+        return;
+      }
+      if (action === "toggleGrid") {
+        setShowGrid((current) => !current);
+        return;
+      }
+      if (action === "togglePlayback") {
+        togglePlayback();
+        return;
+      }
+      if (action === "previousFrame") {
+        stepTimelineFrame(-1);
+        return;
+      }
+      if (action === "nextFrame") {
+        stepTimelineFrame(1);
+        return;
+      }
+      if (action === "redoFrameEdit") {
+        redoFrameEdit();
+        return;
+      }
+
+      undoFrameEdit();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    exportFixedAsset,
+    fixResult,
+    isAnalyzing,
+    isFixing,
+    isImporting,
+    openImportPicker,
+    redoFrameEdit,
+    runFix,
+    selectedAsset,
+    stepTimelineFrame,
+    togglePlayback,
+    undoFrameEdit
   ]);
 
   useEffect(() => {
@@ -3442,12 +3831,34 @@ export function App() {
     }
 
     const nextHeight = resize.startHeight + resize.startY - event.clientY;
-    setBottomPanelHeight(Math.max(150, Math.min(460, Math.round(nextHeight))));
+    setBottomPanelHeight(clampBottomPanelHeight(nextHeight));
   };
 
   const onBottomResizePointerUp = (event: PointerEvent<HTMLDivElement>) => {
     if (bottomResizeRef.current?.pointerId === event.pointerId) {
       bottomResizeRef.current = null;
+    }
+  };
+
+  const onBottomResizeKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setBottomPanelHeight((current) => clampBottomPanelHeight(current + 16));
+      return;
+    }
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setBottomPanelHeight((current) => clampBottomPanelHeight(current - 16));
+      return;
+    }
+    if (event.key === "Home") {
+      event.preventDefault();
+      setBottomPanelHeight(150);
+      return;
+    }
+    if (event.key === "End") {
+      event.preventDefault();
+      setBottomPanelHeight(460);
     }
   };
 
@@ -4231,6 +4642,7 @@ export function App() {
         type="file"
         accept="image/*"
         multiple
+        aria-label="Import image files"
         onChange={(event) => {
           if (event.currentTarget.files) {
             void importFiles(event.currentTarget.files);
@@ -4248,11 +4660,23 @@ export function App() {
             </div>
           </div>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
-          <button type="button" disabled={isImporting || isAnalyzing || isFixing} onClick={openImportPicker}>
+          <button
+            type="button"
+            disabled={isImporting || isAnalyzing || isFixing}
+            onClick={openImportPicker}
+            aria-keyshortcuts="Control+O Meta+O"
+            title="Import images (Ctrl/Cmd+O)"
+          >
             <Upload size={16} />
             {isImporting ? "Importing" : "Import"}
           </button>
-          <button type="button" disabled={!selectedAsset || isFixing || isImporting || isAnalyzing} onClick={runFix}>
+          <button
+            type="button"
+            disabled={!selectedAsset || isFixing || isImporting || isAnalyzing}
+            onClick={runFix}
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            title="Run fix (Ctrl/Cmd+Enter)"
+          >
             <WandSparkles size={16} />
             {isFixing ? "Fixing" : "Fix"}
           </button>
@@ -4260,7 +4684,13 @@ export function App() {
             <Ban size={16} />
             Cancel
           </button>
-          <button type="button" disabled={!fixResult} onClick={exportFixedAsset}>
+          <button
+            type="button"
+            disabled={!fixResult}
+            onClick={exportFixedAsset}
+            aria-keyshortcuts="Control+Shift+E Meta+Shift+E"
+            title="Export bundle (Ctrl/Cmd+Shift+E)"
+          >
             <Download size={16} />
             Export
           </button>
@@ -4285,10 +4715,11 @@ export function App() {
               </li>
             ) : (
               assets.map((asset) => (
-                <li key={asset.id}>
+                <li key={asset.id} className="asset-list-entry">
                   <button
                     type="button"
                     className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}`}
+                    aria-label={`Select ${asset.name}`}
                     onClick={() => selectAsset(asset.id)}
                     onContextMenu={(event) => {
                       event.preventDefault();
@@ -4302,25 +4733,9 @@ export function App() {
                         {getAssetTypeDefinition(asset.assetType).shortLabel} · Source {asset.image.width}x{asset.image.height}
                       </small>
                     </span>
-                    <span
-                      className="icon-button danger"
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`Remove ${asset.name}`}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeAsset(asset.id);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          event.stopPropagation();
-                          removeAsset(asset.id);
-                        }
-                      }}
-                    >
-                      <Trash2 size={14} />
-                    </span>
+                  </button>
+                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} onClick={() => removeAsset(asset.id)}>
+                    <Trash2 size={14} />
                   </button>
                 </li>
               ))
@@ -4338,6 +4753,32 @@ export function App() {
               </button>
             </div>
           ) : null}
+        </section>
+        <section className="panel-section">
+          <SectionTitle
+            title="Samples"
+            docsId="onboarding-samples"
+            tooltip="Load release demo assets with recommended settings."
+            onDocs={openDocs}
+          />
+          <div className="sample-list" aria-label="Release sample workflows">
+            {onboardingSampleCards.map((sample) => (
+              <button
+                key={sample.id}
+                type="button"
+                className="sample-row"
+                disabled={isImporting || isAnalyzing || isFixing}
+                onClick={() => void loadOnboardingSample(sample.id)}
+              >
+                <span>
+                  <strong>{sample.title}</strong>
+                  <small>
+                    {getAssetTypeDefinition(sample.assetType).shortLabel} / {sample.expectedOutput}
+                  </small>
+                </span>
+              </button>
+            ))}
+          </div>
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
@@ -4527,6 +4968,7 @@ export function App() {
                 key={modeOption}
                 type="button"
                 className={viewMode === modeOption ? "active" : ""}
+                aria-pressed={viewMode === modeOption}
                 onClick={() => setViewMode(modeOption)}
               >
                 {getViewportModeLabel(modeOption)}
@@ -4545,10 +4987,26 @@ export function App() {
           </label>
           {hasDetectedSheetLayout ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
-              <button type="button" className="mini-icon-button" disabled={!canUndoFrameEdit} onClick={undoFrameEdit} title="Undo frame edit">
+              <button
+                type="button"
+                className="mini-icon-button"
+                disabled={!canUndoFrameEdit}
+                onClick={undoFrameEdit}
+                aria-label="Undo frame edit"
+                aria-keyshortcuts="Control+Z Meta+Z"
+                title="Undo frame edit (Ctrl/Cmd+Z)"
+              >
                 <Undo2 size={14} />
               </button>
-              <button type="button" className="mini-icon-button" disabled={!canRedoFrameEdit} onClick={redoFrameEdit} title="Redo frame edit">
+              <button
+                type="button"
+                className="mini-icon-button"
+                disabled={!canRedoFrameEdit}
+                onClick={redoFrameEdit}
+                aria-label="Redo frame edit"
+                aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+                title="Redo frame edit (Ctrl/Cmd+Shift+Z or Ctrl+Y)"
+              >
                 <Redo2 size={14} />
               </button>
               <span>Ctrl/Cmd drag selected cells</span>
@@ -4609,6 +5067,7 @@ export function App() {
                     type="button"
                     className={timelineViewportSourceMode === option.mode ? "active" : ""}
                     disabled={!option.enabled}
+                    aria-pressed={timelineViewportSourceMode === option.mode}
                     onClick={() => setTimelineViewportSourceMode(option.mode)}
                   >
                     {option.label}
@@ -4774,13 +5233,17 @@ export function App() {
           role="separator"
           aria-label="Resize bottom panel"
           aria-orientation="horizontal"
+          aria-valuemin={150}
+          aria-valuemax={460}
+          aria-valuenow={bottomPanelHeight}
           tabIndex={0}
           onPointerDown={onBottomResizePointerDown}
           onPointerMove={onBottomResizePointerMove}
           onPointerUp={onBottomResizePointerUp}
           onPointerCancel={onBottomResizePointerUp}
+          onKeyDown={onBottomResizeKeyDown}
         />
-        <div className="tab-strip" role="tablist" aria-label="Bottom panels">
+        <div className="tab-strip" aria-label="Bottom panels">
           {showTimelinePanel ? (
             <button type="button" className="active">
               <Play size={15} />
@@ -4876,10 +5339,22 @@ export function App() {
                         <div className="frame-metadata-heading">
                           <strong>Gameplay metadata</strong>
                           <span>{currentFrameBoxes.length} box{currentFrameBoxes.length === 1 ? "" : "es"}</span>
-                          <button type="button" disabled={!canUndoFrameMetadata} onClick={undoFrameMetadataEdit} title="Undo metadata edit">
+                          <button
+                            type="button"
+                            disabled={!canUndoFrameMetadata}
+                            onClick={undoFrameMetadataEdit}
+                            aria-label="Undo metadata edit"
+                            title="Undo metadata edit"
+                          >
                             <Undo2 size={13} />
                           </button>
-                          <button type="button" disabled={!canRedoFrameMetadata} onClick={redoFrameMetadataEdit} title="Redo metadata edit">
+                          <button
+                            type="button"
+                            disabled={!canRedoFrameMetadata}
+                            onClick={redoFrameMetadataEdit}
+                            aria-label="Redo metadata edit"
+                            title="Redo metadata edit"
+                          >
                             <Redo2 size={13} />
                           </button>
                         </div>
@@ -5007,7 +5482,12 @@ export function App() {
                                   max={currentFrame.rect.h}
                                   onChange={(value) => updateCurrentFrameBox(box.id, { rect: { ...box.rect, h: value } })}
                                 />
-                                <button type="button" onClick={() => deleteCurrentFrameBox(box.id)} title={`Delete ${box.name}`}>
+                                <button
+                                  type="button"
+                                  onClick={() => deleteCurrentFrameBox(box.id)}
+                                  aria-label={`Delete ${box.name}`}
+                                  title={`Delete ${box.name}`}
+                                >
                                   <Trash2 size={13} />
                                 </button>
                               </div>
@@ -5130,6 +5610,7 @@ export function App() {
                       title={`${frame.name} ${frame.rect.w}x${frame.rect.h} ${Math.round(frame.durationMs)}ms${
                         affectedTimelineFrameNames.has(frame.name) ? " stability warning" : ""
                       }`}
+                      aria-label={`Select frame ${index + 1}: ${frame.name}, ${frame.rect.w} by ${frame.rect.h}, ${Math.round(frame.durationMs)} milliseconds`}
                       onClick={() => selectPlaybackFrame(index)}
                     >
                       <strong>{index + 1}</strong>
@@ -5178,7 +5659,23 @@ export function App() {
             </section>
           ) : null}
           <section>
-            <h2>Console</h2>
+            <div className="console-heading">
+              <h2>Console</h2>
+              <button type="button" onClick={exportDiagnosticReport} title="Export sanitized diagnostics JSON">
+                <Download size={14} />
+                Diagnostics
+              </button>
+            </div>
+            {lastOperationError ? (
+              <div className="operation-error" role="status" aria-live="polite">
+                <strong>{lastOperationError.operation} failed</strong>
+                <span>{lastOperationError.message}</span>
+                <small>{lastOperationError.recovery}</small>
+                <button type="button" onClick={() => setLastOperationError(null)}>
+                  Dismiss
+                </button>
+              </div>
+            ) : null}
             <ol className="log-list">
               {logs.map((line, index) => (
                 <li key={`${line}-${index}`}>{line}</li>

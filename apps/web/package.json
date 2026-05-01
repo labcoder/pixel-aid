@@ -13,6 +13,7 @@
   "dependencies": {
     "@pixelaid/core": "0.1.0",
     "@pixelaid/exporters": "0.1.0",
+    "@pixelaid/fixtures": "0.1.0",
     "@pixelaid/shared": "0.1.0",
     "@pixelaid/worker": "0.1.0",
     "@tauri-apps/plugin-dialog": "^2.7.0",
