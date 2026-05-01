@@ -1,5 +1,6 @@
 import {
   automationError,
+  createQualityReport,
   exportEngineBundle,
   extractPaletteFile,
   fixSprite,
@@ -7,6 +8,7 @@ import {
   inspectImage,
   suggestFixSettings,
   type AutomationResult,
+  type CreateQualityReportRequest,
   type ExportEngineBundleRequest,
   type ExtractPaletteFileRequest,
   type FixSpriteRequest,
@@ -17,6 +19,7 @@ import {
 
 export type PixelAidMcpToolName =
   | "inspect_image"
+  | "quality_report"
   | "suggest_fix_settings"
   | "fix_sprite"
   | "fix_sprite_sheet"
@@ -57,6 +60,16 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, sheet layout, and suggested PixelAid settings.",
     inputSchema: objectSchema(["inputPath"], {
       inputPath: stringSchema("Path to a PNG image."),
+      options: commonOptionsSchema,
+    }),
+  },
+  {
+    name: "quality_report",
+    description: "Create a non-destructive quality report with ranked findings and fix recommendations for one or more PNG assets.",
+    inputSchema: objectSchema([], {
+      inputPath: stringSchema("Path to one PNG image."),
+      inputPaths: { type: "array", items: { type: "string" }, description: "Paths to PNG images." },
+      assets: { type: "array", description: "Optional per-asset requests with inputPath and options." },
       options: commonOptionsSchema,
     }),
   },
@@ -154,6 +167,8 @@ export async function handlePixelAidTool(toolName: PixelAidMcpToolName, input: u
   switch (toolName) {
     case "inspect_image":
       return toMcpResponse(toolName, await inspectImage(toInspectRequest(request)));
+    case "quality_report":
+      return toMcpResponse(toolName, await createQualityReport(toQualityReportRequest(request)));
     case "suggest_fix_settings":
       return toMcpResponse(toolName, await suggestFixSettings(toSuggestRequest(request)));
     case "fix_sprite":
@@ -195,6 +210,33 @@ function toMcpResponse<T>(toolName: PixelAidMcpToolName, result: AutomationResul
     content: [{ type: "text", text: `${toolName} completed.` }],
     structuredContent: { ok: true, tool: toolName, result: result.value, warnings: result.warnings },
     isError: false,
+  };
+}
+
+function toQualityReportRequest(input: ToolInput): CreateQualityReportRequest {
+  const assets = Array.isArray(input.assets)
+    ? input.assets.flatMap((asset) => {
+        if (!isObject(asset) || typeof asset.inputPath !== "string") {
+          return [];
+        }
+        return [
+          {
+            inputPath: asset.inputPath,
+            ...(isObject(asset.options) ? { options: asset.options } : {}),
+          },
+        ];
+      })
+    : undefined;
+  const inputPaths = Array.isArray(input.inputPaths)
+    ? input.inputPaths.filter((item): item is string => typeof item === "string")
+    : typeof input.inputPath === "string"
+      ? [input.inputPath]
+      : undefined;
+
+  return {
+    ...(assets && assets.length > 0 ? { assets } : {}),
+    ...(inputPaths && inputPaths.length > 0 ? { inputPaths } : {}),
+    ...(isObject(input.options) ? { options: input.options } : {}),
   };
 }
 

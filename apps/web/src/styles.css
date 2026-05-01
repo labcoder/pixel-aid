@@ -1612,18 +1612,18 @@ button:disabled {
 .bottom-content {
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.1fr 1fr 0.9fr;
+  grid-template-columns: 1.05fr 0.78fr 1fr 0.9fr;
   gap: 1px;
   background: var(--line);
   overflow: hidden;
 }
 
 .bottom-content.without-timeline {
-  grid-template-columns: 1fr 0.9fr;
+  grid-template-columns: 0.78fr 1fr 0.9fr;
 }
 
 .bottom-content.with-tile-preview {
-  grid-template-columns: 1fr 1fr 0.9fr;
+  grid-template-columns: 1fr 0.78fr 1fr 0.9fr;
 }
 
 .bottom-content section {
@@ -2029,6 +2029,159 @@ button:disabled {
   margin: 0.2rem 0 0;
   color: var(--amber);
   font-weight: 800;
+}
+
+.quality-report-panel {
+  display: grid;
+  gap: 0.7rem;
+}
+
+.quality-report-heading,
+.quality-finding div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.quality-report-state {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.45rem;
+  color: var(--muted);
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.quality-report-state.none,
+.quality-report-state.info {
+  color: #101112;
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.quality-report-state.warning {
+  color: #101112;
+  background: var(--amber);
+  border-color: var(--amber);
+}
+
+.quality-report-state.error {
+  color: #101112;
+  background: var(--rose);
+  border-color: var(--rose);
+}
+
+.quality-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.quality-summary-grid span,
+.quality-finding,
+.quality-recommendation,
+.quality-report-ok {
+  min-width: 0;
+  padding: 0.5rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.quality-summary-grid span {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.quality-summary-grid strong {
+  color: var(--amber);
+  font-size: 0.82rem;
+}
+
+.quality-summary-grid small {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quality-summary-grid .is-warning {
+  border-color: #76583a;
+}
+
+.quality-report-list {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.quality-report-list h3 {
+  margin: 0;
+  color: var(--cyan);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+}
+
+.quality-finding,
+.quality-recommendation {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.quality-finding.warning {
+  border-color: #76583a;
+}
+
+.quality-finding.error {
+  border-color: var(--rose);
+}
+
+.quality-finding.info {
+  border-color: #31504c;
+}
+
+.quality-finding strong,
+.quality-recommendation strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 0.74rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quality-finding span,
+.quality-overflow-note {
+  flex: 0 0 auto;
+  color: var(--amber);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.quality-finding p,
+.quality-recommendation p,
+.quality-report-ok {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.quality-report-ok {
+  color: var(--green);
+}
+
+.quality-overflow-note {
+  color: #78837e;
+  text-transform: none;
 }
 
 .docs-shell {

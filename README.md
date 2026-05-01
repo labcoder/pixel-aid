@@ -69,9 +69,10 @@ See `docs/desktop.md` for desktop app setup. See `docs/desktop-release.md` for p
 Automation workflow:
 
 1. Run `pixelaid inspect input.png --json` to get dimensions, palette counts, alpha stats, grid candidates, sheet detection, and suggested settings.
-2. Run `pixelaid suggest input.png --asset-type sprite --target 64x64 --json` when an agent or script needs normalized settings without writing files.
-3. Run `pixelaid fix`, `pixelaid fix-sheet`, `pixelaid palette`, or `pixelaid export` to produce PNG, manifest, palette, engine sidecars, and optional ZIP output.
-4. Use `@pixelaid/mcp` tool definitions and handlers for MCP-ready agent integrations without launching the editor.
+2. Run `pixelaid report input.png more.png --json` when an agent or script needs ranked quality findings and setting recommendations before changing files.
+3. Run `pixelaid suggest input.png --asset-type sprite --target 64x64 --json` when an agent or script needs normalized settings without writing files.
+4. Run `pixelaid fix`, `pixelaid fix-sheet`, `pixelaid palette`, or `pixelaid export` to produce PNG, manifest, palette, engine sidecars, and optional ZIP output.
+5. Use `@pixelaid/mcp` tool definitions and handlers for MCP-ready agent integrations without launching the editor.
 
 ## Implemented Features
 
@@ -119,9 +120,9 @@ Processing:
 
 Automation:
 
-- `@pixelaid/automation` wraps core/exporter operations for Node: PNG decode/encode, inspect, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
-- `@pixelaid/cli` provides `inspect`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, explicit frame metadata support, palette strategy/dithering options, outline source color options, engine targets, and optional ZIP bundling.
-- `@pixelaid/mcp` provides MCP-ready tool definitions and direct handlers for `inspect_image`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
+- `@pixelaid/automation` wraps core/exporter operations for Node: PNG decode/encode, inspect, quality reports, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
+- `@pixelaid/cli` provides `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, explicit frame metadata support, palette strategy/dithering options, outline source color options, engine targets, and optional ZIP bundling.
+- `@pixelaid/mcp` provides MCP-ready tool definitions and direct handlers for `inspect_image`, `quality_report`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
 
 ## Known Limitations
 
@@ -132,7 +133,7 @@ Automation:
 - Export currently supports generic manifests plus Godot, Unity, and Phaser helper files. TexturePacker, Tiled, and LDtk adapters are future work.
 - Tilesets are inspect-only until seam diagnostics and tile-engine metadata exist. Tilemap import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
-- CLI and MCP-ready automation currently support PNG only. A long-running MCP server, local HTTP API, non-PNG codecs, and streaming progress are future work.
+- CLI and MCP-ready automation currently support PNG only. Quality reports are handler-ready, but a long-running MCP server, local HTTP API, non-PNG codecs, and streaming progress are future work.
 
 ## Prioritized Roadmap
 

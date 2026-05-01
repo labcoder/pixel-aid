@@ -25,6 +25,7 @@ describe("PixelAid MCP-ready handlers", () => {
   it("declares the expected automation tools", () => {
     expect(pixelaidMcpTools.map((tool) => tool.name)).toEqual([
       "inspect_image",
+      "quality_report",
       "suggest_fix_settings",
       "fix_sprite",
       "fix_sprite_sheet",
@@ -52,6 +53,18 @@ describe("PixelAid MCP-ready handlers", () => {
       expect(inspect.structuredContent.ok).toBe(true);
       expect(inspect.structuredContent.result.image.width).toBe(4);
       expect(suggest.structuredContent.result.options.targetWidth).toBe(2);
+    });
+  });
+
+  it("handles quality report tool", async () => {
+    await withFixture(async ({ input }) => {
+      const report = await handlePixelAidTool("quality_report", {
+        assets: [{ inputPath: input, options: { assetType: "sprite", maxColors: 3 } }],
+      });
+
+      expect(report.isError).toBe(false);
+      expect(report.structuredContent.result.summary.assetCount).toBe(1);
+      expect(report.structuredContent.result.reports[0].findings.some((finding: { id: string }) => finding.id === "palette-over-budget")).toBe(true);
     });
   });
 

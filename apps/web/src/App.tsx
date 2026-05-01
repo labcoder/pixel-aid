@@ -45,7 +45,14 @@ import type {
   WorkerProgressStage
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
-import { analyzeSceneAssetDiagnostics, analyzeTilesetSeams, detectOutlineColorCandidates, sliceSheetFrames } from "@pixelaid/core";
+import {
+  analyzeQualityReport,
+  analyzeSceneAssetDiagnostics,
+  analyzeTilesetSeams,
+  detectOutlineColorCandidates,
+  sliceSheetFrames
+} from "@pixelaid/core";
+import type { QualityFinding, QualityRecommendation, QualityReport } from "@pixelaid/core";
 import {
   analyzeFrameStability,
   createEngineExportBundle,
@@ -165,6 +172,7 @@ import {
   type PlaybackStepDirection
 } from "./lib/playbackModel";
 import { applyEditorPreset, editorPresets, type EditorPreset } from "./lib/presets";
+import { createQualityReportSheetLayout, getFindingDisplayMeta } from "./lib/qualityReportView";
 import {
   applyPivotOverrides,
   clearAnimationPivotOverride,
@@ -922,6 +930,50 @@ export function App() {
           })
         : [],
     [detectedRowAnimations, detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings]
+  );
+  const qualityReportSheetLayout = useMemo(
+    () =>
+      sheetMode
+        ? createQualityReportSheetLayout({
+            frameWidth,
+            frameHeight,
+            rows: detectedRowAnimations.length > 0 ? detectedRowAnimations.length : sheetRows,
+            columns: plannedSheetLayout.maxColumns,
+            margin: sheetMargin,
+            spacing: sheetSpacing,
+            frames: sheetFrames,
+            rowAnimations: detectedRowAnimations,
+            warnings: detectedSheetWarnings,
+            confidence: detectedSheetFrames.length > 0 ? 0.82 : 0.58,
+            reason: detectedSheetFrames.length > 0 ? "Using current detected/manual sheet context." : "Using current manual sheet controls."
+          })
+        : undefined,
+    [
+      detectedRowAnimations,
+      detectedSheetFrames.length,
+      detectedSheetWarnings,
+      frameHeight,
+      frameWidth,
+      plannedSheetLayout.maxColumns,
+      sheetFrames,
+      sheetMargin,
+      sheetMode,
+      sheetRows,
+      sheetSpacing
+    ]
+  );
+  const qualityReport = useMemo(
+    () =>
+      selectedAsset
+        ? analyzeQualityReport(selectedAsset.image, {
+            assetType,
+            maxColors,
+            alpha,
+            ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
+            ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
+          })
+        : null,
+    [alpha, assetType, gridCandidates, maxColors, qualityReportSheetLayout, selectedAsset]
   );
   const hasDetectedSheetLayout = detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0;
   const selectedDetectedFrame =
@@ -4250,6 +4302,7 @@ export function App() {
               ))}
             </ol>
           </section>
+          <QualityReportPanel report={qualityReport} />
           <section>
             <h2>Metrics</h2>
             <div className="metric-sections">
@@ -4498,6 +4551,114 @@ function MetricGroup({ title, metrics }: { title: string; metrics: Array<[string
       </dl>
     </div>
   );
+}
+
+function QualityReportPanel({ report }: { report: QualityReport | null }) {
+  if (!report) {
+    return (
+      <section className="quality-report-panel">
+        <div className="quality-report-heading">
+          <h2>Quality Report</h2>
+          <span className="quality-report-state">Idle</span>
+        </div>
+        <p className="empty-panel-message">Select an asset to inspect grid, palette, alpha, sheet, and export readiness.</p>
+      </section>
+    );
+  }
+
+  const topFindings = report.findings.slice(0, 5);
+  const topRecommendations = report.recommendations.slice(0, 4);
+
+  return (
+    <section className="quality-report-panel">
+      <div className="quality-report-heading">
+        <h2>Quality Report</h2>
+        <span className={`quality-report-state ${report.summary.highestSeverity}`}>{formatQualitySeverity(report.summary.highestSeverity)}</span>
+      </div>
+      <div className="quality-summary-grid" aria-label="Quality report summary">
+        <span>
+          <strong>{report.metrics.grid.candidates.length}</strong>
+          <small>grid candidates</small>
+        </span>
+        <span>
+          <strong>{Math.round(report.metrics.grid.confidence * 100)}%</strong>
+          <small>grid confidence</small>
+        </span>
+        <span className={report.metrics.palette.fit === "over" ? "is-warning" : ""}>
+          <strong>{report.metrics.palette.exactColorCount}</strong>
+          <small>{report.metrics.palette.maxColors} color budget</small>
+        </span>
+        <span>
+          <strong>{report.metrics.sheet.detected ? report.metrics.sheet.frameCount : 1}</strong>
+          <small>{report.metrics.sheet.detected ? `${report.metrics.sheet.rowCount} sheet rows` : "single asset"}</small>
+        </span>
+      </div>
+      <QualityFindingList findings={topFindings} totalCount={report.findings.length} />
+      <QualityRecommendationList recommendations={topRecommendations} totalCount={report.recommendations.length} />
+    </section>
+  );
+}
+
+function QualityFindingList({ findings, totalCount }: { findings: readonly QualityFinding[]; totalCount: number }) {
+  return (
+    <div className="quality-report-list">
+      <h3>Findings</h3>
+      {findings.length > 0 ? (
+        findings.map((finding) => {
+          const meta = getFindingDisplayMeta(finding);
+          return (
+            <article key={finding.id} className={`quality-finding ${meta.tone}`}>
+              <div>
+                <strong>{finding.title}</strong>
+                <span>
+                  {meta.severityLabel} / {meta.categoryLabel}
+                </span>
+              </div>
+              <p>{finding.detail}</p>
+            </article>
+          );
+        })
+      ) : (
+        <p className="quality-report-ok">No blocking quality findings for the current settings.</p>
+      )}
+      {totalCount > findings.length ? <small className="quality-overflow-note">Showing top {findings.length} of {totalCount} findings.</small> : null}
+    </div>
+  );
+}
+
+function QualityRecommendationList({
+  recommendations,
+  totalCount
+}: {
+  recommendations: readonly QualityRecommendation[];
+  totalCount: number;
+}) {
+  return (
+    <div className="quality-report-list">
+      <h3>Recommendations</h3>
+      {recommendations.length > 0 ? (
+        recommendations.map((recommendation) => (
+          <article key={recommendation.id} className="quality-recommendation">
+            <strong>{recommendation.label}</strong>
+            <p>{recommendation.rationale}</p>
+          </article>
+        ))
+      ) : (
+        <p className="quality-report-ok">No recommendations needed right now.</p>
+      )}
+      {totalCount > recommendations.length ? (
+        <small className="quality-overflow-note">Showing top {recommendations.length} of {totalCount} recommendations.</small>
+      ) : null}
+    </div>
+  );
+}
+
+function formatQualitySeverity(severity: QualityReport["summary"]["highestSeverity"]): string {
+  if (severity === "none") {
+    return "Ready";
+  }
+
+  return severity.charAt(0).toUpperCase() + severity.slice(1);
 }
 
 function GridCandidateList({
