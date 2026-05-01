@@ -233,7 +233,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       bottomPanelHeight: integerSetting(settings.bottomPanelHeight, defaults.settings.bottomPanelHeight, 120, 560),
       playbackFps: numberSetting(settings.playbackFps, defaults.settings.playbackFps, 1, 60),
       playbackLoop: booleanSetting(settings.playbackLoop, defaults.settings.playbackLoop),
-      playbackDirection: unionSetting(settings.playbackDirection, ["forward", "reverse", "ping-pong"], defaults.settings.playbackDirection),
+      playbackDirection: unionSetting(settings.playbackDirection, ["forward", "reverse", "ping-pong", "hold"], defaults.settings.playbackDirection),
       normalizeTimelineFrames: booleanSetting(settings.normalizeTimelineFrames, defaults.settings.normalizeTimelineFrames),
       showOnionSkin: booleanSetting(settings.showOnionSkin, defaults.settings.showOnionSkin),
       timelineViewportSourceMode: unionSetting(settings.timelineViewportSourceMode, ["input", "output", "compare"], defaults.settings.timelineViewportSourceMode),

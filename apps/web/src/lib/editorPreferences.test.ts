@@ -85,6 +85,12 @@ describe("editor preferences", () => {
     expect(invalid.settings.paletteDithering).toBe("none");
   });
 
+  test("preserves hold-frame playback preferences", () => {
+    const preferences = normalizeEditorPreferences({ settings: { playbackDirection: "hold" } });
+
+    expect(preferences.settings.playbackDirection).toBe("hold");
+  });
+
   test("normalizes saved palette library entries", () => {
     const preferences = normalizeEditorPreferences({
       savedPaletteLibrary: [
