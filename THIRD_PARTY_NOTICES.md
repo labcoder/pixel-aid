@@ -1,6 +1,8 @@
 # Third-Party Notices
 
-This file tracks direct dependencies used by PixelAid. Transitive dependency reporting should be automated before release.
+This file tracks release-facing direct dependencies used by PixelAid. A generated npm lockfile report is available in `docs/third-party-license-report.md` and can be refreshed with `npm run license:report`.
+
+PixelAid source code is licensed under `AGPL-3.0-only`. Third-party dependencies remain under their own licenses.
 
 | Package | Version | License | Use |
 | --- | --- | --- | --- |
@@ -24,3 +26,9 @@ This file tracks direct dependencies used by PixelAid. Transitive dependency rep
 | @tauri-apps/plugin-dialog | 2.7.0 | MIT OR Apache-2.0 | Runtime native open/save dialogs in desktop builds |
 | @tauri-apps/plugin-fs | 2.5.0 | MIT OR Apache-2.0 | Runtime filesystem reads/writes for desktop import/export |
 | Tauri Rust crates | 2.x | Apache-2.0 OR MIT | Desktop shell runtime and build support |
+
+## Review Notes
+
+- `npm run license:check` fails on blocked or unknown npm licenses and reports review-required licenses.
+- MPL-2.0 npm packages currently appear through development/build tooling and should be reviewed before public release.
+- Rust/Tauri crate notices should be generated separately before signed desktop release artifacts.
