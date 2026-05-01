@@ -115,7 +115,7 @@ Processing:
 - Core sheet layout detection finds row bands, regular frame groups, outlined cell separators, first-pass content-centered uneven gutters, and conservative disconnected-component frame groups against a sampled background. It can classify common blocky left-side row labels, aligns drifted rows to a shared column grid, and returns frames, row counts, row animations, row-label metadata, row/column confidence diagnostics, and warnings.
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
-- ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects. Selected engine sidecars now include Godot, Unity, Phaser, and TexturePacker-compatible atlas metadata.
+- ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects. Selected engine sidecars now include Godot, Unity, Phaser, and TexturePacker-compatible atlas metadata; Godot, Unity, and Phaser also include compact import recipe JSON for automation-friendly texture settings, frames, pivots, durations, and animation tags.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
 
 Automation:
@@ -141,7 +141,7 @@ Automation:
 2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
 3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
 4. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
-5. Exporters: deepen Godot, Unity, and Phaser import helpers, then add TexturePacker, Tiled, and LDtk adapters, including tileset seam diagnostics and tilemap metadata when those workflows mature.
+5. Exporters: add Tiled and LDtk adapters, including tileset seam diagnostics and tilemap metadata when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
 7. Automation hardening: turn the MCP-ready handlers into a server process, add a local HTTP API, add non-PNG codecs, and support progress events for long batch jobs.
 8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.

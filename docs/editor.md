@@ -228,6 +228,7 @@ Engine export targets can be selected in the Export inspector. When enabled, the
 - Frame durations are exported on each manifest frame as `durationMs`. Detected row clips are exported into the manifest `animations` object with their frame names, FPS fallback, playback direction, and loop setting. If a detected clip is renamed, matching frame names and per-frame duration overrides are renamed with it before export.
 - Normalized export uses the MIG-11 corrected frame list, including duration, clip rename, and pivot override metadata, rather than recalculating animation structure during bundle assembly.
 - Engine adapters preserve unsupported target details as validation warnings. Godot pivots are kept as helper metadata, Unity clip generation stays manual, Phaser receives atlas/animation JSON, and TexturePacker receives JSON Hash-style atlas metadata derived from the same manifest frames.
+- Godot, Unity, and Phaser folders also include `import.recipe.json`. These compact sidecars summarize the exact texture settings, sheet dimensions, frames, pivots, durations, animation tags, helper script path, and target-specific limits so agents and build scripts can reason about imports without parsing README prose.
 
 ## TexturePacker-Compatible Atlas
 

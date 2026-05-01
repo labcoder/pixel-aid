@@ -56,6 +56,11 @@ export function createPhaserAtlasExport(
         path: "phaser/README.md",
         kind: "text",
         contents: createPhaserReadme(imageFile, imageBase)
+      },
+      {
+        path: "phaser/import.recipe.json",
+        kind: "json",
+        contents: createPhaserImportRecipe(manifest, imageFile, imageBase)
       }
     ],
     warnings: collectCommonEngineWarnings(manifest, "phaser")
@@ -114,6 +119,46 @@ function createPhaserAnimations(manifest: PixelAssetManifest, textureKey: string
 
     return result;
   });
+}
+
+function createPhaserImportRecipe(
+  manifest: PixelAssetManifest,
+  imageFile: string,
+  textureKey: string
+): Record<string, unknown> {
+  const atlasPath = `phaser/${textureKey}.json`;
+
+  return {
+    app: manifest.meta.app,
+    version: manifest.meta.version,
+    engine: "phaser",
+    image: imageFile,
+    textureKey,
+    atlasPath,
+    loader: {
+      call: "this.load.atlas",
+      image: imageFile,
+      atlas: atlasPath
+    },
+    textureSettings: {
+      pixelArt: true,
+      antialias: false,
+      roundPixels: true
+    },
+    frames: manifest.frames.map((frame) => ({
+      name: frame.name,
+      rect: { ...frame.rect },
+      pivot: {
+        x: roundRatio(frame.pivot.x, frame.rect.w),
+        y: roundRatio(frame.pivot.y, frame.rect.h)
+      },
+      durationMs: frame.durationMs
+    })),
+    animations: createPhaserAnimations(manifest, textureKey),
+    unsupportedMetadata: [
+      "named anchors and gameplay boxes remain in the generic PixelAid manifest"
+    ]
+  };
 }
 
 function orderFrames(animation: SpriteAnimation): string[] {

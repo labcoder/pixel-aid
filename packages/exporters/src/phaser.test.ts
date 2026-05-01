@@ -61,7 +61,7 @@ describe("Phaser atlas export adapter", () => {
     const result = createPhaserAtlasExport(manifest, "export/images/hero_runtime.png");
     const atlas = result.files.find((file) => file.kind === "json");
 
-    expect(result.files.map((file) => file.path)).toEqual(["phaser/hero_runtime.json", "phaser/README.md"]);
+    expect(result.files.map((file) => file.path)).toEqual(["phaser/hero_runtime.json", "phaser/README.md", "phaser/import.recipe.json"]);
     expect(atlas?.contents).toMatchObject({
       meta: {
         image: "export/images/hero_runtime.png",
@@ -82,6 +82,64 @@ describe("Phaser atlas export adapter", () => {
     );
     expect((readme?.kind === "text" ? readme.contents : "")).toContain("nearest-neighbor");
     expect(result.warnings.map((warning) => warning.code)).toContain("engine-phaser-extrude-logical-rects");
+  });
+
+  test("emits a Phaser import recipe with loader and animation setup data", () => {
+    const result = createPhaserAtlasExport(manifest);
+    const recipe = result.files.find((file) => file.path === "phaser/import.recipe.json");
+
+    expect(recipe).toEqual(
+      expect.objectContaining({
+        kind: "json",
+        contents: {
+          app: "PixelAid",
+          version: "0.1.0",
+          engine: "phaser",
+          image: "hero_sheet.png",
+          textureKey: "hero_sheet",
+          atlasPath: "phaser/hero_sheet.json",
+          loader: {
+            call: "this.load.atlas",
+            image: "hero_sheet.png",
+            atlas: "phaser/hero_sheet.json"
+          },
+          textureSettings: {
+            pixelArt: true,
+            antialias: false,
+            roundPixels: true
+          },
+          frames: [
+            {
+              name: "idle_000",
+              rect: { x: 0, y: 0, w: 16, h: 16 },
+              pivot: { x: 0.5, y: 0.875 },
+              durationMs: 120
+            },
+            {
+              name: "idle_001",
+              rect: { x: 16, y: 0, w: 16, h: 16 },
+              pivot: { x: 0.5, y: 0.875 },
+              durationMs: 90
+            }
+          ],
+          animations: [
+            {
+              key: "idle",
+              frames: [
+                { key: "hero_sheet", frame: "idle_000", duration: 120 },
+                { key: "hero_sheet", frame: "idle_001", duration: 90 }
+              ],
+              frameRate: 8,
+              repeat: -1,
+              yoyo: true
+            }
+          ],
+          unsupportedMetadata: [
+            "named anchors and gameplay boxes remain in the generic PixelAid manifest"
+          ]
+        }
+      })
+    );
   });
 });
 
