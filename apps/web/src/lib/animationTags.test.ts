@@ -1,6 +1,16 @@
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
-import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./animationTags";
+import {
+  applyFrameDurationOverrides,
+  createAnimationTagFromRange,
+  deleteAnimationTag,
+  getAnimationFrameRange,
+  renameAnimationTag,
+  renameFrameDurationOverrides,
+  updateAnimationTagFrameRange,
+  updateAnimationTagTiming,
+  updateFrameDuration
+} from "./animationTags";
 
 const animations: AnimationTag[] = [
   { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 8, loop: true },
@@ -108,5 +118,39 @@ describe("animation tag editing", () => {
       walk_000: 200,
       row_2_000: 90
     });
+  });
+
+  test("creates a custom animation clip from a contiguous frame range", () => {
+    const updated = createAnimationTagFromRange({
+      animations,
+      frames,
+      name: "attack",
+      startIndex: 1,
+      endIndex: 2,
+      fps: 14,
+      loop: false,
+      direction: "reverse"
+    });
+
+    expect(updated.at(-1)).toEqual({
+      name: "attack",
+      frameNames: ["row_1_001", "row_2_000"],
+      fps: 14,
+      loop: false,
+      direction: "reverse"
+    });
+  });
+
+  test("updates an animation clip to a custom frame range", () => {
+    const updated = updateAnimationTagFrameRange({ animations, frames, name: "row_1", startIndex: 0, endIndex: 2 });
+
+    expect(updated[0]?.frameNames).toEqual(["row_1_000", "row_1_001", "row_2_000"]);
+    expect(getAnimationFrameRange(frames, updated[0]!)).toEqual({ startIndex: 0, endIndex: 2 });
+  });
+
+  test("deletes a custom animation clip and falls back to all frames selection", () => {
+    const updated = deleteAnimationTag({ animations, name: "row_1" });
+
+    expect(updated.map((animation) => animation.name)).toEqual(["row_2"]);
   });
 });

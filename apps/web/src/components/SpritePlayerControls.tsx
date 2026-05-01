@@ -105,6 +105,7 @@ export function SpritePlayerControls({
           <option value="forward">Forward</option>
           <option value="reverse">Reverse</option>
           <option value="ping-pong">Ping-pong</option>
+          <option value="hold">Hold</option>
         </select>
       </label>
       <label className="player-number" title={`Current frame duration ${Math.round(currentFrameDurationMs)}ms`}>
@@ -121,7 +122,7 @@ export function SpritePlayerControls({
       </label>
       <label className="player-loop">
         <input type="checkbox" checked={playbackLoop} onChange={(event) => onLoopChange(event.currentTarget.checked)} />
-        Loop
+        {playbackLoop ? "Loop" : "One-shot"}
       </label>
       <label className="player-loop">
         <input type="checkbox" checked={normalizeTimelineFrames} onChange={(event) => onNormalizeChange(event.currentTarget.checked)} />

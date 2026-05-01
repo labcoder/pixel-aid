@@ -113,7 +113,7 @@ export function TimelineViewportCanvas({
         sourceMode,
         frameIndex: liveStateRef.current.frameIndex,
         showOnionSkin,
-        wrapOnion: loop && direction !== "ping-pong"
+        wrapOnion: loop && direction !== "ping-pong" && direction !== "hold"
       });
 
       if (isPlaying && frameCount > 0) {

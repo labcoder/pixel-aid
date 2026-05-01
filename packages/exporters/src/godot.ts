@@ -1,4 +1,4 @@
-import type { PixelAssetManifest } from "@pixelaid/shared";
+import type { PixelAssetManifest, SpriteAnimation } from "@pixelaid/shared";
 import type { EngineExportBundle, EngineExportWarning } from "./engineTypes";
 import { collectCommonEngineWarnings } from "./engineWarnings";
 
@@ -92,6 +92,8 @@ function createGodotImporterScript(manifest: PixelAssetManifest, texturePath: st
     "",
     "func _ordered_frame_names(animation: Dictionary) -> Array:",
     "    var frames := Array(animation.get(\"frames\", []))",
+    "    if animation.get(\"direction\", \"forward\") == \"hold\":",
+    "        return frames.slice(0, 1)",
     "    if animation.get(\"direction\", \"forward\") == \"reverse\":",
     "        frames.reverse()",
     "    return frames",
@@ -136,12 +138,7 @@ function serializeGodotAnimations(manifest: PixelAssetManifest): string {
     .join(", ")}}`;
 }
 
-function serializeGodotAnimation(animation: {
-  frames: readonly string[];
-  fps?: number;
-  loop: boolean;
-  direction?: "forward" | "reverse" | "ping-pong";
-}): string {
+function serializeGodotAnimation(animation: Pick<SpriteAnimation, "frames" | "fps" | "loop" | "direction">): string {
   const fps = animation.fps ?? 8;
   const direction = animation.direction ?? "forward";
   return `{${[
@@ -175,7 +172,7 @@ function collectGodotWarnings(manifest: PixelAssetManifest): EngineExportWarning
       code: "engine-godot-animation-direction",
       severity: "warning",
       message:
-        "Godot helper stores animation names, loops, speed, and frame order; reverse or ping-pong playback still needs project script handling."
+        "Godot helper stores animation names, loops, speed, and frame order; reverse, ping-pong, or hold-frame playback may still need project script handling."
     });
   }
 

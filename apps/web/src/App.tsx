@@ -75,7 +75,17 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
-import { applyFrameDurationOverrides, renameAnimationTag, renameFrameDurationOverrides, updateAnimationTagTiming, updateFrameDuration } from "./lib/animationTags";
+import {
+  applyFrameDurationOverrides,
+  createAnimationTagFromRange,
+  deleteAnimationTag,
+  getAnimationFrameRange,
+  renameAnimationTag,
+  renameFrameDurationOverrides,
+  updateAnimationTagFrameRange,
+  updateAnimationTagTiming,
+  updateFrameDuration
+} from "./lib/animationTags";
 import {
   formatAssetProvenanceSummary,
   removeAssetAndSelectNext,
@@ -2082,9 +2092,35 @@ export function App() {
     [sheetPivot]
   );
 
-  const changePlaybackFps = useCallback((value: number) => {
-    setPlaybackFps(clampFps(value));
-  }, []);
+  const changePlaybackFps = useCallback(
+    (value: number) => {
+      const nextFps = clampFps(value);
+      setPlaybackFps(nextFps);
+
+      const selectedName = selectedAnimationNameRef.current;
+      if (selectedName === ALL_ANIMATIONS) {
+        return;
+      }
+
+      setDetectedRowAnimations((current) => {
+        const existing = current.find((animation) => animation.name === selectedName);
+        if (!existing) {
+          return current;
+        }
+
+        const next = updateAnimationTagTiming({
+          animations: current,
+          name: selectedName,
+          fps: nextFps,
+          loop: existing.loop,
+          direction: existing.direction ?? playbackDirection
+        });
+        detectedRowAnimationsRef.current = next;
+        return next;
+      });
+    },
+    [playbackDirection]
+  );
 
   const resetPlaybackStepDirection = useCallback((direction: PlaybackDirection) => {
     playbackStepDirectionRef.current = getInitialPlayDirection(direction);
@@ -2383,6 +2419,95 @@ export function App() {
       }
     },
     [detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
+  );
+
+  const changePlaybackLoop = useCallback(
+    (nextLoop: boolean) => {
+      setPlaybackLoop(nextLoop);
+      const selectedName = selectedAnimationNameRef.current;
+      if (selectedName === ALL_ANIMATIONS) {
+        return;
+      }
+
+      setDetectedRowAnimations((current) => {
+        const existing = current.find((animation) => animation.name === selectedName);
+        if (!existing) {
+          return current;
+        }
+
+        const next = updateAnimationTagTiming({
+          animations: current,
+          name: selectedName,
+          fps: existing.fps ?? playbackFps,
+          loop: nextLoop,
+          direction: existing.direction ?? playbackDirection
+        });
+        detectedRowAnimationsRef.current = next;
+        return next;
+      });
+    },
+    [playbackDirection, playbackFps]
+  );
+
+  const addCustomAnimationClip = useCallback(() => {
+    if (sheetFrames.length === 0) {
+      return;
+    }
+
+    const selectedIndex = selectedFrameIndexRef.current >= 0 ? selectedFrameIndexRef.current : 0;
+    const nextAnimations = createAnimationTagFromRange({
+      animations: detectedRowAnimations,
+      frames: sheetFrames,
+      name: "clip",
+      startIndex: selectedIndex,
+      endIndex: selectedIndex,
+      fps: playbackFps,
+      loop: playbackLoop,
+      direction: playbackDirection
+    });
+    const createdAnimation = nextAnimations.at(-1);
+    detectedRowAnimationsRef.current = nextAnimations;
+    setDetectedRowAnimations(nextAnimations);
+    if (createdAnimation) {
+      selectedAnimationNameRef.current = createdAnimation.name;
+      setSelectedAnimationName(createdAnimation.name);
+      appendLog(`Created custom animation clip ${createdAnimation.name}`);
+    }
+    setIsPlaying(false);
+  }, [appendLog, detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, sheetFrames]);
+
+  const updateDetectedAnimationRange = useCallback(
+    (name: string, startIndex: number, endIndex: number) => {
+      const safeStartIndex = Number.isFinite(startIndex) ? startIndex : 0;
+      const safeEndIndex = Number.isFinite(endIndex) && endIndex >= 0 ? endIndex : safeStartIndex;
+      setDetectedRowAnimations((current) => {
+        const next = updateAnimationTagFrameRange({ animations: current, frames: sheetFrames, name, startIndex: safeStartIndex, endIndex: safeEndIndex });
+        detectedRowAnimationsRef.current = next;
+        return next;
+      });
+      selectedFrameIndexRef.current = Math.max(0, Math.min(sheetFrames.length - 1, Math.round(safeStartIndex)));
+      setSelectedFrameIndex(selectedFrameIndexRef.current);
+      setFixResult(null);
+      setIsPlaying(false);
+    },
+    [sheetFrames]
+  );
+
+  const removeDetectedAnimation = useCallback(
+    (name: string) => {
+      const nextAnimations = deleteAnimationTag({ animations: detectedRowAnimations, name });
+      detectedRowAnimationsRef.current = nextAnimations;
+      setDetectedRowAnimations(nextAnimations);
+      if (selectedAnimationName === name) {
+        const nextSelectedName = nextAnimations[0]?.name ?? ALL_ANIMATIONS;
+        selectedAnimationNameRef.current = nextSelectedName;
+        setSelectedAnimationName(nextSelectedName);
+      }
+      setFixResult(null);
+      setIsPlaying(false);
+      appendLog(`Removed animation clip ${name}`);
+    },
+    [appendLog, detectedRowAnimations, selectedAnimationName]
   );
 
   const updateDetectedAnimationCellSize = useCallback(
@@ -2920,7 +3045,7 @@ export function App() {
             fallbackFps: playbackFps,
             fallbackLoop: playbackLoop,
             fallbackDirection: playbackDirection
-          })
+          }, sheetFrames)
         : undefined;
     const manifest = createPixelAssetManifest({
       result: exportResult,
@@ -4214,7 +4339,7 @@ export function App() {
                 onFpsChange={changePlaybackFps}
                 onDirectionChange={changePlaybackDirection}
                 onDurationChange={updateSelectedFrameDuration}
-                onLoopChange={setPlaybackLoop}
+                onLoopChange={changePlaybackLoop}
                 onNormalizeChange={setNormalizeTimelineFrames}
                 onOnionSkinChange={setShowOnionSkin}
               />
@@ -4437,20 +4562,27 @@ export function App() {
                     ) : null}
                   </div>
                 </div>
-                {detectedRowAnimations.length > 0 ? (
-                  <div className="clip-editor" aria-label="Detected animation clip metadata">
-                    <div className="clip-editor-title">
-                      <strong>Detected clips</strong>
-                      <span>{detectedRowAnimations.length} row{detectedRowAnimations.length === 1 ? "" : "s"}</span>
-                    </div>
-                    <div className="clip-editor-header">
-                      <span>Clip / export ID</span>
-                      <span>Frames</span>
-                      <span>FPS</span>
-                      <span>Direction</span>
-                      <span>Loop</span>
-                    </div>
-                    {detectedRowAnimations.map((animation) => (
+                <div className="clip-editor" aria-label="Animation clip timesheet metadata">
+                  <div className="clip-editor-title">
+                    <strong>Animation clips</strong>
+                    <span>{detectedRowAnimations.length} clip{detectedRowAnimations.length === 1 ? "" : "s"}</span>
+                    <button type="button" onClick={addCustomAnimationClip} disabled={sheetFrames.length === 0}>
+                      Add clip
+                    </button>
+                  </div>
+                  <div className="clip-editor-header">
+                    <span>Clip / export ID</span>
+                    <span>Frame range</span>
+                    <span>FPS</span>
+                    <span>Playback</span>
+                    <span>Loop</span>
+                    <span>Remove</span>
+                  </div>
+                  {detectedRowAnimations.map((animation) => {
+                    const range = getAnimationFrameRange(sheetFrames, animation);
+                    const rangeStart = range.startIndex >= 0 ? range.startIndex + 1 : 1;
+                    const rangeEnd = range.endIndex >= 0 ? range.endIndex + 1 : rangeStart;
+                    return (
                       <div key={animation.name} className={animation.name === selectedAnimationName ? "clip-row active" : "clip-row"}>
                         <input
                           aria-label={`Rename ${animation.name}`}
@@ -4469,7 +4601,26 @@ export function App() {
                             }
                           }}
                         />
-                        <span>{animation.frameNames.length}</span>
+                        <span className="clip-range-controls">
+                          <input
+                            aria-label={`${animation.name} start frame`}
+                            type="number"
+                            min="1"
+                            max={Math.max(1, sheetFrames.length)}
+                            value={rangeStart}
+                            onChange={(event) => updateDetectedAnimationRange(animation.name, Number(event.currentTarget.value) - 1, range.endIndex)}
+                          />
+                          <span>to</span>
+                          <input
+                            aria-label={`${animation.name} end frame`}
+                            type="number"
+                            min="1"
+                            max={Math.max(1, sheetFrames.length)}
+                            value={rangeEnd}
+                            onChange={(event) => updateDetectedAnimationRange(animation.name, range.startIndex, Number(event.currentTarget.value) - 1)}
+                          />
+                          <small>{animation.frameNames.length}</small>
+                        </span>
                         <input
                           aria-label={`${animation.name} FPS`}
                           type="number"
@@ -4488,6 +4639,7 @@ export function App() {
                           <option value="forward">Forward</option>
                           <option value="reverse">Reverse</option>
                           <option value="ping-pong">Ping-pong</option>
+                          <option value="hold">Hold</option>
                         </select>
                         <label>
                           <input
@@ -4495,12 +4647,15 @@ export function App() {
                             checked={animation.loop}
                             onChange={(event) => updateDetectedAnimationTiming(animation.name, { loop: event.currentTarget.checked })}
                           />
-                          <span>{animation.loop ? "On" : "Off"}</span>
+                          <span>{animation.loop ? "Loop" : "One-shot"}</span>
                         </label>
+                        <button type="button" className="clip-delete-button" onClick={() => removeDetectedAnimation(animation.name)}>
+                          Remove
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                ) : null}
+                    );
+                  })}
+                </div>
                 <div className="timeline-rail">
                   {timelineFrames.map((frame, index) => {
                     const globalFrameIndex = animationFrameIndexes[index] ?? index;

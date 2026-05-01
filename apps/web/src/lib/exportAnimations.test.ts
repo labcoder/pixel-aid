@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { AnimationTag } from "@pixelaid/shared";
+import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
 import { animationTagsToManifestAnimations } from "./exportAnimations";
 
 describe("export animations", () => {
@@ -61,4 +61,27 @@ describe("export animations", () => {
       }
     });
   });
+
+  test("exports ordered per-frame durations when source frames are provided", () => {
+    const tags: AnimationTag[] = [{ name: "attack", frameNames: ["attack_000", "attack_001"], fps: 12, loop: false }];
+    const frames: SpriteFrame[] = [frame("attack_000", 80), frame("attack_001", 160), frame("unused", 500)];
+
+    expect(animationTagsToManifestAnimations(tags, { fallbackFps: 8, fallbackLoop: true }, frames)).toEqual({
+      attack: {
+        frames: ["attack_000", "attack_001"],
+        fps: 12,
+        loop: false,
+        frameDurationsMs: [80, 160]
+      }
+    });
+  });
 });
+
+function frame(name: string, durationMs: number): SpriteFrame {
+  return {
+    name,
+    rect: { x: 0, y: 0, w: 16, h: 16 },
+    pivot: { x: 8, y: 16 },
+    durationMs
+  };
+}

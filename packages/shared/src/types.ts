@@ -320,7 +320,7 @@ export type AnimationTag = {
   fps?: number;
   durationMs?: number;
   loop: boolean;
-  direction?: "forward" | "reverse" | "ping-pong";
+  direction?: "forward" | "reverse" | "ping-pong" | "hold";
 };
 
 export type FrameStabilitySeverity = "info" | "warning" | "error";
@@ -414,7 +414,8 @@ export type SpriteAnimation = {
   loop: boolean;
   fps?: number;
   durationMs?: number;
-  direction?: "forward" | "reverse" | "ping-pong";
+  direction?: "forward" | "reverse" | "ping-pong" | "hold";
+  frameDurationsMs?: number[];
 };
 
 export type PixelAssetManifest = {

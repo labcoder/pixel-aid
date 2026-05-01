@@ -2119,10 +2119,15 @@ button:disabled {
   color: #78837e;
 }
 
+.clip-editor-title button {
+  min-height: 28px;
+  padding: 0 0.55rem;
+}
+
 .clip-editor-header,
 .clip-row {
   display: grid;
-  grid-template-columns: minmax(112px, 1fr) 48px 54px 82px 60px;
+  grid-template-columns: minmax(112px, 1fr) minmax(128px, 150px) 54px 82px 86px 72px;
   gap: 0.4rem;
   align-items: center;
 }
@@ -2166,6 +2171,23 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
+}
+
+.clip-range-controls {
+  display: grid;
+  grid-template-columns: minmax(34px, 1fr) auto minmax(34px, 1fr) auto;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.clip-range-controls small {
+  color: #78837e;
+  text-align: right;
+}
+
+.clip-delete-button {
+  min-height: 28px;
+  padding: 0 0.4rem;
 }
 
 .clip-row input[type="checkbox"] {
