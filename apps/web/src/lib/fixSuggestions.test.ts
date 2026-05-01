@@ -114,6 +114,50 @@ function detailedPresentationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function lowScaleBakedCheckerboardPandaSource(): RGBAImage {
+  const scale = 3;
+  const nativeWidth = 91;
+  const nativeHeight = 96;
+  const image = blankImage(nativeWidth * scale, nativeHeight * scale);
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const darkCell = (Math.floor(x / 24) + Math.floor(y / 24)) % 2 === 1;
+      const hasInteriorCompressionSeam = x > 0 && y > 0 && x < image.width - 1 && y < image.height - 1 && (x % 24 === 11 || y % 24 === 11);
+      const value = hasInteriorCompressionSeam ? 226 : darkCell ? 202 : 250;
+      const offset = (y * image.width + x) * 4;
+      image.data[offset] = value;
+      image.data[offset + 1] = value;
+      image.data[offset + 2] = value;
+      image.data[offset + 3] = 255;
+    }
+  }
+
+  const outline: [number, number, number, number] = [22, 20, 31, 255];
+  const shadow: [number, number, number, number] = [54, 49, 51, 255];
+  const cream: [number, number, number, number] = [253, 247, 219, 255];
+  const brown: [number, number, number, number] = [114, 80, 65, 255];
+
+  fillScaledRect(image, scale, 31, 12, 29, 6, outline);
+  fillScaledRect(image, scale, 25, 18, 41, 20, outline);
+  fillScaledRect(image, scale, 28, 17, 35, 31, cream);
+  fillScaledRect(image, scale, 20, 37, 16, 29, outline);
+  fillScaledRect(image, scale, 55, 37, 16, 29, outline);
+  fillScaledRect(image, scale, 26, 42, 10, 20, shadow);
+  fillScaledRect(image, scale, 55, 42, 10, 20, shadow);
+  fillScaledRect(image, scale, 37, 45, 17, 30, cream);
+  fillScaledRect(image, scale, 30, 70, 13, 10, brown);
+  fillScaledRect(image, scale, 49, 70, 13, 10, brown);
+  fillScaledRect(image, scale, 32, 29, 7, 8, outline);
+  fillScaledRect(image, scale, 52, 29, 7, 8, outline);
+  fillScaledRect(image, scale, 43, 37, 5, 3, outline);
+  fillScaledRect(image, scale, 39, 42, 13, 3, outline);
+  fillScaledRect(image, scale, 40, 18, 12, 3, [255, 253, 235, 255]);
+  addNativePixelVariation(image, scale);
+
+  return image;
+}
+
 function drawRect(image: RGBAImage, startX: number, startY: number, width: number, height: number, rgba: [number, number, number, number]) {
   for (let y = startY; y < startY + height; y += 1) {
     for (let x = startX; x < startX + width; x += 1) {
@@ -122,6 +166,36 @@ function drawRect(image: RGBAImage, startX: number, startY: number, width: numbe
       image.data[offset + 1] = rgba[1];
       image.data[offset + 2] = rgba[2];
       image.data[offset + 3] = rgba[3];
+    }
+  }
+}
+
+function fillScaledRect(image: RGBAImage, scale: number, x: number, y: number, width: number, height: number, rgba: [number, number, number, number]) {
+  drawRect(image, x * scale, y * scale, width * scale, height * scale, rgba);
+}
+
+function addNativePixelVariation(image: RGBAImage, scale: number) {
+  const nativeWidth = Math.floor(image.width / scale);
+  const nativeHeight = Math.floor(image.height / scale);
+
+  for (let nativeY = 0; nativeY < nativeHeight; nativeY += 1) {
+    for (let nativeX = 0; nativeX < nativeWidth; nativeX += 1) {
+      const sampleOffset = (nativeY * scale * image.width + nativeX * scale) * 4;
+      const r = image.data[sampleOffset]!;
+      const g = image.data[sampleOffset + 1]!;
+      const b = image.data[sampleOffset + 2]!;
+      if (Math.abs(r - g) <= 1 && Math.abs(g - b) <= 1 && r >= 190) {
+        continue;
+      }
+
+      const delta = (nativeX + nativeY) % 2 === 0 ? -6 : 6;
+      const color: [number, number, number, number] = [
+        Math.max(0, Math.min(255, r + delta)),
+        Math.max(0, Math.min(255, g + delta)),
+        Math.max(0, Math.min(255, b + delta)),
+        255
+      ];
+      drawRect(image, nativeX * scale, nativeY * scale, scale, scale, color);
     }
   }
 }
@@ -328,6 +402,32 @@ function exteriorEdgeColorMetrics(image: RGBAImage): { edgePixels: number; darkE
   return { edgePixels, darkEdgePixels, uniqueEdgeColors: colors.size };
 }
 
+function darkPixelRatioInRect(image: RGBAImage, rect: Rect): number {
+  let total = 0;
+  let dark = 0;
+
+  for (let y = rect.y; y < rect.y + rect.h; y += 1) {
+    for (let x = rect.x; x < rect.x + rect.w; x += 1) {
+      if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
+        continue;
+      }
+
+      const offset = (y * image.width + x) * 4;
+      if (image.data[offset + 3]! < 16) {
+        continue;
+      }
+
+      const luma = image.data[offset]! * 0.299 + image.data[offset + 1]! * 0.587 + image.data[offset + 2]! * 0.114;
+      total += 1;
+      if (luma < 72) {
+        dark += 1;
+      }
+    }
+  }
+
+  return dark / Math.max(1, total);
+}
+
 function hasTransparentNeighbor(image: RGBAImage, x: number, y: number): boolean {
   const offsets = [
     [-1, 0],
@@ -421,7 +521,8 @@ describe("fix setting suggestions", () => {
     expect(suggestion.downscale).toBe("dominant");
     expect(suggestion.contrastExpansionEnabled).toBe(true);
     expect(suggestion.outlineMode).toBe("repairExisting");
-    expect(suggestion.outlineSourceColors.length).toBeGreaterThan(0);
+    expect(suggestion.outlineSize).toBe(1);
+    expect(suggestion.outlineSourceColors).toHaveLength(1);
   });
 
   test("suggested baked checkerboard panda cleanup preserves body and repairs exterior outline", () => {
@@ -436,11 +537,36 @@ describe("fix setting suggestions", () => {
     expect(result.settings.downscale).toBe("dominant");
     expect(result.settings.cleanup.contrastExpansion?.enabled).toBe(true);
     expect(result.settings.cleanup.outlineMode).toBe("repairExisting");
+    expect(result.settings.cleanup.outlineSize).toBe(1);
     expect(countSoftAlphaPixels(result.image)).toBe(0);
     expect(countVisibleCreamPixels(result.image)).toBeGreaterThanOrEqual(20);
     expect(edgeMetrics.edgePixels).toBeGreaterThan(0);
     expect(edgeMetrics.darkEdgePixels / edgeMetrics.edgePixels).toBeGreaterThanOrEqual(0.8);
     expect(edgeMetrics.uniqueEdgeColors).toBeLessThanOrEqual(3);
+  });
+
+  test("avoids dark detail expansion for low-scale baked checkerboard sprites", () => {
+    const source = lowScaleBakedCheckerboardPandaSource();
+    const suggestion = suggestFixSettings(source);
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.downscale).toBe("dominant");
+    expect(suggestion.gridScaleX).toBeLessThanOrEqual(3.25);
+    expect(suggestion.contrastExpansionEnabled).toBe(false);
+    expect(suggestion.outlineMode).toBe("repairExisting");
+    expect(suggestion.outlineSize).toBe(1);
+    expect(suggestion.outlineSourceColors).toHaveLength(1);
+  });
+
+  test("suggested low-scale baked checkerboard cleanup does not spread dark pixels across the face", () => {
+    const source = lowScaleBakedCheckerboardPandaSource();
+    const result = fixImage(source, buildSuggestedSingleFixOptions(source));
+
+    expect(result.settings.cleanup.contrastExpansion?.enabled).not.toBe(true);
+    expect(result.settings.cleanup.outlineSize).toBe(1);
+    expect(result.settings.cleanup.outlineSourceColors).toHaveLength(1);
+    expect(darkPixelRatioInRect(result.image, { x: 28, y: 18, w: 35, h: 30 })).toBeLessThan(0.45);
   });
 
   test("suggests local correction for high-resolution single sprites", () => {
