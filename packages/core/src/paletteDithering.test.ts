@@ -58,6 +58,29 @@ describe("palette dithering", () => {
     expect(result.diagnostics.dithering).toBe("ordered");
     expect(result.diagnostics.warnings).toContain("Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed.");
   });
+
+  test("keeps extreme accidental colors deterministic under current in-house strategies", () => {
+    const source = noisyGradientImage(16, 16);
+    const frames: SpriteFrame[] = [
+      { name: "left", rect: { x: 0, y: 0, w: 8, h: 16 }, pivot: { x: 4, y: 16 }, durationMs: 120 },
+      { name: "right", rect: { x: 8, y: 0, w: 8, h: 16 }, pivot: { x: 4, y: 16 }, durationMs: 120 }
+    ];
+    const first = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "perceptual", maxColors: 8, lockScope: "sheet", dithering: "none" },
+      fallbackMaxColors: 8,
+      frames
+    });
+    const second = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "perceptual", maxColors: 8, lockScope: "sheet", dithering: "none" },
+      fallbackMaxColors: 8,
+      frames
+    });
+
+    expect(first.diagnostics.inputColorCount).toBeGreaterThan(200);
+    expect(first.diagnostics.outputColorCount).toBeLessThanOrEqual(8);
+    expect(first.palette).toEqual(second.palette);
+    expect(first.diagnostics.drift?.checkedFrameCount).toBe(2);
+  });
 });
 
 function solidImage(width: number, height: number, rgba: readonly [number, number, number, number]): RGBAImage {
@@ -67,6 +90,20 @@ function solidImage(width: number, height: number, rgba: readonly [number, numbe
     data[offset + 1] = rgba[1];
     data[offset + 2] = rgba[2];
     data[offset + 3] = rgba[3];
+  }
+  return { width, height, data };
+}
+
+function noisyGradientImage(width: number, height: number): RGBAImage {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      data[offset] = (x * 17 + y * 7) & 0xff;
+      data[offset + 1] = (x * 5 + y * 19) & 0xff;
+      data[offset + 2] = (x * 11 + y * 13) & 0xff;
+      data[offset + 3] = 255;
+    }
   }
   return { width, height, data };
 }
