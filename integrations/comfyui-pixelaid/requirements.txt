@@ -1,0 +1,2 @@
+# No additional Python dependencies.
+# The nodes use ComfyUI's existing Torch, NumPy, and Pillow runtime for IMAGE tensors.
