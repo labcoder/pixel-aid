@@ -3,6 +3,7 @@ import type {
   FixOptions,
   GridCandidate,
   GridDriftDiagnostics,
+  MorphologyDiagnostics,
   PaletteSettings,
   PixelFixResult,
   Rect,
@@ -18,6 +19,7 @@ import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval } from "./halo";
 import { createImage } from "./image";
+import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
 import { assertNotCancelled, phasePercent, reportProgress } from "./runtime";
@@ -73,7 +75,9 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
   const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
-  const outlineCleaned = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
+  const morphologyResult = applyMorphologyCleanup(denoised, options.cleanup.morphology);
+  const morphologyCleaned = morphologyResult.image;
+  const outlineCleaned = applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     sourceColors: options.cleanup.outlineSourceColors,
     alpha: options.cleanup.outlineAlpha,
@@ -122,6 +126,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     diagnostics: {
       alpha: alphaResult.diagnostics,
       contrastExpansion: contrastExpanded.diagnostics,
+      ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
       palette: paletteResult.diagnostics
     }
   };
@@ -166,6 +171,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   const phaseX = options.grid.phaseX ?? 0;
   const phaseY = options.grid.phaseY ?? 0;
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
+  let morphologyDiagnostics: MorphologyDiagnostics | undefined;
   const contrastExpanded = applyContrastExpansion(image, options.cleanup.contrastExpansion);
 
   reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
@@ -198,6 +204,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     );
     const cleanedFrame = cleanFixedImage(fixedFrame, options);
     alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
+    morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
     pasteImage(cleanedFrame.image, packed, frame.rect);
     reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
     assertNotCancelled(runtime?.signal);
@@ -258,6 +265,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     diagnostics: {
       ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
+      ...(morphologyDiagnostics ? { morphology: morphologyDiagnostics } : {}),
       palette: paletteResult.diagnostics
     }
   };
@@ -321,13 +329,15 @@ function tryNormalizeHexColor(color: string): string | null {
 type CleanFixedImageResult = {
   image: RGBAImage;
   alpha: AlphaCleanupDiagnostics;
+  morphology?: MorphologyDiagnostics;
 };
 
 function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImageResult {
   const alphaResult = applyAlphaMode(image, options.alpha, options.alphaSettings);
   const haloCleaned = applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false });
   const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
-  const outlined = applyOutlineCleanup(denoised, options.cleanup.outlineMode ?? "none", {
+  const morphologyResult = applyMorphologyCleanup(denoised, options.cleanup.morphology);
+  const outlined = applyOutlineCleanup(morphologyResult.image, options.cleanup.outlineMode ?? "none", {
     color: options.cleanup.outlineColor,
     sourceColors: options.cleanup.outlineSourceColors,
     alpha: options.cleanup.outlineAlpha,
@@ -338,7 +348,8 @@ function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImage
   });
   return {
     image: outlined,
-    alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined)
+    alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined),
+    ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {})
   };
 }
 
@@ -378,6 +389,35 @@ function mergeAlphaDiagnostics(
     decontaminatedPixels: current.decontaminatedPixels + next.decontaminatedPixels,
     transparentPixels: current.transparentPixels + next.transparentPixels,
     softAlphaPixels: current.softAlphaPixels + next.softAlphaPixels,
+    warnings: [...new Set([...current.warnings, ...next.warnings])]
+  };
+}
+
+function mergeMorphologyDiagnostics(
+  current: MorphologyDiagnostics | undefined,
+  next: MorphologyDiagnostics | undefined
+): MorphologyDiagnostics | undefined {
+  if (!next) {
+    return current;
+  }
+  if (!current) {
+    return {
+      ...next,
+      warnings: [...next.warnings]
+    };
+  }
+
+  return {
+    ...current,
+    enabled: current.enabled || next.enabled,
+    operationCount: current.operationCount + next.operationCount,
+    openedPixels: current.openedPixels + next.openedPixels,
+    closedPixels: current.closedPixels + next.closedPixels,
+    filledHolePixels: current.filledHolePixels + next.filledHolePixels,
+    removedComponentPixels: current.removedComponentPixels + next.removedComponentPixels,
+    pinholePixels: current.pinholePixels + next.pinholePixels,
+    tinyComponentPixels: current.tinyComponentPixels + next.tinyComponentPixels,
+    brokenOutlinePixels: current.brokenOutlinePixels + next.brokenOutlinePixels,
     warnings: [...new Set([...current.warnings, ...next.warnings])]
   };
 }

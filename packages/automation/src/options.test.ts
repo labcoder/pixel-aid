@@ -129,4 +129,32 @@ describe("automation option normalization", () => {
     if (!result.ok) return;
     expect(result.value.downscale).toBe(downscale);
   });
+
+  it("preserves explicit morphology cleanup settings for automation callers", () => {
+    const result = normalizeFixOptions({
+      cleanup: {
+        morphology: {
+          enabled: true,
+          fillTinyHoles: true,
+          removeTinyComponents: true,
+          maxHolePixels: 1,
+          maxComponentPixels: 2,
+          preserveSinglePixelDetails: true,
+          connectivity: 4,
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.cleanup.morphology).toEqual({
+      enabled: true,
+      fillTinyHoles: true,
+      removeTinyComponents: true,
+      maxHolePixels: 1,
+      maxComponentPixels: 2,
+      preserveSinglePixelDetails: true,
+      connectivity: 4,
+    });
+  });
 });
