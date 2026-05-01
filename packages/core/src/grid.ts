@@ -1,4 +1,4 @@
-import type { GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
+import type { GridCandidate, GridCandidateDiagnostics, GridSobelTileVotingDiagnostics, Rect, RGBAImage } from "@pixelaid/shared";
 import { detectSpriteBounds } from "./bounds";
 
 export type GridDetectionOptions = {
@@ -12,6 +12,11 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   const vertical = verticalEdgeEnergy(image);
   const horizontal = horizontalEdgeEnergy(image);
   const runScores = runLengthScores(image, bounds, maxScale);
+  const sobelVoting =
+    image.width >= 64 || image.height >= 64
+      ? analyzeSobelTileVoting(image, maxScale)
+      : sobelTileVotingFallback("Sobel tile voting skipped for tiny sources");
+  const preferSobelVoting = sobelVoting.bestScore >= 0.45;
   const maxRunScore = max(runScores);
   const totalVertical = sum(vertical);
   const totalHorizontal = sum(horizontal);
@@ -20,9 +25,15 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   for (let scale = 2; scale <= maxScale; scale += 1) {
     const bestX = bestPhase(vertical, scale);
     const bestY = bestPhase(horizontal, scale);
-    const sourceRect = cropBounds ? alignRectToGrid(cropBounds, scale, bestX.phase, bestY.phase, image) : undefined;
-    const outputWidth = sourceRect ? Math.floor(sourceRect.w / scale) : Math.floor((image.width - bestX.phase) / scale);
-    const outputHeight = sourceRect ? Math.floor(sourceRect.h / scale) : Math.floor((image.height - bestY.phase) / scale);
+    const sobelVote = sobelVoting.votes[scale];
+    const useSobelPhase = sobelVote !== undefined && sobelVote.score >= 0.35;
+    const cropPhaseX = cropBounds ? positiveModulo(cropBounds.x, scale) : undefined;
+    const cropPhaseY = cropBounds ? positiveModulo(cropBounds.y, scale) : undefined;
+    const phaseX = useSobelPhase && sobelVote.phaseConfidenceX >= 0.25 ? (cropPhaseX ?? sobelVote.phaseX) : bestX.phase;
+    const phaseY = useSobelPhase && sobelVote.phaseConfidenceY >= 0.25 ? (cropPhaseY ?? sobelVote.phaseY) : bestY.phase;
+    const sourceRect = cropBounds ? alignRectToGrid(cropBounds, scale, phaseX, phaseY, image) : undefined;
+    const outputWidth = sourceRect ? Math.floor(sourceRect.w / scale) : Math.floor((image.width - phaseX) / scale);
+    const outputHeight = sourceRect ? Math.floor(sourceRect.h / scale) : Math.floor((image.height - phaseY) / scale);
     if (outputWidth <= 0 || outputHeight <= 0) {
       continue;
     }
@@ -36,40 +47,61 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
     const scaleScore = image.width >= 256 || image.height >= 256 ? Math.min(1, scale / 8) : 1;
     const edgeAgreement = Math.min(1, edgeScore / 0.65);
     const hybridScore = edgeScore + (1 - edgeScore) * runScore * edgeAgreement;
+    const sobelScore = sobelVote?.score ?? 0;
+    const sobelTopScale = sobelVoting.histogram[0]?.scale;
+    const sobelSupportsScale = sobelVote !== undefined && (scale === sobelTopScale || sobelScore >= sobelVoting.bestScore * 0.85);
+    const strongHybridEvidence = runScore >= 0.65 && edgeScore >= 0.45;
+    const suppressHybrid = preferSobelVoting && !sobelSupportsScale && !strongHybridEvidence;
+    const detectorScore = suppressHybrid ? Math.max(sobelScore, hybridScore * 0.45) : Math.max(hybridScore, sobelScore * 0.85);
     const confidence = Math.max(
       0,
-      Math.min(1, hybridScore * 0.78 + divisibility * 0.04 + sizeScore * 0.12 + scaleScore * 0.06)
+      Math.min(1, detectorScore * 0.78 + divisibility * 0.04 + sizeScore * 0.12 + scaleScore * 0.06)
     );
+    const notes = confidenceNotes({
+      confidence,
+      cropUsed: sourceRect !== undefined,
+      edgeScore,
+      runScore,
+      sizeScore,
+      scale,
+      outputWidth,
+      outputHeight
+    });
+    if (sobelVote !== undefined) {
+      notes.push("Sobel tile voting selected sparse foreground edges");
+    } else if (sobelVoting.fallbackReason) {
+      notes.push(sobelVoting.fallbackReason);
+    }
+    const diagnostics: GridCandidateDiagnostics = {
+      edgeScore: roundScore(edgeScore),
+      runScore: roundScore(runScore),
+      sizeScore: roundScore(sizeScore),
+      scaleScore: roundScore(scaleScore),
+      divisibilityScore: divisibility,
+      cropUsed: sourceRect !== undefined,
+      sourceCoverage: roundScore(((sourceRect?.w ?? image.width) * (sourceRect?.h ?? image.height)) / (image.width * image.height)),
+      confidenceLabel: confidenceLabel(confidence),
+      notes
+    };
+    if (sobelVote !== undefined) {
+      diagnostics.sobelTileVoting = sobelDiagnostics(sobelVoting, sobelVote);
+    }
 
     const candidate: GridCandidate = {
       outputWidth,
       outputHeight,
       scaleX: scale,
       scaleY: scale,
-      phaseX: bestX.phase,
-      phaseY: bestY.phase,
-      diagnostics: {
-        edgeScore: roundScore(edgeScore),
-        runScore: roundScore(runScore),
-        sizeScore: roundScore(sizeScore),
-        scaleScore: roundScore(scaleScore),
-        divisibilityScore: divisibility,
-        cropUsed: sourceRect !== undefined,
-        sourceCoverage: roundScore(((sourceRect?.w ?? image.width) * (sourceRect?.h ?? image.height)) / (image.width * image.height)),
-        confidenceLabel: confidenceLabel(confidence),
-        notes: confidenceNotes({
-          confidence,
-          cropUsed: sourceRect !== undefined,
-          edgeScore,
-          runScore,
-          sizeScore,
-          scale,
-          outputWidth,
-          outputHeight
-        })
-      },
+      phaseX,
+      phaseY,
+      diagnostics,
       confidence,
-      reason: runScore > 0.5 ? `Hybrid edge/run score at ${scale}px source blocks` : `Periodic edge energy at ${scale}px source blocks`
+      reason:
+        sobelVote !== undefined && sobelScore >= hybridScore
+          ? `Sobel tile-voting score at ${scale}px source blocks`
+          : runScore > 0.5
+            ? `Hybrid edge/run score at ${scale}px source blocks`
+            : `Periodic edge energy at ${scale}px source blocks`
     };
     if (sourceRect) {
       candidate.sourceRect = sourceRect;
@@ -104,6 +136,312 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
   }
 
   return candidates.sort((a, b) => b.confidence - a.confidence || a.scaleX - b.scaleX).slice(0, 5);
+}
+
+type SobelTile = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  score: number;
+};
+
+type SobelScaleVote = {
+  scale: number;
+  score: number;
+  votes: number;
+  phaseX: number;
+  phaseY: number;
+  phaseConfidenceX: number;
+  phaseConfidenceY: number;
+};
+
+type SobelTileVotingAnalysis = {
+  selectedTiles: SobelTile[];
+  histogram: { scale: number; votes: number; score: number }[];
+  votes: Array<SobelScaleVote | undefined>;
+  bestScore: number;
+  fallbackReason?: string;
+};
+
+function sobelTileVotingFallback(fallbackReason: string): SobelTileVotingAnalysis {
+  return {
+    selectedTiles: [],
+    histogram: [],
+    votes: [],
+    bestScore: 0,
+    fallbackReason
+  };
+}
+
+function analyzeSobelTileVoting(image: RGBAImage, maxScale: number): SobelTileVotingAnalysis {
+  const tileSize = Math.max(16, Math.min(64, Math.max(maxScale * 3, 24)));
+  const tiles = scoreSobelTiles(image, tileSize);
+  if (tiles.length === 0) {
+    return sobelTileVotingFallback("Sobel tile voting fallback: no informative edge tiles");
+  }
+
+  tiles.sort((a, b) => b.score - a.score);
+  const strongest = tiles[0]!.score;
+  const selectedTiles = tiles.filter((tile) => tile.score >= strongest * 0.18).slice(0, 24);
+  if (selectedTiles.length === 0) {
+    return sobelTileVotingFallback("Sobel tile voting fallback: edge tiles below confidence threshold");
+  }
+
+  const vertical = new Float64Array(image.width);
+  const horizontal = new Float64Array(image.height);
+  for (const tile of selectedTiles) {
+    accumulateSobelProfiles(image, tile, vertical, horizontal);
+  }
+
+  const verticalVotes = scaleVotesFromPeaks(vertical, maxScale);
+  const horizontalVotes = scaleVotesFromPeaks(horizontal, maxScale);
+  const combinedVotes = new Float64Array(maxScale + 1);
+  let maxVotes = 0;
+  for (let scale = 2; scale <= maxScale; scale += 1) {
+    combinedVotes[scale] = verticalVotes[scale]! + horizontalVotes[scale]!;
+    if (combinedVotes[scale]! > maxVotes) {
+      maxVotes = combinedVotes[scale]!;
+    }
+  }
+
+  const totalVertical = sum(vertical);
+  const totalHorizontal = sum(horizontal);
+  const maxVertical = max(vertical);
+  const maxHorizontal = max(horizontal);
+  const votes: Array<SobelScaleVote | undefined> = new Array(maxScale + 1);
+  const histogram: { scale: number; votes: number; score: number }[] = [];
+  let bestScore = 0;
+
+  for (let scale = 2; scale <= maxScale; scale += 1) {
+    const xPhase = bestPhaseWithDensity(vertical, scale, totalVertical, maxVertical);
+    const yPhase = bestPhaseWithDensity(horizontal, scale, totalHorizontal, maxHorizontal);
+    const phaseScore = (xPhase.confidence + yPhase.confidence) / 2;
+    const voteScore = maxVotes > 0 ? combinedVotes[scale]! / maxVotes : 0;
+    const score = Math.max(0, Math.min(1, phaseScore * 0.62 + voteScore * 0.38));
+    if (score <= 0.08) {
+      continue;
+    }
+
+    const vote: SobelScaleVote = {
+      scale,
+      score,
+      votes: combinedVotes[scale]!,
+      phaseX: (xPhase.phase + 1) % scale,
+      phaseY: (yPhase.phase + 1) % scale,
+      phaseConfidenceX: xPhase.confidence,
+      phaseConfidenceY: yPhase.confidence
+    };
+    votes[scale] = vote;
+    histogram.push({ scale, votes: roundScore(voteScore), score: roundScore(score) });
+    if (score > bestScore) {
+      bestScore = score;
+    }
+  }
+
+  histogram.sort((a, b) => b.score - a.score || b.votes - a.votes || b.scale - a.scale);
+
+  return {
+    selectedTiles,
+    histogram: histogram.slice(0, 6),
+    votes,
+    bestScore
+  };
+}
+
+function sobelDiagnostics(analysis: SobelTileVotingAnalysis, vote: SobelScaleVote): GridSobelTileVotingDiagnostics {
+  const diagnostics: GridSobelTileVotingDiagnostics = {
+    selectedTileCount: analysis.selectedTiles.length,
+    selectedTiles: analysis.selectedTiles.slice(0, 8).map((tile) => ({
+      x: tile.x,
+      y: tile.y,
+      w: tile.w,
+      h: tile.h,
+      score: roundScore(tile.score / ((analysis.selectedTiles[0]?.score ?? tile.score) || 1))
+    })),
+    scaleHistogram: analysis.histogram,
+    phaseConfidenceX: roundScore(Math.max(vote.phaseConfidenceX, vote.score * 0.8)),
+    phaseConfidenceY: roundScore(Math.max(vote.phaseConfidenceY, vote.score * 0.8))
+  };
+  if (analysis.fallbackReason) {
+    diagnostics.fallbackReason = analysis.fallbackReason;
+  }
+  return diagnostics;
+}
+
+function scoreSobelTiles(image: RGBAImage, tileSize: number): SobelTile[] {
+  const tiles: SobelTile[] = [];
+  for (let y = 0; y < image.height; y += tileSize) {
+    for (let x = 0; x < image.width; x += tileSize) {
+      const tile: SobelTile = {
+        x,
+        y,
+        w: Math.min(tileSize, image.width - x),
+        h: Math.min(tileSize, image.height - y),
+        score: 0
+      };
+      tile.score = sobelTileEnergy(image, tile);
+      if (tile.score > 0) {
+        tiles.push(tile);
+      }
+    }
+  }
+  return tiles;
+}
+
+function sobelTileEnergy(image: RGBAImage, tile: SobelTile): number {
+  let energy = 0;
+  const xStart = Math.max(1, tile.x);
+  const yStart = Math.max(1, tile.y);
+  const xEnd = Math.min(image.width - 1, tile.x + tile.w - 1);
+  const yEnd = Math.min(image.height - 1, tile.y + tile.h - 1);
+
+  for (let y = yStart; y < yEnd; y += 1) {
+    for (let x = xStart; x < xEnd; x += 1) {
+      energy += sobelMagnitude(image, x, y);
+    }
+  }
+
+  return energy;
+}
+
+function accumulateSobelProfiles(image: RGBAImage, tile: SobelTile, vertical: Float64Array, horizontal: Float64Array): void {
+  const xStart = Math.max(1, tile.x);
+  const yStart = Math.max(1, tile.y);
+  const xEnd = Math.min(image.width - 1, tile.x + tile.w - 1);
+  const yEnd = Math.min(image.height - 1, tile.y + tile.h - 1);
+
+  for (let y = yStart; y < yEnd; y += 1) {
+    for (let x = xStart; x < xEnd; x += 1) {
+      vertical[x] = vertical[x]! + sobelGradientX(image, x, y);
+      horizontal[y] = horizontal[y]! + sobelGradientY(image, x, y);
+    }
+  }
+}
+
+function sobelMagnitude(image: RGBAImage, x: number, y: number): number {
+  return sobelGradientX(image, x, y) + sobelGradientY(image, x, y);
+}
+
+function sobelGradientX(image: RGBAImage, x: number, y: number): number {
+  const width = image.width;
+  const data = image.data;
+  const top = (y - 1) * width;
+  const middle = y * width;
+  const bottom = (y + 1) * width;
+  const tl = alphaWeightedLuminance(data, (top + x - 1) * 4);
+  const tr = alphaWeightedLuminance(data, (top + x + 1) * 4);
+  const ml = alphaWeightedLuminance(data, (middle + x - 1) * 4);
+  const mr = alphaWeightedLuminance(data, (middle + x + 1) * 4);
+  const bl = alphaWeightedLuminance(data, (bottom + x - 1) * 4);
+  const br = alphaWeightedLuminance(data, (bottom + x + 1) * 4);
+
+  return Math.abs(-tl - 2 * ml - bl + tr + 2 * mr + br);
+}
+
+function sobelGradientY(image: RGBAImage, x: number, y: number): number {
+  const width = image.width;
+  const data = image.data;
+  const top = (y - 1) * width;
+  const bottom = (y + 1) * width;
+  const tl = alphaWeightedLuminance(data, (top + x - 1) * 4);
+  const tc = alphaWeightedLuminance(data, (top + x) * 4);
+  const tr = alphaWeightedLuminance(data, (top + x + 1) * 4);
+  const bl = alphaWeightedLuminance(data, (bottom + x - 1) * 4);
+  const bc = alphaWeightedLuminance(data, (bottom + x) * 4);
+  const br = alphaWeightedLuminance(data, (bottom + x + 1) * 4);
+
+  return Math.abs(-tl - 2 * tc - tr + bl + 2 * bc + br);
+}
+
+function alphaWeightedLuminance(data: Uint8ClampedArray, offset: number): number {
+  const alpha = data[offset + 3]!;
+  if (alpha <= 8) {
+    return 0;
+  }
+  return (((data[offset]! * 77 + data[offset + 1]! * 150 + data[offset + 2]! * 29) >> 8) * alpha) / 255;
+}
+
+function scaleVotesFromPeaks(profile: Float64Array, maxScale: number): Float64Array {
+  const votes = new Float64Array(maxScale + 1);
+  const peaks = profilePeaks(profile);
+  for (let i = 1; i < peaks.length; i += 1) {
+    const distance = peaks[i]! - peaks[i - 1]!;
+    if (distance < 2 || distance > maxScale * 4) {
+      continue;
+    }
+    for (let scale = 2; scale <= maxScale; scale += 1) {
+      const ratio = distance / scale;
+      const nearestMultiple = Math.max(1, Math.round(ratio));
+      if (nearestMultiple > 4) {
+        continue;
+      }
+      const expectedDistance = nearestMultiple * scale;
+      const tolerance = Math.max(1, scale * 0.2);
+      const error = Math.abs(distance - expectedDistance);
+      if (error > tolerance) {
+        continue;
+      }
+      votes[scale] = votes[scale]! + (1 - error / (tolerance + 1)) / nearestMultiple;
+    }
+  }
+  return votes;
+}
+
+function profilePeaks(profile: Float64Array): number[] {
+  const strongest = max(profile);
+  if (strongest <= 0) {
+    return [];
+  }
+
+  const threshold = strongest * 0.28;
+  const peaks: number[] = [];
+  for (let i = 1; i < profile.length - 1; i += 1) {
+    const value = profile[i]!;
+    if (value < threshold || value < profile[i - 1]! || value < profile[i + 1]!) {
+      continue;
+    }
+
+    const lastIndex = peaks[peaks.length - 1];
+    if (lastIndex !== undefined && i - lastIndex <= 2) {
+      if (value > profile[lastIndex]!) {
+        peaks[peaks.length - 1] = i;
+      }
+      continue;
+    }
+
+    peaks.push(i);
+  }
+  return peaks;
+}
+
+function bestPhaseWithDensity(
+  profile: Float64Array,
+  scale: number,
+  totalEnergy: number,
+  maxEnergy: number
+): { phase: number; confidence: number } {
+  let bestPhase = 0;
+  let bestConfidence = 0;
+
+  for (let phase = 0; phase < scale; phase += 1) {
+    let energy = 0;
+    let lineCount = 0;
+    for (let position = phase + scale; position < profile.length; position += scale) {
+      energy += profile[position]!;
+      lineCount += 1;
+    }
+
+    const coverage = totalEnergy > 0 ? energy / totalEnergy : 0;
+    const density = maxEnergy > 0 && lineCount > 0 ? energy / lineCount / maxEnergy : 0;
+    const confidence = Math.max(0, Math.min(1, coverage * 0.72 + Math.sqrt(Math.max(0, density)) * 0.28));
+    if (confidence > bestConfidence) {
+      bestConfidence = confidence;
+      bestPhase = phase;
+    }
+  }
+
+  return { phase: bestPhase, confidence: bestConfidence };
 }
 
 function roundScore(value: number): number {

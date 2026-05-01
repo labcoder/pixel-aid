@@ -245,7 +245,17 @@ export type GridCandidateDiagnostics = {
   sourceCoverage: number;
   confidenceLabel: "low" | "medium" | "high";
   notes: string[];
+  sobelTileVoting?: GridSobelTileVotingDiagnostics;
   drift?: GridDriftDiagnostics;
+};
+
+export type GridSobelTileVotingDiagnostics = {
+  selectedTileCount: number;
+  selectedTiles: { x: number; y: number; w: number; h: number; score: number }[];
+  scaleHistogram: { scale: number; votes: number; score: number }[];
+  phaseConfidenceX: number;
+  phaseConfidenceY: number;
+  fallbackReason?: string;
 };
 
 export type GridDriftDiagnostics = {

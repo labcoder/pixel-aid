@@ -26,6 +26,7 @@ export type {
   GridCandidate,
   GridCandidateDiagnostics,
   GridDriftDiagnostics,
+  GridSobelTileVotingDiagnostics,
   OutlineMode,
   PaletteDiagnostics,
   PaletteDitheringMode,
