@@ -111,6 +111,8 @@ describe("cleanup fixture suite", () => {
     expect(bodyPixel[2]).toBeGreaterThan(160);
     expect(bodyPixel[0] - bodyPixel[2]).toBeGreaterThan(30);
     expect(signature.palette).not.toContain("#cacaca");
+    expect(countSoftAlphaPixels(result.image.data)).toBe(0);
+    expect(countVisibleBrightNeutralPixels(result.image.data)).toBe(0);
     expect(countTransparentPixelsWithUnsafeRgb(result.image.data, fixture.expected.alpha!.transparentRgb!)).toBe(0);
   });
 
@@ -347,6 +349,25 @@ function countSoftAlphaPixels(data: Uint8ClampedArray): number {
   for (let offset = 0; offset < data.length; offset += 4) {
     const alpha = data[offset + 3]!;
     if (alpha > 0 && alpha < 255) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countVisibleBrightNeutralPixels(data: Uint8ClampedArray): number {
+  let count = 0;
+  for (let offset = 0; offset < data.length; offset += 4) {
+    if (data[offset + 3]! < 16) {
+      continue;
+    }
+
+    const r = data[offset]!;
+    const g = data[offset + 1]!;
+    const b = data[offset + 2]!;
+    const brightness = r + g + b;
+    const spread = Math.max(r, g, b) - Math.min(r, g, b);
+    if (brightness >= 540 && spread <= 16) {
       count += 1;
     }
   }
