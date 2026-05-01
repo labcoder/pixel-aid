@@ -2,6 +2,8 @@
 
 PixelAid fixtures are deterministic TypeScript generators. The repo does not commit large PNG goldens; tests create compact signatures and structural assertions from generated `RGBAImage` buffers.
 
+Release-facing onboarding/demo samples are documented in `docs/onboarding-samples.md`. The canonical sample registry is `releaseOnboardingSamples` in `packages/fixtures/src/onboardingSamples.ts`; it links demo workflows to existing deterministic fixtures and records first-party provenance.
+
 ## Visual Regression Goldens
 
 `packages/fixtures/src/visualRegression.ts` defines the compact golden-signature suite used by `packages/core/src/visualRegression.test.ts`. Each case runs a real `fixImage` path and compares:
