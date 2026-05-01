@@ -31,6 +31,10 @@ export { createPhaserAtlasExport } from "./phaser";
 export type { PhaserAtlas } from "./phaser";
 export { createTexturePackerAtlas, createTexturePackerAtlasExport } from "./texturePacker";
 export type { TexturePackerAtlas, TexturePackerAtlasOptions, TexturePackerFrame } from "./texturePacker";
+export { createTiledTileset, createTiledTilesetExport } from "./tiled";
+export type { TiledProperty, TiledTileset, TiledTilesetOptions } from "./tiled";
+export { createLdtkTilesetCompanion, createLdtkTilesetExport } from "./ldtk";
+export type { LdtkTilesetCompanion, LdtkTilesetOptions } from "./ldtk";
 export { createAsepriteCompanionExport, importAsepriteWorkflow } from "./aseprite";
 export type {
   AsepriteCompanionExport,

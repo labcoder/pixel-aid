@@ -1,4 +1,4 @@
-export type EngineExportTarget = "godot" | "unity" | "phaser" | "texturepacker";
+export type EngineExportTarget = "godot" | "unity" | "phaser" | "texturepacker" | "tiled" | "ldtk";
 
 export type EngineExportSeverity = "info" | "warning" | "error";
 
