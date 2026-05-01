@@ -197,9 +197,13 @@ import {
   type PivotPreset
 } from "./lib/sheetControls";
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
+import { createSheetDetectorReview, reconcileSheetDetectorWarnings, type SheetDetectorCandidate } from "./lib/sheetDetectorReview";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./lib/sheetLayoutModel";
 import {
+  fillRowToFrameCount,
+  fillSparseRowsToFrameCount,
+  insertFrameAtRowEdge,
   insertFrameNearSelection,
   insertRowNearSelection,
   removeFrameAtSelection,
@@ -1020,6 +1024,33 @@ export function App() {
   const canEditManualSheetCell = hasDetectedSheetLayout && selectedDetectedFrame !== undefined;
   const canEditManualSheetRow = hasDetectedSheetLayout && selectedManualAnimation !== undefined;
   const canRemoveManualSheetRow = canEditManualSheetRow && detectedRowAnimations.length > 1;
+  const sheetDetectorReview = useMemo(
+    () =>
+      hasDetectedSheetLayout
+        ? createSheetDetectorReview({
+            frames: detectedSheetFrames,
+            animations: detectedRowAnimations,
+            selectedAnimationName: selectedManualAnimationName,
+            margin: sheetMargin,
+            spacing: sheetSpacing,
+            warnings: detectedSheetWarnings,
+            diagnostics: detectedSheetDiagnostics
+          })
+        : null,
+    [
+      detectedRowAnimations,
+      detectedSheetDiagnostics,
+      detectedSheetFrames,
+      detectedSheetWarnings,
+      hasDetectedSheetLayout,
+      selectedManualAnimationName,
+      sheetMargin,
+      sheetSpacing
+    ]
+  );
+  const selectedSparseRow = sheetDetectorReview?.selectedRow;
+  const canRecoverSelectedSparseRow = selectedAsset !== null && selectedSparseRow !== undefined;
+  const canFillSparseRows = selectedAsset !== null && sheetDetectorReview?.summary.hasSparseRows === true;
   const canUndoFrameEdit = canUndoFrameEditHistory(frameEditHistory);
   const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
   const timelineState = getTimelineState(mode, timelineFrames.length);
@@ -2419,6 +2450,7 @@ export function App() {
       detectedRowAnimationsRef.current = result.animations;
       setDetectedSheetFrames(result.frames);
       setDetectedRowAnimations(result.animations);
+      setDetectedSheetWarnings((current) => reconcileSheetDetectorWarnings({ animations: result.animations, warnings: current }));
       selectedFrameIndexRef.current = result.selectedFrameIndex;
       setSelectedFrameIndex(result.selectedFrameIndex);
       selectedAnimationNameRef.current = result.selectedAnimationName;
@@ -2582,6 +2614,132 @@ export function App() {
       `Removed row ${selectedManualAnimationName}`
     );
   }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, selectedManualAnimationName, sheetMargin, sheetSpacing]);
+
+  const recoverFirstCellForSelectedRow = useCallback(() => {
+    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      insertFrameAtRowEdge({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedSparseRow.rowName,
+        edge: "start",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Recovered first cell for ${selectedSparseRow.rowName}`
+    );
+  }, [
+    applyManualSheetEdit,
+    detectedRowAnimations,
+    detectedSheetFrames,
+    gridScaleX,
+    gridScaleY,
+    selectedAsset,
+    selectedSparseRow,
+    sheetMargin,
+    sheetSpacing
+  ]);
+
+  const recoverLastCellForSelectedRow = useCallback(() => {
+    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      insertFrameAtRowEdge({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedSparseRow.rowName,
+        edge: "end",
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Recovered last cell for ${selectedSparseRow.rowName}`
+    );
+  }, [
+    applyManualSheetEdit,
+    detectedRowAnimations,
+    detectedSheetFrames,
+    gridScaleX,
+    gridScaleY,
+    selectedAsset,
+    selectedSparseRow,
+    sheetMargin,
+    sheetSpacing
+  ]);
+
+  const fillSelectedSparseRow = useCallback(() => {
+    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      fillRowToFrameCount({
+        frames: detectedSheetFrames,
+        animations: detectedRowAnimations,
+        selectedAnimationName: selectedSparseRow.rowName,
+        targetFrameCount: selectedSparseRow.targetFrameCount,
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        scaleX: gridScaleX,
+        scaleY: gridScaleY,
+        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+      }),
+      `Filled ${selectedSparseRow.rowName} to ${selectedSparseRow.targetFrameCount} cells`
+    );
+  }, [
+    applyManualSheetEdit,
+    detectedRowAnimations,
+    detectedSheetFrames,
+    gridScaleX,
+    gridScaleY,
+    selectedAsset,
+    selectedSparseRow,
+    sheetMargin,
+    sheetSpacing
+  ]);
+
+  const applySheetDetectorCandidate = useCallback(
+    (candidate: SheetDetectorCandidate) => {
+      if (!selectedAsset || candidate.action !== "fillSparseRows" || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+        return;
+      }
+
+      applyManualSheetEdit(
+        fillSparseRowsToFrameCount({
+          frames: detectedSheetFrames,
+          animations: detectedRowAnimations,
+          targetFrameCount: sheetDetectorReview?.summary.maxFrameCount ?? 0,
+          margin: sheetMargin,
+          spacing: sheetSpacing,
+          scaleX: gridScaleX,
+          scaleY: gridScaleY,
+          sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
+        }),
+        `Applied detector candidate: ${candidate.title}`
+      );
+    },
+    [
+      applyManualSheetEdit,
+      detectedRowAnimations,
+      detectedSheetFrames,
+      gridScaleX,
+      gridScaleY,
+      selectedAsset,
+      sheetDetectorReview?.summary.maxFrameCount,
+      sheetMargin,
+      sheetSpacing
+    ]
+  );
 
   const moveDetectedSourceFrame = useCallback(
     (frameIndex: number, delta: { x: number; y: number }) => {
@@ -3421,6 +3579,61 @@ export function App() {
               <p key={note}>{note}</p>
             ))}
             <small>Detected rows keep their source boxes. Cell edits change the packed output canvas, not the source selection.</small>
+          </div>
+        ) : null}
+        {sheetDetectorReview ? (
+          <div className="sheet-detector-review" aria-label="Sheet detector review">
+            <div className="sheet-detector-review-heading">
+              <strong>Detector review</strong>
+              <span>
+                {sheetDetectorReview.summary.rowCount} rows / {sheetDetectorReview.summary.frameCount} cells
+              </span>
+            </div>
+            <div className="sheet-detector-confidence-grid">
+              {sheetDetectorReview.confidenceItems.map((item) => (
+                <div key={item.label} className={`sheet-detector-confidence is-${item.tone}`}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  <small>{item.detail}</small>
+                </div>
+              ))}
+            </div>
+            <div className="sheet-detector-candidates">
+              {sheetDetectorReview.candidates.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  disabled={candidate.action === "none" || !canFillSparseRows}
+                  onClick={() => applySheetDetectorCandidate(candidate)}
+                >
+                  <span>{candidate.title}</span>
+                  <strong>{candidate.frameCount} cells</strong>
+                  <small>{candidate.description}</small>
+                </button>
+              ))}
+            </div>
+            {selectedSparseRow ? (
+              <div className="sheet-detector-row-recovery">
+                <div>
+                  <strong>{selectedSparseRow.rowName}</strong>
+                  <span>
+                    {selectedSparseRow.frameCount} / {selectedSparseRow.targetFrameCount} cells
+                  </span>
+                </div>
+                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={recoverFirstCellForSelectedRow}>
+                  <SkipBack size={13} />
+                  First
+                </button>
+                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={recoverLastCellForSelectedRow}>
+                  <SkipForward size={13} />
+                  Last
+                </button>
+                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={fillSelectedSparseRow}>
+                  <WandSparkles size={13} />
+                  Fill row
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (

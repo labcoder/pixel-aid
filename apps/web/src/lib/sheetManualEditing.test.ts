@@ -1,6 +1,14 @@
 import { describe, expect, test } from "vitest";
 import type { AnimationTag, Rect, SpriteFrame } from "@pixelaid/shared";
-import { insertFrameNearSelection, insertRowNearSelection, removeFrameAtSelection, removeRowAtSelection } from "./sheetManualEditing";
+import {
+  fillRowToFrameCount,
+  fillSparseRowsToFrameCount,
+  insertFrameAtRowEdge,
+  insertFrameNearSelection,
+  insertRowNearSelection,
+  removeFrameAtSelection,
+  removeRowAtSelection
+} from "./sheetManualEditing";
 
 const frames: SpriteFrame[] = [
   frame("row_1_000", "row_1", { x: 0, y: 0, w: 64, h: 64 }, { x: 100, y: 20, w: 128, h: 128 }),
@@ -214,6 +222,97 @@ describe("manual sheet editing", () => {
     expect(result.frames.map((item) => item.name)).toEqual(["row_2_000"]);
     expect(result.selectedFrameIndex).toBe(0);
     expect(result.selectedAnimationName).toBe("row_2");
+  });
+
+  test("recovers a missing first cell at the selected row edge", () => {
+    const result = insertFrameAtRowEdge({
+      frames,
+      animations,
+      selectedAnimationName: "row_1",
+      edge: "start",
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 512, height: 512 }
+    });
+
+    expect(result.animations[0]?.frameNames).toEqual(["row_1_002", "row_1_000", "row_1_001"]);
+    expect(result.selectedAnimationName).toBe("row_1");
+    expect(result.selectedFrameIndex).toBe(0);
+    expect(result.frames[0]).toMatchObject({
+      name: "row_1_002",
+      tags: ["row_1"],
+      rect: { x: 0, y: 0, w: 64, h: 64 },
+      sourceRect: { x: 0, y: 20, w: 128, h: 128 }
+    });
+    expect(result.frames[1]?.rect).toEqual({ x: 64, y: 0, w: 64, h: 64 });
+  });
+
+  test("recovers a missing last cell at the selected row edge", () => {
+    const result = insertFrameAtRowEdge({
+      frames,
+      animations,
+      selectedAnimationName: "row_2",
+      edge: "end",
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 512, height: 512 }
+    });
+
+    expect(result.animations[1]?.frameNames).toEqual(["row_2_000", "row_2_001"]);
+    expect(result.selectedAnimationName).toBe("row_2");
+    expect(result.selectedFrameIndex).toBe(3);
+    expect(result.frames[3]).toMatchObject({
+      name: "row_2_001",
+      tags: ["row_2"],
+      rect: { x: 64, y: 64, w: 64, h: 64 },
+      sourceRect: { x: 228, y: 180, w: 128, h: 128 }
+    });
+  });
+
+  test("fills a sparse row to a target frame count", () => {
+    const result = fillRowToFrameCount({
+      frames,
+      animations,
+      selectedAnimationName: "row_2",
+      targetFrameCount: 3,
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 640, height: 512 }
+    });
+
+    expect(result.animations[1]?.frameNames).toEqual(["row_2_000", "row_2_001", "row_2_002"]);
+    expect(result.selectedAnimationName).toBe("row_2");
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001", "row_2_000", "row_2_001", "row_2_002"]);
+    expect(result.frames[3]?.sourceRect).toEqual({ x: 228, y: 180, w: 128, h: 128 });
+    expect(result.frames[4]?.sourceRect).toEqual({ x: 356, y: 180, w: 128, h: 128 });
+    expect(result.frames[4]?.rect).toEqual({ x: 128, y: 64, w: 64, h: 64 });
+  });
+
+  test("fills every sparse row to the widest row count", () => {
+    const result = fillSparseRowsToFrameCount({
+      frames,
+      animations,
+      targetFrameCount: 2,
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 512, height: 512 }
+    });
+
+    expect(result.animations.map((animation) => animation.frameNames)).toEqual([
+      ["row_1_000", "row_1_001"],
+      ["row_2_000", "row_2_001"]
+    ]);
+    expect(result.selectedAnimationName).toBe("row_2");
+    expect(result.selectedFrameIndex).toBe(3);
+    expect(result.frames[3]?.sourceRect).toEqual({ x: 228, y: 180, w: 128, h: 128 });
   });
 });
 
