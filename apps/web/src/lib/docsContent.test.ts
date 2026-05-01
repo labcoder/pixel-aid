@@ -14,6 +14,8 @@ describe("docs content", () => {
     expect(getDocsSection("algorithms")?.markdown).toContain("## Grid Detection");
     expect(getDocsSection("performance")?.markdown).toContain("Performance");
     expect(getDocsSection("licensing")?.markdown).toContain("Dependency");
+    expect(getDocsSection("troubleshooting")?.markdown).toContain("Diagnostics");
+    expect(getDocsSection("launch-qa")?.markdown).toContain("Manual QA Matrix");
   });
 
   test("keeps section ids unique", () => {

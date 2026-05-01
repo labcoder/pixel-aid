@@ -1,4 +1,12 @@
 export {
+  createDiagnosticReport,
+  sanitizeDiagnosticValue,
+  type CreateDiagnosticReportInput,
+  type DiagnosticAppInfo,
+  type DiagnosticReport,
+  type DiagnosticStatus,
+} from "./diagnostics";
+export {
   decodePngFile,
   encodePngFile,
   readRgbaImageFile,

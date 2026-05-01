@@ -60,6 +60,21 @@ button:disabled {
   background: #191c1c;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[role="separator"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+button:focus-visible {
+  border-color: var(--amber);
+}
+
 .file-input {
   display: none;
 }
@@ -74,6 +89,51 @@ button:disabled {
     "bottom bottom bottom" var(--bottom-panel-height) /
     260px minmax(420px, 1fr) 300px;
   overflow: hidden;
+}
+
+.error-boundary-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  color: var(--text);
+  background: var(--bg);
+}
+
+.error-boundary-shell section {
+  width: min(560px, 100%);
+  display: grid;
+  gap: 0.8rem;
+  padding: 20px;
+  background: #111616;
+  border: 1px solid #385f5a;
+  border-radius: 8px;
+}
+
+.error-boundary-shell h1,
+.error-boundary-shell p {
+  margin: 0;
+}
+
+.error-boundary-shell p,
+.error-boundary-shell pre {
+  color: var(--muted);
+}
+
+.error-boundary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.error-boundary-shell pre {
+  max-height: 140px;
+  overflow: auto;
+  padding: 0.7rem;
+  background: #0f1212;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  white-space: pre-wrap;
 }
 
 .editor-shell.is-drop-active .viewport-canvas-wrap::after {
@@ -200,6 +260,12 @@ button:disabled {
   padding: 0;
 }
 
+.sample-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
 .import-status {
   display: flex;
   align-items: center;
@@ -243,6 +309,13 @@ button:disabled {
 
 .asset-list li + li {
   margin-top: 0.45rem;
+}
+
+.asset-list-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  gap: 0.35rem;
+  align-items: stretch;
 }
 
 .asset-list .muted-row,
@@ -433,6 +506,7 @@ button:disabled {
 .asset-list .asset-row {
   min-height: 52px;
   padding: 0.4rem;
+  margin: 0;
 }
 
 .asset-thumb {
@@ -470,6 +544,48 @@ button:disabled {
   font-size: 0.72rem;
 }
 
+.sample-row {
+  width: 100%;
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 0.6rem;
+  color: var(--muted);
+  background: #131818;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: left;
+}
+
+.sample-row:hover:not(:disabled),
+.sample-row:focus-visible {
+  color: var(--text);
+  border-color: #385f5a;
+  background: #17201f;
+}
+
+.sample-row span {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.sample-row strong,
+.sample-row small {
+  overflow-wrap: anywhere;
+}
+
+.sample-row strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.sample-row small {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.25;
+}
+
 .asset-list .asset-row.active-asset {
   color: var(--text);
   border-color: var(--cyan);
@@ -477,8 +593,8 @@ button:disabled {
 }
 
 .icon-button {
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  min-height: 30px;
   margin-left: auto;
   display: grid;
   place-items: center;
@@ -701,6 +817,10 @@ button:disabled {
   box-shadow: inset 0 0 0 1px var(--amber);
 }
 
+.sprite-sandbox-canvas:focus-visible {
+  outline-offset: -3px;
+}
+
 .viewport-strip {
   display: flex;
   align-items: center;
@@ -851,6 +971,14 @@ button:disabled {
 
 .viewport-canvas-wrap canvas:active {
   cursor: grabbing;
+}
+
+.viewport-canvas-wrap canvas:focus-visible,
+.timeline-viewport-player canvas:focus-visible,
+.tile-repeat-preview-canvas:focus-visible,
+.frame-preview-canvas:focus-visible,
+.grid-candidate-thumb:focus-visible {
+  outline-offset: -3px;
 }
 
 .viewport-empty-state {
@@ -2455,6 +2583,49 @@ button:disabled {
 
 .log-list li + li {
   margin-top: 0.35rem;
+}
+
+.console-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+}
+
+.console-heading button {
+  min-height: 28px;
+  padding: 0 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.operation-error {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.65rem;
+  padding: 0.6rem;
+  color: #ffd8d8;
+  background: #241515;
+  border: 1px solid #6b3535;
+  border-radius: 6px;
+  font-size: 0.72rem;
+}
+
+.operation-error strong {
+  color: #ff8b8b;
+}
+
+.operation-error span,
+.operation-error small {
+  overflow-wrap: anywhere;
+}
+
+.operation-error button {
+  width: fit-content;
+  min-height: 26px;
+  margin-top: 0.2rem;
+  padding: 0 0.5rem;
+  font-size: 0.68rem;
 }
 
 .metric-sections {

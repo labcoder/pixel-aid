@@ -5,6 +5,8 @@ export { compareGoldenSignatures, createGoldenSignature } from "./goldenSignatur
 export type { GoldenSignatureOptions } from "./goldenSignature";
 export { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";
 export { largeBackgroundFixtures } from "./largeBackgrounds";
+export { releaseOnboardingSamples } from "./onboardingSamples";
+export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
 export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";

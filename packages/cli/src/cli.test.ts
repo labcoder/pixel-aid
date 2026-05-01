@@ -307,6 +307,68 @@ describe("pixelaid CLI", () => {
     expect(missingCode).toBe(3);
     expect(parseStdout(missing).error.code).toBe("input_not_found");
   });
+
+  it("writes sanitized diagnostics for failed commands without changing JSON stdout", async () => {
+    await withFixture(async ({ dir }) => {
+      const capture = createCapture();
+      const diagnostics = path.join(dir, "failure-diagnostics.json");
+      const code = await runCli([
+        "--diagnostics",
+        diagnostics,
+        "fix",
+        "--json",
+        "--api-key",
+        "sk-test-123456789",
+      ], capture);
+      const body = parseStdout(capture);
+      const report = JSON.parse(await readFile(diagnostics, "utf8"));
+
+      expect(code).toBe(2);
+      expect(body).toMatchObject({ ok: false, command: "fix", error: { code: "invalid_options" } });
+      expect(report).toMatchObject({
+        schemaVersion: 1,
+        app: { name: "PixelAid", packageName: "@pixelaid/cli" },
+        command: "fix",
+        status: "failure",
+        exitCode: 2,
+        error: { code: "invalid_options", exitCode: 2 },
+      });
+      expect(report.metadata.argv).toEqual(["fix", "--json", "--api-key", "[REDACTED]"]);
+      expect(JSON.stringify(report)).not.toContain("sk-test-123456789");
+    });
+  });
+
+  it("writes diagnostics for successful commands when requested", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const diagnostics = path.join(dir, "success-diagnostics.json");
+      const code = await runCli([
+        "--diagnostics",
+        diagnostics,
+        "inspect",
+        input,
+        "--colors",
+        "4",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+      const report = JSON.parse(await readFile(diagnostics, "utf8"));
+
+      expect(code).toBe(0);
+      expect(body).toMatchObject({ ok: true, command: "inspect" });
+      expect(report).toMatchObject({
+        schemaVersion: 1,
+        command: "inspect",
+        operation: "inspect_image",
+        status: "success",
+        exitCode: 0,
+        options: { maxColors: 4 },
+        paths: { inputPath: input },
+        recoveryHints: ["No recovery action needed."],
+      });
+      expect(report.error).toBeUndefined();
+    });
+  });
 });
 
 function createCapture(): CliCapture {

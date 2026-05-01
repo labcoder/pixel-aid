@@ -49,6 +49,12 @@ Useful fix flags:
 - `--outline-color #101112`
 - `--outline-source-colors #102020,#203030`
 
+Diagnostics:
+
+- `--diagnostics <path>` writes a local JSON diagnostic report for the command without changing normal stdout or `--json` output.
+- Reports include the PixelAid package version, command, operation, timestamp, exit code, sanitized options, paths, metadata, warnings, errors, and recovery hints.
+- Likely secrets, tokens, API keys, authorization headers, and prompt/private-prompt fields are redacted before writing the file.
+
 Sprite sheet flags:
 
 - `--detect-sheet`

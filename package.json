@@ -2,6 +2,7 @@
   "name": "pixelaid",
   "version": "0.1.0",
   "private": true,
+  "license": "AGPL-3.0-only",
   "type": "module",
   "description": "High-performance editor for turning fake pixel-art images into real engine-ready pixel assets.",
   "workspaces": [
@@ -15,6 +16,8 @@
     "desktop:build": "npm run check -w @pixelaid/desktop && npm run desktop:build -w @pixelaid/desktop",
     "desktop:info": "npm run info -w @pixelaid/desktop",
     "brand:sync": "node scripts/sync-brand-assets.mjs",
+    "license:report": "node scripts/license-report.mjs",
+    "license:check": "node scripts/license-report.mjs --check",
     "build": "npm run build --workspaces --if-present",
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

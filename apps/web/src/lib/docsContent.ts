@@ -3,6 +3,9 @@ import architectureMarkdown from "../../../../docs/architecture.md?raw";
 import algorithmsMarkdown from "../../../../docs/algorithms.md?raw";
 import performanceMarkdown from "../../../../docs/performance.md?raw";
 import licensingMarkdown from "../../../../docs/licensing.md?raw";
+import onboardingSamplesMarkdown from "../../../../docs/onboarding-samples.md?raw";
+import troubleshootingMarkdown from "../../../../docs/troubleshooting.md?raw";
+import launchQaMarkdown from "../../../../docs/launch-qa.md?raw";
 
 export type DocsSection = {
   id: string;
@@ -61,6 +64,12 @@ export const docsSections: DocsSection[] = [
     markdown: extractMarkdownSection(editorMarkdown, "Export")
   },
   {
+    id: "onboarding-samples",
+    title: "Samples",
+    tooltip: "Release sample workflows for fake-grid sprites, alpha cleanup, sheets, tilesets, and backgrounds.",
+    markdown: onboardingSamplesMarkdown
+  },
+  {
     id: "architecture",
     title: "Architecture",
     tooltip: "Package boundaries, data flow, and extension points.",
@@ -83,6 +92,18 @@ export const docsSections: DocsSection[] = [
     title: "Licensing",
     tooltip: "License strategy and dependency policy.",
     markdown: licensingMarkdown
+  },
+  {
+    id: "troubleshooting",
+    title: "Troubleshooting",
+    tooltip: "Diagnostics export and common recovery paths.",
+    markdown: troubleshootingMarkdown
+  },
+  {
+    id: "launch-qa",
+    title: "Launch QA",
+    tooltip: "Release-candidate smoke tests, beta feedback, and privacy guidance.",
+    markdown: launchQaMarkdown
   }
 ];
 
