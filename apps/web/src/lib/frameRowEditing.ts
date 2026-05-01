@@ -60,6 +60,7 @@ export function resizeAnimationRowFromSourceFrame({
     spacing,
     scaleX,
     scaleY,
-    sourceSize
+    sourceSize,
+    resizeSourceFootprints: true
   });
 }

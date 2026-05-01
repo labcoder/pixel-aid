@@ -102,6 +102,30 @@ describe("sheet layout model", () => {
     expect(idleFrames[0]?.sourceRect).toEqual(frames[0]?.sourceRect);
   });
 
+  test("keeps detected source boxes when resizing output cells with source grid context", () => {
+    const resized = resizeAnimationCells({
+      frames,
+      animations,
+      animationName: "idle",
+      cellWidth: 60,
+      cellHeight: 60,
+      margin: 0,
+      spacing: 0,
+      scaleX: 4,
+      scaleY: 4,
+      sourceSize: { width: 2048, height: 1024 }
+    });
+
+    const idleFrames = resized.filter((frame) => frame.tags?.includes("idle"));
+
+    expect(idleFrames.map((frame) => frame.rect)).toEqual([
+      { x: 0, y: 0, w: 60, h: 60 },
+      { x: 60, y: 0, w: 60, h: 60 },
+      { x: 120, y: 0, w: 60, h: 60 }
+    ]);
+    expect(idleFrames.map((frame) => frame.sourceRect)).toEqual(frames.slice(0, 3).map((frame) => frame.sourceRect));
+  });
+
   test("can resize animation row source footprints around their centers to match the output cell scale", () => {
     const resized = resizeAnimationCells({
       frames,
@@ -113,7 +137,8 @@ describe("sheet layout model", () => {
       spacing: 0,
       scaleX: 4,
       scaleY: 4,
-      sourceSize: { width: 2048, height: 1024 }
+      sourceSize: { width: 2048, height: 1024 },
+      resizeSourceFootprints: true
     });
 
     const idleFrames = resized.filter((frame) => frame.tags?.includes("idle"));
