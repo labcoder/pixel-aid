@@ -4,6 +4,7 @@ import type { FramePreviewPlacement } from "../lib/frameNormalization";
 import { tickPlayback, type PlaybackDirection, type PlaybackStepDirection } from "../lib/playbackModel";
 import { getTimelineViewportLayout, type TimelineViewportPane } from "../lib/timelineViewportLayout";
 import type { TimelineViewportSourceMode } from "../lib/timelineViewportSources";
+import type { DiagnosticOverlayMask, DiagnosticOverlayModel } from "../lib/diagnosticOverlays";
 
 export type TimelineViewportCanvasProps = {
   inputImage: RGBAImage | null;
@@ -18,6 +19,7 @@ export type TimelineViewportCanvasProps = {
   direction: PlaybackDirection;
   playDirection: PlaybackStepDirection;
   showOnionSkin: boolean;
+  diagnosticOverlay?: DiagnosticOverlayModel | undefined;
   onFrameCommit: (timelinePosition: number, playDirection: PlaybackStepDirection) => void;
   onPlaybackStop?: () => void;
 };
@@ -41,6 +43,7 @@ export function TimelineViewportCanvas({
   direction,
   playDirection,
   showOnionSkin,
+  diagnosticOverlay,
   onFrameCommit,
   onPlaybackStop
 }: TimelineViewportCanvasProps) {
@@ -48,6 +51,14 @@ export function TimelineViewportCanvas({
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
   const inputCanvas = useMemo(() => (inputImage ? imageToCanvas(inputImage) : null), [inputImage]);
   const outputCanvas = useMemo(() => (outputImage ? imageToCanvas(outputImage) : null), [outputImage]);
+  const inputOverlayCanvas = useMemo(
+    () => (diagnosticOverlay?.sourceMask ? maskToCanvas(diagnosticOverlay.sourceMask) : null),
+    [diagnosticOverlay?.sourceMask]
+  );
+  const outputOverlayCanvas = useMemo(
+    () => (diagnosticOverlay?.fixedMask ? maskToCanvas(diagnosticOverlay.fixedMask) : null),
+    [diagnosticOverlay?.fixedMask]
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -95,6 +106,8 @@ export function TimelineViewportCanvas({
         canvas,
         inputCanvas,
         outputCanvas,
+        inputOverlayCanvas,
+        outputOverlayCanvas,
         inputPlacements,
         outputPlacements,
         sourceMode,
@@ -127,12 +140,14 @@ export function TimelineViewportCanvas({
     direction,
     fps,
     inputCanvas,
+    inputOverlayCanvas,
     inputPlacements,
     isPlaying,
     loop,
     onFrameCommit,
     onPlaybackStop,
     outputCanvas,
+    outputOverlayCanvas,
     outputPlacements,
     playDirection,
     selectedTimelinePosition,
@@ -151,6 +166,8 @@ function drawCanvas({
   canvas,
   inputCanvas,
   outputCanvas,
+  inputOverlayCanvas,
+  outputOverlayCanvas,
   inputPlacements,
   outputPlacements,
   sourceMode,
@@ -161,6 +178,8 @@ function drawCanvas({
   canvas: HTMLCanvasElement;
   inputCanvas: HTMLCanvasElement | null;
   outputCanvas: HTMLCanvasElement | null;
+  inputOverlayCanvas: HTMLCanvasElement | null;
+  outputOverlayCanvas: HTMLCanvasElement | null;
   inputPlacements: readonly FramePreviewPlacement[];
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
@@ -205,8 +224,9 @@ function drawCanvas({
 
   for (const pane of layout.panes) {
     const sourceCanvas = pane.id === "output" ? outputCanvas : inputCanvas;
+    const overlayCanvas = pane.id === "output" ? outputOverlayCanvas : inputOverlayCanvas;
     const placements = pane.id === "output" ? outputPlacements : inputPlacements;
-    drawPane(context, pane, sourceCanvas, placements, frameIndex, showOnionSkin, wrapOnion);
+    drawPane(context, pane, sourceCanvas, overlayCanvas, placements, frameIndex, showOnionSkin, wrapOnion);
   }
 
   if (layout.dividerX !== undefined) {
@@ -224,6 +244,7 @@ function drawPane(
   context: CanvasRenderingContext2D,
   pane: TimelineViewportPane,
   sourceCanvas: HTMLCanvasElement | null,
+  overlayCanvas: HTMLCanvasElement | null,
   placements: readonly FramePreviewPlacement[],
   frameIndex: number,
   showOnionSkin: boolean,
@@ -253,6 +274,9 @@ function drawPane(
   const placement = getPlacement(placements, frameIndex);
   if (placement) {
     drawFramePlacement(context, sourceCanvas, placement, pane.drawRect.x, pane.drawRect.y, pane.scale, 1);
+    if (overlayCanvas) {
+      drawFramePlacement(context, overlayCanvas, placement, pane.drawRect.x, pane.drawRect.y, pane.scale, 1);
+    }
     drawFrameGuides(context, pane, placement, frameIndex, placements.length);
   }
 
@@ -407,6 +431,37 @@ function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
   context.imageSmoothingEnabled = false;
   context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
   return canvas;
+}
+
+function maskToCanvas(mask: DiagnosticOverlayMask): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = mask.width;
+  canvas.height = mask.height;
+  const context = canvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to create timeline diagnostics overlay canvas");
+  }
+
+  const [r, g, b] = hexToRgb(mask.color);
+  const alpha = Math.round(Math.max(0, Math.min(1, mask.alpha)) * 255);
+  const image = context.createImageData(mask.width, mask.height);
+  for (let index = 0; index < mask.data.length; index += 1) {
+    if (mask.data[index] !== 1) {
+      continue;
+    }
+    const offset = index * 4;
+    image.data[offset] = r;
+    image.data[offset + 1] = g;
+    image.data[offset + 2] = b;
+    image.data[offset + 3] = alpha;
+  }
+  context.putImageData(image, 0, 0);
+  return canvas;
+}
+
+function hexToRgb(color: string): [number, number, number] {
+  const normalized = /^#[0-9a-fA-F]{6}$/.test(color) ? color.slice(1) : "ffffff";
+  return [Number.parseInt(normalized.slice(0, 2), 16), Number.parseInt(normalized.slice(2, 4), 16), Number.parseInt(normalized.slice(4, 6), 16)];
 }
 
 function drawChecker(context: CanvasRenderingContext2D, width: number, height: number): void {

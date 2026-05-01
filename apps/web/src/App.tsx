@@ -85,6 +85,11 @@ import {
 } from "./lib/assets";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
+import {
+  createDiagnosticOverlayModel,
+  diagnosticOverlayOptions,
+  type DiagnosticOverlayMode
+} from "./lib/diagnosticOverlays";
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
 import {
   createDefaultEditorPreferences,
@@ -390,6 +395,7 @@ export function App() {
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
+  const [diagnosticOverlayMode, setDiagnosticOverlayMode] = useState<DiagnosticOverlayMode>("none");
   const [zoom, setZoom] = useState(initialSettings.zoom);
   const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
@@ -917,6 +923,33 @@ export function App() {
         fixedImage: fixResult?.image ?? null
       }),
     [canvasViewMode, fixResult?.image, selectedAsset?.image]
+  );
+  const diagnosticOverlay = useMemo(
+    () =>
+      createDiagnosticOverlayModel({
+        mode: diagnosticOverlayMode,
+        sourceImage: selectedAsset?.image ?? null,
+        fixedImage: fixResult?.image ?? null,
+        palette: fixResult?.palette ?? [],
+        alphaThreshold,
+        ...(fixResult?.grid ?? gridCandidates[0] ? { grid: fixResult?.grid ?? gridCandidates[0] } : {}),
+        outlineCandidateColors:
+          outlineSourceMode === "manual" && selectedOutlineSourceColors.length > 0
+            ? selectedOutlineSourceColors
+            : outlineSourceCandidates.slice(0, 3).map((candidate) => candidate.color)
+      }),
+    [
+      alphaThreshold,
+      diagnosticOverlayMode,
+      fixResult?.grid,
+      fixResult?.image,
+      fixResult?.palette,
+      gridCandidates,
+      outlineSourceCandidates,
+      outlineSourceMode,
+      selectedAsset?.image,
+      selectedOutlineSourceColors
+    ]
   );
   const sheetDetectionNotes = useMemo(
     () =>
@@ -3903,6 +3936,16 @@ export function App() {
               </button>
             ))}
           </div>
+          <label className="diagnostic-overlay-select">
+            <span>Overlay</span>
+            <select value={diagnosticOverlayMode} onChange={(event) => setDiagnosticOverlayMode(event.currentTarget.value as DiagnosticOverlayMode)}>
+              {diagnosticOverlayOptions.map((option) => (
+                <option key={option.mode} value={option.mode}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
           {hasDetectedSheetLayout ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
               <button type="button" className="mini-icon-button" disabled={!canUndoFrameEdit} onClick={undoFrameEdit} title="Undo frame edit">
@@ -3920,6 +3963,18 @@ export function App() {
             <span>Grid: {showGrid ? "on" : "off"}</span>
           </div>
         </div>
+        {diagnosticOverlayMode !== "none" ? (
+          <div className={`diagnostic-overlay-bar${diagnosticOverlay.active ? "" : " inactive"}`} aria-label="Diagnostics overlay summary">
+            <strong>{diagnosticOverlay.label}</strong>
+            <span>{diagnosticOverlay.summary}</span>
+            {diagnosticOverlay.legend.map((item) => (
+              <span key={`${item.label}-${item.value}`} className="diagnostic-overlay-legend">
+                <i style={{ background: item.color }} aria-hidden="true" />
+                {item.label}: {item.value}
+              </span>
+            ))}
+          </div>
+        ) : null}
         {viewMode === "timeline" ? (
           <div className="timeline-viewport-shell">
             <div className="timeline-viewport-toolbar">
@@ -3977,6 +4032,7 @@ export function App() {
               direction={playbackDirection}
               playDirection={playbackStepDirectionRef.current}
               showOnionSkin={showOnionSkin}
+              diagnosticOverlay={diagnosticOverlay}
               onFrameCommit={commitTimelineViewportFrame}
               onPlaybackStop={stopTimelinePlayback}
             />
@@ -3986,6 +4042,7 @@ export function App() {
             sourceImage={selectedAsset?.image ?? null}
             fixedImage={fixResult?.image ?? null}
             fixedSourceRect={fixedComparisonSourceRect}
+            diagnosticOverlay={diagnosticOverlay}
             viewMode={canvasViewMode}
             zoom={zoom}
             showGrid={showGrid}
