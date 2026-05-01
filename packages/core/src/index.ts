@@ -30,6 +30,8 @@ export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
 export { applyHaloRemoval } from "./halo";
 export type { HaloRemovalOptions } from "./halo";
+export { applyContrastExpansion } from "./contrastExpansion";
+export type { ContrastExpansionOptions, ContrastExpansionResult } from "./contrastExpansion";
 export {
   analyzeMaskArtifacts,
   applyMorphologyCleanup,

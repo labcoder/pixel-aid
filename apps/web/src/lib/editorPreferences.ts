@@ -77,6 +77,7 @@ export type EditorPreferenceSettings = {
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
+  contrastExpansionEnabled: boolean;
   engineExportTargets: EngineExportTarget[];
   showAdvancedControls: boolean;
   inspectorGroupOrder: InspectorGroupId[];
@@ -144,6 +145,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   preserveSinglePixelDetails: true,
   removeHalos: true,
   denoiseStrength: 20,
+  contrastExpansionEnabled: false,
   engineExportTargets: ["godot", "unity", "phaser"],
   showAdvancedControls: false,
   inspectorGroupOrder: defaultInspectorGroupOrder
@@ -254,6 +256,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       preserveSinglePixelDetails: booleanSetting(settings.preserveSinglePixelDetails, defaults.settings.preserveSinglePixelDetails),
       removeHalos: booleanSetting(settings.removeHalos, defaults.settings.removeHalos),
       denoiseStrength: numberSetting(settings.denoiseStrength, defaults.settings.denoiseStrength, 0, 100),
+      contrastExpansionEnabled: booleanSetting(settings.contrastExpansionEnabled, defaults.settings.contrastExpansionEnabled),
       engineExportTargets: engineTargetsSetting(settings.engineExportTargets, defaults.settings.engineExportTargets),
       showAdvancedControls: booleanSetting(settings.showAdvancedControls, defaults.settings.showAdvancedControls),
       inspectorGroupOrder: inspectorOrderSetting(settings.inspectorGroupOrder, defaults.settings.inspectorGroupOrder)
