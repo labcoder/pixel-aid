@@ -24,7 +24,7 @@ export const docsSections: DocsSection[] = [
   {
     id: "fix-settings",
     title: "Fix Settings",
-    tooltip: "Controls asset type, processing mode, target size, sheet sizing hierarchy, palette, downscale, and alpha handling.",
+    tooltip: "Controls asset type, processing mode, output size, sheet sizing hierarchy, palette, downscale, and alpha handling.",
     markdown: extractMarkdownSection(editorMarkdown, "Fix Settings")
   },
   {
