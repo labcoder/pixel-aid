@@ -25,7 +25,7 @@ On a packaging machine with Rust/Cargo and platform prerequisites:
 npm run desktop:build
 ```
 
-Record the commit SHA, operating system, Node/npm versions, whether desktop packaging was run, and any known Vite chunk-size warnings.
+Record the commit SHA, operating system, Node/npm versions, whether desktop packaging was run, and the result of `npm run bundle:budget` after a production web build.
 
 ## Manual QA Matrix
 
@@ -84,7 +84,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Tilemaps are inspect-first. | PixelAid can identify candidate tile grids but does not export full map data yet. | Tilemap workflow milestone. |
 | Tileset repair suggestions are preview-only. | Seam issues are diagnosed; automated repair remains future work. | Tileset repair milestone. |
 | Desktop signing/auto-update not configured. | Packaged builds may be unsigned until release infrastructure is set. | Desktop distribution milestone. |
-| Large web bundle warning remains. | Build is valid, but code-splitting should be revisited before a heavily public web launch. | Performance hardening milestone. |
+| Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
 
 ## Privacy Rules
