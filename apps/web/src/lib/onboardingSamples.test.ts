@@ -22,6 +22,15 @@ describe("onboarding samples", () => {
     expect(imported.asset.provenance?.settings?.sampleId).toBe("demo-fake-grid-robot");
   });
 
+  test("include fixture expectations for multi-row sheet samples", () => {
+    const imported = createOnboardingSampleImport("demo-uneven-labeled-sheet", "2026-05-01T00:00:00.000Z");
+
+    expect(imported.asset.assetType).toBe("animationSheet");
+    expect(imported.fixtureExpected.sheet?.rowFrameCounts).toEqual([4, 6, 5]);
+    expect(imported.fixtureExpected.sheet?.animationNames).toEqual(["idle", "walk", "jump"]);
+    expect(imported.settings.sheet).toMatchObject({ frameWidth: 48, frameHeight: 42, rows: 3, columns: 6, margin: 84 });
+  });
+
   test("throw a useful error for unknown sample IDs", () => {
     expect(() => createOnboardingSampleImport("missing-sample")).toThrow("Unknown onboarding sample");
   });

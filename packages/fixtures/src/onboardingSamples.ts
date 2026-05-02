@@ -1,6 +1,12 @@
 import type { AssetType, FixOptions } from "@pixelaid/shared";
 
-export type ReleaseSampleCategory = "fakeGridSprite" | "haloAlpha" | "animationSheet" | "tilesetSeam" | "backgroundReview";
+export type ReleaseSampleCategory =
+  | "fakeGridSprite"
+  | "haloAlpha"
+  | "paletteDrift"
+  | "sheetLayout"
+  | "tilesetSeam"
+  | "backgroundReview";
 
 export type ReleaseSampleProvenance = {
   origin: "first-party-generated";
@@ -122,7 +128,7 @@ export const releaseOnboardingSamples: ReleaseOnboardingSample[] = [
     id: "demo-palette-drift-walk",
     title: "Palette drift walk cycle",
     sourceFixtureId: "palette-drift-walk-4f",
-    category: "animationSheet",
+    category: "paletteDrift",
     assetType: "animationSheet",
     failureMode: "Four animation frames have slightly different source colors, which can create per-frame palette flicker.",
     suggestedSettings: {
@@ -155,6 +161,47 @@ export const releaseOnboardingSamples: ReleaseOnboardingSample[] = [
         "Palette count is 12 or fewer across the full sheet.",
         "All four frames share the same palette instead of changing per frame.",
         "Frame pivots remain at x 12, y 30."
+      ]
+    },
+    provenance: firstPartyGenerated
+  },
+  {
+    id: "demo-uneven-labeled-sheet",
+    title: "Uneven labeled animation sheet",
+    sourceFixtureId: "uneven-gutter-labeled-sheet",
+    category: "sheetLayout",
+    assetType: "animationSheet",
+    failureMode: "A row-labeled AI-style animation sheet can contain uneven gutters, different row lengths, and text labels that should not become frames.",
+    suggestedSettings: {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 288,
+      targetHeight: 126,
+      maxColors: 24,
+      paletteSettings: { mode: "auto", strategy: "frequency", maxColors: 24, lockScope: "sheet", dithering: "none" },
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true
+      },
+      sheet: { frameWidth: 48, frameHeight: 42, rows: 3, columns: 6, margin: 84, spacing: 0, extrude: 0, pivot: { x: 24, y: 40 } }
+    },
+    expectedOutput: "A normalized 3-row animation sheet with idle, walk, and jump clips, preserved source boxes, shared palette settings, and visible gutter warnings.",
+    reproduction: {
+      fixtureImport: "cleanupFixtureCatalog.find((fixture) => fixture.id === \"uneven-gutter-labeled-sheet\")!.createImage()",
+      workflow: [
+        "Import the generated labeled sheet.",
+        "Select Animation Sheet and inspect the detected row/cell layout before fixing.",
+        "Use 48x42 output cells, sheet-locked palette settings, and conservative cleanup.",
+        "Open the Timeline tab and switch between the idle, walk, and jump clips."
+      ],
+      verification: [
+        "The row frame counts are 4, 6, and 5.",
+        "Animation names are idle, walk, and jump.",
+        "The sample reports an uneven-gutter warning so users know to inspect frame boxes."
       ]
     },
     provenance: firstPartyGenerated

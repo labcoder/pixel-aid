@@ -379,6 +379,62 @@ function createSampleAnimationName(title: string): string {
     .slice(0, 32) || "sample_animation";
 }
 
+function createSampleSheetFrames(sheetOptions: NonNullable<FixOptions["sheet"]>, sheetExpected: OnboardingSampleImport["fixtureExpected"]["sheet"]): SpriteFrame[] {
+  const frames = sliceSheetFrames(sheetOptions);
+  const rowFrameCounts = sheetExpected?.rowFrameCounts ?? [];
+
+  if (rowFrameCounts.length === 0 || sheetOptions.columns <= 0) {
+    return frames;
+  }
+
+  const selectedFrames = rowFrameCounts.flatMap((count, rowIndex) => {
+    const rowStart = rowIndex * sheetOptions.columns;
+    return frames.slice(rowStart, rowStart + count);
+  });
+
+  return selectedFrames.length > 0 ? selectedFrames : frames;
+}
+
+function createSampleAnimations(title: string, frames: SpriteFrame[], sheetExpected: OnboardingSampleImport["fixtureExpected"]["sheet"]): AnimationTag[] {
+  if (frames.length === 0) {
+    return [];
+  }
+
+  const fps = Math.round(1000 / Math.max(1, frames[0]?.durationMs ?? 120));
+  const rowFrameCounts = sheetExpected?.rowFrameCounts ?? [];
+  const animationNames = sheetExpected?.animationNames ?? [];
+
+  if (rowFrameCounts.length > 0 && animationNames.length === rowFrameCounts.length) {
+    let offset = 0;
+    return rowFrameCounts.flatMap((count, index) => {
+      const rowFrames = frames.slice(offset, offset + count);
+      offset += count;
+
+      if (rowFrames.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          name: animationNames[index] ?? createSampleAnimationName(title),
+          frameNames: rowFrames.map((frame) => frame.name),
+          loop: true,
+          fps
+        }
+      ];
+    });
+  }
+
+  return [
+    {
+      name: createSampleAnimationName(title),
+      frameNames: frames.map((frame) => frame.name),
+      loop: true,
+      fps
+    }
+  ];
+}
+
 function clampBottomPanelHeight(value: number): number {
   return Math.max(150, Math.min(460, Math.round(value)));
 }
@@ -1903,19 +1959,8 @@ export function App() {
       const targetSampleWidth = settings.targetWidth ?? asset.image.width;
       const targetSampleHeight = settings.targetHeight ?? asset.image.height;
       const sheetOptions = settings.sheet;
-      const sampleFrames = sheetOptions ? sliceSheetFrames(sheetOptions) : [];
-      const sampleAnimationName = createSampleAnimationName(sample.title);
-      const sampleAnimations: AnimationTag[] =
-        sampleFrames.length > 0
-          ? [
-              {
-                name: sampleAnimationName,
-                frameNames: sampleFrames.map((frame) => frame.name),
-                loop: true,
-                fps: Math.round(1000 / Math.max(1, sampleFrames[0]?.durationMs ?? 120))
-              }
-            ]
-          : [];
+      const sampleFrames = sheetOptions ? createSampleSheetFrames(sheetOptions, sampleImport.fixtureExpected.sheet) : [];
+      const sampleAnimations = createSampleAnimations(sample.title, sampleFrames, sampleImport.fixtureExpected.sheet);
       const selectedSampleFrameIndex = sampleFrames.length > 0 ? 0 : -1;
       const selectedSampleAnimationName = sampleAnimations[0]?.name ?? ALL_ANIMATIONS;
       const paletteColors = settings.paletteSettings?.colors ?? settings.palette ?? [];
