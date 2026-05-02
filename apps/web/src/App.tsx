@@ -23,7 +23,7 @@ import {
   WandSparkles
 } from "lucide-react";
 import type { CSSProperties, DragEvent, KeyboardEvent as ReactKeyboardEvent, PointerEvent, ReactNode } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AlphaCleanupSettings,
   AlphaMode,
@@ -70,7 +70,6 @@ import {
   type EngineExportTarget
 } from "@pixelaid/exporters";
 import { AssetThumbnail } from "./components/AssetThumbnail";
-import { DocsPage } from "./components/DocsPage";
 import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
 import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
@@ -309,6 +308,7 @@ type PaletteModalState = {
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 const onboardingSampleCards = getOnboardingSampleCards();
+const DocsPage = lazy(() => import("./components/DocsPage").then((module) => ({ default: module.DocsPage })));
 const palettePresetOptions = [
   ["pixelaid-mono-4", "PixelAid Mono 4"],
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
@@ -5045,7 +5045,25 @@ export function App() {
   };
 
   if (route === "/docs") {
-    return <DocsPage onBack={openEditor} />;
+    return (
+      <Suspense
+        fallback={
+          <main className="docs-shell">
+            <header className="docs-header">
+              <button type="button" onClick={openEditor}>
+                Back to editor
+              </button>
+              <div>
+                <h1>PixelAid Docs</h1>
+                <p>Loading documentation...</p>
+              </div>
+            </header>
+          </main>
+        }
+      >
+        <DocsPage onBack={openEditor} />
+      </Suspense>
+    );
   }
 
   return (

@@ -80,3 +80,19 @@ Run all available benchmarks with:
 ```sh
 npm run benchmark
 ```
+
+## Web Bundle Budget
+
+The web app keeps Vite's chunk warning aligned with PixelAid's editor reality instead of treating the default 500 kB threshold as the release policy. The current 1.1 budget is:
+
+- Largest emitted web JavaScript chunk: 700 kB.
+- Total emitted gzipped web JavaScript: 260 kB.
+
+Run the budget check after a production build:
+
+```sh
+npm run build -w @pixelaid/web
+npm run bundle:budget
+```
+
+The budget script reports the largest JavaScript chunks and fails if either limit is exceeded. Raise these limits only with a short note in this document explaining why the added payload belongs in the first-load editor path. Low-frequency surfaces such as docs, sample walkthroughs, and future sandbox workflows should be lazy loaded or split before increasing the budget.
