@@ -208,6 +208,7 @@ import {
 } from "./lib/paletteLibrary";
 import { analyzeVisiblePalettePreview } from "./lib/palettePreview";
 import { drawRgbaImageNearest } from "./lib/previewCanvas";
+import { getSamplePickerButtonLabel } from "./lib/samplePicker";
 import {
   clampFps,
   getFrameDurationMs,
@@ -574,6 +575,7 @@ export function App() {
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
   const [pendingAssetDeletionId, setPendingAssetDeletionId] = useState<string | null>(null);
+  const [samplePickerOpen, setSamplePickerOpen] = useState(false);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
   const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
   const [savedPaletteLibrary, setSavedPaletteLibrary] = useState<PaletteLibraryEntry[]>(initialPreferences.savedPaletteLibrary);
@@ -822,6 +824,7 @@ export function App() {
   const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
   const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
   const editorPanelMenuItems = useMemo(() => getEditorPanelMenuItems({ bottomPanelVisible: showBottomPanel }), [showBottomPanel]);
+  const samplePickerButtonLabel = getSamplePickerButtonLabel(onboardingSampleCards.length);
   const toggleAppMenu = useCallback((menu: AppMenuId) => {
     setActiveAppMenu((current) => (current === menu ? null : menu));
   }, []);
@@ -1306,6 +1309,7 @@ export function App() {
       if (event.key === "Escape") {
         setActiveAppMenu(null);
         setPendingAssetDeletionId(null);
+        setSamplePickerOpen(false);
       }
     };
 
@@ -1946,6 +1950,23 @@ export function App() {
       }
     },
     [appendLog, applyOnboardingSampleSettings, isEditorBusy, nextBusyOperation, recordOperationError]
+  );
+
+  const openSamplePicker = useCallback(() => {
+    setActiveAppMenu(null);
+    setSamplePickerOpen(true);
+  }, []);
+
+  const closeSamplePicker = useCallback(() => {
+    setSamplePickerOpen(false);
+  }, []);
+
+  const importSampleFromPicker = useCallback(
+    async (sampleId: string) => {
+      setSamplePickerOpen(false);
+      await loadOnboardingSample(sampleId);
+    },
+    [loadOnboardingSample]
   );
 
   const openImportPicker = useCallback(() => {
@@ -4743,6 +4764,10 @@ export function App() {
               <span>Import images</span>
               <kbd>Ctrl/Cmd O</kbd>
             </button>
+            <button type="button" role="menuitem" disabled={isEditorBusy} onClick={openSamplePicker}>
+              <Sparkles size={14} />
+              <span>Add sample asset</span>
+            </button>
           </ToolbarMenu>
           <ToolbarMenu id="view" label="View" icon={<Eye size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
             {editorPanelMenuItems.map((item) => (
@@ -4855,6 +4880,16 @@ export function App() {
               <span>{assetPanelStatus}</span>
             </div>
           ) : null}
+          <div className="asset-panel-actions">
+            <button type="button" onClick={openImportPicker} disabled={isEditorBusy}>
+              <Upload size={14} />
+              Import
+            </button>
+            <button type="button" onClick={openSamplePicker} disabled={isEditorBusy}>
+              <Sparkles size={14} />
+              {samplePickerButtonLabel}
+            </button>
+          </div>
           <ul className="asset-list">
             {assets.length === 0 ? (
               <li className="muted-row">
@@ -4902,32 +4937,6 @@ export function App() {
               </button>
             </div>
           ) : null}
-        </section>
-        <section className="panel-section">
-          <SectionTitle
-            title="Samples"
-            docsId="onboarding-samples"
-            tooltip="Load release demo assets with recommended settings."
-            onDocs={openDocs}
-          />
-          <div className="sample-list" aria-label="Release sample workflows">
-            {onboardingSampleCards.map((sample) => (
-              <button
-                key={sample.id}
-                type="button"
-                className="sample-row"
-                disabled={isEditorBusy}
-                onClick={() => void loadOnboardingSample(sample.id)}
-              >
-                <span>
-                  <strong>{sample.title}</strong>
-                  <small>
-                    {getAssetTypeDefinition(sample.assetType).shortLabel} / {sample.expectedOutput}
-                  </small>
-                </span>
-              </button>
-            ))}
-          </div>
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
@@ -5870,6 +5879,43 @@ export function App() {
           </section>
         </div>
       </footer>
+      ) : null}
+      {samplePickerOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            closeSamplePicker();
+          }
+        }}>
+          <section className="sample-picker-modal" role="dialog" aria-modal="true" aria-labelledby="sample-picker-title">
+            <div className="sample-picker-heading">
+              <div>
+                <h2 id="sample-picker-title">Import Sample Asset</h2>
+                <p>Load a deterministic workflow sample with recommended PixelAid settings.</p>
+              </div>
+              <button type="button" onClick={closeSamplePicker} aria-label="Close sample picker">
+                Close
+              </button>
+            </div>
+            <div className="sample-picker-list" aria-label="Release sample workflows">
+              {onboardingSampleCards.map((sample) => (
+                <button
+                  key={sample.id}
+                  type="button"
+                  className="sample-row"
+                  disabled={isEditorBusy}
+                  onClick={() => void importSampleFromPicker(sample.id)}
+                >
+                  <span>
+                    <strong>{sample.title}</strong>
+                    <small>
+                      {getAssetTypeDefinition(sample.assetType).shortLabel} / {sample.expectedOutput}
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </section>
+        </div>
       ) : null}
       {pendingAssetDeletion ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
