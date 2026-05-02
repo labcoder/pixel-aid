@@ -101,6 +101,7 @@ import {
   updateAssetTypeMetadata,
   type AssetProvenancePatch
 } from "./lib/assets";
+import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import {
@@ -572,6 +573,7 @@ export function App() {
   const [showAdvancedControls, setShowAdvancedControls] = useState(initialSettings.showAdvancedControls);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
+  const [pendingAssetDeletionId, setPendingAssetDeletionId] = useState<string | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
   const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
   const [savedPaletteLibrary, setSavedPaletteLibrary] = useState<PaletteLibraryEntry[]>(initialPreferences.savedPaletteLibrary);
@@ -857,6 +859,10 @@ export function App() {
   const selectedPaletteLibraryIssues = useMemo(
     () => (selectedPaletteLibraryEntry ? validatePaletteLibraryEntry(selectedPaletteLibraryEntry) : []),
     [selectedPaletteLibraryEntry]
+  );
+  const pendingAssetDeletion = useMemo(
+    () => getAssetDeletionConfirmation(assets, pendingAssetDeletionId),
+    [assets, pendingAssetDeletionId]
   );
   useEffect(() => {
     setSelectedPaletteLibraryId((current) => {
@@ -1299,6 +1305,7 @@ export function App() {
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         setActiveAppMenu(null);
+        setPendingAssetDeletionId(null);
       }
     };
 
@@ -3617,6 +3624,25 @@ export function App() {
     [appendLog, assets, isEditorBusy, nextBusyOperation, selectedAsset?.id]
   );
 
+  const requestAssetDeletion = useCallback((assetId: string) => {
+    setAssetMenu(null);
+    setPendingAssetDeletionId(assetId);
+  }, []);
+
+  const cancelAssetDeletion = useCallback(() => {
+    setPendingAssetDeletionId(null);
+  }, []);
+
+  const confirmAssetDeletion = useCallback(async () => {
+    if (!pendingAssetDeletion || isEditorBusy) {
+      return;
+    }
+
+    const assetId = pendingAssetDeletion.asset.id;
+    setPendingAssetDeletionId(null);
+    await removeAsset(assetId);
+  }, [isEditorBusy, pendingAssetDeletion, removeAsset]);
+
   const exportFixedAsset = useCallback(() => {
     if (!selectedAsset || !fixResult) {
       return;
@@ -4857,7 +4883,7 @@ export function App() {
                       </small>
                     </span>
                   </button>
-                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} disabled={isEditorBusy} onClick={() => void removeAsset(asset.id)}>
+                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} disabled={isEditorBusy} onClick={() => requestAssetDeletion(asset.id)}>
                     <Trash2 size={14} />
                   </button>
                 </li>
@@ -4870,7 +4896,7 @@ export function App() {
               style={{ left: assetMenu.x, top: assetMenu.y }}
               onClick={(event) => event.stopPropagation()}
             >
-              <button type="button" disabled={isEditorBusy} onClick={() => void removeAsset(assetMenu.assetId)}>
+              <button type="button" disabled={isEditorBusy} onClick={() => requestAssetDeletion(assetMenu.assetId)}>
                 <Trash2 size={14} />
                 Delete asset
               </button>
@@ -5844,6 +5870,30 @@ export function App() {
           </section>
         </div>
       </footer>
+      ) : null}
+      {pendingAssetDeletion ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            cancelAssetDeletion();
+          }
+        }}>
+          <section className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="delete-asset-title">
+            <div className="confirmation-modal-heading">
+              <Trash2 size={18} />
+              <h2 id="delete-asset-title">{pendingAssetDeletion.title}</h2>
+            </div>
+            <p>{pendingAssetDeletion.message}</p>
+            <div className="confirmation-modal-actions">
+              <button type="button" onClick={cancelAssetDeletion} disabled={isAssetActivating}>
+                Cancel
+              </button>
+              <button type="button" className="danger-action" onClick={() => void confirmAssetDeletion()} disabled={isAssetActivating}>
+                <Trash2 size={14} />
+                {isAssetActivating ? "Deleting..." : pendingAssetDeletion.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
       ) : null}
     </main>
   );
