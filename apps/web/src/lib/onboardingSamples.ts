@@ -1,5 +1,5 @@
 import { cleanupFixtureCatalog, releaseOnboardingSamples } from "@pixelaid/fixtures";
-import type { ReleaseOnboardingSample } from "@pixelaid/fixtures";
+import type { CleanupFixtureExpected, ReleaseOnboardingSample } from "@pixelaid/fixtures";
 import type { FixOptions } from "@pixelaid/shared";
 import { createDefaultAssetTypeMetadata } from "./assets";
 import type { ImportedImageAsset } from "./imageDecode";
@@ -16,6 +16,7 @@ export type OnboardingSampleImport = {
   sample: ReleaseOnboardingSample;
   asset: ImportedImageAsset;
   settings: FixOptions;
+  fixtureExpected: CleanupFixtureExpected;
 };
 
 export function getOnboardingSampleCards(): OnboardingSampleCard[] {
@@ -45,6 +46,7 @@ export function createOnboardingSampleImport(sampleId: string, importedAt = new 
   return {
     sample,
     settings: sample.suggestedSettings,
+    fixtureExpected: fixture.expected,
     asset: {
       id: `sample-${sample.id}`,
       name: `${slug}.png`,

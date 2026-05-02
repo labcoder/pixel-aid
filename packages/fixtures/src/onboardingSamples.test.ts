@@ -21,7 +21,7 @@ describe("release onboarding samples", () => {
     const categories = new Set(releaseOnboardingSamples.map((sample) => sample.category));
 
     expect(new Set(ids).size).toBe(ids.length);
-    expect(categories).toEqual(new Set(["fakeGridSprite", "haloAlpha", "animationSheet", "tilesetSeam", "backgroundReview"]));
+    expect(categories).toEqual(new Set(["fakeGridSprite", "haloAlpha", "paletteDrift", "sheetLayout", "tilesetSeam", "backgroundReview"]));
   });
 
   test("include reproducible settings and reviewer workflow notes", () => {

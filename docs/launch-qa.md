@@ -34,7 +34,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | Import | Toolbar import, drag/drop, paste, repeated imports, unsupported files, progress labels. | `demo-fake-grid-robot`, one user PNG, one non-image file. | Asset appears once, analysis status appears, unsupported file logs a recoverable error. |
 | Classification | Auto type detection plus manual asset-type override per imported asset. | Sprite, icon, animation sheet, tileset, background samples. | Asset type, support warnings, and mode update correctly without leaking settings across assets. |
 | Single-sprite fix | Auto grid, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, `outline-repair-dual-tone`, `halo-transparent-edge`. | Output is native sized, palette-limited, transparent where expected, with no clipped outline. |
-| Sheet correction | Auto row/cell detection, manual add/remove/fill row fixes, frame drag/resize with undo. | `demo-palette-drift-walk`, `uneven-gutter-labeled-sheet`, `drifted-effect-sheet`. | Detected row counts match expectations or are manually corrected; source/output timeline frames stay aligned. |
+| Sheet correction | Auto row/cell detection, manual add/remove/fill row fixes, frame drag/resize with undo. | `demo-palette-drift-walk`, `demo-uneven-labeled-sheet`, `drifted-effect-sheet`. | Detected row counts match expectations or are manually corrected; source/output timeline frames stay aligned. |
 | Palette | Auto/fixed/preset palettes, sheet lock, no dithering default, palette sidecar export. | Palette drift sample plus a high-color AI asset. | Palette count respects budget and animation does not shimmer from per-frame palette changes. |
 | Alpha | Preserve, binary, flood fill, color key, decontaminated transparent RGB. | Checkerboard matte icon and matte white sprite. | Preview looks clean on checker/light/dark/grass-style backgrounds. |
 | Timeline/player | Input/output/compare sources, row animation selection, FPS, loop, direction, onion skin, normalized export toggle. | Multi-row animation sheet sample. | Playback is stable and selected row can be compared before/after after Fix. |
@@ -54,10 +54,12 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 5. Export the bundle and inspect the manifest.
 6. Load **Palette drift walk cycle**.
 7. Run Fix, open Timeline, compare input/output playback for the row.
-8. Export with normalized sheet enabled and confirm frame rects match the packed output.
-9. Load **Broken tileset seams**.
-10. Confirm repeat preview shows seam warnings without claiming automatic repair.
-11. Export Diagnostics from the Console panel and confirm private prompt/API-key-like strings are redacted.
+8. Load **Uneven labeled animation sheet**.
+9. Confirm row clip selection exposes idle, walk, and jump and output cell presets do not disturb source boxes.
+10. Export with normalized sheet enabled and confirm frame rects match the packed output.
+11. Load **Broken tileset seams**.
+12. Confirm repeat preview shows seam warnings without claiming automatic repair.
+13. Export Diagnostics from the Console panel and confirm private prompt/API-key-like strings are redacted.
 
 ## Beta Feedback Loop
 
