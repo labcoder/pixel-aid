@@ -1,5 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { useEffect, useRef } from "react";
+import { drawRgbaImageNearest } from "../lib/previewCanvas";
 import { getContainedDrawRect } from "../lib/previewGeometry";
 
 export function AssetThumbnail({ image, label }: { image: RGBAImage; label: string }) {
@@ -26,18 +27,13 @@ export function AssetThumbnail({ image, label }: { image: RGBAImage; label: stri
     context.clearRect(0, 0, rect.width, rect.height);
     drawChecker(context, rect.width, rect.height);
 
-    const source = document.createElement("canvas");
-    source.width = image.width;
-    source.height = image.height;
-    const sourceContext = source.getContext("2d");
-    if (!sourceContext) {
-      return;
-    }
-    sourceContext.imageSmoothingEnabled = false;
-    sourceContext.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-
     const drawRect = getContainedDrawRect({ width: rect.width, height: rect.height }, image);
-    context.drawImage(source, drawRect.x, drawRect.y, drawRect.width, drawRect.height);
+    drawRgbaImageNearest(
+      context,
+      image,
+      { x: 0, y: 0, w: image.width, h: image.height },
+      { x: drawRect.x, y: drawRect.y, w: drawRect.width, h: drawRect.height }
+    );
   }, [image]);
 
   return <canvas ref={canvasRef} className="asset-thumb" aria-label={`${label} thumbnail`} />;

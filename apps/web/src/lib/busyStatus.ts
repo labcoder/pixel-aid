@@ -1,4 +1,4 @@
-export type BusyOperationKind = "import" | "analysis" | "fix";
+export type BusyOperationKind = "import" | "activation" | "analysis" | "fix";
 
 export type BusyOperation = {
   id: number;
@@ -9,6 +9,7 @@ export type BusyOperation = {
 
 export type VisibleBusyOperationInput = {
   importOperation?: BusyOperation | null;
+  activationOperation?: BusyOperation | null;
   analysisOperation?: BusyOperation | null;
   fixOperation?: BusyOperation | null;
 };
@@ -41,10 +42,11 @@ export function clearBusyOperation(operation: BusyOperation | null, id: number):
 
 export function selectVisibleBusyOperation({
   importOperation = null,
+  activationOperation = null,
   analysisOperation = null,
   fixOperation = null
 }: VisibleBusyOperationInput): BusyOperation | null {
-  return importOperation ?? analysisOperation ?? fixOperation;
+  return importOperation ?? activationOperation ?? analysisOperation ?? fixOperation;
 }
 
 export function formatBusyOperationLabel(operation: BusyOperation | null): string | null {

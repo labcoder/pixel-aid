@@ -1,5 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { useEffect, useRef } from "react";
+import { drawRgbaImageNearest } from "../lib/previewCanvas";
 import type { TileRepeatPreviewLayout, TileRepeatPreviewSeamGuideLine } from "../lib/tileRepeatPreview";
 
 export function TileRepeatPreviewCanvas({
@@ -43,7 +44,6 @@ export function TileRepeatPreviewCanvas({
       return;
     }
 
-    const sourceCanvas = imageToCanvas(image);
     const scale = Math.max(1, Math.floor(Math.min((rect.width - 24) / layout.width, (rect.height - 24) / layout.height)));
     const drawWidth = layout.width * scale;
     const drawHeight = layout.height * scale;
@@ -54,17 +54,12 @@ export function TileRepeatPreviewCanvas({
     context.fillRect(startX - 1, startY - 1, drawWidth + 2, drawHeight + 2);
 
     for (const cell of layout.cells) {
-      context.drawImage(
-        sourceCanvas,
-        cell.sourceRect.x,
-        cell.sourceRect.y,
-        cell.sourceRect.w,
-        cell.sourceRect.h,
-        startX + cell.outputRect.x * scale,
-        startY + cell.outputRect.y * scale,
-        cell.outputRect.w * scale,
-        cell.outputRect.h * scale
-      );
+      drawRgbaImageNearest(context, image, cell.sourceRect, {
+        x: startX + cell.outputRect.x * scale,
+        y: startY + cell.outputRect.y * scale,
+        w: cell.outputRect.w * scale,
+        h: cell.outputRect.h * scale
+      });
     }
 
     context.strokeStyle = "#35c6b6";
@@ -75,20 +70,6 @@ export function TileRepeatPreviewCanvas({
   }, [image, layout, seamIssueGuideLines]);
 
   return <canvas ref={canvasRef} className={className} aria-label={ariaLabel} />;
-}
-
-function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create tile repeat preview canvas");
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-  return canvas;
 }
 
 function drawSeamGuideLines(
