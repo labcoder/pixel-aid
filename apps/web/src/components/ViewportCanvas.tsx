@@ -35,7 +35,7 @@ export type ViewportCanvasProps = {
   onFrameSelect?: (index: number) => void;
   onSourceFrameMove?: (index: number, delta: Point) => void;
   onSourceFrameResize?: (index: number, handle: FrameResizeHandle, delta: Point) => void;
-  onSourceFrameEditStart?: () => void;
+  onSourceFrameEditStart?: (edit: { mode: "move" | "resize"; frameIndex: number }) => void;
   onSourceFrameEditCommit?: (changed: boolean) => void;
 };
 
@@ -243,7 +243,7 @@ export function ViewportCanvas({
       if (intent.intent === "resize") {
         event.currentTarget.setPointerCapture(event.pointerId);
         onFrameSelect?.(intent.frameIndex);
-        onSourceFrameEditStart?.();
+        onSourceFrameEditStart?.({ mode: "resize", frameIndex: intent.frameIndex });
         frameDragRef.current = {
           pointerId: event.pointerId,
           mode: "resize",
@@ -260,7 +260,7 @@ export function ViewportCanvas({
       if (intent.intent === "move") {
         event.currentTarget.setPointerCapture(event.pointerId);
         onFrameSelect?.(intent.frameIndex);
-        onSourceFrameEditStart?.();
+        onSourceFrameEditStart?.({ mode: "move", frameIndex: intent.frameIndex });
         frameDragRef.current = {
           pointerId: event.pointerId,
           mode: "move",
