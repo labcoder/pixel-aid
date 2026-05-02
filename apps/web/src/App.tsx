@@ -208,6 +208,7 @@ import {
 } from "./lib/paletteLibrary";
 import { analyzeVisiblePalettePreview } from "./lib/palettePreview";
 import { drawRgbaImageNearest } from "./lib/previewCanvas";
+import { getPaletteWindow } from "./lib/paletteWindow";
 import { getSamplePickerButtonLabel } from "./lib/samplePicker";
 import {
   clampFps,
@@ -283,6 +284,13 @@ import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type Edito
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 type AppMenuId = "file" | "view" | "export";
+
+type PaletteModalState = {
+  title: string;
+  colors: string[];
+  totalColors: number;
+  truncated: boolean;
+};
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 const onboardingSampleCards = getOnboardingSampleCards();
@@ -576,6 +584,9 @@ export function App() {
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
   const [pendingAssetDeletionId, setPendingAssetDeletionId] = useState<string | null>(null);
   const [samplePickerOpen, setSamplePickerOpen] = useState(false);
+  const [palettesExpanded, setPalettesExpanded] = useState(false);
+  const [paletteModal, setPaletteModal] = useState<PaletteModalState | null>(null);
+  const [paletteModalPage, setPaletteModalPage] = useState(0);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
   const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
   const [savedPaletteLibrary, setSavedPaletteLibrary] = useState<PaletteLibraryEntry[]>(initialPreferences.savedPaletteLibrary);
@@ -855,6 +866,10 @@ export function App() {
   const paletteWarningMessages = summarizePaletteWarnings(paletteDiagnostics);
   const outputPalettePreview = outputPalette.slice(0, Math.min(outputPalette.length, 16));
   const outputPaletteLabel = paletteDiagnostics ? `Output (${paletteDiagnostics.mode})` : "Output";
+  const paletteModalWindow = useMemo(
+    () => (paletteModal ? getPaletteWindow(paletteModal.colors, { page: paletteModalPage, pageSize: 256 }) : null),
+    [paletteModal, paletteModalPage]
+  );
   const selectedPaletteLibraryEntry = useMemo(
     () => savedPaletteLibrary.find((entry) => entry.id === selectedPaletteLibraryId) ?? savedPaletteLibrary[0] ?? null,
     [savedPaletteLibrary, selectedPaletteLibraryId]
@@ -867,6 +882,36 @@ export function App() {
     () => getAssetDeletionConfirmation(assets, pendingAssetDeletionId),
     [assets, pendingAssetDeletionId]
   );
+  const openSourcePaletteModal = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    const analysis = analyzeVisiblePalettePreview(selectedAsset.image, 10000, { maxUniqueColors: 10000 });
+    setPaletteModal({
+      title: "Source palette",
+      colors: analysis.colors,
+      totalColors: analysis.totalColors,
+      truncated: analysis.truncated
+    });
+    setPaletteModalPage(0);
+  }, [selectedAsset]);
+  const openOutputPaletteModal = useCallback(() => {
+    if (outputPalette.length === 0) {
+      return;
+    }
+
+    setPaletteModal({
+      title: outputPaletteLabel,
+      colors: outputPalette,
+      totalColors: outputPalette.length,
+      truncated: false
+    });
+    setPaletteModalPage(0);
+  }, [outputPalette, outputPaletteLabel]);
+  const closePaletteModal = useCallback(() => {
+    setPaletteModal(null);
+  }, []);
   useEffect(() => {
     setSelectedPaletteLibraryId((current) => {
       if (current && savedPaletteLibrary.some((entry) => entry.id === current)) {
@@ -1310,6 +1355,7 @@ export function App() {
         setActiveAppMenu(null);
         setPendingAssetDeletionId(null);
         setSamplePickerOpen(false);
+        setPaletteModal(null);
       }
     };
 
@@ -4938,72 +4984,87 @@ export function App() {
             </div>
           ) : null}
         </section>
-        <section className="panel-section">
-          <h2>Palettes</h2>
-          <PaletteSwatches
-            label="Source"
-            colors={sourcePalette}
-            totalColors={sourceColorCount}
-            totalColorsTruncated={sourcePaletteAnalysis?.truncated ?? false}
-            emptyText="Import an asset"
-          />
-          <PaletteSwatches
-            label={outputPaletteLabel}
-            colors={outputPalettePreview}
-            totalColors={paletteDiagnostics?.outputColorCount ?? outputPalette.length}
-            emptyText="Run Fix"
-          />
-          <div className="palette-library-actions">
-            <button
-              type="button"
-              disabled={outputPalette.length === 0}
-              onClick={() =>
-                savePaletteColorsToLibrary(
-                  selectedAsset ? `${assetBaseName(selectedAsset.name)} output` : "Output palette",
-                  outputPalette
-                )
-              }
-            >
-              <Sparkles size={14} />
-              Save output
-            </button>
-            <button
-              type="button"
-              disabled={fixedPaletteColors.length === 0}
-              onClick={() => savePaletteColorsToLibrary("Fixed palette", fixedPaletteColors)}
-            >
-              <Sparkles size={14} />
-              Save fixed
-            </button>
-            <button type="button" onClick={importPaletteToLibrary}>
-              <Upload size={14} />
-              Import
-            </button>
-          </div>
-          <div className="palette-library-list">
-            {savedPaletteLibrary.length === 0 ? (
-              <p className="field-note">No saved palettes.</p>
-            ) : (
-              savedPaletteLibrary.map((entry) => (
-                <div key={entry.id} className={entry.id === selectedPaletteLibraryEntry?.id ? "palette-library-entry active" : "palette-library-entry"}>
-                  <button type="button" className="preset-row" onClick={() => setSelectedPaletteLibraryId(entry.id)}>
-                    <span>
-                      <strong>{entry.name}</strong>
-                      <small>{entry.colors.length} colors</small>
-                    </span>
-                  </button>
-                  <button type="button" className="preset-remove-button" aria-label={`Apply ${entry.name}`} onClick={() => applyPaletteLibraryEntry(entry)}>
-                    <WandSparkles size={14} />
-                  </button>
-                  <button type="button" className="preset-remove-button" aria-label={`Remove ${entry.name}`} onClick={() => removePaletteLibraryEntry(entry)}>
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-          {selectedPaletteLibraryEntry ? (
-            <div className="palette-library-editor">
+        <section className="panel-section collapsible-panel-section">
+          <button
+            type="button"
+            className="panel-section-toggle"
+            aria-expanded={palettesExpanded}
+            onClick={() => setPalettesExpanded((current) => !current)}
+          >
+            <span>Palettes</span>
+            <small>
+              Source {sourceColorCount || "--"} / Output {outputPalette.length || "--"}
+            </small>
+            <ChevronDown size={14} />
+          </button>
+          {palettesExpanded ? (
+            <div className="collapsible-panel-content">
+              <PaletteSwatches
+                label="Source"
+                colors={sourcePalette}
+                totalColors={sourceColorCount}
+                totalColorsTruncated={sourcePaletteAnalysis?.truncated ?? false}
+                emptyText="Import an asset"
+                onOpenPalette={selectedAsset ? openSourcePaletteModal : undefined}
+              />
+              <PaletteSwatches
+                label={outputPaletteLabel}
+                colors={outputPalettePreview}
+                totalColors={paletteDiagnostics?.outputColorCount ?? outputPalette.length}
+                emptyText="Run Fix"
+                onOpenPalette={outputPalette.length > 0 ? openOutputPaletteModal : undefined}
+              />
+              <div className="palette-library-actions">
+                <button
+                  type="button"
+                  disabled={outputPalette.length === 0}
+                  onClick={() =>
+                    savePaletteColorsToLibrary(
+                      selectedAsset ? `${assetBaseName(selectedAsset.name)} output` : "Output palette",
+                      outputPalette
+                    )
+                  }
+                >
+                  <Sparkles size={14} />
+                  Save output
+                </button>
+                <button
+                  type="button"
+                  disabled={fixedPaletteColors.length === 0}
+                  onClick={() => savePaletteColorsToLibrary("Fixed palette", fixedPaletteColors)}
+                >
+                  <Sparkles size={14} />
+                  Save fixed
+                </button>
+                <button type="button" onClick={importPaletteToLibrary}>
+                  <Upload size={14} />
+                  Import
+                </button>
+              </div>
+              <div className="palette-library-list">
+                {savedPaletteLibrary.length === 0 ? (
+                  <p className="field-note">No saved palettes.</p>
+                ) : (
+                  savedPaletteLibrary.map((entry) => (
+                    <div key={entry.id} className={entry.id === selectedPaletteLibraryEntry?.id ? "palette-library-entry active" : "palette-library-entry"}>
+                      <button type="button" className="preset-row" onClick={() => setSelectedPaletteLibraryId(entry.id)}>
+                        <span>
+                          <strong>{entry.name}</strong>
+                          <small>{entry.colors.length} colors</small>
+                        </span>
+                      </button>
+                      <button type="button" className="preset-remove-button" aria-label={`Apply ${entry.name}`} onClick={() => applyPaletteLibraryEntry(entry)}>
+                        <WandSparkles size={14} />
+                      </button>
+                      <button type="button" className="preset-remove-button" aria-label={`Remove ${entry.name}`} onClick={() => removePaletteLibraryEntry(entry)}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+              {selectedPaletteLibraryEntry ? (
+                <div className="palette-library-editor">
               <label className="field-row field-row-stack">
                 <span>Name</span>
                 <input
@@ -5083,8 +5144,12 @@ export function App() {
                   ))}
                 </div>
               ) : null}
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <p className="collapsed-section-summary">Open to inspect source/output palettes or manage saved palette presets.</p>
+          )}
         </section>
         <section className="panel-section">
           <h2>Presets</h2>
@@ -5880,6 +5945,56 @@ export function App() {
         </div>
       </footer>
       ) : null}
+      {paletteModal && paletteModalWindow ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            closePaletteModal();
+          }
+        }}>
+          <section className="palette-modal" role="dialog" aria-modal="true" aria-labelledby="palette-modal-title">
+            <div className="palette-modal-heading">
+              <div>
+                <h2 id="palette-modal-title">{paletteModal.title}</h2>
+                <p>
+                  {paletteModalWindow.total === 0
+                    ? "No colors available."
+                    : `Showing ${paletteModalWindow.start + 1}-${paletteModalWindow.end} of ${paletteModal.totalColors}${paletteModal.truncated ? "+" : ""}`}
+                </p>
+              </div>
+              <button type="button" onClick={closePaletteModal} aria-label="Close palette viewer">
+                Close
+              </button>
+            </div>
+            <div className="palette-modal-grid" aria-label={`${paletteModal.title} colors`}>
+              {paletteModalWindow.colors.map((color, index) => (
+                <span key={`${color}-${paletteModalWindow.start + index}`} className="palette-modal-swatch">
+                  <span style={{ backgroundColor: color }} />
+                  <code>{color}</code>
+                </span>
+              ))}
+            </div>
+            <div className="palette-modal-controls">
+              <button
+                type="button"
+                disabled={paletteModalWindow.page <= 0}
+                onClick={() => setPaletteModalPage((page) => Math.max(0, page - 1))}
+              >
+                Previous
+              </button>
+              <span>
+                Page {paletteModalWindow.page + 1} of {paletteModalWindow.pageCount}
+              </span>
+              <button
+                type="button"
+                disabled={paletteModalWindow.page >= paletteModalWindow.pageCount - 1}
+                onClick={() => setPaletteModalPage((page) => page + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       {samplePickerOpen ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
           if (event.currentTarget === event.target) {
@@ -5989,13 +6104,15 @@ function PaletteSwatches({
   colors,
   totalColors = colors.length,
   totalColorsTruncated = false,
-  emptyText
+  emptyText,
+  onOpenPalette
 }: {
   label: string;
   colors: readonly string[];
   totalColors?: number;
   totalColorsTruncated?: boolean;
   emptyText: string;
+  onOpenPalette?: (() => void) | undefined;
 }) {
   const totalText = totalColorsTruncated ? `${totalColors}+` : String(totalColors);
   const shownText = totalColors > colors.length || totalColorsTruncated ? `${colors.length} of ${totalText}` : `${colors.length}`;
@@ -6004,7 +6121,13 @@ function PaletteSwatches({
     <div className="palette-preview">
       <div className="mini-label">
         <span>{label}</span>
-        <small>{colors.length > 0 ? `${shownText} shown` : emptyText}</small>
+        {colors.length > 0 && onOpenPalette ? (
+          <button type="button" className="palette-count-button" onClick={onOpenPalette}>
+            {shownText} shown
+          </button>
+        ) : (
+          <small>{colors.length > 0 ? `${shownText} shown` : emptyText}</small>
+        )}
       </div>
       <div className="swatch-row" aria-label={`${label} palette preview`}>
         {colors.length > 0 ? (
