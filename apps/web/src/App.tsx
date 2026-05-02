@@ -272,11 +272,13 @@ import {
   getSimpleDenoiseChoice,
   getSimpleDenoiseStrength,
   getSimpleOutlineChoice,
+  getSimpleSheetCellSizeChoice,
   simpleAlphaChoices,
   simpleColorChoices,
   simpleDenoiseChoices,
   simpleOutlineChoices,
   simpleResizeChoices,
+  simpleSheetCellSizeChoices,
   type SimpleAlphaChoice,
   type SimpleDenoiseChoice,
   type SimpleOutlineChoice
@@ -1008,6 +1010,15 @@ export function App() {
   const plannedSheetOutputSize = useMemo(
     () => ({ width: plannedSheetLayout.width, height: plannedSheetLayout.height }),
     [plannedSheetLayout.height, plannedSheetLayout.width]
+  );
+  const simpleSheetCellSizeChoice = useMemo(
+    () =>
+      getSimpleSheetCellSizeChoice({
+        rows: plannedSheetLayout.rows,
+        fallbackWidth: frameWidth,
+        fallbackHeight: frameHeight
+      }),
+    [frameHeight, frameWidth, plannedSheetLayout.rows]
   );
   const effectiveTargetWidth = sheetMode ? plannedSheetLayout.width : targetWidth;
   const effectiveTargetHeight = sheetMode ? plannedSheetLayout.height : targetHeight;
@@ -2557,6 +2568,38 @@ export function App() {
   const applySimpleOutlineChoice = useCallback((choice: SimpleOutlineChoice) => {
     setOutlineMode(choice === "repair" ? "repairExisting" : choice === "add" ? "add" : "none");
   }, []);
+
+  const applySimpleSheetCellSize = useCallback(
+    (value: number) => {
+      const nextSize = clampSheetInteger(value, 1, 1024);
+
+      if (detectedRowAnimations.length > 0) {
+        setDetectedSheetFrames((current) =>
+          detectedRowAnimations.reduce(
+            (frames, animation) =>
+              resizeAnimationCells({
+                frames,
+                animations: detectedRowAnimations,
+                animationName: animation.name,
+                cellWidth: nextSize,
+                cellHeight: nextSize,
+                margin: sheetMargin,
+                spacing: sheetSpacing
+              }),
+            current
+          )
+        );
+      } else {
+        setFrameWidth(nextSize);
+        setFrameHeight(nextSize);
+      }
+
+      setFixResult(null);
+      setIsPlaying(false);
+      appendLog(`Set sheet output cell size to ${nextSize}x${nextSize}`);
+    },
+    [appendLog, detectedRowAnimations, sheetMargin, sheetSpacing]
+  );
 
   const updateManualFrameWidth = useCallback(
     (value: number) => {
@@ -5463,7 +5506,17 @@ export function App() {
           summary={guidedFixSummary}
           reason={suggestionReason}
           simpleControls={
-            selectedAsset && mode === "single" ? (
+            selectedAsset && sheetMode ? (
+              <SimpleSheetControls
+                cellSizeChoice={simpleSheetCellSizeChoice}
+                maxColors={maxColors}
+                alphaChoice={getSimpleAlphaChoice(alpha)}
+                onCellSizeChange={applySimpleSheetCellSize}
+                onCustomCellSize={() => setShowAdvancedControls(true)}
+                onAlphaChange={applySimpleAlphaChoice}
+                onMaxColorsChange={setPaletteBudget}
+              />
+            ) : selectedAsset && mode === "single" ? (
               <SimpleSpriteControls
                 targetWidth={targetWidth}
                 maxColors={maxColors}
@@ -6323,6 +6376,56 @@ function SimpleSpriteControls({
         options={simpleOutlineChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
         value={outlineChoice}
         onChange={(value) => onOutlineChange(value as SimpleOutlineChoice)}
+      />
+      <SimpleButtonGroup
+        label="Colors"
+        options={simpleColorChoices.map((count) => ({ id: String(count), label: String(count) }))}
+        value={String(maxColors)}
+        onChange={(value) => onMaxColorsChange(Number(value))}
+      />
+    </div>
+  );
+}
+
+function SimpleSheetControls({
+  cellSizeChoice,
+  maxColors,
+  alphaChoice,
+  onCellSizeChange,
+  onCustomCellSize,
+  onAlphaChange,
+  onMaxColorsChange
+}: {
+  cellSizeChoice: string;
+  maxColors: number;
+  alphaChoice: SimpleAlphaChoice;
+  onCellSizeChange: (value: number) => void;
+  onCustomCellSize: () => void;
+  onAlphaChange: (value: SimpleAlphaChoice) => void;
+  onMaxColorsChange: (value: number) => void;
+}) {
+  return (
+    <div className="simple-sprite-controls" aria-label="Simple sheet controls">
+      <SimpleButtonGroup
+        label="Cell size"
+        options={[
+          ...simpleSheetCellSizeChoices.map((size) => ({ id: String(size), label: String(size) })),
+          { id: "custom", label: "Custom" }
+        ]}
+        value={cellSizeChoice}
+        onChange={(value) => {
+          if (value === "custom") {
+            onCustomCellSize();
+            return;
+          }
+          onCellSizeChange(Number(value));
+        }}
+      />
+      <SimpleButtonGroup
+        label="Background"
+        options={simpleAlphaChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
+        value={alphaChoice}
+        onChange={(value) => onAlphaChange(value as SimpleAlphaChoice)}
       />
       <SimpleButtonGroup
         label="Colors"

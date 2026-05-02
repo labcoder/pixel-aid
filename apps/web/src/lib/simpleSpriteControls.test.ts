@@ -3,7 +3,8 @@ import {
   getSimpleAlphaChoice,
   getSimpleDenoiseChoice,
   getSimpleDenoiseStrength,
-  getSimpleOutlineChoice
+  getSimpleOutlineChoice,
+  getSimpleSheetCellSizeChoice
 } from "./simpleSpriteControls";
 
 describe("simple sprite controls", () => {
@@ -27,5 +28,34 @@ describe("simple sprite controls", () => {
     expect(getSimpleOutlineChoice("repairExisting")).toBe("repair");
     expect(getSimpleOutlineChoice("add")).toBe("add");
     expect(getSimpleOutlineChoice("none")).toBe("none");
+  });
+
+  test("maps consistent square sheet cells to quick size choices", () => {
+    expect(
+      getSimpleSheetCellSizeChoice({
+        rows: [
+          { cellWidth: 32, cellHeight: 32 },
+          { cellWidth: 32, cellHeight: 32 }
+        ],
+        fallbackWidth: 64,
+        fallbackHeight: 64
+      })
+    ).toBe("32");
+  });
+
+  test("shows custom for non-square or mixed sheet cell sizes", () => {
+    expect(getSimpleSheetCellSizeChoice({ rows: [{ cellWidth: 48, cellHeight: 64 }], fallbackWidth: 64, fallbackHeight: 64 })).toBe(
+      "custom"
+    );
+    expect(
+      getSimpleSheetCellSizeChoice({
+        rows: [
+          { cellWidth: 32, cellHeight: 32 },
+          { cellWidth: 64, cellHeight: 64 }
+        ],
+        fallbackWidth: 64,
+        fallbackHeight: 64
+      })
+    ).toBe("custom");
   });
 });
