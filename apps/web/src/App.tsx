@@ -130,7 +130,14 @@ import {
 import { engineExportFileToBundleFile, engineWarningsToValidationIssues } from "./lib/engineExportFiles";
 import { getEditorPanelMenuItems, type EditorPanelId } from "./lib/editorShell";
 import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleFile } from "./lib/exportBundle";
-import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
+import {
+  assetBaseName,
+  defaultExportBundleBaseName,
+  defaultExportBundleFilename,
+  downloadBlob,
+  resolveExportBundleFilename,
+  rgbaImageToPngBlob
+} from "./lib/exportFiles";
 import {
   applyTargetSizePreset,
   denoiseStrengthLabel,
@@ -581,6 +588,7 @@ export function App() {
     errorCount: number;
   } | null>(null);
   const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(initialSettings.engineExportTargets);
+  const [exportBundleName, setExportBundleName] = useState("");
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
@@ -827,6 +835,13 @@ export function App() {
   const categoryConfidence = selectedAsset?.categoryConfidence ?? 0;
   const provenanceOrigin = selectedAsset?.provenance?.origin ?? "unknown";
   const provenanceSummary = formatAssetProvenanceSummary(selectedAsset?.provenance);
+  const defaultBundleBaseName = selectedAsset ? defaultExportBundleBaseName(selectedAsset.name) : defaultExportBundleBaseName("pixelaid_asset");
+  const defaultBundleFilename = selectedAsset ? defaultExportBundleFilename(selectedAsset.name) : "";
+  const exportBundleNameValue = selectedAsset ? exportBundleName || defaultBundleFilename : "";
+  const exportBundleNameResolution = useMemo(
+    () => resolveExportBundleFilename(exportBundleNameValue, defaultBundleBaseName),
+    [defaultBundleBaseName, exportBundleNameValue]
+  );
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
   const isImporting = importOperation !== null;
   const isAssetActivating = assetActivationOperation !== null;
@@ -850,8 +865,11 @@ export function App() {
     }
   }, []);
   useEffect(() => {
+    setExportBundleName(selectedAsset ? defaultExportBundleFilename(selectedAsset.name) : "");
+  }, [selectedAsset?.id, selectedAsset?.name]);
+  useEffect(() => {
     setLastExportValidation(null);
-  }, [engineExportTargets, fixResult, selectedAsset?.id]);
+  }, [engineExportTargets, exportBundleName, fixResult, selectedAsset?.id]);
   const sourcePaletteAnalysis = useMemo(
     () => (selectedAsset ? analyzeVisiblePalettePreview(selectedAsset.image, 8, { maxUniqueColors: 10000 }) : null),
     [selectedAsset]
@@ -3746,7 +3764,10 @@ export function App() {
       return;
     }
 
-    const baseName = assetBaseName(selectedAsset.name);
+    const assetNameBaseName = assetBaseName(selectedAsset.name);
+    const defaultNameBaseName = defaultExportBundleBaseName(selectedAsset.name);
+    const exportName = resolveExportBundleFilename(exportBundleName || defaultExportBundleFilename(selectedAsset.name), defaultNameBaseName);
+    const baseName = exportName.baseName === defaultNameBaseName ? assetNameBaseName : exportName.baseName;
     const shouldNormalizeExport = sheetMode && normalizeTimelineFrames && sheetFrames.length > 0;
     const normalizedExport = shouldNormalizeExport
       ? createNormalizedSheetExport({
@@ -3766,7 +3787,7 @@ export function App() {
     const exportFrames = normalizedExport?.frames ?? sheetFrames;
     const imageName = shouldNormalizeExport ? `${baseName}_normalized.png` : `${baseName}_fixed.png`;
     const manifestName = `${baseName}_manifest.json`;
-    const bundleName = `${baseName}_pixelaid_bundle.zip`;
+    const bundleName = exportName.filename;
     const animations =
       detectedRowAnimations.length > 0
         ? animationTagsToManifestAnimations(detectedRowAnimations, {
@@ -3869,6 +3890,7 @@ export function App() {
     appendLog,
     detectedRowAnimations,
     engineExportTargets,
+    exportBundleName,
     fixResult,
     normalizeTimelineFrames,
     playbackDirection,
@@ -4751,6 +4773,16 @@ export function App() {
     export: (
       <>
         <Field label="Target" value="Generic JSON" />
+        <TextField
+          label="Bundle name"
+          value={exportBundleNameValue}
+          disabled={!selectedAsset}
+          onChange={setExportBundleName}
+        />
+        <ReadonlyField label="Safe ZIP" value={selectedAsset ? exportBundleNameResolution.filename : "--"} text disabled={!selectedAsset} />
+        {exportBundleNameResolution.usedFallback && selectedAsset ? (
+          <p className="field-note">Invalid filename characters will fall back to the default safe bundle name.</p>
+        ) : null}
         <ReadonlyField label="Bundle" value={fixResult ? "ZIP ready" : "pending"} text />
         <ReadonlyField label="Provenance" value={selectedAsset ? provenanceSummary : "--"} text disabled={!selectedAsset} />
         <ReadonlyField
