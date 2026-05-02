@@ -409,10 +409,26 @@ button:focus-visible {
   padding: 0;
 }
 
-.sample-list {
+.asset-panel-actions,
+.sample-list,
+.sample-picker-list {
   display: grid;
   gap: 0.45rem;
   margin-top: 0.7rem;
+}
+
+.asset-panel-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.asset-panel-actions button {
+  min-width: 0;
+  min-height: 32px;
+  padding: 0 0.45rem;
+  color: var(--muted);
+  background: #17201f;
+  border-color: #31504c;
+  font-size: 0.74rem;
 }
 
 .import-status {
@@ -815,6 +831,53 @@ button:focus-visible {
   border: 1px solid #5b393c;
   border-radius: 8px;
   box-shadow: 0 22px 60px #00000090;
+}
+
+.sample-picker-modal {
+  width: min(620px, 100%);
+  max-height: min(680px, calc(100vh - 48px));
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 0.9rem;
+  padding: 16px;
+  color: var(--text);
+  background: #111616;
+  border: 1px solid #38504e;
+  border-radius: 8px;
+  box-shadow: 0 22px 60px #00000090;
+}
+
+.sample-picker-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.sample-picker-heading h2,
+.sample-picker-heading p {
+  margin: 0;
+}
+
+.sample-picker-heading h2 {
+  font-size: 1rem;
+}
+
+.sample-picker-heading p {
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.sample-picker-heading button {
+  min-height: 30px;
+  padding: 0 0.6rem;
+}
+
+.sample-picker-list {
+  overflow: auto;
+  margin-top: 0;
+  padding-right: 2px;
 }
 
 .confirmation-modal-heading {
