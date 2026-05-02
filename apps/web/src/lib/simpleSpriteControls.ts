@@ -31,6 +31,7 @@ export const simpleOutlineChoices: Array<{ id: SimpleOutlineChoice; label: strin
 
 export const simpleColorChoices = [16, 24, 32, 64] as const;
 export const simpleResizeChoices = [32, 48, 64, 96, 128] as const;
+export const simpleSheetCellSizeChoices = [16, 24, 32, 48, 64] as const;
 
 export function getSimpleDenoiseStrength(choice: SimpleDenoiseChoice): number {
   return denoiseStrengthByChoice[choice];
@@ -60,4 +61,23 @@ export function getSimpleOutlineChoice(outline: OutlineMode): SimpleOutlineChoic
     return "repair";
   }
   return outline === "add" ? "add" : "none";
+}
+
+export function getSimpleSheetCellSizeChoice({
+  rows,
+  fallbackWidth,
+  fallbackHeight
+}: {
+  rows: readonly { cellWidth: number; cellHeight: number }[];
+  fallbackWidth: number;
+  fallbackHeight: number;
+}): string {
+  const first = rows[0] ?? { cellWidth: fallbackWidth, cellHeight: fallbackHeight };
+  const consistent = rows.every((row) => row.cellWidth === first.cellWidth && row.cellHeight === first.cellHeight);
+
+  if (!consistent || first.cellWidth !== first.cellHeight || !simpleSheetCellSizeChoices.includes(first.cellWidth as (typeof simpleSheetCellSizeChoices)[number])) {
+    return "custom";
+  }
+
+  return String(first.cellWidth);
 }
