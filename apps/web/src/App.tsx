@@ -8,7 +8,6 @@ import {
   Download,
   Eye,
   FileImage,
-  Gauge,
   Layers,
   Plus,
   Play,
@@ -103,7 +102,7 @@ import {
 } from "./lib/assets";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
-import { getBottomPanelSections } from "./lib/bottomPanelLayout";
+import { getBottomPanelSections, type BottomPanelSection } from "./lib/bottomPanelLayout";
 import {
   createDiagnosticOverlayModel,
   type DiagnosticOverlayMode
@@ -551,6 +550,7 @@ export function App() {
   );
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(initialSettings.bottomPanelHeight);
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelSection>("timeline");
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(initialSettings.playbackFps);
@@ -1264,16 +1264,21 @@ export function App() {
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
   const bottomPanelSections = useMemo(() => getBottomPanelSections(mode, assetType), [assetType, mode]);
-  const showTimelinePanel = bottomPanelSections.includes("timeline");
-  const showTilePreviewPanel = bottomPanelSections.includes("tilePreview");
-  const bottomContentClassName = showTimelinePanel
-    ? "bottom-content"
-    : showTilePreviewPanel
-      ? "bottom-content with-tile-preview"
-      : "bottom-content without-timeline";
+  const activeBottomPanelTab = bottomPanelSections.includes(bottomPanelTab) ? bottomPanelTab : (bottomPanelSections[0] ?? "diagnostics");
+  const showTimelinePanel = activeBottomPanelTab === "timeline";
+  const showTilePreviewPanel = activeBottomPanelTab === "tilePreview";
+  const showDiagnosticsPanel = activeBottomPanelTab === "diagnostics";
+  const bottomContentClassName = `bottom-content is-${activeBottomPanelTab}`;
   const canScrubTimeline = timelineState.enabled && timelineFrames.length > 0;
   const canPlayTimeline = timelineState.enabled && timelineFrames.length > 1;
   const currentFrameDurationMs = currentFrame ? getFrameDurationMs(currentFrame, playbackFps) : 0;
+
+  useEffect(() => {
+    if (!bottomPanelSections.includes(bottomPanelTab)) {
+      setBottomPanelTab(bottomPanelSections[0] ?? "diagnostics");
+    }
+  }, [bottomPanelSections, bottomPanelTab]);
+
   const guidedFixSummary = useMemo(
     () =>
       getGuidedFixSummary({
@@ -5581,25 +5586,36 @@ export function App() {
           onKeyDown={onBottomResizeKeyDown}
         />
         <div className="tab-strip" aria-label="Bottom panels">
-          {showTimelinePanel ? (
-            <button type="button" className="active">
+          {bottomPanelSections.includes("timeline") ? (
+            <button
+              type="button"
+              className={activeBottomPanelTab === "timeline" ? "active" : ""}
+              aria-pressed={activeBottomPanelTab === "timeline"}
+              onClick={() => setBottomPanelTab("timeline")}
+            >
               <Play size={15} />
               Timeline
             </button>
           ) : null}
-          {showTilePreviewPanel ? (
-            <button type="button" className="active">
+          {bottomPanelSections.includes("tilePreview") ? (
+            <button
+              type="button"
+              className={activeBottomPanelTab === "tilePreview" ? "active" : ""}
+              aria-pressed={activeBottomPanelTab === "tilePreview"}
+              onClick={() => setBottomPanelTab("tilePreview")}
+            >
               <Layers size={15} />
               Repeat Preview
             </button>
           ) : null}
-          <button type="button">
+          <button
+            type="button"
+            className={activeBottomPanelTab === "diagnostics" ? "active" : ""}
+            aria-pressed={activeBottomPanelTab === "diagnostics"}
+            onClick={() => setBottomPanelTab("diagnostics")}
+          >
             <Terminal size={15} />
-            Logs
-          </button>
-          <button type="button">
-            <Gauge size={15} />
-            Metrics
+            Metrics and Logs
           </button>
         </div>
         <div className={bottomContentClassName}>
@@ -5995,70 +6011,76 @@ export function App() {
               </div>
             </section>
           ) : null}
-          <section>
-            <div className="console-heading">
-              <h2>Console</h2>
-              <button type="button" onClick={exportDiagnosticReport} title="Export sanitized diagnostics JSON">
-                <Download size={14} />
-                Diagnostics
-              </button>
-            </div>
-            {lastOperationError ? (
-              <div className="operation-error" role="status" aria-live="polite">
-                <strong>{lastOperationError.operation} failed</strong>
-                <span>{lastOperationError.message}</span>
-                <small>{lastOperationError.recovery}</small>
-                <button type="button" onClick={() => setLastOperationError(null)}>
-                  Dismiss
-                </button>
+          {showDiagnosticsPanel ? (
+            <section className="diagnostics-panel" aria-label="Metrics and logs">
+              <div className="diagnostics-grid">
+                <div className="diagnostics-card">
+                  <div className="console-heading">
+                    <h2>Console</h2>
+                    <button type="button" onClick={exportDiagnosticReport} title="Export sanitized diagnostics JSON">
+                      <Download size={14} />
+                      Diagnostics
+                    </button>
+                  </div>
+                  {lastOperationError ? (
+                    <div className="operation-error" role="status" aria-live="polite">
+                      <strong>{lastOperationError.operation} failed</strong>
+                      <span>{lastOperationError.message}</span>
+                      <small>{lastOperationError.recovery}</small>
+                      <button type="button" onClick={() => setLastOperationError(null)}>
+                        Dismiss
+                      </button>
+                    </div>
+                  ) : null}
+                  <ol className="log-list">
+                    {logs.map((line, index) => (
+                      <li key={`${line}-${index}`}>{line}</li>
+                    ))}
+                  </ol>
+                </div>
+                <QualityReportPanel report={qualityReport} />
+                <div className="diagnostics-card">
+                  <h2>Metrics</h2>
+                  <div className="metric-sections">
+                    <MetricGroup
+                      title="Source"
+                      metrics={[
+                        ["Size", selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"],
+                        ["Colors", selectedAsset ? String(sourceColorCount) : "--"],
+                        ["Type", selectedAsset ? assetTypeDefinition.shortLabel : "--"],
+                        ["Origin", selectedAsset ? provenanceSummary : "--"],
+                        ["Mode", mode],
+                        ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
+                      ]}
+                    />
+                    <MetricGroup
+                      title="Output"
+                      metrics={[
+                        ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${effectiveTargetWidth}x${effectiveTargetHeight}`],
+                        ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
+                        [
+                          "Palette",
+                          paletteDiagnostics
+                            ? `${paletteDiagnostics.mode} / ${paletteDiagnostics.lockScope} / ${paletteDiagnostics.dithering}`
+                            : `${paletteMode} / ${activePaletteLockScope} / ${paletteDithering}`
+                        ],
+                        ["Downscale", downscale],
+                        ["Denoise", denoiseStrengthLabel(denoiseStrength)],
+                        ["Detail expansion", contrastExpansionEnabled ? "on" : "off"],
+                        ["Halos", removeHalos ? "remove" : "keep"],
+                        ["Progress", formatBusyOperationLabel(visibleFixOperation) ?? "--"],
+                        [
+                          "Outline",
+                          outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
+                        ],
+                        ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
+                      ]}
+                    />
+                  </div>
+                </div>
               </div>
-            ) : null}
-            <ol className="log-list">
-              {logs.map((line, index) => (
-                <li key={`${line}-${index}`}>{line}</li>
-              ))}
-            </ol>
-          </section>
-          <QualityReportPanel report={qualityReport} />
-          <section>
-            <h2>Metrics</h2>
-            <div className="metric-sections">
-              <MetricGroup
-                title="Source"
-                metrics={[
-                  ["Size", selectedAsset ? `${selectedAsset.image.width}x${selectedAsset.image.height}` : "--"],
-                  ["Colors", selectedAsset ? String(sourceColorCount) : "--"],
-                  ["Type", selectedAsset ? assetTypeDefinition.shortLabel : "--"],
-                  ["Origin", selectedAsset ? provenanceSummary : "--"],
-                  ["Mode", mode],
-                  ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
-                ]}
-              />
-              <MetricGroup
-                title="Output"
-                metrics={[
-                  ["Size", fixResult ? `${fixResult.image.width}x${fixResult.image.height}` : `${effectiveTargetWidth}x${effectiveTargetHeight}`],
-                  ["Colors", fixResult ? String(fixResult.palette.length) : "--"],
-                  [
-                    "Palette",
-                    paletteDiagnostics
-                      ? `${paletteDiagnostics.mode} / ${paletteDiagnostics.lockScope} / ${paletteDiagnostics.dithering}`
-                      : `${paletteMode} / ${activePaletteLockScope} / ${paletteDithering}`
-                  ],
-                  ["Downscale", downscale],
-                  ["Denoise", denoiseStrengthLabel(denoiseStrength)],
-                  ["Detail expansion", contrastExpansionEnabled ? "on" : "off"],
-                  ["Halos", removeHalos ? "remove" : "keep"],
-                  ["Progress", formatBusyOperationLabel(visibleFixOperation) ?? "--"],
-                  [
-                    "Outline",
-                    outlineMode === "none" ? "none" : `${outlineMode} ${outlineSize}px ${Math.round((outlineAlpha / 255) * 100)}%`
-                  ],
-                  ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
-                ]}
-              />
-            </div>
-          </section>
+            </section>
+          ) : null}
         </div>
       </footer>
       ) : null}
