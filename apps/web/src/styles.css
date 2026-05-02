@@ -795,6 +795,68 @@ button:focus-visible {
   border-color: var(--line);
 }
 
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: #050707a8;
+}
+
+.confirmation-modal {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.9rem;
+  padding: 16px;
+  color: var(--text);
+  background: #111616;
+  border: 1px solid #5b393c;
+  border-radius: 8px;
+  box-shadow: 0 22px 60px #00000090;
+}
+
+.confirmation-modal-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #ff8f98;
+}
+
+.confirmation-modal-heading h2,
+.confirmation-modal p {
+  margin: 0;
+}
+
+.confirmation-modal-heading h2 {
+  color: var(--text);
+  font-size: 0.98rem;
+}
+
+.confirmation-modal p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.confirmation-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.danger-action {
+  color: #fff0f1;
+  background: #6b2d35;
+  border-color: #a9434e;
+  font-weight: 800;
+}
+
+.danger-action:hover:not(:disabled) {
+  border-color: #ff8f98;
+}
+
 .swatch-row {
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
