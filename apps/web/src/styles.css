@@ -2668,14 +2668,18 @@ button:focus-visible {
 .timeline-metadata-panel {
   min-width: 0;
   display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  align-items: start;
   gap: 0.65rem;
   margin-top: 0.65rem;
 }
 
 .timeline-bottom-panel {
-  display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
   gap: 0.65rem;
+  overflow: auto;
 }
 
 .timeline-panel-heading,
@@ -2939,11 +2943,14 @@ button:focus-visible {
 }
 
 .clip-editor {
+  min-width: 0;
   display: grid;
   gap: 5px;
   margin-top: 0.7rem;
   color: var(--muted);
   font-size: 0.68rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
 }
 
 .clip-editor-title {
@@ -2969,6 +2976,7 @@ button:focus-visible {
   grid-template-columns: minmax(112px, 1fr) minmax(128px, 150px) 54px 82px 86px 72px;
   gap: 0.4rem;
   align-items: center;
+  min-width: 680px;
 }
 
 .clip-editor-header {
@@ -3034,6 +3042,7 @@ button:focus-visible {
 }
 
 .timeline-rail {
+  flex: 0 0 auto;
   min-height: 64px;
   display: flex;
   gap: 8px;
