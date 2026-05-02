@@ -37,3 +37,58 @@ export function assetBaseName(filename: string): string {
   const withoutExtension = filename.replace(/\.[^.]+$/, "");
   return withoutExtension.replace(/[^a-z0-9_-]+/gi, "_").replace(/^_+|_+$/g, "") || "pixelaid_asset";
 }
+
+const windowsReservedNames = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const invalidFilenameCharacters = new Set(['<', '>', ':', '"', "/", "\\", "|", "?", "*"]);
+
+export function defaultExportBundleBaseName(filename: string): string {
+  return `${assetBaseName(filename)}_pixelaid_bundle`;
+}
+
+export function defaultExportBundleFilename(filename: string): string {
+  return `${defaultExportBundleBaseName(filename)}.zip`;
+}
+
+export function sanitizeExportBundleBaseName(value: string, fallbackBaseName = "pixelaid_bundle"): string {
+  const fallback = sanitizeBaseName(fallbackBaseName) ?? "pixelaid_bundle";
+  return sanitizeBaseName(value) ?? fallback;
+}
+
+export function resolveExportBundleFilename(
+  value: string,
+  fallbackBaseName = "pixelaid_bundle"
+): { baseName: string; filename: string; usedFallback: boolean } {
+  const fallback = sanitizeExportBundleBaseName(fallbackBaseName, "pixelaid_bundle");
+  const baseName = sanitizeExportBundleBaseName(value, fallback);
+
+  return {
+    baseName,
+    filename: `${baseName}.zip`,
+    usedFallback: baseName === fallback && sanitizeBaseName(value) === null
+  };
+}
+
+function sanitizeBaseName(value: string): string | null {
+  const trimmed = value.trim().replace(/\.zip$/i, "");
+  const safe = replaceInvalidFilenameCharacters(trimmed)
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^[._-]+|[._ -]+$/g, "")
+    .slice(0, 120);
+
+  if (!safe || windowsReservedNames.test(safe)) {
+    return null;
+  }
+
+  return safe;
+}
+
+function replaceInvalidFilenameCharacters(value: string): string {
+  let safe = "";
+
+  for (const char of value) {
+    safe += char.charCodeAt(0) < 32 || invalidFilenameCharacters.has(char) ? "_" : char;
+  }
+
+  return safe;
+}
