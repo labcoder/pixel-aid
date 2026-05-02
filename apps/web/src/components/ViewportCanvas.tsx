@@ -83,6 +83,8 @@ export function ViewportCanvas({
     () => (diagnosticOverlay?.fixedMask ? maskToCanvas(diagnosticOverlay.fixedMask) : null),
     [diagnosticOverlay?.fixedMask]
   );
+  const sourceCanvas = useMemo(() => (sourceImage ? imageToCanvas(sourceImage) : null), [sourceImage]);
+  const fixedCanvas = useMemo(() => (fixedImage ? imageToCanvas(fixedImage) : null), [fixedImage]);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
 
@@ -137,9 +139,6 @@ export function ViewportCanvas({
       return;
     }
 
-    const sourceCanvas = sourceImage ? imageToCanvas(sourceImage) : null;
-    const fixedCanvas = fixedImage ? imageToCanvas(fixedImage) : null;
-
     const draw = () => {
       const rect = canvas.getBoundingClientRect();
       const dpr = window.devicePixelRatio || 1;
@@ -189,15 +188,15 @@ export function ViewportCanvas({
     return () => observer.disconnect();
   }, [
     diagnosticOverlay,
-    fixedImage,
+    fixedCanvas,
     fixedOverlayCanvas,
     fixedSourceRect,
     frames,
     renderKey,
     selectedFrameIndex,
     showGrid,
+    sourceCanvas,
     sourceFrames,
-    sourceImage,
     sourceOverlayCanvas,
     viewMode,
     zoom

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { countVisibleColors, extractVisiblePalette } from "./palettePreview";
+import { analyzeVisiblePalettePreview, countVisibleColors, extractVisiblePalette } from "./palettePreview";
 import type { RGBAImage } from "@pixelaid/shared";
 
 const image = (pixels: number[]): RGBAImage => ({
@@ -20,5 +20,18 @@ describe("palette preview", () => {
 
     expect(extractVisiblePalette(source, 2)).toEqual(["#0a141e", "#00c8f0"]);
     expect(countVisibleColors(source)).toBe(3);
+  });
+
+  test("bounds source palette analysis for extremely high color inputs", () => {
+    const pixels: number[] = [];
+    for (let index = 0; index < 6; index += 1) {
+      pixels.push(index, index + 1, index + 2, 255);
+    }
+
+    const preview = analyzeVisiblePalettePreview(image(pixels), 3, { maxUniqueColors: 4 });
+
+    expect(preview.colors).toHaveLength(3);
+    expect(preview.totalColors).toBe(4);
+    expect(preview.truncated).toBe(true);
   });
 });

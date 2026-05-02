@@ -1,6 +1,7 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { useEffect, useRef } from "react";
 import type { FramePreviewPlacement } from "../lib/frameNormalization";
+import { drawRgbaImageNearest } from "../lib/previewCanvas";
 
 export function FramePreviewCanvas({
   image,
@@ -43,7 +44,6 @@ export function FramePreviewCanvas({
       return;
     }
 
-    const sourceCanvas = imageToCanvas(image);
     const scale = Math.max(1, Math.floor(Math.min((rect.width - 24) / placement.canvas.width, (rect.height - 24) / placement.canvas.height)));
     const drawWidth = placement.canvas.width * scale;
     const drawHeight = placement.canvas.height * scale;
@@ -53,14 +53,14 @@ export function FramePreviewCanvas({
     context.fillStyle = "#101414";
     context.fillRect(startX - 1, startY - 1, drawWidth + 2, drawHeight + 2);
     if (previousPlacement) {
-      drawFramePlacement(context, sourceCanvas, previousPlacement, startX, startY, scale, 0.28);
+      drawFramePlacement(context, image, previousPlacement, startX, startY, scale, 0.28);
       drawOnionLabel(context, "prev", startX + 4, startY + drawHeight - 15, "#8fb8ff");
     }
     if (nextPlacement) {
-      drawFramePlacement(context, sourceCanvas, nextPlacement, startX, startY, scale, 0.28);
+      drawFramePlacement(context, image, nextPlacement, startX, startY, scale, 0.28);
       drawOnionLabel(context, "next", startX + drawWidth - 28, startY + drawHeight - 15, "#ff9fb2");
     }
-    drawFramePlacement(context, sourceCanvas, placement, startX, startY, scale, 1);
+    drawFramePlacement(context, image, placement, startX, startY, scale, 1);
 
     context.strokeStyle = "#35c6b6";
     context.lineWidth = 1;
@@ -92,7 +92,7 @@ export function FramePreviewCanvas({
 
 function drawFramePlacement(
   context: CanvasRenderingContext2D,
-  sourceCanvas: HTMLCanvasElement,
+  image: RGBAImage,
   placement: FramePreviewPlacement,
   startX: number,
   startY: number,
@@ -101,20 +101,7 @@ function drawFramePlacement(
 ): void {
   const drawRect = placement.drawRect ?? placement.frame.rect;
   const targetRect = getPlacementTargetRect(placement, startX, startY, scale, drawRect);
-  context.save();
-  context.globalAlpha = alpha;
-  context.drawImage(
-    sourceCanvas,
-    drawRect.x,
-    drawRect.y,
-    drawRect.w,
-    drawRect.h,
-    targetRect.x,
-    targetRect.y,
-    targetRect.w,
-    targetRect.h
-  );
-  context.restore();
+  drawRgbaImageNearest(context, image, drawRect, targetRect, alpha);
 }
 
 function getPlacementTargetRect(
@@ -150,20 +137,6 @@ function drawOnionLabel(context: CanvasRenderingContext2D, label: string, x: num
   context.textBaseline = "top";
   context.fillText(label, x, y);
   context.restore();
-}
-
-function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create frame preview canvas");
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-  return canvas;
 }
 
 function drawChecker(context: CanvasRenderingContext2D, width: number, height: number): void {

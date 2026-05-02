@@ -35,6 +35,13 @@ describe("busy status", () => {
     expect(formatBusyOperationLabel(visible)).toBe("Preparing 4 frame fix... Waiting for worker");
   });
 
+  test("shows asset activation while switching selected assets", () => {
+    const activation = createBusyOperation(5, "activation", "Switching to hero.png...");
+
+    expect(selectVisibleBusyOperation({ activationOperation: activation })).toEqual(activation);
+    expect(formatBusyOperationLabel(activation)).toBe("Switching to hero.png...");
+  });
+
   test("clears only the matching active operation id", () => {
     const operation = createBusyOperation(4, "analysis", "Analyzing hero.png...");
 

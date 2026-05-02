@@ -590,6 +590,12 @@ button:focus-visible {
   color: var(--text);
   border-color: var(--cyan);
   background: #19302e;
+  box-shadow: inset 3px 0 0 var(--cyan), 0 0 0 1px #35c6b638, 0 8px 20px #00000028;
+}
+
+.asset-list .asset-row:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .icon-button {

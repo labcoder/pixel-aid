@@ -204,7 +204,8 @@ import {
   type PaletteImportFormat,
   type PaletteLibraryEntry
 } from "./lib/paletteLibrary";
-import { countVisibleColors, extractVisiblePalette } from "./lib/palettePreview";
+import { analyzeVisiblePalettePreview } from "./lib/palettePreview";
+import { drawRgbaImageNearest } from "./lib/previewCanvas";
 import {
   clampFps,
   getFrameDurationMs,
@@ -476,6 +477,7 @@ export function App() {
   const [lastOperationError, setLastOperationError] = useState<OperationErrorReport | null>(null);
   const [isDropActive, setIsDropActive] = useState(false);
   const [importOperation, setImportOperation] = useState<BusyOperation | null>(null);
+  const [assetActivationOperation, setAssetActivationOperation] = useState<BusyOperation | null>(null);
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
@@ -804,22 +806,25 @@ export function App() {
   const provenanceSummary = formatAssetProvenanceSummary(selectedAsset?.provenance);
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
   const isImporting = importOperation !== null;
+  const isAssetActivating = assetActivationOperation !== null;
   const isAnalyzing = analysisOperation !== null;
   const isFixing = fixOperation !== null || fixProgress !== null;
+  const isEditorBusy = isImporting || isAssetActivating || isAnalyzing || isFixing;
   const visibleFixOperation = fixProgress
     ? updateBusyOperation(fixOperation ?? createBusyOperation(0, "fix", formatFixProgress(fixProgress)), formatFixProgress(fixProgress))
     : fixOperation;
-  const visibleBusyOperation = selectVisibleBusyOperation({ importOperation, analysisOperation, fixOperation: visibleFixOperation });
+  const visibleBusyOperation = selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation, fixOperation: visibleFixOperation });
   const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
-  const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, analysisOperation }));
+  const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
   useEffect(() => {
     setLastExportValidation(null);
   }, [engineExportTargets, fixResult, selectedAsset?.id]);
-  const sourcePalette = useMemo(
-    () => (selectedAsset ? extractVisiblePalette(selectedAsset.image, 8) : []),
+  const sourcePaletteAnalysis = useMemo(
+    () => (selectedAsset ? analyzeVisiblePalettePreview(selectedAsset.image, 8, { maxUniqueColors: 10000 }) : null),
     [selectedAsset]
   );
-  const sourceColorCount = useMemo(() => (selectedAsset ? countVisibleColors(selectedAsset.image) : 0), [selectedAsset]);
+  const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
+  const sourceColorCount = sourcePaletteAnalysis?.totalColors ?? 0;
   const outlineSourceCandidates = useMemo(
     () => (selectedAsset ? detectOutlineColorCandidates(selectedAsset.image, { maxCandidates: 6 }) : []),
     [selectedAsset]
@@ -1717,6 +1722,10 @@ export function App() {
 
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
+      if (isEditorBusy) {
+        return;
+      }
+
       const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
       if (imageFiles.length === 0) {
         appendLog("No image files found in import");
@@ -1725,6 +1734,9 @@ export function App() {
 
       const operation = nextBusyOperation("import", `Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
       setImportOperation(operation);
+      setFixResult(null);
+      setLastExportValidation(null);
+      setIsPlaying(false);
       await waitForNextPaint();
 
       try {
@@ -1763,7 +1775,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, nextBusyOperation, recordOperationError]
+    [appendLog, applyFixSuggestion, isEditorBusy, nextBusyOperation, recordOperationError]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -1868,12 +1880,15 @@ export function App() {
 
   const loadOnboardingSample = useCallback(
     async (sampleId: string) => {
-      if (isImporting || isAnalyzing || isFixing) {
+      if (isEditorBusy) {
         return;
       }
 
       const operation = nextBusyOperation("import", "Loading sample workflow...");
       setImportOperation(operation);
+      setFixResult(null);
+      setLastExportValidation(null);
+      setIsPlaying(false);
       await waitForNextPaint();
 
       try {
@@ -1900,7 +1915,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyOnboardingSampleSettings, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError]
+    [appendLog, applyOnboardingSampleSettings, isEditorBusy, nextBusyOperation, recordOperationError]
   );
 
   const openImportPicker = useCallback(() => {
@@ -2029,7 +2044,7 @@ export function App() {
   ]);
 
   const runFix = useCallback(async () => {
-    if (!selectedAsset || isFixing || isImporting || isAnalyzing) {
+    if (!selectedAsset || isEditorBusy) {
       return;
     }
 
@@ -2116,9 +2131,7 @@ export function App() {
     buildFixOptions,
     effectiveTargetHeight,
     effectiveTargetWidth,
-    isAnalyzing,
-    isFixing,
-    isImporting,
+    isEditorBusy,
     mode,
     nextBusyOperation,
     recordOperationError,
@@ -2150,7 +2163,7 @@ export function App() {
   }, []);
 
   const autoSuggest = useCallback(async () => {
-    if (!selectedAsset || isImporting || isAnalyzing || isFixing) {
+    if (!selectedAsset || isEditorBusy) {
       return;
     }
 
@@ -2173,7 +2186,7 @@ export function App() {
     } finally {
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, isAnalyzing, isFixing, isImporting, nextBusyOperation, recordOperationError, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, isEditorBusy, nextBusyOperation, recordOperationError, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -3537,51 +3550,86 @@ export function App() {
   );
 
   const selectAsset = useCallback(
-    (assetId: string) => {
+    async (assetId: string) => {
       const nextAsset = assets.find((asset) => asset.id === assetId);
-      if (assetId !== selectedAsset?.id) {
-        setFixResult(null);
-        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
-        sourceFrameEditStartSnapshotRef.current = null;
+      if (!nextAsset) {
+        setAssetMenu(null);
+        return;
       }
-      if (nextAsset) {
+
+      if (assetId === selectedAsset?.id) {
+        setAssetMenu(null);
+        return;
+      }
+
+      if (isEditorBusy) {
+        return;
+      }
+
+      const operation = nextBusyOperation("activation", `Switching to ${nextAsset.name}...`);
+      setAssetActivationOperation(operation);
+      setAssetMenu(null);
+      setFixResult(null);
+      setLastExportValidation(null);
+      setIsPlaying(false);
+      setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+      sourceFrameEditStartSnapshotRef.current = null;
+      await waitForNextPaint();
+
+      try {
         const nextMode = assetTypeToMode(nextAsset.assetType);
         setMode(nextMode);
         setCropToBounds(nextMode === "single");
+        setSelectedAssetId(assetId);
+        appendLog(`Selected ${nextAsset.name}`);
+        await waitForNextPaint();
+      } finally {
+        setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
       }
-      setSelectedAssetId(assetId);
-      setAssetMenu(null);
     },
-    [assets, selectedAsset?.id]
+    [appendLog, assets, isEditorBusy, nextBusyOperation, selectedAsset?.id]
   );
 
   const removeAsset = useCallback(
-    (assetId: string) => {
-      setAssets((current) => {
-        const result = removeAssetAndSelectNext(current, assetId, selectedAsset?.id ?? null);
-        const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
-        if (nextSelectedAsset) {
-          const nextMode = assetTypeToMode(nextSelectedAsset.assetType);
-          setMode(nextMode);
-          setCropToBounds(nextMode === "single");
-        }
-        setSelectedAssetId(result.selectedAssetId);
-        return result.assets;
-      });
-      if (assetId === selectedAsset?.id) {
-        setFixResult(null);
-        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
-        sourceFrameEditStartSnapshotRef.current = null;
+    async (assetId: string) => {
+      if (isEditorBusy) {
+        return;
       }
-      setGridCandidateCache((current) => {
-        const next = { ...current };
-        delete next[assetId];
-        return next;
-      });
-      setAssetMenu(null);
-      appendLog("Removed asset");
+
+      const removingAsset = assets.find((asset) => asset.id === assetId);
+      const operation = nextBusyOperation("activation", removingAsset ? `Removing ${removingAsset.name}...` : "Removing asset...");
+      setAssetActivationOperation(operation);
+      await waitForNextPaint();
+      try {
+        setAssets((current) => {
+          const result = removeAssetAndSelectNext(current, assetId, selectedAsset?.id ?? null);
+          const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
+          if (nextSelectedAsset) {
+            const nextMode = assetTypeToMode(nextSelectedAsset.assetType);
+            setMode(nextMode);
+            setCropToBounds(nextMode === "single");
+          }
+          setSelectedAssetId(result.selectedAssetId);
+          return result.assets;
+        });
+        if (assetId === selectedAsset?.id) {
+          setFixResult(null);
+          setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+          sourceFrameEditStartSnapshotRef.current = null;
+        }
+        setGridCandidateCache((current) => {
+          const next = { ...current };
+          delete next[assetId];
+          return next;
+        });
+        setAssetMenu(null);
+        appendLog("Removed asset");
+        await waitForNextPaint();
+      } finally {
+        setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
+      }
     },
-    [appendLog, selectedAsset?.id]
+    [appendLog, assets, isEditorBusy, nextBusyOperation, selectedAsset?.id]
   );
 
   const exportFixedAsset = useCallback(() => {
@@ -3747,13 +3795,13 @@ export function App() {
       event.preventDefault();
 
       if (action === "import") {
-        if (!isImporting && !isAnalyzing && !isFixing) {
+        if (!isEditorBusy) {
           openImportPicker();
         }
         return;
       }
       if (action === "fix") {
-        if (selectedAsset && !isFixing && !isImporting && !isAnalyzing) {
+        if (selectedAsset && !isEditorBusy) {
           void runFix();
         }
         return;
@@ -3793,9 +3841,7 @@ export function App() {
   }, [
     exportFixedAsset,
     fixResult,
-    isAnalyzing,
-    isFixing,
-    isImporting,
+    isEditorBusy,
     openImportPicker,
     redoFrameEdit,
     runFix,
@@ -3903,7 +3949,7 @@ export function App() {
   const inspectorGroupContent: Record<InspectorGroupId, ReactNode> = {
     asset: (
       <>
-        <button type="button" className="wide-tool-button" disabled={!selectedAsset || isImporting || isAnalyzing || isFixing} onClick={autoSuggest}>
+        <button type="button" className="wide-tool-button" disabled={!selectedAsset || isEditorBusy} onClick={autoSuggest}>
           <WandSparkles size={15} />
           {isAnalyzing ? "Analyzing" : "Auto Suggest"}
         </button>
@@ -4674,7 +4720,7 @@ export function App() {
         <nav className="toolbar-actions" aria-label="Primary editor actions">
           <button
             type="button"
-            disabled={isImporting || isAnalyzing || isFixing}
+            disabled={isEditorBusy}
             onClick={openImportPicker}
             aria-keyshortcuts="Control+O Meta+O"
             title="Import images (Ctrl/Cmd+O)"
@@ -4684,7 +4730,7 @@ export function App() {
           </button>
           <button
             type="button"
-            disabled={!selectedAsset || isFixing || isImporting || isAnalyzing}
+            disabled={!selectedAsset || isEditorBusy}
             onClick={runFix}
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="Run fix (Ctrl/Cmd+Enter)"
@@ -4732,7 +4778,8 @@ export function App() {
                     type="button"
                     className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}`}
                     aria-label={`Select ${asset.name}`}
-                    onClick={() => selectAsset(asset.id)}
+                    disabled={isEditorBusy}
+                    onClick={() => void selectAsset(asset.id)}
                     onContextMenu={(event) => {
                       event.preventDefault();
                       setAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
@@ -4746,7 +4793,7 @@ export function App() {
                       </small>
                     </span>
                   </button>
-                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} onClick={() => removeAsset(asset.id)}>
+                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} disabled={isEditorBusy} onClick={() => void removeAsset(asset.id)}>
                     <Trash2 size={14} />
                   </button>
                 </li>
@@ -4759,7 +4806,7 @@ export function App() {
               style={{ left: assetMenu.x, top: assetMenu.y }}
               onClick={(event) => event.stopPropagation()}
             >
-              <button type="button" onClick={() => removeAsset(assetMenu.assetId)}>
+              <button type="button" disabled={isEditorBusy} onClick={() => void removeAsset(assetMenu.assetId)}>
                 <Trash2 size={14} />
                 Delete asset
               </button>
@@ -4779,7 +4826,7 @@ export function App() {
                 key={sample.id}
                 type="button"
                 className="sample-row"
-                disabled={isImporting || isAnalyzing || isFixing}
+                disabled={isEditorBusy}
                 onClick={() => void loadOnboardingSample(sample.id)}
               >
                 <span>
@@ -4794,7 +4841,13 @@ export function App() {
         </section>
         <section className="panel-section">
           <h2>Palettes</h2>
-          <PaletteSwatches label="Source" colors={sourcePalette} totalColors={sourceColorCount} emptyText="Import an asset" />
+          <PaletteSwatches
+            label="Source"
+            colors={sourcePalette}
+            totalColors={sourceColorCount}
+            totalColorsTruncated={sourcePaletteAnalysis?.truncated ?? false}
+            emptyText="Import an asset"
+          />
           <PaletteSwatches
             label={outputPaletteLabel}
             colors={outputPalettePreview}
@@ -5208,8 +5261,8 @@ export function App() {
               />
             ) : null
           }
-          busy={isImporting || isAnalyzing || isFixing}
-          canFix={selectedAsset !== null && !isImporting && !isAnalyzing && !isFixing}
+          busy={isEditorBusy}
+          canFix={selectedAsset !== null && !isEditorBusy}
           advancedOpen={showAdvancedControls}
           onAutoSuggest={autoSuggest}
           onRunFix={runFix}
@@ -5744,14 +5797,17 @@ function PaletteSwatches({
   label,
   colors,
   totalColors = colors.length,
+  totalColorsTruncated = false,
   emptyText
 }: {
   label: string;
   colors: readonly string[];
   totalColors?: number;
+  totalColorsTruncated?: boolean;
   emptyText: string;
 }) {
-  const shownText = totalColors > colors.length ? `${colors.length} of ${totalColors}` : `${colors.length}`;
+  const totalText = totalColorsTruncated ? `${totalColors}+` : String(totalColors);
+  const shownText = totalColors > colors.length || totalColorsTruncated ? `${colors.length} of ${totalText}` : `${colors.length}`;
 
   return (
     <div className="palette-preview">
@@ -6132,16 +6188,6 @@ function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate
       return;
     }
 
-    const source = document.createElement("canvas");
-    source.width = image.width;
-    source.height = image.height;
-    const sourceContext = source.getContext("2d");
-    if (!sourceContext) {
-      return;
-    }
-    sourceContext.imageSmoothingEnabled = false;
-    sourceContext.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-
     const sourceRect = candidate.sourceRect ?? {
       x: candidate.phaseX,
       y: candidate.phaseY,
@@ -6158,7 +6204,7 @@ function GridCandidateCanvas({ image, candidate }: { image: RGBAImage; candidate
     context.clearRect(0, 0, width, height);
     context.fillStyle = "#101112";
     context.fillRect(0, 0, width, height);
-    context.drawImage(source, sourceRect.x, sourceRect.y, sourceRect.w, sourceRect.h, x, y, drawWidth, drawHeight);
+    drawRgbaImageNearest(context, image, sourceRect, { x, y, w: drawWidth, h: drawHeight });
     context.strokeStyle = "#f1c75b";
     context.strokeRect(x + 0.5, y + 0.5, drawWidth - 1, drawHeight - 1);
   }, [candidate, image]);
