@@ -105,6 +105,7 @@ import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetType
 import { getBottomPanelSections, type BottomPanelSection } from "./lib/bottomPanelLayout";
 import {
   createDiagnosticOverlayModel,
+  diagnosticOverlayOptions,
   type DiagnosticOverlayMode
 } from "./lib/diagnosticOverlays";
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
@@ -146,7 +147,7 @@ import {
 } from "./lib/fixControls";
 import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
-import { moveFrameBySourceDelta } from "./lib/frameEditing";
+import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
 import {
   addFrameMetadataBox,
@@ -180,7 +181,6 @@ import {
   type FrameEditSnapshot
 } from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
-import { resizeAnimationRowFromSourceFrame } from "./lib/frameRowEditing";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
 import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
@@ -256,11 +256,13 @@ import { createSheetDetectorReview, reconcileSheetDetectorWarnings, type SheetDe
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./lib/sheetLayoutModel";
 import {
+  createManualSheetLayout,
   fillRowToFrameCount,
   fillSparseRowsToFrameCount,
   insertFrameAtRowEdge,
   insertFrameNearSelection,
   insertRowNearSelection,
+  removeAnimationOrSheetRow,
   removeFrameAtSelection,
   removeRowAtSelection,
   type ManualSheetEditResult
@@ -533,7 +535,7 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
   frame: {
     title: "Frame / Cell",
     docsId: "frame-cell",
-    tooltip: "Sheet frame dimensions, rows, columns, margin, and spacing."
+    tooltip: "Sheet input frame boxes, row/column layout, and packed output cell sizes."
   },
   viewport: {
     title: "Viewport",
@@ -563,7 +565,7 @@ export function App() {
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
-  const diagnosticOverlayMode: DiagnosticOverlayMode = "none";
+  const [diagnosticOverlayMode, setDiagnosticOverlayMode] = useState<DiagnosticOverlayMode>("none");
   const [zoom, setZoom] = useState(initialSettings.zoom);
   const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
@@ -672,6 +674,7 @@ export function App() {
   const detectedSheetFramesRef = useRef<SpriteFrame[]>(detectedSheetFrames);
   const detectedRowAnimationsRef = useRef<AnimationTag[]>(detectedRowAnimations);
   const sourceFrameEditStartSnapshotRef = useRef<FrameEditSnapshot | null>(null);
+  const sourceFrameEditGestureRef = useRef<{ mode: "move" | "resize"; frameIndex: number } | null>(null);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
 
@@ -1020,7 +1023,22 @@ export function App() {
     [frameHeight, frameWidth, sheetColumns, sheetExtrude, sheetMargin, sheetPivot, sheetRows, sheetSpacing]
   );
   const manualSheetFrames = useMemo(() => (sheetMode ? sliceSheetFrames(sheetOptions) : []), [sheetMode, sheetOptions]);
-  const baseSheetFrames = sheetMode && detectedSheetFrames.length > 0 ? detectedSheetFrames : manualSheetFrames;
+  const manualSheetLayout = useMemo(
+    () =>
+      sheetMode
+        ? createManualSheetLayout({
+            frames: manualSheetFrames,
+            rows: sheetRows,
+            columns: sheetColumns,
+            fps: playbackFps
+          })
+        : { frames: [], animations: [] },
+    [manualSheetFrames, playbackFps, sheetColumns, sheetMode, sheetRows]
+  );
+  const hasStoredSheetLayout = sheetMode && detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0;
+  const editableSheetFrames = hasStoredSheetLayout ? detectedSheetFrames : manualSheetLayout.frames;
+  const sheetRowAnimations = hasStoredSheetLayout ? detectedRowAnimations : manualSheetLayout.animations;
+  const baseSheetFrames = sheetMode ? editableSheetFrames : [];
   const timedSheetFrames = useMemo(
     () => applyFrameDurationOverrides(baseSheetFrames, frameDurationOverrides),
     [baseSheetFrames, frameDurationOverrides]
@@ -1029,10 +1047,10 @@ export function App() {
     () =>
       applyPivotOverrides({
         frames: timedSheetFrames,
-        animations: detectedRowAnimations,
+        animations: sheetRowAnimations,
         overrides: pivotOverrides
       }),
-    [detectedRowAnimations, pivotOverrides, timedSheetFrames]
+    [pivotOverrides, sheetRowAnimations, timedSheetFrames]
   );
   const sheetFrames = useMemo(
     () =>
@@ -1051,7 +1069,7 @@ export function App() {
     () =>
       deriveSheetOutputLayout({
         frames: sheetMode ? sheetFrames : [],
-        animations: detectedRowAnimations,
+        animations: sheetRowAnimations,
         margin: sheetMargin,
         spacing: sheetSpacing,
         fallback: {
@@ -1061,7 +1079,7 @@ export function App() {
           columns: sheetColumns
         }
       }),
-    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetFrames, sheetMargin, sheetMode, sheetRows, sheetSpacing]
+    [frameHeight, frameWidth, sheetColumns, sheetFrames, sheetMargin, sheetMode, sheetRowAnimations, sheetRows, sheetSpacing]
   );
   const plannedSheetOutputSize = useMemo(
     () => ({ width: plannedSheetLayout.width, height: plannedSheetLayout.height }),
@@ -1104,8 +1122,8 @@ export function App() {
     [frameHeight, frameWidth, sheetCanvasSize.height, sheetCanvasSize.width, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
   );
   const animationFrameIndexes = useMemo(
-    () => getAnimationFrameIndexes(sheetFrames, detectedRowAnimations, selectedAnimationName),
-    [detectedRowAnimations, selectedAnimationName, sheetFrames]
+    () => getAnimationFrameIndexes(sheetFrames, sheetRowAnimations, selectedAnimationName),
+    [selectedAnimationName, sheetFrames, sheetRowAnimations]
   );
   const timelineFrames = useMemo(() => animationFrameIndexes.map((index) => sheetFrames[index]!).filter(Boolean), [animationFrameIndexes, sheetFrames]);
   const timelineStabilityDiagnostics = useMemo(
@@ -1224,13 +1242,13 @@ export function App() {
       detectedSheetFrames.length > 0
         ? formatSheetDetectionNotes({
             frameCount: detectedSheetFrames.length,
-            rowCount: detectedRowAnimations.length,
-            rowFrameCounts: detectedRowAnimations.map((animation) => animation.frameNames.length),
+            rowCount: sheetRowAnimations.length,
+            rowFrameCounts: sheetRowAnimations.map((animation) => animation.frameNames.length),
             warnings: detectedSheetWarnings,
             diagnostics: detectedSheetDiagnostics
           })
         : [],
-    [detectedRowAnimations, detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings]
+    [detectedSheetDiagnostics, detectedSheetFrames.length, detectedSheetWarnings, sheetRowAnimations]
   );
   const qualityReportSheetLayout = useMemo(
     () =>
@@ -1238,19 +1256,18 @@ export function App() {
         ? createQualityReportSheetLayout({
             frameWidth,
             frameHeight,
-            rows: detectedRowAnimations.length > 0 ? detectedRowAnimations.length : sheetRows,
+            rows: sheetRowAnimations.length > 0 ? sheetRowAnimations.length : sheetRows,
             columns: plannedSheetLayout.maxColumns,
             margin: sheetMargin,
             spacing: sheetSpacing,
             frames: sheetFrames,
-            rowAnimations: detectedRowAnimations,
+            rowAnimations: sheetRowAnimations,
             warnings: detectedSheetWarnings,
             confidence: detectedSheetFrames.length > 0 ? 0.82 : 0.58,
             reason: detectedSheetFrames.length > 0 ? "Using current detected/manual sheet context." : "Using current manual sheet controls."
           })
         : undefined,
     [
-      detectedRowAnimations,
       detectedSheetFrames.length,
       detectedSheetWarnings,
       frameHeight,
@@ -1258,6 +1275,7 @@ export function App() {
       plannedSheetLayout.maxColumns,
       sheetFrames,
       sheetMargin,
+      sheetRowAnimations,
       sheetMode,
       sheetRows,
       sheetSpacing
@@ -1276,24 +1294,23 @@ export function App() {
         : null,
     [alpha, assetType, gridCandidates, maxColors, qualityReportSheetLayout, selectedAsset]
   );
-  const hasDetectedSheetLayout = detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0;
   const selectedDetectedFrame =
-    selectedFrameIndex >= 0 && selectedFrameIndex < detectedSheetFrames.length ? detectedSheetFrames[selectedFrameIndex] : undefined;
+    selectedFrameIndex >= 0 && selectedFrameIndex < editableSheetFrames.length ? editableSheetFrames[selectedFrameIndex] : undefined;
   const selectedDetectedFrameRowName = selectedDetectedFrame?.tags?.find((tag) =>
-    detectedRowAnimations.some((animation) => animation.name === tag)
+    sheetRowAnimations.some((animation) => animation.name === tag)
   );
   const selectedManualAnimationName =
-    selectedAnimationName !== ALL_ANIMATIONS ? selectedAnimationName : selectedDetectedFrameRowName ?? detectedRowAnimations[0]?.name ?? ALL_ANIMATIONS;
-  const selectedManualAnimation = detectedRowAnimations.find((animation) => animation.name === selectedManualAnimationName);
-  const canEditManualSheetCell = hasDetectedSheetLayout && selectedDetectedFrame !== undefined;
-  const canEditManualSheetRow = hasDetectedSheetLayout && selectedManualAnimation !== undefined;
-  const canRemoveManualSheetRow = canEditManualSheetRow && detectedRowAnimations.length > 1;
+    selectedAnimationName !== ALL_ANIMATIONS ? selectedAnimationName : selectedDetectedFrameRowName ?? sheetRowAnimations[0]?.name ?? ALL_ANIMATIONS;
+  const selectedManualAnimation = sheetRowAnimations.find((animation) => animation.name === selectedManualAnimationName);
+  const canEditManualSheetCell = sheetMode && selectedDetectedFrame !== undefined && sheetRowAnimations.length > 0;
+  const canEditManualSheetRow = sheetMode && selectedManualAnimation !== undefined;
+  const canRemoveManualSheetRow = canEditManualSheetRow && sheetRowAnimations.length > 1;
   const sheetDetectorReview = useMemo(
     () =>
-      hasDetectedSheetLayout
+      sheetMode && editableSheetFrames.length > 0 && sheetRowAnimations.length > 0
         ? createSheetDetectorReview({
-            frames: detectedSheetFrames,
-            animations: detectedRowAnimations,
+            frames: editableSheetFrames,
+            animations: sheetRowAnimations,
             selectedAnimationName: selectedManualAnimationName,
             margin: sheetMargin,
             spacing: sheetSpacing,
@@ -1302,13 +1319,13 @@ export function App() {
           })
         : null,
     [
-      detectedRowAnimations,
       detectedSheetDiagnostics,
-      detectedSheetFrames,
       detectedSheetWarnings,
-      hasDetectedSheetLayout,
+      editableSheetFrames,
       selectedManualAnimationName,
       sheetMargin,
+      sheetMode,
+      sheetRowAnimations,
       sheetSpacing
     ]
   );
@@ -2510,10 +2527,10 @@ export function App() {
       getVisibleInspectorGroups(inspectorGroupOrder, {
         assetType,
         mode,
-        frameCount: detectedSheetFrames.length,
-        animationCount: detectedRowAnimations.length
+        frameCount: editableSheetFrames.length,
+        animationCount: sheetRowAnimations.length
       }),
-    [assetType, detectedRowAnimations.length, detectedSheetFrames.length, inspectorGroupOrder, mode]
+    [assetType, editableSheetFrames.length, inspectorGroupOrder, mode, sheetRowAnimations.length]
   );
 
   const moveInspectorGroupInPanel = useCallback(
@@ -2524,15 +2541,15 @@ export function App() {
           getVisibleInspectorGroups(current, {
             assetType,
             mode,
-            frameCount: detectedSheetFrames.length,
-            animationCount: detectedRowAnimations.length
+            frameCount: editableSheetFrames.length,
+            animationCount: sheetRowAnimations.length
           }),
           group,
           direction
         )
       );
     },
-    [assetType, detectedRowAnimations.length, detectedSheetFrames.length, mode]
+    [assetType, editableSheetFrames.length, mode, sheetRowAnimations.length]
   );
 
   const commitTargetSize = useCallback(
@@ -2623,22 +2640,26 @@ export function App() {
     (value: number) => {
       const nextSize = clampSheetInteger(value, 1, 1024);
 
-      if (detectedRowAnimations.length > 0) {
-        setDetectedSheetFrames((current) =>
-          detectedRowAnimations.reduce(
+      if (sheetRowAnimations.length > 0) {
+        setDetectedSheetFrames((current) => {
+          const next = sheetRowAnimations.reduce(
             (frames, animation) =>
               resizeAnimationCells({
                 frames,
-                animations: detectedRowAnimations,
+                animations: sheetRowAnimations,
                 animationName: animation.name,
                 cellWidth: nextSize,
                 cellHeight: nextSize,
                 margin: sheetMargin,
                 spacing: sheetSpacing
               }),
-            current
-          )
-        );
+            current.length > 0 ? current : editableSheetFrames
+          );
+          detectedSheetFramesRef.current = next;
+          detectedRowAnimationsRef.current = sheetRowAnimations;
+          setDetectedRowAnimations(sheetRowAnimations);
+          return next;
+        });
       } else {
         setFrameWidth(nextSize);
         setFrameHeight(nextSize);
@@ -2648,7 +2669,7 @@ export function App() {
       setIsPlaying(false);
       appendLog(`Set sheet output cell size to ${nextSize}x${nextSize}`);
     },
-    [appendLog, detectedRowAnimations, sheetMargin, sheetSpacing]
+    [appendLog, editableSheetFrames, sheetMargin, sheetRowAnimations, sheetSpacing]
   );
 
   const updateManualFrameWidth = useCallback(
@@ -2681,43 +2702,47 @@ export function App() {
   );
   const updateManualSheetMargin = useCallback(
     (value: number) => {
-      if (detectedRowAnimations.length === 0) {
-        clearDetectedSheetLayout();
-      } else {
-        setDetectedSheetFrames((current) =>
-          repackAnimationRows({
-            frames: current,
-            animations: detectedRowAnimations,
+      if (sheetRowAnimations.length > 0) {
+        setDetectedSheetFrames((current) => {
+          const next = repackAnimationRows({
+            frames: current.length > 0 ? current : editableSheetFrames,
+            animations: sheetRowAnimations,
             margin: value,
             spacing: sheetSpacing
-          })
-        );
+          });
+          detectedSheetFramesRef.current = next;
+          detectedRowAnimationsRef.current = sheetRowAnimations;
+          setDetectedRowAnimations(sheetRowAnimations);
+          return next;
+        });
       }
       setSheetMargin(value);
       setFixResult(null);
       setIsPlaying(false);
     },
-    [clearDetectedSheetLayout, detectedRowAnimations, sheetSpacing]
+    [editableSheetFrames, sheetRowAnimations, sheetSpacing]
   );
   const updateManualSheetSpacing = useCallback(
     (value: number) => {
-      if (detectedRowAnimations.length === 0) {
-        clearDetectedSheetLayout();
-      } else {
-        setDetectedSheetFrames((current) =>
-          repackAnimationRows({
-            frames: current,
-            animations: detectedRowAnimations,
+      if (sheetRowAnimations.length > 0) {
+        setDetectedSheetFrames((current) => {
+          const next = repackAnimationRows({
+            frames: current.length > 0 ? current : editableSheetFrames,
+            animations: sheetRowAnimations,
             margin: sheetMargin,
             spacing: value
-          })
-        );
+          });
+          detectedSheetFramesRef.current = next;
+          detectedRowAnimationsRef.current = sheetRowAnimations;
+          setDetectedRowAnimations(sheetRowAnimations);
+          return next;
+        });
       }
       setSheetSpacing(value);
       setFixResult(null);
       setIsPlaying(false);
     },
-    [clearDetectedSheetLayout, detectedRowAnimations, sheetMargin]
+    [editableSheetFrames, sheetMargin, sheetRowAnimations]
   );
 
   const fitSheetGridToFrameSize = useCallback(() => {
@@ -2758,13 +2783,14 @@ export function App() {
       }
 
       setDetectedRowAnimations((current) => {
-        const existing = current.find((animation) => animation.name === selectedName);
+        const sourceAnimations = current.length > 0 ? current : sheetRowAnimations;
+        const existing = sourceAnimations.find((animation) => animation.name === selectedName);
         if (!existing) {
           return current;
         }
 
         const next = updateAnimationTagTiming({
-          animations: current,
+          animations: sourceAnimations,
           name: selectedName,
           fps: nextFps,
           loop: existing.loop,
@@ -2773,24 +2799,17 @@ export function App() {
         detectedRowAnimationsRef.current = next;
         return next;
       });
+      if (!hasStoredSheetLayout) {
+        detectedSheetFramesRef.current = editableSheetFrames;
+        setDetectedSheetFrames(editableSheetFrames);
+      }
     },
-    [playbackDirection]
+    [editableSheetFrames, hasStoredSheetLayout, playbackDirection, sheetRowAnimations]
   );
 
   const resetPlaybackStepDirection = useCallback((direction: PlaybackDirection) => {
     playbackStepDirectionRef.current = getInitialPlayDirection(direction);
   }, []);
-
-  const createCurrentFrameEditSnapshot = useCallback(
-    () =>
-      createFrameEditSnapshot({
-        frames: detectedSheetFramesRef.current,
-        animations: detectedRowAnimationsRef.current,
-        selectedFrameIndex: selectedFrameIndexRef.current,
-        selectedAnimationName: selectedAnimationNameRef.current
-      }),
-    []
-  );
 
   const restoreFrameEditSnapshot = useCallback(
     (snapshot: FrameEditSnapshot) => {
@@ -2888,7 +2907,7 @@ export function App() {
       }
 
       const rowTag = sheetFrames[nextIndex]?.tags?.[0];
-      if (rowTag && detectedRowAnimations.some((animation) => animation.name === rowTag)) {
+      if (rowTag && sheetRowAnimations.some((animation) => animation.name === rowTag)) {
         setSelectedAnimationName(rowTag);
       }
       setIsPlaying(false);
@@ -2896,7 +2915,7 @@ export function App() {
       selectedFrameIndexRef.current = nextIndex;
       setSelectedFrameIndex(nextIndex);
     },
-    [detectedRowAnimations, playbackDirection, resetPlaybackStepDirection, sheetFrames]
+    [playbackDirection, resetPlaybackStepDirection, sheetFrames, sheetRowAnimations]
   );
 
   const stepTimelineFrame = useCallback(
@@ -2946,7 +2965,7 @@ export function App() {
     (value: string) => {
       setIsPlaying(false);
       setSelectedAnimationName(value);
-      const animation = detectedRowAnimations.find((item) => item.name === value);
+      const animation = sheetRowAnimations.find((item) => item.name === value);
       if (animation) {
         const nextDirection = animation.direction ?? playbackDirection;
         setPlaybackFps(clampFps(animation.fps ?? playbackFps));
@@ -2955,14 +2974,16 @@ export function App() {
         resetPlaybackStepDirection(nextDirection);
       }
     },
-    [detectedRowAnimations, playbackDirection, playbackFps, resetPlaybackStepDirection]
+    [playbackDirection, playbackFps, resetPlaybackStepDirection, sheetRowAnimations]
   );
 
   const renameDetectedAnimation = useCallback(
     (fromName: string, toName: string) => {
-      const result = renameAnimationTag({ animations: detectedRowAnimations, frames: detectedSheetFrames, fromName, toName });
+      const result = renameAnimationTag({ animations: sheetRowAnimations, frames: editableSheetFrames, fromName, toName });
       setDetectedRowAnimations(result.animations);
+      detectedRowAnimationsRef.current = result.animations;
       setDetectedSheetFrames(result.frames);
+      detectedSheetFramesRef.current = result.frames;
       setFrameDurationOverrides((current) => renameFrameDurationOverrides({ overrides: current, frameNames: result.frameNameMap }));
       setPivotOverrides((current) => {
         const nextPivotOverrides = renamePivotOverrides({
@@ -2979,7 +3000,7 @@ export function App() {
       });
       setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
     },
-    [detectedRowAnimations, detectedSheetFrames]
+    [editableSheetFrames, sheetRowAnimations]
   );
 
   const commitFrameMetadataEdit = useCallback((snapshot: FrameMetadataSnapshot) => {
@@ -3158,13 +3179,13 @@ export function App() {
       return;
     }
 
-    const animation = detectedRowAnimations.find((item) => item.name === selectedAnimationName);
+    const animation = sheetRowAnimations.find((item) => item.name === selectedAnimationName);
     if (!animation) {
       return;
     }
 
     copyCurrentMetadataToFrameNames(animation.frameNames);
-  }, [copyCurrentMetadataToFrameNames, currentFrame, detectedRowAnimations, selectedAnimationName]);
+  }, [copyCurrentMetadataToFrameNames, currentFrame, selectedAnimationName, sheetRowAnimations]);
 
   const copyCurrentMetadataToAllFrames = useCallback(() => {
     if (!currentFrame) {
@@ -3192,13 +3213,20 @@ export function App() {
 
   const updateDetectedAnimationTiming = useCallback(
     (name: string, timing: { fps?: number; loop?: boolean; direction?: PlaybackDirection }) => {
-      const existing = detectedRowAnimations.find((animation) => animation.name === name);
+      const existing = sheetRowAnimations.find((animation) => animation.name === name);
       const nextFps = clampFps(timing.fps ?? existing?.fps ?? playbackFps);
       const nextLoop = timing.loop ?? existing?.loop ?? playbackLoop;
       const nextDirection = timing.direction ?? existing?.direction ?? playbackDirection;
-      setDetectedRowAnimations((current) =>
-        updateAnimationTagTiming({ animations: current, name, fps: nextFps, loop: nextLoop, direction: nextDirection })
-      );
+      setDetectedRowAnimations((current) => {
+        const sourceAnimations = current.length > 0 ? current : sheetRowAnimations;
+        const next = updateAnimationTagTiming({ animations: sourceAnimations, name, fps: nextFps, loop: nextLoop, direction: nextDirection });
+        detectedRowAnimationsRef.current = next;
+        return next;
+      });
+      if (!hasStoredSheetLayout) {
+        detectedSheetFramesRef.current = editableSheetFrames;
+        setDetectedSheetFrames(editableSheetFrames);
+      }
       if (selectedAnimationName === name) {
         setPlaybackFps(nextFps);
         setPlaybackLoop(nextLoop);
@@ -3206,7 +3234,7 @@ export function App() {
         resetPlaybackStepDirection(nextDirection);
       }
     },
-    [detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
+    [editableSheetFrames, hasStoredSheetLayout, playbackDirection, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName, sheetRowAnimations]
   );
 
   const changePlaybackLoop = useCallback(
@@ -3218,13 +3246,14 @@ export function App() {
       }
 
       setDetectedRowAnimations((current) => {
-        const existing = current.find((animation) => animation.name === selectedName);
+        const sourceAnimations = current.length > 0 ? current : sheetRowAnimations;
+        const existing = sourceAnimations.find((animation) => animation.name === selectedName);
         if (!existing) {
           return current;
         }
 
         const next = updateAnimationTagTiming({
-          animations: current,
+          animations: sourceAnimations,
           name: selectedName,
           fps: existing.fps ?? playbackFps,
           loop: nextLoop,
@@ -3233,8 +3262,12 @@ export function App() {
         detectedRowAnimationsRef.current = next;
         return next;
       });
+      if (!hasStoredSheetLayout) {
+        detectedSheetFramesRef.current = editableSheetFrames;
+        setDetectedSheetFrames(editableSheetFrames);
+      }
     },
-    [playbackDirection, playbackFps]
+    [editableSheetFrames, hasStoredSheetLayout, playbackDirection, playbackFps, sheetRowAnimations]
   );
 
   const addCustomAnimationClip = useCallback(() => {
@@ -3244,7 +3277,7 @@ export function App() {
 
     const selectedIndex = selectedFrameIndexRef.current >= 0 ? selectedFrameIndexRef.current : 0;
     const nextAnimations = createAnimationTagFromRange({
-      animations: detectedRowAnimations,
+      animations: sheetRowAnimations,
       frames: sheetFrames,
       name: "clip",
       startIndex: selectedIndex,
@@ -3255,6 +3288,8 @@ export function App() {
     });
     const createdAnimation = nextAnimations.at(-1);
     detectedRowAnimationsRef.current = nextAnimations;
+    detectedSheetFramesRef.current = editableSheetFrames;
+    setDetectedSheetFrames(editableSheetFrames);
     setDetectedRowAnimations(nextAnimations);
     if (createdAnimation) {
       selectedAnimationNameRef.current = createdAnimation.name;
@@ -3262,30 +3297,68 @@ export function App() {
       appendLog(`Created custom animation clip ${createdAnimation.name}`);
     }
     setIsPlaying(false);
-  }, [appendLog, detectedRowAnimations, playbackDirection, playbackFps, playbackLoop, sheetFrames]);
+  }, [appendLog, editableSheetFrames, playbackDirection, playbackFps, playbackLoop, sheetFrames, sheetRowAnimations]);
 
   const updateDetectedAnimationRange = useCallback(
     (name: string, startIndex: number, endIndex: number) => {
       const safeStartIndex = Number.isFinite(startIndex) ? startIndex : 0;
       const safeEndIndex = Number.isFinite(endIndex) && endIndex >= 0 ? endIndex : safeStartIndex;
       setDetectedRowAnimations((current) => {
-        const next = updateAnimationTagFrameRange({ animations: current, frames: sheetFrames, name, startIndex: safeStartIndex, endIndex: safeEndIndex });
+        const sourceAnimations = current.length > 0 ? current : sheetRowAnimations;
+        const next = updateAnimationTagFrameRange({ animations: sourceAnimations, frames: sheetFrames, name, startIndex: safeStartIndex, endIndex: safeEndIndex });
         detectedRowAnimationsRef.current = next;
         return next;
       });
+      if (!hasStoredSheetLayout) {
+        detectedSheetFramesRef.current = editableSheetFrames;
+        setDetectedSheetFrames(editableSheetFrames);
+      }
       selectedFrameIndexRef.current = Math.max(0, Math.min(sheetFrames.length - 1, Math.round(safeStartIndex)));
       setSelectedFrameIndex(selectedFrameIndexRef.current);
       setFixResult(null);
       setIsPlaying(false);
     },
-    [sheetFrames]
+    [editableSheetFrames, hasStoredSheetLayout, sheetFrames, sheetRowAnimations]
   );
 
   const removeDetectedAnimation = useCallback(
     (name: string) => {
-      const nextAnimations = deleteAnimationTag({ animations: detectedRowAnimations, name });
+      const targetAnimation = sheetRowAnimations.find((animation) => animation.name === name);
+      const rowBacked = targetAnimation?.frameNames.every((frameName) => editableSheetFrames.find((frame) => frame.name === frameName)?.tags?.includes(name));
+      if (rowBacked) {
+        const result = removeAnimationOrSheetRow({
+          frames: editableSheetFrames,
+          animations: sheetRowAnimations,
+          selectedAnimationName: name,
+          margin: sheetMargin,
+          spacing: sheetSpacing
+        });
+        const nextSnapshot = createFrameEditSnapshot({
+          frames: result.frames,
+          animations: result.animations,
+          selectedFrameIndex: result.selectedFrameIndex,
+          selectedAnimationName: result.selectedAnimationName
+        });
+        setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
+        detectedSheetFramesRef.current = result.frames;
+        detectedRowAnimationsRef.current = result.animations;
+        setDetectedSheetFrames(result.frames);
+        setDetectedRowAnimations(result.animations);
+        selectedFrameIndexRef.current = result.selectedFrameIndex;
+        setSelectedFrameIndex(result.selectedFrameIndex);
+        selectedAnimationNameRef.current = result.selectedAnimationName;
+        setSelectedAnimationName(result.selectedAnimationName);
+        setFixResult(null);
+        setIsPlaying(false);
+        appendLog(`Removed row ${name}`);
+        return;
+      }
+
+      const nextAnimations = deleteAnimationTag({ animations: sheetRowAnimations, name });
       detectedRowAnimationsRef.current = nextAnimations;
+      detectedSheetFramesRef.current = editableSheetFrames;
       setDetectedRowAnimations(nextAnimations);
+      setDetectedSheetFrames(editableSheetFrames);
       if (selectedAnimationName === name) {
         const nextSelectedName = nextAnimations[0]?.name ?? ALL_ANIMATIONS;
         selectedAnimationNameRef.current = nextSelectedName;
@@ -3295,35 +3368,40 @@ export function App() {
       setIsPlaying(false);
       appendLog(`Removed animation clip ${name}`);
     },
-    [appendLog, detectedRowAnimations, selectedAnimationName]
+    [appendLog, editableSheetFrames, selectedAnimationName, sheetMargin, sheetRowAnimations, sheetSpacing]
   );
 
   const updateDetectedAnimationOutputCellSize = useCallback(
     (animationName: string, dimension: "width" | "height", value: number) => {
       const nextValue = clampSheetInteger(value, 1, 1024);
       setDetectedSheetFrames((current) => {
+        const sourceFrames = current.length > 0 ? current : editableSheetFrames;
         const layout = deriveSheetOutputLayout({
-          frames: current,
-          animations: detectedRowAnimations,
+          frames: sourceFrames,
+          animations: sheetRowAnimations,
           margin: sheetMargin,
           spacing: sheetSpacing,
           fallback: { frameWidth, frameHeight, rows: sheetRows, columns: sheetColumns }
         });
         const row = layout.rows.find((item) => item.name === animationName);
-        return resizeAnimationCells({
-          frames: current,
-          animations: detectedRowAnimations,
+        const next = resizeAnimationCells({
+          frames: sourceFrames,
+          animations: sheetRowAnimations,
           animationName,
           cellWidth: dimension === "width" ? nextValue : row?.cellWidth ?? frameWidth,
           cellHeight: dimension === "height" ? nextValue : row?.cellHeight ?? frameHeight,
           margin: sheetMargin,
           spacing: sheetSpacing
         });
+        detectedSheetFramesRef.current = next;
+        detectedRowAnimationsRef.current = sheetRowAnimations;
+        setDetectedRowAnimations(sheetRowAnimations);
+        return next;
       });
       setFixResult(null);
       setIsPlaying(false);
     },
-    [detectedRowAnimations, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRows, sheetSpacing]
+    [editableSheetFrames, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRowAnimations, sheetRows, sheetSpacing]
   );
 
   const changePlaybackDirection = useCallback(
@@ -3332,19 +3410,25 @@ export function App() {
       setPlaybackDirection(nextDirection);
       setIsPlaying(false);
       resetPlaybackStepDirection(nextDirection);
-      if (selectedAnimationName !== ALL_ANIMATIONS && detectedRowAnimations.some((animation) => animation.name === selectedAnimationName)) {
-        setDetectedRowAnimations((current) =>
-          updateAnimationTagTiming({
-            animations: current,
+      if (selectedAnimationName !== ALL_ANIMATIONS && sheetRowAnimations.some((animation) => animation.name === selectedAnimationName)) {
+        setDetectedRowAnimations((current) => {
+          const next = updateAnimationTagTiming({
+            animations: current.length > 0 ? current : sheetRowAnimations,
             name: selectedAnimationName,
             fps: playbackFps,
             loop: playbackLoop,
             direction: nextDirection
-          })
-        );
+          });
+          detectedRowAnimationsRef.current = next;
+          return next;
+        });
+        if (!hasStoredSheetLayout) {
+          detectedSheetFramesRef.current = editableSheetFrames;
+          setDetectedSheetFrames(editableSheetFrames);
+        }
       }
     },
-    [detectedRowAnimations, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName]
+    [editableSheetFrames, hasStoredSheetLayout, playbackFps, playbackLoop, resetPlaybackStepDirection, selectedAnimationName, sheetRowAnimations]
   );
 
   const applyManualSheetEdit = useCallback(
@@ -3385,15 +3469,15 @@ export function App() {
   );
 
   const addCellBeforeSelected = useCallback(() => {
-    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+    if (!selectedAsset || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
       return;
     }
 
-    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    const selectedName = editableSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
     applyManualSheetEdit(
       insertFrameNearSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedFrameIndex: selectedFrameIndexRef.current,
         placement: "before",
         margin: sheetMargin,
@@ -3404,18 +3488,18 @@ export function App() {
       }),
       `Added cell before ${selectedName}`
     );
-  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]);
+  }, [applyManualSheetEdit, editableSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetRowAnimations, sheetSpacing]);
 
   const addCellAfterSelected = useCallback(() => {
-    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+    if (!selectedAsset || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
       return;
     }
 
-    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    const selectedName = editableSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
     applyManualSheetEdit(
       insertFrameNearSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedFrameIndex: selectedFrameIndexRef.current,
         placement: "after",
         margin: sheetMargin,
@@ -3426,35 +3510,35 @@ export function App() {
       }),
       `Added cell after ${selectedName}`
     );
-  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]);
+  }, [applyManualSheetEdit, editableSheetFrames, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetRowAnimations, sheetSpacing]);
 
   const removeSelectedCell = useCallback(() => {
-    if (detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
+    if (editableSheetFrames.length === 0 || sheetRowAnimations.length === 0 || selectedFrameIndexRef.current < 0) {
       return;
     }
 
-    const selectedName = detectedSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
+    const selectedName = editableSheetFrames[selectedFrameIndexRef.current]?.name ?? "selected frame";
     applyManualSheetEdit(
       removeFrameAtSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedFrameIndex: selectedFrameIndexRef.current,
         margin: sheetMargin,
         spacing: sheetSpacing
       }),
       `Removed cell ${selectedName}`
     );
-  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, sheetMargin, sheetSpacing]);
+  }, [applyManualSheetEdit, editableSheetFrames, sheetMargin, sheetRowAnimations, sheetSpacing]);
 
   const addRowBeforeSelected = useCallback(() => {
-    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+    if (!selectedAsset || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
       return;
     }
 
     applyManualSheetEdit(
       insertRowNearSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedManualAnimationName,
         placement: "before",
         margin: sheetMargin,
@@ -3467,25 +3551,25 @@ export function App() {
     );
   }, [
     applyManualSheetEdit,
-    detectedRowAnimations,
-    detectedSheetFrames,
+    editableSheetFrames,
     gridScaleX,
     gridScaleY,
     selectedAsset,
     selectedManualAnimationName,
     sheetMargin,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
   const addRowAfterSelected = useCallback(() => {
-    if (!selectedAsset || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+    if (!selectedAsset || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
       return;
     }
 
     applyManualSheetEdit(
       insertRowNearSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedManualAnimationName,
         placement: "after",
         margin: sheetMargin,
@@ -3498,42 +3582,42 @@ export function App() {
     );
   }, [
     applyManualSheetEdit,
-    detectedRowAnimations,
-    detectedSheetFrames,
+    editableSheetFrames,
     gridScaleX,
     gridScaleY,
     selectedAsset,
     selectedManualAnimationName,
     sheetMargin,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
   const removeSelectedRow = useCallback(() => {
-    if (detectedRowAnimations.length <= 1 || detectedSheetFrames.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
+    if (sheetRowAnimations.length <= 1 || editableSheetFrames.length === 0 || selectedManualAnimationName === ALL_ANIMATIONS) {
       return;
     }
 
     applyManualSheetEdit(
       removeRowAtSelection({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedManualAnimationName,
         margin: sheetMargin,
         spacing: sheetSpacing
       }),
       `Removed row ${selectedManualAnimationName}`
     );
-  }, [applyManualSheetEdit, detectedRowAnimations, detectedSheetFrames, selectedManualAnimationName, sheetMargin, sheetSpacing]);
+  }, [applyManualSheetEdit, editableSheetFrames, selectedManualAnimationName, sheetMargin, sheetRowAnimations, sheetSpacing]);
 
   const recoverFirstCellForSelectedRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
       return;
     }
 
     applyManualSheetEdit(
       insertFrameAtRowEdge({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedSparseRow.rowName,
         edge: "start",
         margin: sheetMargin,
@@ -3546,25 +3630,25 @@ export function App() {
     );
   }, [
     applyManualSheetEdit,
-    detectedRowAnimations,
-    detectedSheetFrames,
+    editableSheetFrames,
     gridScaleX,
     gridScaleY,
     selectedAsset,
     selectedSparseRow,
     sheetMargin,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
   const recoverLastCellForSelectedRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
       return;
     }
 
     applyManualSheetEdit(
       insertFrameAtRowEdge({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedSparseRow.rowName,
         edge: "end",
         margin: sheetMargin,
@@ -3577,25 +3661,25 @@ export function App() {
     );
   }, [
     applyManualSheetEdit,
-    detectedRowAnimations,
-    detectedSheetFrames,
+    editableSheetFrames,
     gridScaleX,
     gridScaleY,
     selectedAsset,
     selectedSparseRow,
     sheetMargin,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
   const fillSelectedSparseRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
       return;
     }
 
     applyManualSheetEdit(
       fillRowToFrameCount({
-        frames: detectedSheetFrames,
-        animations: detectedRowAnimations,
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations,
         selectedAnimationName: selectedSparseRow.rowName,
         targetFrameCount: selectedSparseRow.targetFrameCount,
         margin: sheetMargin,
@@ -3608,26 +3692,26 @@ export function App() {
     );
   }, [
     applyManualSheetEdit,
-    detectedRowAnimations,
-    detectedSheetFrames,
+    editableSheetFrames,
     gridScaleX,
     gridScaleY,
     selectedAsset,
     selectedSparseRow,
     sheetMargin,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
   const applySheetDetectorCandidate = useCallback(
     (candidate: SheetDetectorCandidate) => {
-      if (!selectedAsset || candidate.action !== "fillSparseRows" || detectedSheetFrames.length === 0 || detectedRowAnimations.length === 0) {
+      if (!selectedAsset || candidate.action !== "fillSparseRows" || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
         return;
       }
 
       applyManualSheetEdit(
         fillSparseRowsToFrameCount({
-          frames: detectedSheetFrames,
-          animations: detectedRowAnimations,
+          frames: editableSheetFrames,
+          animations: sheetRowAnimations,
           targetFrameCount: sheetDetectorReview?.summary.maxFrameCount ?? 0,
           margin: sheetMargin,
           spacing: sheetSpacing,
@@ -3640,13 +3724,13 @@ export function App() {
     },
     [
       applyManualSheetEdit,
-      detectedRowAnimations,
-      detectedSheetFrames,
+      editableSheetFrames,
       gridScaleX,
       gridScaleY,
       selectedAsset,
       sheetDetectorReview?.summary.maxFrameCount,
       sheetMargin,
+      sheetRowAnimations,
       sheetSpacing
     ]
   );
@@ -3658,7 +3742,8 @@ export function App() {
       }
 
       setDetectedSheetFrames((current) => {
-        const next = current.map((frame, index) =>
+        const sourceFrames = current.length > 0 ? current : detectedSheetFramesRef.current.length > 0 ? detectedSheetFramesRef.current : editableSheetFrames;
+        const next = sourceFrames.map((frame, index) =>
           index === frameIndex
             ? moveFrameBySourceDelta({
                 frame,
@@ -3677,7 +3762,7 @@ export function App() {
       setFixResult(null);
       setIsPlaying(false);
     },
-    [effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
+    [editableSheetFrames, effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
   );
 
   const resizeDetectedSourceFrame = useCallback(
@@ -3687,47 +3772,89 @@ export function App() {
       }
 
       setDetectedSheetFrames((current) => {
-        const next = resizeAnimationRowFromSourceFrame({
-          frames: current,
-          animations: detectedRowAnimations,
-          frameIndex,
-          handle,
-          delta,
-          scaleX: gridScaleX,
-          scaleY: gridScaleY,
-          sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
-          outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
-          margin: sheetMargin,
-          spacing: sheetSpacing
-        });
+        const sourceFrames = current.length > 0 ? current : detectedSheetFramesRef.current.length > 0 ? detectedSheetFramesRef.current : editableSheetFrames;
+        const next = sourceFrames.map((frame, index) =>
+          index === frameIndex
+            ? resizeFrameBySourceDelta({
+                frame,
+                handle,
+                deltaX: delta.x,
+                deltaY: delta.y,
+                scaleX: gridScaleX,
+                scaleY: gridScaleY,
+                sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height },
+                outputSize: { width: effectiveTargetWidth, height: effectiveTargetHeight },
+                minOutputSize: { width: 4, height: 4 }
+              })
+            : frame
+        );
         detectedSheetFramesRef.current = next;
         return next;
       });
       setFixResult(null);
       setIsPlaying(false);
     },
-    [detectedRowAnimations, effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset, sheetMargin, sheetSpacing]
+    [editableSheetFrames, effectiveTargetHeight, effectiveTargetWidth, gridScaleX, gridScaleY, selectedAsset]
   );
 
-  const beginSourceFrameEdit = useCallback(() => {
-    const snapshot = createCurrentFrameEditSnapshot();
+  const beginSourceFrameEdit = useCallback((edit: { mode: "move" | "resize"; frameIndex: number }) => {
+    const snapshot = createFrameEditSnapshot({
+      frames: editableSheetFrames,
+      animations: sheetRowAnimations,
+      selectedFrameIndex: selectedFrameIndexRef.current,
+      selectedAnimationName: selectedAnimationNameRef.current
+    });
     sourceFrameEditStartSnapshotRef.current = snapshot;
+    sourceFrameEditGestureRef.current = edit;
+    detectedSheetFramesRef.current = snapshot.frames;
+    detectedRowAnimationsRef.current = snapshot.animations;
+    if (!hasStoredSheetLayout) {
+      setDetectedSheetFrames(snapshot.frames);
+      setDetectedRowAnimations(snapshot.animations);
+    }
     setFrameEditHistory((current) => replaceFrameEditHistoryPresent(current, snapshot));
-  }, [createCurrentFrameEditSnapshot]);
+  }, [editableSheetFrames, hasStoredSheetLayout, sheetRowAnimations]);
 
   const commitSourceFrameEdit = useCallback(
     (changed: boolean) => {
       const startSnapshot = sourceFrameEditStartSnapshotRef.current;
+      const gesture = sourceFrameEditGestureRef.current;
       sourceFrameEditStartSnapshotRef.current = null;
+      sourceFrameEditGestureRef.current = null;
       if (!startSnapshot || !changed) {
         return;
       }
 
-      const nextSnapshot = createCurrentFrameEditSnapshot();
+      let nextFrames = detectedSheetFramesRef.current;
+      const nextAnimations = detectedRowAnimationsRef.current;
+      if (gesture?.mode === "resize") {
+        const resizedFrame = nextFrames[gesture.frameIndex];
+        const animationName = resizedFrame?.tags?.find((tag) => nextAnimations.some((animation) => animation.name === tag));
+        if (resizedFrame && animationName) {
+          nextFrames = resizeAnimationCells({
+            frames: nextFrames,
+            animations: nextAnimations,
+            animationName,
+            cellWidth: resizedFrame.rect.w,
+            cellHeight: resizedFrame.rect.h,
+            margin: sheetMargin,
+            spacing: sheetSpacing
+          });
+          detectedSheetFramesRef.current = nextFrames;
+          setDetectedSheetFrames(nextFrames);
+        }
+      }
+
+      const nextSnapshot = createFrameEditSnapshot({
+        frames: nextFrames,
+        animations: nextAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        selectedAnimationName: selectedAnimationNameRef.current
+      });
       setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
       appendLog(`Edited ${nextSnapshot.frames[nextSnapshot.selectedFrameIndex]?.name ?? "source frame"}`);
     },
-    [appendLog, createCurrentFrameEditSnapshot]
+    [appendLog, sheetMargin, sheetSpacing]
   );
 
   const applyGridCandidate = useCallback(
@@ -3867,8 +3994,8 @@ export function App() {
           result: fixResult,
           frames: sheetFrames,
           columns: sheetColumns,
-          ...(detectedRowAnimations.length > 0
-            ? { rowFrameCounts: detectedRowAnimations.map((animation) => animation.frameNames.length) }
+          ...(sheetRowAnimations.length > 0
+            ? { rowFrameCounts: sheetRowAnimations.map((animation) => animation.frameNames.length) }
             : {}),
           margin: sheetMargin,
           spacing: sheetSpacing,
@@ -3882,8 +4009,8 @@ export function App() {
     const manifestName = `${baseName}_manifest.json`;
     const bundleName = exportName.filename;
     const animations =
-      detectedRowAnimations.length > 0
-        ? animationTagsToManifestAnimations(detectedRowAnimations, {
+      sheetRowAnimations.length > 0
+        ? animationTagsToManifestAnimations(sheetRowAnimations, {
             fallbackFps: playbackFps,
             fallbackLoop: playbackLoop,
             fallbackDirection: playbackDirection
@@ -3981,7 +4108,6 @@ export function App() {
     });
   }, [
     appendLog,
-    detectedRowAnimations,
     engineExportTargets,
     exportBundleName,
     fixResult,
@@ -3997,6 +4123,7 @@ export function App() {
     sheetMargin,
     sheetMode,
     sheetOptions,
+    sheetRowAnimations,
     sheetSpacing
   ]);
 
@@ -4713,7 +4840,7 @@ export function App() {
             ) : null}
           </div>
         ) : null}
-        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+        {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="manual-sheet-corrections" aria-label="Manual sheet correction tools">
             <div className="manual-sheet-correction-heading">
               <strong>Manual corrections</strong>
@@ -4750,7 +4877,7 @@ export function App() {
             <small>Add missing cells before or after the selected frame, then adjust the new source box in the Input view.</small>
           </div>
         ) : null}
-        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+        {hasStoredSheetLayout ? (
           <div className="animation-cell-controls" aria-label="Animation row output cell sizes">
             <div className="animation-cell-header">
               <span>Animation</span>
@@ -4758,7 +4885,7 @@ export function App() {
               <span>Output W</span>
               <span>Output H</span>
             </div>
-            {detectedRowAnimations.map((animation) => {
+            {sheetRowAnimations.map((animation) => {
               const row = plannedSheetLayout.rows.find((item) => item.name === animation.name);
               return (
                 <div key={animation.name} className="animation-cell-row">
@@ -4786,8 +4913,8 @@ export function App() {
           </div>
         ) : (
           <>
-            <NumberField label="Frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
-            <NumberField label="Frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
+            <NumberField label="Input frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
+            <NumberField label="Input frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
             <NumberField label="Rows" value={sheetRows} min={1} onChange={updateManualSheetRows} />
             <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
           </>
@@ -4795,7 +4922,7 @@ export function App() {
         <NumberField label="Margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
         <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
         <NumberField label="Extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
-        {detectedSheetFrames.length > 0 && detectedRowAnimations.length > 0 ? (
+        {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="sheet-fit-summary is-valid">
             <strong>{plannedSheetLayout.frameCount} frames</strong>
             <span>
@@ -4845,7 +4972,7 @@ export function App() {
           onChange={(value) => setCustomPivotY(clampSheetInteger(value, 0, frameHeight))}
         />
         <p className="field-note">
-          Frame size describes each sprite tile inside the fixed sheet. Margin starts the first cell, spacing is the gutter, extrude is export padding metadata, and pivot is stored per frame in native pixels.
+          Input frame size defines source boxes for manual grids. Output cell controls change the packed fixed sheet without moving source boxes. Margin starts the first cell, spacing is the gutter, extrude is export padding metadata, and pivot is stored per frame in native pixels.
         </p>
       </>
     ) : (
@@ -4853,6 +4980,13 @@ export function App() {
     ),
     viewport: (
       <>
+        <SelectField
+          label="Overlay"
+          value={diagnosticOverlayMode}
+          options={diagnosticOverlayOptions.map((option) => [option.mode, option.label])}
+          onChange={(value) => setDiagnosticOverlayMode(value as DiagnosticOverlayMode)}
+        />
+        <p className="field-note">{diagnosticOverlay.summary}</p>
         <label className="toggle-row">
           <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
           Show grid overlay
@@ -5360,7 +5494,7 @@ export function App() {
               </button>
             ))}
           </div>
-          {hasDetectedSheetLayout ? (
+          {sheetMode && editableSheetFrames.length > 0 ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
               <button
                 type="button"
@@ -5409,7 +5543,7 @@ export function App() {
           <div className="timeline-viewport-shell">
             <div className="timeline-viewport-toolbar">
               <SpritePlayerControls
-                animations={detectedRowAnimations}
+                animations={sheetRowAnimations}
                 selectedAnimationName={selectedAnimationName}
                 canPlay={canPlayTimeline}
                 canScrub={canScrubTimeline}
@@ -5532,7 +5666,7 @@ export function App() {
             sourceFrames={sourceSheetFrames}
             frames={sheetFrames}
             selectedFrameIndex={selectedFrameIndex}
-            canEditSourceFrames={detectedSheetFrames.length > 0}
+            canEditSourceFrames={editableSheetFrames.length > 0}
             onZoomChange={setZoom}
             onFrameSelect={selectSourceFrame}
             onSourceFrameMove={moveDetectedSourceFrame}
@@ -5681,7 +5815,7 @@ export function App() {
               <>
                 <div className="timeline-toolbar-row">
                   <div className="timeline-clip-pills" aria-label="Timeline clip selection">
-                    {detectedRowAnimations.length > 1 ? (
+                    {sheetRowAnimations.length > 1 ? (
                       <button
                         type="button"
                         className={selectedAnimationName === ALL_ANIMATIONS ? "active" : ""}
@@ -5691,7 +5825,7 @@ export function App() {
                         All
                       </button>
                     ) : null}
-                    {detectedRowAnimations.map((animation) => (
+                    {sheetRowAnimations.map((animation) => (
                       <button
                         key={animation.name}
                         type="button"
@@ -5957,7 +6091,7 @@ export function App() {
                 <div className="clip-editor" aria-label="Animation clip timesheet metadata">
                   <div className="clip-editor-title">
                     <strong>Animation clips</strong>
-                    <span>{detectedRowAnimations.length} clip{detectedRowAnimations.length === 1 ? "" : "s"}</span>
+                    <span>{sheetRowAnimations.length} clip{sheetRowAnimations.length === 1 ? "" : "s"}</span>
                     <button type="button" onClick={addCustomAnimationClip} disabled={sheetFrames.length === 0}>
                       Add clip
                     </button>
@@ -5970,7 +6104,7 @@ export function App() {
                     <span>Loop</span>
                     <span>Remove</span>
                   </div>
-                  {detectedRowAnimations.map((animation) => {
+                  {sheetRowAnimations.map((animation) => {
                     const range = getAnimationFrameRange(sheetFrames, animation);
                     const rangeStart = range.startIndex >= 0 ? range.startIndex + 1 : 1;
                     const rangeEnd = range.endIndex >= 0 ? range.endIndex + 1 : rangeStart;
@@ -6530,7 +6664,7 @@ function SimpleSheetControls({
   return (
     <div className="simple-sprite-controls" aria-label="Simple sheet controls">
       <SimpleButtonGroup
-        label="Cell size"
+        label="Output cell"
         options={[
           ...simpleSheetCellSizeChoices.map((size) => ({ id: String(size), label: String(size) })),
           { id: "custom", label: "Custom" }

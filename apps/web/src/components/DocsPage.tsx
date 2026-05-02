@@ -1,6 +1,7 @@
 import { ArrowLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { docsSections } from "../lib/docsContent";
+import { parseMarkdownBlocks } from "../lib/docsMarkdown";
 
 export function DocsPage({ onBack }: { onBack: () => void }) {
   return (
@@ -36,69 +37,59 @@ export function DocsPage({ onBack }: { onBack: () => void }) {
 }
 
 function MarkdownBlock({ markdown }: { markdown: string }) {
-  const lines = markdown.trim().split("\n");
-  const elements: ReactNode[] = [];
-  let listItems: string[] = [];
-  let codeLines: string[] = [];
+  return <>{parseMarkdownBlocks(markdown).map(renderMarkdownBlock)}</>;
+}
 
-  const flushList = () => {
-    if (listItems.length === 0) {
-      return;
+function renderMarkdownBlock(block: ReturnType<typeof parseMarkdownBlocks>[number], index: number): ReactNode {
+  const key = `${block.type}-${index}`;
+  if (block.type === "heading") {
+    if (block.level === 2) {
+      return <h2 key={key}>{block.text}</h2>;
     }
-
-    elements.push(
-      <ul key={`list-${elements.length}`}>
-        {listItems.map((item) => (
-          <li key={item}>{item}</li>
+    if (block.level === 3) {
+      return <h3 key={key}>{block.text}</h3>;
+    }
+    return <h4 key={key}>{block.text}</h4>;
+  }
+  if (block.type === "list") {
+    return (
+      <ul key={key}>
+        {block.items.map((item, itemIndex) => (
+          <li key={`${item}-${itemIndex}`}>{item}</li>
         ))}
       </ul>
     );
-    listItems = [];
-  };
-
-  const flushCode = () => {
-    if (codeLines.length === 0) {
-      return;
-    }
-
-    elements.push(
-      <pre key={`code-${elements.length}`}>
-        <code>{codeLines.join("\n")}</code>
+  }
+  if (block.type === "code") {
+    return (
+      <pre key={key}>
+        <code>{block.text}</code>
       </pre>
     );
-    codeLines = [];
-  };
-
-  for (const line of lines) {
-    if (line.startsWith("```")) {
-      if (codeLines.length > 0) {
-        flushCode();
-      } else {
-        flushList();
-        codeLines = [""];
-      }
-    } else if (codeLines.length > 0) {
-      codeLines.push(line);
-    } else if (line.startsWith("# ")) {
-      flushList();
-      elements.push(<h2 key={line}>{line.slice(2)}</h2>);
-    } else if (line.startsWith("## ")) {
-      flushList();
-      elements.push(<h3 key={line}>{line.slice(3)}</h3>);
-    } else if (line.startsWith("### ")) {
-      flushList();
-      elements.push(<h4 key={line}>{line.slice(4)}</h4>);
-    } else if (line.startsWith("- ")) {
-      listItems.push(line.slice(2));
-    } else if (line.trim().length === 0) {
-      flushList();
-    } else {
-      flushList();
-      elements.push(<p key={`${line}-${elements.length}`}>{line}</p>);
-    }
   }
-  flushList();
-  flushCode();
-
-  return <>{elements}</>;
+  if (block.type === "table") {
+    return (
+      <div key={key} className="docs-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              {block.headers.map((header, headerIndex) => (
+                <th key={`${header}-${headerIndex}`}>{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {block.rows.map((row, rowIndex) => (
+              <tr key={`row-${rowIndex}`}>
+                {block.headers.map((_, cellIndex) => (
+                  <td key={`cell-${rowIndex}-${cellIndex}`}>{row[cellIndex] ?? ""}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  return <p key={key}>{block.text}</p>;
 }
