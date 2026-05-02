@@ -63,7 +63,7 @@ export const editorPresets: EditorPreset[] = [
   {
     id: "manual-sheet",
     label: "Manual sheet setup",
-    description: "Sheet mode with manual target controls enabled.",
+    description: "Sheet mode with manual output controls enabled.",
     settings: {
       assetType: "spriteSheet",
       mode: "spriteSheet",

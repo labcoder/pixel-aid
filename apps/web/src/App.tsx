@@ -183,7 +183,12 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
-import { moveInspectorGroup, type InspectorGroupId } from "./lib/inspectorGroups";
+import {
+  getVisibleInspectorGroups,
+  isInspectorGroupDefaultOpen,
+  moveVisibleInspectorGroup,
+  type InspectorGroupId
+} from "./lib/inspectorGroups";
 import { createOnboardingSampleImport, getOnboardingSampleCards, type OnboardingSampleImport } from "./lib/onboardingSamples";
 import {
   getOutlineSourceColorsForFix,
@@ -449,7 +454,7 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
   asset: {
     title: "Asset",
     docsId: "fix-settings",
-    tooltip: "Mode, Auto Suggest, single-sprite target size, and sheet-derived output size."
+    tooltip: "Mode, Auto Suggest, single-sprite output size, and sheet-derived output size."
   },
   cleanup: {
     title: "Cleanup",
@@ -2181,7 +2186,7 @@ export function App() {
           );
         })
         .catch((error) => {
-          recordOperationError("fix", error, "Try Auto Suggest, lower the target size/color count, or disable advanced cleanup before running Fix again.", {
+          recordOperationError("fix", error, "Try Auto Suggest, lower the output size/color count, or disable advanced cleanup before running Fix again.", {
             asset: selectedAsset.name,
             mode,
             assetType,
@@ -2421,9 +2426,35 @@ export function App() {
     [selectedAsset]
   );
 
-  const moveInspectorGroupInPanel = useCallback((group: InspectorGroupId, direction: "up" | "down") => {
-    setInspectorGroupOrder((current) => moveInspectorGroup(current, group, direction));
-  }, []);
+  const visibleInspectorGroups = useMemo(
+    () =>
+      getVisibleInspectorGroups(inspectorGroupOrder, {
+        assetType,
+        mode,
+        frameCount: detectedSheetFrames.length,
+        animationCount: detectedRowAnimations.length
+      }),
+    [assetType, detectedRowAnimations.length, detectedSheetFrames.length, inspectorGroupOrder, mode]
+  );
+
+  const moveInspectorGroupInPanel = useCallback(
+    (group: InspectorGroupId, direction: "up" | "down") => {
+      setInspectorGroupOrder((current) =>
+        moveVisibleInspectorGroup(
+          current,
+          getVisibleInspectorGroups(current, {
+            assetType,
+            mode,
+            frameCount: detectedSheetFrames.length,
+            animationCount: detectedRowAnimations.length
+          }),
+          group,
+          direction
+        )
+      );
+    },
+    [assetType, detectedRowAnimations.length, detectedSheetFrames.length, mode]
+  );
 
   const commitTargetSize = useCallback(
     (next: { targetWidth: number; targetHeight: number }) => {
@@ -4151,14 +4182,14 @@ export function App() {
         ) : (
           <>
             <DimensionField
-              label="Target W"
+              label="Output W"
               value={targetWidth}
               min={1}
               max={Math.max(512, targetWidth)}
               onChange={(value) => updateTargetSize("width", value)}
             />
             <DimensionField
-              label="Target H"
+              label="Output H"
               value={targetHeight}
               min={1}
               max={Math.max(512, targetHeight)}
@@ -4183,7 +4214,7 @@ export function App() {
               Lock aspect ratio
             </label>
             <p className="field-note">
-              Target size is the native game-art output. Editing it disables auto crop so the requested dimensions are honored.
+              Output size is the native game-art result. Editing it disables auto crop so the requested dimensions are honored.
             </p>
           </>
         )}
@@ -4428,7 +4459,7 @@ export function App() {
           value={gridDetect}
           options={[
             ["auto", "Auto candidate"],
-            ["manual", "Manual target"]
+            ["manual", "Manual output"]
           ]}
           onChange={(value) => {
             clearDetectedSheetLayout();
@@ -4498,7 +4529,7 @@ export function App() {
           Correct local drift
         </label>
         <p className="field-note">
-          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while target size still guides the grid.
+          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid.
         </p>
       </>
     ),
@@ -5423,7 +5454,7 @@ export function App() {
           onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
         />
         {showAdvancedControls ? (
-          inspectorGroupOrder.map((group, index) => (
+          visibleInspectorGroups.map((group, index) => (
             <InspectorGroup
               key={group}
               title={inspectorGroupMeta[group].title}
@@ -5431,9 +5462,10 @@ export function App() {
               tooltip={inspectorGroupMeta[group].tooltip}
               onDocs={openDocs}
               canMoveUp={index > 0}
-              canMoveDown={index < inspectorGroupOrder.length - 1}
+              canMoveDown={index < visibleInspectorGroups.length - 1}
               onMoveUp={() => moveInspectorGroupInPanel(group, "up")}
               onMoveDown={() => moveInspectorGroupInPanel(group, "down")}
+              defaultOpen={isInspectorGroupDefaultOpen(group)}
             >
               {inspectorGroupContent[group]}
             </InspectorGroup>
@@ -6604,6 +6636,7 @@ function InspectorGroup({
   canMoveDown,
   onMoveUp,
   onMoveDown,
+  defaultOpen,
   children
 }: {
   title: string;
@@ -6614,10 +6647,17 @@ function InspectorGroup({
   canMoveDown: boolean;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  defaultOpen: boolean;
   children: ReactNode;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    setOpen(defaultOpen);
+  }, [defaultOpen]);
+
   return (
-    <details className="control-group" open>
+    <details className="control-group" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>
         <span>{title}</span>
         <span className="inspector-group-actions">
