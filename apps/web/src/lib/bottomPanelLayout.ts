@@ -1,15 +1,15 @@
 import type { AssetMode, AssetType } from "@pixelaid/shared";
 
-export type BottomPanelSection = "timeline" | "tilePreview" | "logs" | "metrics";
+export type BottomPanelSection = "timeline" | "tilePreview" | "diagnostics";
 
 export function getBottomPanelSections(mode: AssetMode, assetType: AssetType = "sprite"): BottomPanelSection[] {
   if (assetType === "tileset") {
-    return ["tilePreview", "logs", "metrics"];
+    return ["tilePreview", "diagnostics"];
   }
 
   if (mode === "single") {
-    return ["logs", "metrics"];
+    return ["diagnostics"];
   }
 
-  return ["timeline", "logs", "metrics"];
+  return ["timeline", "diagnostics"];
 }

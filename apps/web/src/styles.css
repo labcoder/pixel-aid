@@ -2485,21 +2485,35 @@ button:focus-visible {
 .bottom-content {
   min-height: 0;
   display: grid;
-  grid-template-columns: 1.05fr 0.78fr 1fr 0.9fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   background: var(--line);
   overflow: hidden;
 }
 
-.bottom-content.without-timeline {
-  grid-template-columns: 0.78fr 1fr 0.9fr;
+.bottom-content > section {
+  min-width: 0;
+  min-height: 0;
+  padding: 12px;
+  background: var(--surface-1);
+  overflow: auto;
 }
 
-.bottom-content.with-tile-preview {
-  grid-template-columns: 1fr 0.78fr 1fr 0.9fr;
+.diagnostics-panel {
+  overflow: hidden;
 }
 
-.bottom-content section {
+.diagnostics-grid {
+  min-height: 0;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.78fr) minmax(260px, 1fr) minmax(240px, 0.9fr);
+  gap: 1px;
+  background: var(--line);
+}
+
+.diagnostics-card,
+.diagnostics-grid > .quality-report-panel {
   min-width: 0;
   min-height: 0;
   padding: 12px;
