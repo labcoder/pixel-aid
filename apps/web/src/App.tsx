@@ -1,11 +1,12 @@
 import {
-  Ban,
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   CircleHelp,
   Copy,
   Crosshair,
   Download,
+  Eye,
   FileImage,
   Gauge,
   Layers,
@@ -104,7 +105,6 @@ import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetType
 import { getBottomPanelSections } from "./lib/bottomPanelLayout";
 import {
   createDiagnosticOverlayModel,
-  diagnosticOverlayOptions,
   type DiagnosticOverlayMode
 } from "./lib/diagnosticOverlays";
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
@@ -127,6 +127,7 @@ import {
   type BusyOperationKind
 } from "./lib/busyStatus";
 import { engineExportFileToBundleFile, engineWarningsToValidationIssues } from "./lib/engineExportFiles";
+import { getEditorPanelMenuItems, type EditorPanelId } from "./lib/editorShell";
 import { createAssetBundleZip, jsonBundleFile, textBundleFile, type AssetBundleFile } from "./lib/exportBundle";
 import { assetBaseName, downloadBlob, rgbaImageToPngBlob } from "./lib/exportFiles";
 import {
@@ -278,6 +279,8 @@ import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type EditorViewMode } from "./lib/viewportModes";
 import { getViewportNativeReadout } from "./lib/viewportReadout";
+
+type AppMenuId = "file" | "view" | "export";
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 const onboardingSampleCards = getOnboardingSampleCards();
@@ -481,7 +484,7 @@ export function App() {
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
-  const [diagnosticOverlayMode, setDiagnosticOverlayMode] = useState<DiagnosticOverlayMode>("none");
+  const diagnosticOverlayMode: DiagnosticOverlayMode = "none";
   const [zoom, setZoom] = useState(initialSettings.zoom);
   const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
@@ -524,6 +527,7 @@ export function App() {
   );
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(initialSettings.bottomPanelHeight);
+  const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(initialSettings.playbackFps);
   const [playbackLoop, setPlaybackLoop] = useState(initialSettings.playbackLoop);
@@ -567,6 +571,7 @@ export function App() {
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [showAdvancedControls, setShowAdvancedControls] = useState(initialSettings.showAdvancedControls);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
+  const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
   const [inspectorGroupOrder, setInspectorGroupOrder] = useState<InspectorGroupId[]>(initialSettings.inspectorGroupOrder);
   const [savedEditorPresets, setSavedEditorPresets] = useState<EditorPreset[]>(initialPreferences.savedPresets);
   const [savedPaletteLibrary, setSavedPaletteLibrary] = useState<PaletteLibraryEntry[]>(initialPreferences.savedPaletteLibrary);
@@ -575,8 +580,6 @@ export function App() {
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
-  const activeFixOperationIdRef = useRef<number | null>(null);
-  const fixStartCancelledRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const selectedAnimationNameRef = useRef(selectedAnimationName);
@@ -816,6 +819,15 @@ export function App() {
   const visibleBusyOperation = selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation, fixOperation: visibleFixOperation });
   const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
   const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
+  const editorPanelMenuItems = useMemo(() => getEditorPanelMenuItems({ bottomPanelVisible: showBottomPanel }), [showBottomPanel]);
+  const toggleAppMenu = useCallback((menu: AppMenuId) => {
+    setActiveAppMenu((current) => (current === menu ? null : menu));
+  }, []);
+  const toggleEditorPanel = useCallback((panel: EditorPanelId) => {
+    if (panel === "bottom") {
+      setShowBottomPanel((current) => !current);
+    }
+  }, []);
   useEffect(() => {
     setLastExportValidation(null);
   }, [engineExportTargets, fixResult, selectedAsset?.id]);
@@ -1281,6 +1293,17 @@ export function App() {
     const syncRoute = () => setRoute(window.location.pathname);
     window.addEventListener("popstate", syncRoute);
     return () => window.removeEventListener("popstate", syncRoute);
+  }, []);
+
+  useEffect(() => {
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setActiveAppMenu(null);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
   }, []);
 
   const openDocs = useCallback((sectionId: string) => {
@@ -2049,19 +2072,11 @@ export function App() {
     }
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
-    fixStartCancelledRef.current = false;
     lastLoggedFixStageRef.current = undefined;
     const operation = nextBusyOperation("fix", sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
-    activeFixOperationIdRef.current = operation.id;
     setFixOperation(operation);
     setFixProgress({ requestId: "pending", stage: "decode-prep", percent: 0 });
     await waitForNextPaint();
-    if (fixStartCancelledRef.current) {
-      setFixOperation((current) => clearBusyOperation(current, operation.id));
-      setFixProgress(null);
-      activeFixOperationIdRef.current = null;
-      return;
-    }
 
     try {
       const options = buildFixOptions();
@@ -2069,12 +2084,6 @@ export function App() {
         current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...") : current
       );
       await waitForNextPaint();
-      if (fixStartCancelledRef.current) {
-        setFixOperation((current) => clearBusyOperation(current, operation.id));
-        setFixProgress(null);
-        activeFixOperationIdRef.current = null;
-        return;
-      }
 
       const job = startFixJob(selectedAsset.image, options, {
         onProgress: (progress) => {
@@ -2110,7 +2119,6 @@ export function App() {
         .finally(() => {
           if (activeJobRef.current?.requestId === job.requestId) {
             activeJobRef.current = null;
-            activeFixOperationIdRef.current = null;
           }
           setFixOperation((current) => clearBusyOperation(current, operation.id));
           setFixProgress(null);
@@ -2123,7 +2131,6 @@ export function App() {
       });
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
-      activeFixOperationIdRef.current = null;
     }
   }, [
     appendLog,
@@ -2139,28 +2146,6 @@ export function App() {
     sheetFrames.length,
     sheetMode
   ]);
-
-  const cancelFix = useCallback(() => {
-    if (!activeJobRef.current) {
-      fixStartCancelledRef.current = true;
-      const operationId = activeFixOperationIdRef.current;
-      if (operationId !== null) {
-        setFixOperation((current) => clearBusyOperation(current, operationId));
-      }
-      setFixProgress((progress) =>
-        progress ? { ...progress, stage: "cancelled", percent: 100, message: "Cancelling" } : { requestId: "pending", stage: "cancelled", percent: 100, message: "Cancelling" }
-      );
-      return;
-    }
-    setFixOperation((current) => (current ? updateBusyOperation(current, "Cancelling fix...") : current));
-    setFixProgress((progress) => ({
-      requestId: activeJobRef.current?.requestId ?? progress?.requestId ?? "pending",
-      stage: "cancelled",
-      percent: 100,
-      message: "Cancelling"
-    }));
-    activeJobRef.current?.cancel();
-  }, []);
 
   const autoSuggest = useCallback(async () => {
     if (!selectedAsset || isEditorBusy) {
@@ -4682,8 +4667,8 @@ export function App() {
 
   return (
     <main
-      className={`editor-shell${isDropActive ? " is-drop-active" : ""}`}
-      style={{ "--bottom-panel-height": `${bottomPanelHeight}px` } as CSSProperties}
+      className={`editor-shell${isDropActive ? " is-drop-active" : ""}${showBottomPanel ? "" : " is-bottom-panel-hidden"}`}
+      style={{ "--bottom-panel-height": `${showBottomPanel ? bottomPanelHeight : 0}px` } as CSSProperties}
       aria-label="PixelAid editor"
       onDragEnter={() => setIsDropActive(true)}
       onDragOver={(event) => event.preventDefault()}
@@ -4709,14 +4694,95 @@ export function App() {
         }}
         />
 
-        <header className="top-toolbar">
-          <div className="brand-lockup">
-            <img className="brand-logo" src="/brand/header-logo-compact-dark.png" width="100" height="34" alt="PixelAid" />
-            <div className="brand-copy">
-              <h1>PixelAid</h1>
-              <p>Fake-pixel fixer</p>
-            </div>
+      <header className="top-toolbar">
+        <div className="brand-lockup">
+          <img className="brand-logo" src="/brand/header-logo-compact-dark.png" width="100" height="34" alt="PixelAid" />
+          <div className="brand-copy">
+            <h1>PixelAid</h1>
+            <p>Fake-pixel fixer</p>
           </div>
+        </div>
+        <nav className="app-menu-bar" aria-label="Application menus">
+          <ToolbarMenu id="file" label="File" icon={<FileImage size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={isEditorBusy}
+              onClick={() => {
+                setActiveAppMenu(null);
+                openImportPicker();
+              }}
+            >
+              <Upload size={14} />
+              <span>Import images</span>
+              <kbd>Ctrl/Cmd O</kbd>
+            </button>
+          </ToolbarMenu>
+          <ToolbarMenu id="view" label="View" icon={<Eye size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
+            {editorPanelMenuItems.map((item) => (
+              <label key={item.id} className="menu-check-row">
+                <input
+                  type="checkbox"
+                  checked={item.checked}
+                  disabled={item.disabled}
+                  onChange={() => toggleEditorPanel(item.id)}
+                />
+                <span>{item.label}</span>
+                {item.disabled ? <small>required</small> : null}
+              </label>
+            ))}
+            <label className="menu-check-row">
+              <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
+              <span>Pixel grid</span>
+              <small>Ctrl/G</small>
+            </label>
+          </ToolbarMenu>
+          <ToolbarMenu id="export" label="Export" icon={<Download size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
+            <button
+              type="button"
+              role="menuitem"
+              className="menu-primary export-action"
+              disabled={!fixResult}
+              onClick={() => {
+                setActiveAppMenu(null);
+                exportFixedAsset();
+              }}
+            >
+              <Download size={14} />
+              <span>Export bundle</span>
+              <kbd>Ctrl/Cmd Shift E</kbd>
+            </button>
+            <div className="menu-section-label">Engine targets</div>
+            {(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"] as const).map((target) => (
+              <label key={target} className="menu-check-row">
+                <input
+                  type="checkbox"
+                  checked={engineExportTargets.includes(target)}
+                  onChange={() => toggleEngineExportTarget(target)}
+                />
+                <span>{targetLabel(target)}</span>
+              </label>
+            ))}
+            <label className="menu-check-row">
+              <input
+                type="checkbox"
+                checked={normalizeTimelineFrames}
+                disabled={!sheetMode}
+                onChange={(event) => setNormalizeTimelineFrames(event.currentTarget.checked)}
+              />
+              <span>Normalize sheet PNG</span>
+              {!sheetMode ? <small>sheet only</small> : null}
+            </label>
+            <div className="menu-status-row">
+              <span>Validation</span>
+              <strong>
+                {lastExportValidation
+                  ? `${lastExportValidation.ok ? "OK" : "Review"} / ${lastExportValidation.warningCount} warnings`
+                  : "pending"}
+              </strong>
+            </div>
+          </ToolbarMenu>
+        </nav>
         <nav className="toolbar-actions" aria-label="Primary editor actions">
           <button
             type="button"
@@ -4730,6 +4796,7 @@ export function App() {
           </button>
           <button
             type="button"
+            className="fix-action"
             disabled={!selectedAsset || isEditorBusy}
             onClick={runFix}
             aria-keyshortcuts="Control+Enter Meta+Enter"
@@ -4738,12 +4805,9 @@ export function App() {
             <WandSparkles size={16} />
             {isFixing ? "Fixing" : "Fix"}
           </button>
-          <button type="button" disabled={!isFixing} onClick={cancelFix} aria-label="Cancel active fix job">
-            <Ban size={16} />
-            Cancel
-          </button>
           <button
             type="button"
+            className="export-action"
             disabled={!fixResult}
             onClick={exportFixedAsset}
             aria-keyshortcuts="Control+Shift+E Meta+Shift+E"
@@ -5040,16 +5104,6 @@ export function App() {
               </button>
             ))}
           </div>
-          <label className="diagnostic-overlay-select">
-            <span>Overlay</span>
-            <select value={diagnosticOverlayMode} onChange={(event) => setDiagnosticOverlayMode(event.currentTarget.value as DiagnosticOverlayMode)}>
-              {diagnosticOverlayOptions.map((option) => (
-                <option key={option.mode} value={option.mode}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </label>
           {hasDetectedSheetLayout ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
               <button
@@ -5292,6 +5346,7 @@ export function App() {
         )}
       </aside>
 
+      {showBottomPanel ? (
       <footer className="bottom-panel panel" aria-label="Timeline logs and metrics">
         <div
           className="bottom-resize-handle"
@@ -5789,7 +5844,47 @@ export function App() {
           </section>
         </div>
       </footer>
+      ) : null}
     </main>
+  );
+}
+
+function ToolbarMenu({
+  id,
+  label,
+  icon,
+  activeMenu,
+  onToggle,
+  children
+}: {
+  id: AppMenuId;
+  label: string;
+  icon: ReactNode;
+  activeMenu: AppMenuId | null;
+  onToggle: (menu: AppMenuId) => void;
+  children: ReactNode;
+}) {
+  const open = activeMenu === id;
+
+  return (
+    <div className="app-menu">
+      <button
+        type="button"
+        className={open ? "app-menu-trigger active" : "app-menu-trigger"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => onToggle(id)}
+      >
+        {icon}
+        <span>{label}</span>
+        <ChevronDown size={13} />
+      </button>
+      {open ? (
+        <div className="app-menu-popover" role="menu" aria-label={`${label} menu`}>
+          {children}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -5884,7 +5979,7 @@ function GuidedFixPanel({
           <Sparkles size={14} />
           Auto Suggest
         </button>
-        <button type="button" disabled={!canFix} onClick={onRunFix}>
+        <button type="button" className="guided-fix-action" disabled={!canFix} onClick={onRunFix}>
           <WandSparkles size={14} />
           Fix
         </button>

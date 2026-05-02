@@ -19,6 +19,7 @@
   --amber: #f1c75b;
   --rose: #e85361;
   --green: #8ccf70;
+  --purple: #b58cff;
 }
 
 * {
@@ -91,6 +92,13 @@ button:focus-visible {
   overflow: hidden;
 }
 
+.editor-shell.is-bottom-panel-hidden {
+  grid-template:
+    "toolbar toolbar toolbar" 56px
+    "left viewport right" minmax(0, 1fr) /
+    260px minmax(420px, 1fr) 300px;
+}
+
 .error-boundary-shell {
   min-height: 100vh;
   display: grid;
@@ -150,6 +158,7 @@ button:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 0.8rem;
   padding: 0 14px;
   background: #171917;
   border-bottom: 1px solid var(--line);
@@ -199,6 +208,146 @@ button:focus-visible {
 .toolbar-actions button {
   padding: 0 0.75rem;
   background: #202322;
+}
+
+.toolbar-actions .fix-action,
+.guided-actions .guided-fix-action {
+  color: #071108;
+  background: var(--green);
+  border-color: var(--green);
+  font-weight: 900;
+}
+
+.toolbar-actions .fix-action:hover:not(:disabled),
+.guided-actions .guided-fix-action:hover:not(:disabled) {
+  border-color: #bcf2a7;
+}
+
+.toolbar-actions .export-action,
+.menu-primary.export-action {
+  color: #121018;
+  background: var(--purple);
+  border-color: var(--purple);
+  font-weight: 900;
+}
+
+.toolbar-actions .export-action:hover:not(:disabled),
+.menu-primary.export-action:hover:not(:disabled) {
+  border-color: #dac8ff;
+}
+
+.app-menu-bar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-right: auto;
+}
+
+.app-menu {
+  position: relative;
+}
+
+.app-menu-trigger {
+  min-height: 30px;
+  padding: 0 0.55rem;
+  color: var(--muted);
+  background: #151a19;
+}
+
+.app-menu-trigger.active {
+  color: var(--text);
+  border-color: var(--cyan);
+  background: #182524;
+}
+
+.app-menu-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 254px;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.4rem;
+  background: #101414;
+  border: 1px solid #38504e;
+  border-radius: 7px;
+  box-shadow: 0 16px 42px #00000080;
+}
+
+.app-menu-popover button,
+.menu-check-row,
+.menu-status-row {
+  width: 100%;
+  min-height: 30px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0 0.5rem;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 0.74rem;
+}
+
+.app-menu-popover button {
+  justify-content: stretch;
+}
+
+.app-menu-popover button:hover:not(:disabled),
+.menu-check-row:hover {
+  color: var(--text);
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.app-menu-popover span,
+.menu-check-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.app-menu-popover kbd,
+.menu-check-row small,
+.menu-status-row strong {
+  color: var(--amber);
+  font: inherit;
+  font-size: 0.68rem;
+}
+
+.menu-check-row {
+  cursor: default;
+}
+
+.menu-check-row input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+}
+
+.menu-check-row:has(input:disabled) {
+  opacity: 0.58;
+}
+
+.menu-section-label {
+  margin: 0.35rem 0 0.1rem;
+  padding: 0 0.5rem;
+  color: var(--cyan);
+  font-size: 0.66rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.menu-status-row {
+  margin-top: 0.25rem;
+  background: #121a1a;
+  border-color: var(--line);
 }
 
 .panel {
