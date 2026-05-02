@@ -105,6 +105,7 @@ import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetType
 import { getBottomPanelSections, type BottomPanelSection } from "./lib/bottomPanelLayout";
 import {
   createDiagnosticOverlayModel,
+  diagnosticOverlayOptions,
   type DiagnosticOverlayMode
 } from "./lib/diagnosticOverlays";
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
@@ -564,7 +565,7 @@ export function App() {
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
-  const diagnosticOverlayMode: DiagnosticOverlayMode = "none";
+  const [diagnosticOverlayMode, setDiagnosticOverlayMode] = useState<DiagnosticOverlayMode>("none");
   const [zoom, setZoom] = useState(initialSettings.zoom);
   const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
@@ -4979,6 +4980,13 @@ export function App() {
     ),
     viewport: (
       <>
+        <SelectField
+          label="Overlay"
+          value={diagnosticOverlayMode}
+          options={diagnosticOverlayOptions.map((option) => [option.mode, option.label])}
+          onChange={(value) => setDiagnosticOverlayMode(value as DiagnosticOverlayMode)}
+        />
+        <p className="field-note">{diagnosticOverlay.summary}</p>
         <label className="toggle-row">
           <input type="checkbox" checked={showGrid} onChange={(event) => setShowGrid(event.currentTarget.checked)} />
           Show grid overlay
