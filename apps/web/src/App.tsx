@@ -5620,10 +5620,59 @@ export function App() {
         </div>
         <div className={bottomContentClassName}>
           {showTimelinePanel ? (
-          <section>
-            <h2>Timeline Metadata</h2>
+          <section className="timeline-bottom-panel" aria-label="Timeline metadata">
+            <div className="timeline-panel-heading">
+              <div>
+                <h2>Timeline Metadata</h2>
+                <span>{selectedAnimationName === ALL_ANIMATIONS ? "All clips" : selectedAnimationName}</span>
+              </div>
+              <div className="timeline-panel-badges">
+                <span>{timelineSourceModeLabel}</span>
+                <span>{timelineFrames.length} frames</span>
+                <span>{playbackFps} FPS</span>
+              </div>
+            </div>
             {timelineState.enabled ? (
               <>
+                <div className="timeline-toolbar-row">
+                  <div className="timeline-clip-pills" aria-label="Timeline clip selection">
+                    {detectedRowAnimations.length > 1 ? (
+                      <button
+                        type="button"
+                        className={selectedAnimationName === ALL_ANIMATIONS ? "active" : ""}
+                        aria-pressed={selectedAnimationName === ALL_ANIMATIONS}
+                        onClick={() => changeSelectedAnimation(ALL_ANIMATIONS)}
+                      >
+                        All
+                      </button>
+                    ) : null}
+                    {detectedRowAnimations.map((animation) => (
+                      <button
+                        key={animation.name}
+                        type="button"
+                        className={selectedAnimationName === animation.name ? "active" : ""}
+                        aria-pressed={selectedAnimationName === animation.name}
+                        onClick={() => changeSelectedAnimation(animation.name)}
+                      >
+                        {animation.name}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="timeline-source-controls compact" aria-label="Timeline playback source">
+                    {timelineViewportSourceOptions.map((option) => (
+                      <button
+                        key={option.mode}
+                        type="button"
+                        className={timelineViewportSourceMode === option.mode ? "active" : ""}
+                        disabled={!option.enabled}
+                        aria-pressed={timelineViewportSourceMode === option.mode}
+                        onClick={() => setTimelineViewportSourceMode(option.mode)}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <div className="player-readout">
                   <strong>
                     Frame {timelinePosition >= 0 ? timelinePosition + 1 : 0}/{timelineFrames.length}
@@ -5671,6 +5720,13 @@ export function App() {
                           min={0}
                           max={Math.max(currentFrame.rect.h, currentFrame.pivot.y)}
                           onChange={(value) => updateCurrentFramePivot("y", value)}
+                        />
+                        <NumberField
+                          label="Duration ms"
+                          value={Math.round(currentFrame.durationMs)}
+                          min={16}
+                          max={5000}
+                          onChange={updateSelectedFrameDuration}
                         />
                         <button type="button" onClick={resetCurrentFramePivot}>
                           Reset frame
