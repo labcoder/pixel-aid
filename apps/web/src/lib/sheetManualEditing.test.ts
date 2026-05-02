@@ -1,11 +1,13 @@
 import { describe, expect, test } from "vitest";
 import type { AnimationTag, Rect, SpriteFrame } from "@pixelaid/shared";
 import {
+  createManualSheetLayout,
   fillRowToFrameCount,
   fillSparseRowsToFrameCount,
   insertFrameAtRowEdge,
   insertFrameNearSelection,
   insertRowNearSelection,
+  removeAnimationOrSheetRow,
   removeFrameAtSelection,
   removeRowAtSelection
 } from "./sheetManualEditing";
@@ -22,6 +24,27 @@ const animations: AnimationTag[] = [
 ];
 
 describe("manual sheet editing", () => {
+  test("turns manual grid frames into named editable row animations", () => {
+    const layout = createManualSheetLayout({
+      frames: [
+        frame("frame_000", "", { x: 0, y: 0, w: 16, h: 16 }, { x: 0, y: 0, w: 32, h: 32 }),
+        frame("frame_001", "", { x: 16, y: 0, w: 16, h: 16 }, { x: 32, y: 0, w: 32, h: 32 }),
+        frame("frame_002", "", { x: 0, y: 16, w: 16, h: 16 }, { x: 0, y: 32, w: 32, h: 32 }),
+        frame("frame_003", "", { x: 16, y: 16, w: 16, h: 16 }, { x: 32, y: 32, w: 32, h: 32 })
+      ],
+      rows: 2,
+      columns: 2,
+      fps: 10
+    });
+
+    expect(layout.animations).toEqual([
+      { name: "row_1", frameNames: ["row_1_000", "row_1_001"], fps: 10, loop: true, direction: "forward" },
+      { name: "row_2", frameNames: ["row_2_000", "row_2_001"], fps: 10, loop: true, direction: "forward" }
+    ]);
+    expect(layout.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001", "row_2_000", "row_2_001"]);
+    expect(layout.frames.map((item) => item.tags)).toEqual([["row_1"], ["row_1"], ["row_2"], ["row_2"]]);
+  });
+
   test("inserts a new cell before the selected frame and keeps row membership", () => {
     const result = insertFrameNearSelection({
       frames,
@@ -222,6 +245,34 @@ describe("manual sheet editing", () => {
     expect(result.frames.map((item) => item.name)).toEqual(["row_2_000"]);
     expect(result.selectedFrameIndex).toBe(0);
     expect(result.selectedAnimationName).toBe("row_2");
+  });
+
+  test("removes row frames when deleting a sheet row animation", () => {
+    const result = removeAnimationOrSheetRow({
+      frames,
+      animations,
+      selectedAnimationName: "row_2",
+      margin: 0,
+      spacing: 0
+    });
+
+    expect(result.animations.map((animation) => animation.name)).toEqual(["row_1"]);
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001"]);
+    expect(result.selectedAnimationName).toBe("row_1");
+  });
+
+  test("removes only the clip when deleting a custom animation", () => {
+    const result = removeAnimationOrSheetRow({
+      frames,
+      animations: [...animations, { name: "attack", frameNames: ["row_1_001", "row_2_000"], fps: 12, loop: false }],
+      selectedAnimationName: "attack",
+      margin: 0,
+      spacing: 0
+    });
+
+    expect(result.animations.map((animation) => animation.name)).toEqual(["row_1", "row_2"]);
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001", "row_2_000"]);
+    expect(result.selectedAnimationName).toBe("row_1");
   });
 
   test("recovers a missing first cell at the selected row edge", () => {

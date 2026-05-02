@@ -8,6 +8,11 @@ export type ManualSheetEditResult = {
   selectedAnimationName: string;
 };
 
+export type ManualSheetLayout = {
+  frames: SpriteFrame[];
+  animations: AnimationTag[];
+};
+
 type SheetEditBaseOptions = {
   frames: readonly SpriteFrame[];
   animations: readonly AnimationTag[];
@@ -17,6 +22,59 @@ type SheetEditBaseOptions = {
   scaleY: number;
   sourceSize: { width: number; height: number };
 };
+
+export function createManualSheetLayout({
+  frames,
+  rows,
+  columns,
+  fps = 8
+}: {
+  frames: readonly SpriteFrame[];
+  rows: number;
+  columns: number;
+  fps?: number;
+}): ManualSheetLayout {
+  const safeRows = Math.max(1, Math.round(rows));
+  const safeColumns = Math.max(1, Math.round(columns));
+  const nextFrames: SpriteFrame[] = [];
+  const animations: AnimationTag[] = [];
+
+  for (let row = 0; row < safeRows; row += 1) {
+    const rowName = `row_${row + 1}`;
+    const frameNames: string[] = [];
+
+    for (let column = 0; column < safeColumns; column += 1) {
+      const sourceIndex = row * safeColumns + column;
+      const sourceFrame = frames[sourceIndex];
+      if (!sourceFrame) {
+        continue;
+      }
+
+      const frameName = `${rowName}_${column.toString().padStart(3, "0")}`;
+      nextFrames.push({
+        ...copyFrame(sourceFrame),
+        name: frameName,
+        tags: [rowName]
+      });
+      frameNames.push(frameName);
+    }
+
+    if (frameNames.length > 0) {
+      animations.push({
+        name: rowName,
+        frameNames,
+        fps,
+        loop: true,
+        direction: "forward"
+      });
+    }
+  }
+
+  return {
+    frames: nextFrames,
+    animations
+  };
+}
 
 export function insertFrameNearSelection({
   frames,
@@ -350,6 +408,46 @@ export function removeRowAtSelection({
   };
 }
 
+export function removeAnimationOrSheetRow({
+  frames,
+  animations,
+  selectedAnimationName,
+  margin,
+  spacing
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  selectedAnimationName: string;
+  margin: number;
+  spacing: number;
+}): ManualSheetEditResult {
+  const selectedRow = animations.find((animation) => animation.name === selectedAnimationName);
+  if (!selectedRow) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  if (isSheetRowAnimation(selectedRow, frames) && animations.length > 1) {
+    return removeRowAtSelection({
+      frames,
+      animations,
+      selectedAnimationName,
+      margin,
+      spacing
+    });
+  }
+
+  const nextAnimations = animations.filter((animation) => animation.name !== selectedAnimationName).map(copyAnimation);
+  const nextSelectedAnimation = nextAnimations[0];
+  const nextSelectedFrameName = nextSelectedAnimation?.frameNames[0];
+
+  return {
+    frames: frames.map(copyFrame),
+    animations: nextAnimations,
+    selectedFrameIndex: nextSelectedFrameName ? findFrameIndexByName(frames, nextSelectedFrameName) : frames.length > 0 ? 0 : -1,
+    selectedAnimationName: nextSelectedAnimation?.name ?? selectedAnimationName
+  };
+}
+
 function unchanged(frames: readonly SpriteFrame[], animations: readonly AnimationTag[], selectedFrameIndex: number): ManualSheetEditResult {
   const selectedFrame = frames[selectedFrameIndex];
   return {
@@ -513,6 +611,15 @@ function appendFramesForRowsToTarget({
 
 function findAnimationForFrame(frame: SpriteFrame, animations: readonly AnimationTag[]): AnimationTag | undefined {
   return animations.find((animation) => animation.frameNames.includes(frame.name) || frame.tags?.includes(animation.name));
+}
+
+function isSheetRowAnimation(animation: AnimationTag, frames: readonly SpriteFrame[]): boolean {
+  if (animation.frameNames.length === 0) {
+    return false;
+  }
+
+  const framesByName = new Map(frames.map((frame) => [frame.name, frame]));
+  return animation.frameNames.every((frameName) => framesByName.get(frameName)?.tags?.includes(animation.name));
 }
 
 function findAnimationIndex(animationName: string, animations: readonly AnimationTag[]): number {
