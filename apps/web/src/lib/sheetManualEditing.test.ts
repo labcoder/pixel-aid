@@ -7,6 +7,7 @@ import {
   insertFrameAtRowEdge,
   insertFrameNearSelection,
   insertRowNearSelection,
+  joinSheetRowsIntoClip,
   removeAnimationOrSheetRow,
   removeFrameAtSelection,
   removeRowAtSelection
@@ -364,6 +365,26 @@ describe("manual sheet editing", () => {
     expect(result.selectedAnimationName).toBe("row_2");
     expect(result.selectedFrameIndex).toBe(3);
     expect(result.frames[3]?.sourceRect).toEqual({ x: 228, y: 180, w: 128, h: 128 });
+  });
+
+  test("joins multiple detected rows into one row-major animation clip", () => {
+    const result = joinSheetRowsIntoClip({
+      frames,
+      animations,
+      rowNames: ["row_1", "row_2"]
+    });
+
+    expect(result.animations.map((animation) => animation.name)).toEqual(["row_1", "row_2", "joined_rows"]);
+    expect(result.animations[2]).toMatchObject({
+      name: "joined_rows",
+      frameNames: ["row_1_000", "row_1_001", "row_2_000"],
+      fps: 8,
+      loop: true,
+      direction: "forward"
+    });
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001", "row_2_000"]);
+    expect(result.selectedAnimationName).toBe("joined_rows");
+    expect(result.selectedFrameIndex).toBe(0);
   });
 });
 

@@ -40,6 +40,55 @@ describe("sheet layout model", () => {
     ]);
   });
 
+  test("does not treat joined playback clips as physical sheet rows", () => {
+    const layout = deriveSheetOutputLayout({
+      frames,
+      animations: [
+        ...animations,
+        {
+          name: "joined_rows",
+          frameNames: [...animations[0]!.frameNames, ...animations[1]!.frameNames],
+          fps: 8,
+          loop: true
+        }
+      ],
+      margin: 0,
+      spacing: 0,
+      fallback: { frameWidth: 64, frameHeight: 64, rows: 2, columns: 8 }
+    });
+
+    expect(layout).toMatchObject({
+      width: 512,
+      height: 128,
+      frameCount: 11,
+      rowCount: 2,
+      maxColumns: 8
+    });
+    expect(layout.rows.map((row) => row.name)).toEqual(["idle", "run"]);
+  });
+
+  test("keeps renamed animation rows physical when frame tags still use original row names", () => {
+    const layout = deriveSheetOutputLayout({
+      frames,
+      animations: [
+        { name: "stand", frameNames: ["idle_000", "idle_001", "idle_002"], fps: 8, loop: true },
+        animations[1]!
+      ],
+      margin: 0,
+      spacing: 0,
+      fallback: { frameWidth: 64, frameHeight: 64, rows: 2, columns: 8 }
+    });
+
+    expect(layout).toMatchObject({
+      width: 512,
+      height: 128,
+      frameCount: 11,
+      rowCount: 2,
+      maxColumns: 8
+    });
+    expect(layout.rows.map((row) => row.name)).toEqual(["stand", "run"]);
+  });
+
   test("allows different cell sizes per animation row", () => {
     const layout = deriveSheetOutputLayout({
       frames: [...makeRow("idle", 2, 48, 64), ...makeRow("shoot", 5, 96, 64)],

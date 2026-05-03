@@ -186,7 +186,7 @@ import {
 } from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
-import { suggestFixSettings, type FixSettingSuggestion } from "./lib/fixSuggestions";
+import { suggestFixSettings, suggestFixSettingsForAssetType, type FixSettingSuggestion } from "./lib/fixSuggestions";
 import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
@@ -263,6 +263,7 @@ import {
   createManualSheetLayout,
   insertFrameNearSelection,
   insertRowNearSelection,
+  joinSheetRowsIntoClip,
   removeAnimationOrSheetRow,
   removeFrameAtSelection,
   removeRowAtSelection,
@@ -1585,6 +1586,7 @@ export function App() {
   const canRemoveManualSheetCell = canEditManualSheetCell && editableSheetFrames.length > 1;
   const canEditManualSheetRow = sheetMode && selectedManualAnimation !== undefined;
   const canRemoveManualSheetRow = canEditManualSheetRow && sheetRowAnimations.length > 1;
+  const canJoinSheetRows = sheetMode && editableSheetFrames.length > 0 && sheetRowAnimations.length > 1;
   const selectedSheetLayoutRow = plannedSheetLayout.rows.find((row) => row.name === selectedManualAnimationName);
   const selectedRowLayoutFrame = useMemo(() => {
     if (!selectedManualAnimation) {
@@ -2897,56 +2899,22 @@ export function App() {
       }
 
       const definition = getAssetTypeDefinition(nextAssetType);
-      const preset = getAssetTypeCleanupPreset(nextAssetType);
-      const nextMode = assetTypeToMode(nextAssetType);
-      const wasSheetLike = isSheetLikeMode(mode);
-      const nextSheetLike = isSheetLikeMode(nextMode);
-      const warnings = getAssetTypeWarnings(nextAssetType);
+      const manualAsset: ImportedImageAsset = {
+        ...selectedAsset,
+        assetType: nextAssetType,
+        assetTypeSource: "manual",
+        assetTypeWarnings: getAssetTypeWarnings(nextAssetType),
+        categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
+        categoryConfidence: 1
+      };
+      const suggestion = suggestFixSettingsForAssetType(selectedAsset.image, nextAssetType);
 
-      setAssets((current) =>
-        updateAssetTypeMetadata(current, selectedAsset.id, {
-          assetType: nextAssetType,
-          assetTypeSource: "manual",
-          assetTypeWarnings: warnings,
-          categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
-          categoryConfidence: 1
-        })
-      );
-
-      setMode(nextMode);
-      if (wasSheetLike !== nextSheetLike) {
-        clearDetectedSheetLayout();
-      }
-      if (!nextSheetLike) {
-        setSheetRows(1);
-        setSheetColumns(1);
-      } else if (!wasSheetLike) {
-        setSheetRows(1);
-        setSheetColumns(2);
-      }
-      setCropToBounds(nextMode === "single");
-      setPaletteBudget(preset.maxColors);
-      setDownscale(preset.downscale);
-      setAlpha(preset.alpha);
-      applyAlphaSettings(preset.alphaSettings);
-      setRemoveOrphans(preset.removeOrphans);
-      setJaggyCleanup(preset.jaggyCleanup);
-      setPreserveSinglePixelDetails(preset.preserveSinglePixelDetails);
-      setRemoveHalos(preset.removeHalos);
-      setDenoiseStrength(preset.denoiseStrength);
-      setSuggestionReason(
-        formatSuggestionReason(
-          "Manual asset type override applied.",
-          1,
-          recommendationConfidence,
-          `Manual asset type: ${definition.label}. ${definition.description}`,
-          1,
-          warnings
-        )
-      );
+      setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+      cacheFixSuggestionAnalysis(manualAsset, suggestion);
+      applyFixSuggestion(suggestion, manualAsset);
       appendLog(`Asset type set: ${definition.label}`);
     },
-    [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset, setPaletteBudget]
+    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, selectedAsset]
   );
 
   const visibleInspectorGroups = useMemo(
@@ -4159,6 +4127,20 @@ export function App() {
       `Removed row ${selectedManualAnimationName}`
     );
   }, [applyManualSheetEdit, editableSheetFrames, selectedManualAnimationName, sheetMargin, sheetRowAnimations, sheetSpacing]);
+
+  const joinDetectedRows = useCallback(() => {
+    if (sheetRowAnimations.length <= 1 || editableSheetFrames.length === 0) {
+      return;
+    }
+
+    applyManualSheetEdit(
+      joinSheetRowsIntoClip({
+        frames: editableSheetFrames,
+        animations: sheetRowAnimations
+      }),
+      `Joined ${sheetRowAnimations.length} rows into one clip`
+    );
+  }, [applyManualSheetEdit, editableSheetFrames, sheetRowAnimations]);
 
   const moveDetectedSourceFrame = useCallback(
     (frameIndex: number, delta: { x: number; y: number }) => {
@@ -6385,6 +6367,10 @@ export function App() {
                 <button type="button" disabled={!canRemoveManualSheetRow} onClick={removeSelectedRow}>
                   <Trash2 size={13} />
                   Row
+                </button>
+                <button type="button" disabled={!canJoinSheetRows} onClick={joinDetectedRows}>
+                  <Layers size={13} />
+                  Join rows
                 </button>
               </div>
             </div>
