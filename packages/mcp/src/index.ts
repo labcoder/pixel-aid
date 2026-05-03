@@ -97,16 +97,16 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     name: "inspect_image",
     description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, sheet layout, and suggested PixelAid settings.",
     inputSchema: objectSchema(["inputPath"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       options: commonOptionsSchema,
     }),
   },
   {
     name: "quality_report",
-    description: "Create a non-destructive quality report with ranked findings and fix recommendations for one or more PNG assets.",
+    description: "Create a non-destructive quality report with ranked findings and fix recommendations for one or more PNG/JPEG assets.",
     inputSchema: objectSchema([], {
-      inputPath: stringSchema("Path to one PNG image."),
-      inputPaths: { type: "array", items: { type: "string" }, description: "Paths to PNG images." },
+      inputPath: stringSchema("Path to one PNG or JPEG image."),
+      inputPaths: { type: "array", items: { type: "string" }, description: "Paths to PNG or JPEG images." },
       assets: { type: "array", description: "Optional per-asset requests with inputPath and options." },
       options: commonOptionsSchema,
     }),
@@ -115,15 +115,15 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     name: "suggest_fix_settings",
     description: "Return normalized PixelAid fix settings for an image without writing output files.",
     inputSchema: objectSchema(["inputPath"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       options: commonOptionsSchema,
     }),
   },
   {
     name: "fix_sprite",
-    description: "Fix a single sprite PNG and optionally write a PixelAid manifest.",
+    description: "Fix a single sprite image and optionally write a PixelAid manifest.",
     inputSchema: objectSchema(["inputPath", "outputPath"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       outputPath: stringSchema("PNG output path."),
       manifestPath: stringSchema("Optional JSON manifest output path."),
       options: commonOptionsSchema,
@@ -134,7 +134,7 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     name: "fix_sprite_sheet",
     description: "Fix a sprite sheet using detected frames or provided frame metadata.",
     inputSchema: objectSchema(["inputPath", "outDir"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       outDir: stringSchema("Output directory."),
       outputPath: stringSchema("Optional PNG output path."),
       manifestPath: stringSchema("Optional JSON manifest output path."),
@@ -149,15 +149,15 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     name: "detect_sprite_sheet",
     description: "Run sheet detection and return frame rows, frame rects, row animations, confidence, and warnings.",
     inputSchema: objectSchema(["inputPath"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       options: commonOptionsSchema,
     }),
   },
   {
     name: "extract_palette",
-    description: "Extract a limited palette from a PNG and write it as .hex or JSON.",
+    description: "Extract a limited palette from a PNG/JPEG image and write it as .hex or JSON.",
     inputSchema: objectSchema(["inputPath", "outputPath"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       outputPath: stringSchema("Palette output path (.hex or .json)."),
       maxColors: { type: "number", description: "Maximum number of colors.", default: 24 },
       overwrite: booleanSchema("Allow replacing an existing palette file."),
@@ -167,7 +167,7 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
     name: "export_engine_bundle",
     description: "Fix an asset and write generic PixelAid outputs plus Godot, Unity, Phaser, TexturePacker, Tiled, and/or LDtk helper files.",
     inputSchema: objectSchema(["inputPath", "outDir"], {
-      inputPath: stringSchema("Path to a PNG image."),
+      inputPath: stringSchema("Path to a PNG or JPEG image."),
       outDir: stringSchema("Output directory."),
       targets: { type: "array", items: { type: "string", enum: ["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"] }, default: ["godot", "unity", "phaser"] },
       options: commonOptionsSchema,

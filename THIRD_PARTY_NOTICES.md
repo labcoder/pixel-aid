@@ -13,6 +13,7 @@ PixelAid source code is licensed under `AGPL-3.0-only`. Third-party dependencies
 | pngjs | 7.0.0 | MIT | Node CLI/MCP PNG decode and encode |
 | jpeg-js | 0.4.4 | BSD-3-Clause | Node CLI/MCP JPEG input decode |
 | Vite | 8.0.10 | MIT | Build/dev server |
+| esbuild | 0.28.0 | MIT | Build bundled CLI and MCP server binaries |
 | @vitejs/plugin-react | 6.0.1 | MIT | Build React transform |
 | TypeScript | 6.0.3 | Apache-2.0 | Compiler |
 | Vitest | 4.1.5 | MIT | Tests |
