@@ -436,8 +436,26 @@ function createUniquePaletteLibraryId(
   return nextId;
 }
 
+function waitForPaints(count = 1): Promise<void> {
+  const frameCount = Math.max(1, count);
+
+  return new Promise((resolve) => {
+    let remaining = frameCount;
+    const tick = () => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(tick);
+    };
+
+    window.requestAnimationFrame(tick);
+  });
+}
+
 function waitForNextPaint(): Promise<void> {
-  return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+  return waitForPaints();
 }
 
 function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
@@ -1084,19 +1102,38 @@ export function App() {
     }
 
     let cancelled = false;
+    let frameId = 0;
+    let operationId: number | null = null;
     const timeoutId = window.setTimeout(() => {
-      const analysis = createSourceAssetAnalysis(selectedAsset);
-      if (cancelled) {
-        return;
-      }
-      setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+      const operation = nextBusyOperation("analysis", `Preparing source analysis for ${selectedAsset.name}...`);
+      operationId = operation.id;
+      setAnalysisOperation(operation);
+
+      frameId = window.requestAnimationFrame(() => {
+        try {
+          const analysis = createSourceAssetAnalysis(selectedAsset);
+          if (cancelled) {
+            return;
+          }
+          setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+        } finally {
+          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
+        }
+      });
     }, 0);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+      if (operationId !== null) {
+        const cancelledOperationId = operationId;
+        setAnalysisOperation((current) => clearBusyOperation(current, cancelledOperationId));
+      }
     };
-  }, [selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
+  }, [nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -4306,22 +4343,24 @@ export function App() {
       const operation = nextBusyOperation("activation", `Switching to ${nextAsset.name}...`);
       setAssetActivationOperation(operation);
       setAssetMenu(null);
-      setFixResult(null);
-      setLastExportValidation(null);
-      setIsPlaying(false);
-      setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
-      sourceFrameEditStartSnapshotRef.current = null;
-      sourceFrameEditGestureRef.current = null;
-      setSourceFrameEditActive(false);
+      await waitForNextPaint();
 
       try {
+        setFixResult(null);
+        setLastExportValidation(null);
+        setIsPlaying(false);
+        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+        sourceFrameEditStartSnapshotRef.current = null;
+        sourceFrameEditGestureRef.current = null;
+        setSourceFrameEditActive(false);
+
         const nextMode = assetTypeToMode(nextAsset.assetType);
         setMode(nextMode);
         setCropToBounds(nextMode === "single");
         qualityReportSwitchFallbackRef.current = { assetId };
         setSelectedAssetId(assetId);
         appendLog(`Selected ${nextAsset.name}`);
-        await waitForNextPaint();
+        await waitForPaints(2);
       } finally {
         setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
       }
