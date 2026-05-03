@@ -13,6 +13,7 @@ import type {
   OutlineMode,
   Rect,
   RGBAImage,
+  SheetConditioningDiagnostics,
   SheetLayoutDetection,
   SpriteFrame
 } from "@pixelaid/shared";
@@ -60,10 +61,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const initial = candidates[0];
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
-  const detectedSheetLayout = detectSheetLayout(image);
-  const sheetConditioning = detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
-  const sheetLayoutScore = Math.max(estimateSheetLayoutScore(image), detectedSheetLayout.confidence);
-  const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, sheetLayoutScore);
+  const quickSheetLayoutScore = estimateSheetLayoutScore(image);
+  const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, quickSheetLayoutScore);
+  const shouldAnalyzeSheet = shouldAnalyzeSheetSuggestion(image, initialMode, quickSheetLayoutScore);
+  const detectedSheetLayout = shouldAnalyzeSheet ? detectSheetLayout(image) : emptySheetLayoutDetection();
+  const sheetConditioning =
+    shouldAnalyzeSheet ? detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
+  const sheetLayoutScore = Math.max(quickSheetLayoutScore, detectedSheetLayout.confidence);
   let candidate = chooseSuggestionGrid(image, candidates, initialMode);
   let outputWidth = candidate?.outputWidth ?? image.width;
   let outputHeight = candidate?.outputHeight ?? image.height;
@@ -700,6 +704,46 @@ function estimateSheetLayoutScore(image: RGBAImage): number {
   const bandScore = Math.min(1, (bands - 2) / 4);
   const densityScore = sampledRows > 0 ? Math.min(1, activeRows / sampledRows / 0.6) : 0;
   return Math.min(1, 0.5 + bandScore * 0.35 + densityScore * 0.15);
+}
+
+function shouldAnalyzeSheetSuggestion(image: RGBAImage, initialMode: AssetMode, quickSheetLayoutScore: number): boolean {
+  if (initialMode === "spriteSheet" || quickSheetLayoutScore >= 0.35) {
+    return true;
+  }
+
+  const ratio = image.width / image.height;
+  return image.width >= 384 && image.height >= 240 && ratio >= 1.15 && ratio <= 2.4 && quickSheetLayoutScore >= 0.2;
+}
+
+function emptySheetLayoutDetection(): SheetLayoutDetection {
+  return {
+    frameWidth: 0,
+    frameHeight: 0,
+    rows: 0,
+    columns: 0,
+    margin: 0,
+    spacing: 0,
+    frames: [],
+    rowRects: [],
+    rowFrameCounts: [],
+    rowAnimations: [],
+    rowLabels: [],
+    confidence: 0,
+    reason: "Sheet layout diagnostics skipped for single-image import.",
+    warnings: []
+  };
+}
+
+function emptySheetConditioning(): SheetConditioningDiagnostics {
+  return {
+    exactColorCount: 0,
+    coarseColorBinCount: 0,
+    foregroundPixelRatio: 0,
+    background: { r: 0, g: 0, b: 0, a: 0 },
+    presentationLike: false,
+    recommendFrameFirst: false,
+    issues: []
+  };
 }
 
 function classifyMode(width: number, height: number, outputWidth: number, outputHeight: number, sheetLayoutScore = 0): AssetMode {

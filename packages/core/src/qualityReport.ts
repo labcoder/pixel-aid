@@ -116,14 +116,23 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
   const maxColors = normalizeMaxColors(options.maxColors);
   const exactColorCount = countVisibleExactColors(image);
   const alpha = countAlphaPixels(image);
-  const bakedTransparency = detectBakedTransparencyBackground(image, alpha.transparentPixels);
-  const morphologyArtifacts = analyzeMaskArtifacts(buildAlphaMask(image), image.width, image.height, {
-    maxHolePixels: 1,
-    maxComponentPixels: 2
-  });
-  const sheetLayout = options.sheetLayout ?? detectSheetLayout(image);
-  const outlineCandidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
-  const detailAnalysis = analyzeDetailDensityLinework(image);
+  const shouldAnalyzeBakedTransparency = supportsBakedTransparencyDiagnostics(assetType);
+  const shouldAnalyzeMorphology = supportsMorphologyDiagnostics(assetType);
+  const shouldAnalyzeSheetLayout = supportsSheetLayoutDiagnostics(assetType);
+  const shouldAnalyzeOutline = supportsOutlineDiagnostics(assetType);
+  const shouldAnalyzeDetail = supportsContrastRecommendation(assetType);
+  const bakedTransparency = shouldAnalyzeBakedTransparency
+    ? detectBakedTransparencyBackground(image, alpha.transparentPixels)
+    : { detected: false, coverage: 0 };
+  const morphologyArtifacts = shouldAnalyzeMorphology
+    ? analyzeMaskArtifacts(buildAlphaMask(image), image.width, image.height, {
+        maxHolePixels: 1,
+        maxComponentPixels: 2
+      })
+    : emptyMorphologyArtifacts();
+  const sheetLayout = shouldAnalyzeSheetLayout ? options.sheetLayout ?? detectSheetLayout(image) : emptySheetLayoutDetection();
+  const outlineCandidates = shouldAnalyzeOutline ? detectOutlineColorCandidates(image, { maxCandidates: 4 }) : [];
+  const detailAnalysis = shouldAnalyzeDetail ? analyzeDetailDensityLinework(image) : emptyDetailDensityLinework();
   const tilemapDiagnostics = assetType === "tilemap" ? analyzeTilemapDiagnostics(image) : undefined;
   const tilesetDiagnostics = assetType === "tileset" ? analyzeTilesetSeams(image, resolveTileOptions(image, options, sheetLayout)) : undefined;
   const findings: QualityFinding[] = [];
@@ -657,6 +666,57 @@ function luminance(r: number, g: number, b: number): number {
 
 function supportsContrastRecommendation(assetType: AssetType): boolean {
   return assetType === "sprite" || assetType === "spriteSheet" || assetType === "animationSheet" || assetType === "characterSheet" || assetType === "icon";
+}
+
+function supportsBakedTransparencyDiagnostics(assetType: AssetType): boolean {
+  return assetType === "sprite" || assetType === "icon";
+}
+
+function supportsMorphologyDiagnostics(assetType: AssetType): boolean {
+  return assetType === "sprite" || assetType === "spriteSheet" || assetType === "animationSheet" || assetType === "characterSheet" || assetType === "icon" || assetType === "uiElement";
+}
+
+function supportsOutlineDiagnostics(assetType: AssetType): boolean {
+  return supportsMorphologyDiagnostics(assetType);
+}
+
+function supportsSheetLayoutDiagnostics(assetType: AssetType): boolean {
+  return assetType === "spriteSheet" || assetType === "animationSheet" || assetType === "characterSheet" || assetType === "tileset";
+}
+
+function emptySheetLayoutDetection(): SheetLayoutDetection {
+  return {
+    frameWidth: 0,
+    frameHeight: 0,
+    rows: 0,
+    columns: 0,
+    margin: 0,
+    spacing: 0,
+    frames: [],
+    rowRects: [],
+    rowFrameCounts: [],
+    rowAnimations: [],
+    rowLabels: [],
+    confidence: 0,
+    reason: "Sheet layout diagnostics not applicable for this asset type.",
+    warnings: []
+  };
+}
+
+function emptyMorphologyArtifacts(): ReturnType<typeof analyzeMaskArtifacts> {
+  return {
+    pinholePixels: 0,
+    tinyComponentPixels: 0,
+    brokenOutlinePixels: 0
+  };
+}
+
+function emptyDetailDensityLinework(): ReturnType<typeof analyzeDetailDensityLinework> {
+  return {
+    detailDensity: 0,
+    darkLineRatio: 0,
+    shouldRecommendContrast: false
+  };
 }
 
 function buildAlphaMask(image: RGBAImage): Uint8Array {

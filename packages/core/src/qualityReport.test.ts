@@ -55,6 +55,28 @@ describe("quality report", () => {
     expect(report.findings.some((finding) => finding.id === "sheet-manual-correction")).toBe(false);
   });
 
+  test("keeps inspect-only background diagnostics lightweight and avoids sprite repair assumptions", () => {
+    const image = createImage(12, 12, [220, 230, 240, 255]);
+    fillRect(image, 2, 2, 8, 8, [12, 14, 20, 255]);
+    fillRect(image, 3, 3, 6, 6, [248, 240, 210, 255]);
+    fillRect(image, 5, 5, 2, 2, [34, 36, 46, 255]);
+    writePixel(image, 1, 1, 0, 0, 0, 0);
+
+    const report = analyzeQualityReport(image, {
+      assetType: "background",
+      maxColors: 2
+    });
+
+    expect(report.metrics.outline.candidateCount).toBe(0);
+    expect(report.metrics.sheet.detected).toBe(false);
+    expect(report.metrics.sheet.frameCount).toBe(0);
+    expect(report.metrics.morphology.pinholePixels).toBe(0);
+    expect(report.metrics.morphology.tinyComponentPixels).toBe(0);
+    expect(report.findings.some((finding) => finding.id === "outline-candidates")).toBe(false);
+    expect(report.findings.some((finding) => finding.id === "morphology-artifacts")).toBe(false);
+    expect(report.findings.some((finding) => finding.id === "detail-density-linework")).toBe(false);
+  });
+
   test("adds tilemap grid recommendations for repeated map-like assets", () => {
     const image = createRepeatedTilemap(8, 8, 16);
     const report = analyzeQualityReport(image, {
