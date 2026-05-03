@@ -7,6 +7,7 @@ import {
   Crosshair,
   Download,
   Eye,
+  EyeOff,
   FileImage,
   Layers,
   Plus,
@@ -29,7 +30,6 @@ import type {
   AlphaMode,
   AnimationTag,
   AssetMode,
-  AssetProvenanceOrigin,
   AssetType,
   AssetTypeWarning,
   DownscaleMethod,
@@ -100,9 +100,7 @@ import {
 import {
   formatAssetProvenanceSummary,
   removeAssetAndSelectNext,
-  updateAssetProvenanceMetadata,
-  updateAssetTypeMetadata,
-  type AssetProvenancePatch
+  updateAssetTypeMetadata
 } from "./lib/assets";
 import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
@@ -728,6 +726,8 @@ export function App() {
   const [sandboxSpeed, setSandboxSpeed] = useState(96);
   const [sandboxScale, setSandboxScale] = useState(3);
   const [showSandboxGuides, setShowSandboxGuides] = useState(true);
+  const [frameMetadataExpanded, setFrameMetadataExpanded] = useState(false);
+  const [showFrameMetadataOverlays, setShowFrameMetadataOverlays] = useState(true);
   const [downscale, setDownscale] = useState<DownscaleMethod>(initialSettings.downscale);
   const [alpha, setAlpha] = useState<AlphaMode>(initialSettings.alpha);
   const [alphaThreshold, setAlphaThreshold] = useState(initialSettings.alphaThreshold);
@@ -1023,7 +1023,6 @@ export function App() {
   const assetTypeWarnings = selectedAsset?.assetTypeWarnings ?? [];
   const categoryReason = selectedAsset?.categoryReason ?? "Auto Suggest will classify the imported asset type.";
   const categoryConfidence = selectedAsset?.categoryConfidence ?? 0;
-  const provenanceOrigin = selectedAsset?.provenance?.origin ?? "unknown";
   const provenanceSummary = formatAssetProvenanceSummary(selectedAsset?.provenance);
   const defaultBundleBaseName = selectedAsset ? defaultExportBundleBaseName(selectedAsset.name) : defaultExportBundleBaseName("pixelaid_asset");
   const defaultBundleFilename = selectedAsset ? defaultExportBundleFilename(selectedAsset.name) : "";
@@ -1789,7 +1788,14 @@ export function App() {
   }, [selectedAnimationName]);
 
   useEffect(() => {
-    setSelectedOutlineSourceColors((current) => normalizeOutlineSourceColors(current));
+    setSelectedOutlineSourceColors((current) => {
+      const normalized = normalizeOutlineSourceColors(current);
+      if (normalized.length === current.length && normalized.every((color, index) => color === current[index])) {
+        return current;
+      }
+
+      return normalized;
+    });
   }, [outlineSourceCandidates]);
 
   useEffect(() => {
@@ -2943,18 +2949,6 @@ export function App() {
     [appendLog, applyAlphaSettings, clearDetectedSheetLayout, mode, recommendationConfidence, selectedAsset, setPaletteBudget]
   );
 
-  const updateSelectedAssetProvenance = useCallback(
-    (patch: AssetProvenancePatch) => {
-      if (!selectedAsset) {
-        return;
-      }
-
-      setAssets((current) => updateAssetProvenanceMetadata(current, selectedAsset.id, patch));
-      setLastExportValidation(null);
-    },
-    [selectedAsset]
-  );
-
   const visibleInspectorGroups = useMemo(
     () =>
       getVisibleInspectorGroups(inspectorGroupOrder, {
@@ -3519,7 +3513,7 @@ export function App() {
 
       const existing = currentFrame.anchors?.[0] ?? {
         id: primaryAnchorId,
-        name: "Anchor",
+        name: "Pivot marker",
         point: { ...currentFrame.pivot },
         color: "#f1c75b"
       };
@@ -4816,58 +4810,6 @@ export function App() {
             ))}
           </div>
         ) : null}
-        <ReadonlyField label="Provenance" value={selectedAsset ? provenanceSummary : "--"} text disabled={!selectedAsset} />
-        <SelectField
-          label="Origin"
-          value={provenanceOrigin}
-          options={[
-            ["unknown", "Unknown"],
-            ["ai", "AI generated"],
-            ["manual", "Manual"]
-          ]}
-          disabled={!selectedAsset}
-          onChange={(value) => updateSelectedAssetProvenance({ origin: value as AssetProvenanceOrigin })}
-        />
-        {provenanceOrigin !== "unknown" ? (
-          <>
-            <TextField
-              label="Provider"
-              value={selectedAsset?.provenance?.provider ?? ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ provider: value })}
-            />
-            <TextField
-              label="Model"
-              value={selectedAsset?.provenance?.model ?? ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ model: value })}
-            />
-            <TextareaField
-              label="Prompt"
-              value={selectedAsset?.provenance?.prompt ?? ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ prompt: value })}
-            />
-            <TextField
-              label="Seed"
-              value={selectedAsset?.provenance?.seed !== undefined ? String(selectedAsset.provenance.seed) : ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ seed: value })}
-            />
-            <TextField
-              label="Source"
-              value={selectedAsset?.provenance?.sourceImage ?? ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ sourceImage: value })}
-            />
-            <TextField
-              label="Generated"
-              value={selectedAsset?.provenance?.generatedAt ?? ""}
-              disabled={!selectedAsset}
-              onChange={(value) => updateSelectedAssetProvenance({ generatedAt: value })}
-            />
-          </>
-        ) : null}
         {assetType === "tileset" ? (
           <>
             <ReadonlyField label="Seam risk" value={tileDiagnosticsSummary.summary} text />
@@ -5230,7 +5172,7 @@ export function App() {
     ),
     grid: (
       <>
-        <GridCandidateList
+        <GridCandidateReview
           image={selectedAsset?.image ?? null}
           candidates={gridCandidates}
           activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY, phaseX: gridPhaseX, phaseY: gridPhaseY }}
@@ -5707,11 +5649,7 @@ export function App() {
 
       <header className="top-toolbar">
         <div className="brand-lockup">
-          <img className="brand-logo" src="/brand/header-logo-compact-dark.png" width="100" height="34" alt="PixelAid" />
-          <div className="brand-copy">
-            <h1>PixelAid</h1>
-            <p>Fake-pixel fixer</p>
-          </div>
+          <img className="brand-logo" src="/brand/header-logo-compact-dark.png" width="128" height="44" alt="PixelAid" />
         </div>
         <nav className="app-menu-bar" aria-label="Application menus">
           <ToolbarMenu id="file" label="File" icon={<FileImage size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
@@ -6295,6 +6233,7 @@ export function App() {
             frames={sheetFrames}
             selectedFrameIndex={selectedFrameIndex}
             canEditSourceFrames={editableSheetFrames.length > 0}
+            showFrameMetadataOverlays={showFrameMetadataOverlays}
             onZoomChange={setZoom}
             onFrameSelect={selectSourceFrame}
             onSourceFrameMove={moveDetectedSourceFrame}
@@ -6497,6 +6436,7 @@ export function App() {
                   <span>{currentFrame ? `${currentFrame.name} ${currentFrame.rect.w}x${currentFrame.rect.h}` : "No frame selected"}</span>
                   <small>{currentFrame ? `${Math.round(currentFrameDurationMs)}ms` : "--"}</small>
                 </div>
+                <div className="timeline-workspace">
                 <div className="timeline-metadata-panel">
                   <div className="frame-preview-meta timeline-frame-meta">
                     <strong>{timelineMetadataPlacement?.normalized ? "Normalized canvas" : "Frame canvas"}</strong>
@@ -6561,10 +6501,28 @@ export function App() {
                       </div>
                     ) : null}
                     {currentFrame ? (
-                      <div className="frame-metadata-editor" aria-label="Frame gameplay metadata">
+                      <div className={`frame-metadata-editor${frameMetadataExpanded ? " is-expanded" : ""}`} aria-label="Frame gameplay metadata">
                         <div className="frame-metadata-heading">
-                          <strong>Gameplay metadata</strong>
+                          <button
+                            type="button"
+                            className="frame-metadata-toggle"
+                            aria-expanded={frameMetadataExpanded}
+                            onClick={() => setFrameMetadataExpanded((current) => !current)}
+                          >
+                            <ChevronDown size={13} />
+                            <strong>Gameplay metadata</strong>
+                          </button>
                           <span>{currentFrameBoxes.length} box{currentFrameBoxes.length === 1 ? "" : "es"}</span>
+                          <button
+                            type="button"
+                            className={showFrameMetadataOverlays ? "mini-icon-button active" : "mini-icon-button"}
+                            aria-pressed={showFrameMetadataOverlays}
+                            aria-label={showFrameMetadataOverlays ? "Hide metadata overlays in the input view" : "Show metadata overlays in the input view"}
+                            title={showFrameMetadataOverlays ? "Hide metadata overlays in the input view" : "Show metadata overlays in the input view"}
+                            onClick={() => setShowFrameMetadataOverlays((current) => !current)}
+                          >
+                            {showFrameMetadataOverlays ? <Eye size={13} /> : <EyeOff size={13} />}
+                          </button>
                           <button
                             type="button"
                             disabled={!canUndoFrameMetadata}
@@ -6584,10 +6542,12 @@ export function App() {
                             <Redo2 size={13} />
                           </button>
                         </div>
+                        {frameMetadataExpanded ? (
+                          <>
                         <div className="frame-anchor-editor">
                           <div className="frame-anchor-title">
                             <Crosshair size={13} />
-                            <strong>Anchor</strong>
+                            <strong>Pivot marker</strong>
                             <button type="button" onClick={clearCurrentFrameAnchor} disabled={!currentFrameAnchor}>
                               Clear
                             </button>
@@ -6596,7 +6556,7 @@ export function App() {
                             <span>Name</span>
                             <input
                               type="text"
-                              value={currentFrameAnchor?.name ?? "Anchor"}
+                              value={currentFrameAnchor?.name ?? "Pivot marker"}
                               onChange={(event) => updateCurrentFrameAnchor({ name: event.currentTarget.value })}
                             />
                           </label>
@@ -6609,7 +6569,7 @@ export function App() {
                             />
                           </label>
                           <NumberField
-                            label="Anchor X"
+                            label="Pivot marker X"
                             value={currentFrameAnchor?.point.x ?? currentFrame.pivot.x}
                             min={0}
                             max={currentFrame.rect.w}
@@ -6623,7 +6583,7 @@ export function App() {
                             }
                           />
                           <NumberField
-                            label="Anchor Y"
+                            label="Pivot marker Y"
                             value={currentFrameAnchor?.point.y ?? currentFrame.pivot.y}
                             min={0}
                             max={currentFrame.rect.h}
@@ -6722,10 +6682,17 @@ export function App() {
                             <small>No collision, hurtbox, or hitbox rectangles.</small>
                           )}
                         </div>
+                          </>
+                        ) : (
+                          <small className="frame-metadata-collapsed-note">
+                            Expand to edit pivot markers, collision boxes, hurtboxes, and hitboxes. The eye toggle only changes input-view visibility.
+                          </small>
+                        )}
                       </div>
                     ) : null}
                   </div>
                 </div>
+                <div className="timeline-editing-column">
                 <div className="clip-editor" aria-label="Animation clip timesheet metadata">
                   <div className="clip-editor-title">
                     <strong>Animation clips</strong>
@@ -6855,6 +6822,8 @@ export function App() {
                     </button>
                     );
                   })}
+                </div>
+                </div>
                 </div>
                 <p className="field-note">
                   Select a frame to highlight its bounds and pivot in the viewport. Frame duration is used for playback and export;
@@ -7528,7 +7497,7 @@ function formatQualitySeverity(severity: QualityReport["summary"]["highestSeveri
   return severity.charAt(0).toUpperCase() + severity.slice(1);
 }
 
-function GridCandidateList({
+function GridCandidateReview({
   image,
   candidates,
   activeSettings,
@@ -7541,6 +7510,46 @@ function GridCandidateList({
 }) {
   if (!image || candidates.length === 0) {
     return <p className="field-note">Import an asset to inspect grid candidates.</p>;
+  }
+
+  const bestCandidate = candidates[0]!;
+  const bestPreview = formatGridCandidatePreview(bestCandidate, 0);
+  const bestActive = candidateMatchesSettings(bestCandidate, activeSettings);
+
+  return (
+    <div className="grid-candidate-review">
+      <div className="grid-candidate-summary">
+        <span>
+          <strong>{bestPreview.title}</strong>
+          <small>
+            {bestPreview.nativeSize} / {bestPreview.scale} / {bestPreview.confidenceLabel}
+          </small>
+        </span>
+        <button type="button" disabled={bestActive} onClick={() => onApply(bestCandidate)}>
+          {bestActive ? "Applied" : "Apply"}
+        </button>
+      </div>
+      <details>
+        <summary>Review {candidates.length} grid candidate{candidates.length === 1 ? "" : "s"}</summary>
+        <GridCandidateList image={image} candidates={candidates} activeSettings={activeSettings} onApply={onApply} />
+      </details>
+    </div>
+  );
+}
+
+function GridCandidateList({
+  image,
+  candidates,
+  activeSettings,
+  onApply
+}: {
+  image: RGBAImage | null;
+  candidates: GridCandidate[];
+  activeSettings: { targetWidth: number; targetHeight: number; scaleX: number; scaleY: number; phaseX: number; phaseY: number };
+  onApply: (candidate: GridCandidate) => void;
+}) {
+  if (!image || candidates.length === 0) {
+    return null;
   }
 
   return (
@@ -7849,25 +7858,6 @@ function TextField({
     <label className="field-row">
       <span>{label}</span>
       <input type="text" value={value} disabled={disabled} onChange={(event) => onChange(event.currentTarget.value)} />
-    </label>
-  );
-}
-
-function TextareaField({
-  label,
-  value,
-  disabled,
-  onChange
-}: {
-  label: string;
-  value: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label className="field-row field-row-stack">
-      <span>{label}</span>
-      <textarea value={value} disabled={disabled} spellCheck={false} onChange={(event) => onChange(event.currentTarget.value)} />
     </label>
   );
 }
