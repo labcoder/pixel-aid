@@ -38,7 +38,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | Palette | Auto/fixed/preset palettes, sheet lock, no dithering default, palette sidecar export. | Palette drift sample plus a high-color AI asset. | Palette count respects budget and animation does not shimmer from per-frame palette changes. |
 | Alpha | Preserve, binary, flood fill, color key, decontaminated transparent RGB. | Checkerboard matte icon and matte white sprite. | Preview looks clean on checker/light/dark/grass-style backgrounds. |
 | Timeline/player | Input/output/compare sources, row animation selection, FPS, loop, direction, onion skin, normalized export toggle. | Multi-row animation sheet sample. | Playback is stable and selected row can be compared before/after after Fix. |
-| Tilesets/tilemaps | Repeat preview, seam diagnostics, tilemap grid confirmation, canonical tile ID export. | Broken tileset sample and one map-like image. | Seam warnings appear for known-bad sample; tilemaps export generic metadata when ready and stay `inspectOnly` when tile identity confidence is low. |
+| Tilesets/tilemaps | Repeat preview, seam diagnostics, conservative seam repair, tilemap grid confirmation, canonical tile ID export. | Broken tileset sample and one map-like image. | Seam warnings appear for known-bad sample, low-risk repair can be applied/undone, and tilemaps export generic metadata when ready while staying `inspectOnly` when tile identity confidence is low. |
 | Export | ZIP bundle, manifest, palette files, validation report, frame sequence, engine sidecars. | Sprite and animation sheet outputs. | Bundle opens, manifest frame rects/pivots/animations match preview, selected engine helper files exist. |
 | CLI | `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, `export`, `--diagnostics`. | Fixture-generated PNGs and one real beta PNG. | JSON envelopes and exit codes are stable; diagnostics sidecars are sanitized. |
 | MCP-ready handlers | Tool schema validation and handler responses. | Minimal fixture paths. | Structured content includes `ok`, tool name, result/warnings, and stable error envelopes. |
@@ -58,7 +58,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 9. Confirm row clip selection exposes idle, walk, and jump and output cell presets do not disturb source boxes.
 10. Export with normalized sheet enabled and confirm frame rects match the packed output.
 11. Load **Broken tileset seams**.
-12. Confirm repeat preview shows seam warnings without claiming automatic repair.
+12. Confirm repeat preview shows seam warnings, low-risk seam repair can be applied and undone, and high-risk/manual repaint seams remain suggestions.
 13. Export Diagnostics from the Console panel and confirm private prompt/API-key-like strings are redacted.
 
 ## Beta Feedback Loop
@@ -82,7 +82,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Full MCP server process is deferred. | MCP-ready handlers exist, but a long-running server is future work. | Post-1.0 automation milestone. |
 | CLI/MCP PNG-only IO. | Convert non-PNG assets before automation use. | Non-PNG codec follow-up. |
 | Tiled/LDtk tilemap project export is deferred. | PixelAid exports generic canonical tilemap metadata, but not full editor project/map files yet. | Engine-specific tilemap adapter milestone. |
-| Tileset repair suggestions are preview-only. | Seam issues are diagnosed; automated repair remains future work. | Tileset repair milestone. |
+| Tileset seam repair is conservative. | Low-risk edge/lighting drift can be applied to the fixed output; severe seams and semantic repainting still need manual work. | Advanced tileset repair milestone. |
 | Desktop signing/auto-update not configured. | Packaged builds may be unsigned until release infrastructure is set. | Desktop distribution milestone. |
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
