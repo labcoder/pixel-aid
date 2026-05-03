@@ -6683,11 +6683,7 @@ export function App() {
                           )}
                         </div>
                           </>
-                        ) : (
-                          <small className="frame-metadata-collapsed-note">
-                            Expand to edit pivot markers, collision boxes, hurtboxes, and hitboxes. The eye toggle only changes input-view visibility.
-                          </small>
-                        )}
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -6825,10 +6821,6 @@ export function App() {
                 </div>
                 </div>
                 </div>
-                <p className="field-note">
-                  Select a frame to highlight its bounds and pivot in the viewport. Frame duration is used for playback and export;
-                  clip FPS is the fallback speed for frames without custom timing. Clip names become animation keys and frame-name prefixes.
-                </p>
               </>
             ) : (
               <p className="empty-panel-message">{timelineState.message}</p>
