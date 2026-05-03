@@ -257,14 +257,11 @@ import {
   type PivotPreset
 } from "./lib/sheetControls";
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
-import { createSheetDetectorReview, reconcileSheetDetectorWarnings, type SheetDetectorCandidate } from "./lib/sheetDetectorReview";
+import { reconcileSheetDetectorWarnings } from "./lib/sheetDetectorReview";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
 import { applyScopedSheetLayoutPatch, deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells, type SheetLayoutPatch } from "./lib/sheetLayoutModel";
 import {
   createManualSheetLayout,
-  fillRowToFrameCount,
-  fillSparseRowsToFrameCount,
-  insertFrameAtRowEdge,
   insertFrameNearSelection,
   insertRowNearSelection,
   removeAnimationOrSheetRow,
@@ -310,11 +307,20 @@ type PaletteModalState = {
   colors: string[];
   totalColors: number;
   truncated: boolean;
+  kind?: "palette" | "outlineSource";
 };
 
 type SourceAssetAnalysis = {
   palette: ReturnType<typeof analyzeVisiblePalettePreview>;
   outlineCandidates: ReturnType<typeof detectOutlineColorCandidates>;
+};
+
+type BrowserEyeDropper = {
+  open: () => Promise<{ sRGBHex: string }>;
+};
+
+type WindowWithEyeDropper = Window & {
+  EyeDropper?: new () => BrowserEyeDropper;
 };
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
@@ -341,7 +347,51 @@ const sheetLayoutScopeOptions: Array<[SheetLayoutOverrideScope, string]> = [
   ["frame", "Selected frame"]
 ];
 type SheetLayoutPatchField = "cellWidth" | "cellHeight" | "spacing" | "extrude" | "offsetX" | "offsetY";
+type InputSheetLayoutPatchField = "sourceWidth" | "sourceHeight" | "offsetX" | "offsetY" | "pivotX" | "pivotY";
 const primaryAnchorId = "anchor_01";
+
+function getFrameSourceRectForLayout(frame: SpriteFrame | undefined, scaleX: number, scaleY: number): SpriteFrame["rect"] {
+  if (!frame) {
+    return { x: 0, y: 0, w: 1, h: 1 };
+  }
+
+  if (frame.sourceRect) {
+    return { ...frame.sourceRect };
+  }
+
+  return {
+    x: Math.round(frame.rect.x * scaleX),
+    y: Math.round(frame.rect.y * scaleY),
+    w: Math.max(1, Math.round(frame.rect.w * scaleX)),
+    h: Math.max(1, Math.round(frame.rect.h * scaleY))
+  };
+}
+
+function getFrameAnimationName(frame: SpriteFrame, animations: readonly AnimationTag[]): string | undefined {
+  const explicitTag = frame.tags?.find((tag) => animations.some((animation) => animation.name === tag));
+  if (explicitTag) {
+    return explicitTag;
+  }
+
+  return animations.find((animation) => animation.frameNames.includes(frame.name))?.name;
+}
+
+function getInputLayoutPatchLabel(field: InputSheetLayoutPatchField): string {
+  switch (field) {
+    case "sourceWidth":
+      return "source width";
+    case "sourceHeight":
+      return "source height";
+    case "offsetX":
+      return "source X";
+    case "offsetY":
+      return "source Y";
+    case "pivotX":
+      return "pivot X";
+    case "pivotY":
+      return "pivot Y";
+  }
+}
 
 function paletteBudgetAtLeast(colorCount: number): number {
   for (const budget of paletteBudgets) {
@@ -402,7 +452,7 @@ function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
 function createSourceAssetAnalysis(asset: ImportedImageAsset): SourceAssetAnalysis {
   return {
     palette: analyzeVisiblePalettePreview(asset.image, 8, { maxUniqueColors: 10000 }),
-    outlineCandidates: detectOutlineColorCandidates(asset.image, { maxCandidates: 6 })
+    outlineCandidates: detectOutlineColorCandidates(asset.image, { maxCandidates: 64 })
   };
 }
 
@@ -655,6 +705,7 @@ export function App() {
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
   const [detectedSheetDiagnostics, setDetectedSheetDiagnostics] = useState<SheetLayoutDiagnostics | undefined>(undefined);
+  const [inputSheetLayoutScope, setInputSheetLayoutScope] = useState<SheetLayoutOverrideScope>("frame");
   const [sheetLayoutScope, setSheetLayoutScope] = useState<SheetLayoutOverrideScope>("row");
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [pivotOverrides, setPivotOverrides] = useState<PivotOverrideState>(emptyPivotOverrides);
@@ -688,6 +739,7 @@ export function App() {
   const [outlineAlpha, setOutlineAlpha] = useState(initialSettings.outlineAlpha);
   const [outlineColorEdited, setOutlineColorEdited] = useState(initialSettings.outlineColorEdited);
   const [outlineSourceMode, setOutlineSourceMode] = useState<OutlineSourceMode>(initialSettings.outlineSourceMode);
+  const [outlineManualColor, setOutlineManualColor] = useState("#101112");
   const [selectedOutlineSourceColors, setSelectedOutlineSourceColors] = useState<string[]>([]);
   const [removeOrphans, setRemoveOrphans] = useState(initialSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(initialSettings.jaggyCleanup);
@@ -1021,6 +1073,8 @@ export function App() {
   const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
   const sourceColorCount = sourcePaletteAnalysis?.totalColors ?? 0;
   const outlineSourceCandidates = selectedSourceAnalysis?.outlineCandidates ?? [];
+  const outlineSourcePreviewCandidates = outlineSourceCandidates.slice(0, 12);
+  const outlineSourceHiddenCount = Math.max(0, outlineSourceCandidates.length - outlineSourcePreviewCandidates.length);
   useEffect(() => {
     if (!selectedAsset || !selectedSourceAnalysisKey || selectedSourceAnalysis) {
       return undefined;
@@ -1092,6 +1146,20 @@ export function App() {
     });
     setPaletteModalPage(0);
   }, [outputPalette, outputPaletteLabel]);
+  const openOutlineSourcePaletteModal = useCallback(() => {
+    const colors = normalizeOutlineSourceColors([
+      ...outlineSourceCandidates.map((candidate) => candidate.color),
+      ...selectedOutlineSourceColors
+    ]);
+    setPaletteModal({
+      title: "Outline source colors",
+      colors,
+      totalColors: colors.length,
+      truncated: false,
+      kind: "outlineSource"
+    });
+    setPaletteModalPage(0);
+  }, [outlineSourceCandidates, selectedOutlineSourceColors]);
   const closePaletteModal = useCallback(() => {
     setPaletteModal(null);
   }, []);
@@ -1522,6 +1590,36 @@ export function App() {
       sheetFrames.find((frame) => selectedRowNames.has(frame.name))
     );
   }, [selectedManualAnimation, sheetFrames]);
+  const selectedInputLayoutFrame = useMemo(() => {
+    if (inputSheetLayoutScope === "frame") {
+      return selectedDetectedFrame;
+    }
+
+    if (inputSheetLayoutScope === "row") {
+      if (!selectedManualAnimation) {
+        return undefined;
+      }
+
+      const selectedRowNames = new Set(selectedManualAnimation.frameNames);
+      return editableSheetFrames.find((frame) => selectedRowNames.has(frame.name));
+    }
+
+    return editableSheetFrames[0];
+  }, [editableSheetFrames, inputSheetLayoutScope, selectedDetectedFrame, selectedManualAnimation]);
+  const scopedInputLayoutValues = useMemo(() => {
+    const sourceRect = getFrameSourceRectForLayout(selectedInputLayoutFrame, gridScaleX, gridScaleY);
+
+    return {
+      sourceWidth: sourceRect.w,
+      sourceHeight: sourceRect.h,
+      offsetX: sourceRect.x,
+      offsetY: sourceRect.y,
+      spacing: selectedInputLayoutFrame?.sheetLayout?.spacing ?? sheetSpacing,
+      extrude: selectedInputLayoutFrame?.sheetLayout?.extrude ?? sheetExtrude,
+      pivotX: selectedInputLayoutFrame?.pivot.x ?? sheetPivot.x,
+      pivotY: selectedInputLayoutFrame?.pivot.y ?? sheetPivot.y
+    };
+  }, [gridScaleX, gridScaleY, selectedInputLayoutFrame, sheetExtrude, sheetPivot.x, sheetPivot.y, sheetSpacing]);
   const scopedSheetLayoutValues = useMemo(() => {
     const firstRow = plannedSheetLayout.rows[0];
     const layoutSource =
@@ -1562,39 +1660,19 @@ export function App() {
     sheetLayoutScope,
     sheetSpacing
   ]);
+  const canEditScopedInputLayout =
+    sheetMode &&
+    selectedAsset !== null &&
+    editableSheetFrames.length > 0 &&
+    sheetRowAnimations.length > 0 &&
+    (inputSheetLayoutScope !== "row" || selectedManualAnimation !== undefined) &&
+    (inputSheetLayoutScope !== "frame" || selectedDetectedFrame !== undefined);
   const canEditScopedSheetLayout =
     sheetMode &&
     editableSheetFrames.length > 0 &&
     sheetRowAnimations.length > 0 &&
     (sheetLayoutScope !== "row" || selectedManualAnimation !== undefined) &&
     (sheetLayoutScope !== "frame" || selectedDetectedFrame !== undefined);
-  const sheetDetectorReview = useMemo(
-    () =>
-      sheetMode && editableSheetFrames.length > 0 && sheetRowAnimations.length > 0
-        ? createSheetDetectorReview({
-            frames: editableSheetFrames,
-            animations: sheetRowAnimations,
-            selectedAnimationName: selectedManualAnimationName,
-            margin: sheetMargin,
-            spacing: sheetSpacing,
-            warnings: detectedSheetWarnings,
-            diagnostics: detectedSheetDiagnostics
-          })
-        : null,
-    [
-      detectedSheetDiagnostics,
-      detectedSheetWarnings,
-      editableSheetFrames,
-      selectedManualAnimationName,
-      sheetMargin,
-      sheetMode,
-      sheetRowAnimations,
-      sheetSpacing
-    ]
-  );
-  const selectedSparseRow = sheetDetectorReview?.selectedRow;
-  const canRecoverSelectedSparseRow = selectedAsset !== null && selectedSparseRow !== undefined;
-  const canFillSparseRows = selectedAsset !== null && sheetDetectorReview?.summary.hasSparseRows === true;
   const canUndoFrameEdit = canUndoFrameEditHistory(frameEditHistory);
   const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
   const timelineState = getTimelineState(mode, timelineFrames.length);
@@ -1617,6 +1695,12 @@ export function App() {
       setBottomPanelTab(bottomPanelSections[0] ?? "diagnostics");
     }
   }, [bottomPanelSections, bottomPanelTab]);
+
+  useEffect(() => {
+    if (sheetMode && selectedDetectedFrame) {
+      setInputSheetLayoutScope("frame");
+    }
+  }, [selectedDetectedFrame?.name, sheetMode]);
 
   const guidedFixSummary = useMemo(
     () =>
@@ -1697,8 +1781,7 @@ export function App() {
   }, [selectedAnimationName]);
 
   useEffect(() => {
-    const candidateColors = new Set(outlineSourceCandidates.map((candidate) => candidate.color));
-    setSelectedOutlineSourceColors((current) => normalizeOutlineSourceColors(current).filter((color) => candidateColors.has(color)));
+    setSelectedOutlineSourceColors((current) => normalizeOutlineSourceColors(current));
   }, [outlineSourceCandidates]);
 
   useEffect(() => {
@@ -3720,42 +3803,94 @@ export function App() {
     [appendLog, editableSheetFrames, sheetMargin, sheetRowAnimations, sheetSpacing]
   );
 
-  const updateDetectedAnimationOutputCellSize = useCallback(
-    (animationName: string, dimension: "width" | "height", value: number) => {
-      const nextValue = clampSheetInteger(value, 1, 1024);
-      setDetectedSheetFrames((current) => {
-        const sourceFrames = current.length > 0 ? current : editableSheetFrames;
-        const layout = deriveSheetOutputLayout({
-          frames: sourceFrames,
-          animations: sheetRowAnimations,
-          margin: sheetMargin,
-          spacing: sheetSpacing,
-          fallback: { frameWidth, frameHeight, rows: sheetRows, columns: sheetColumns }
-        });
-        const row = layout.rows.find((item) => item.name === animationName);
-        const next = resizeAnimationCells({
-          frames: sourceFrames,
-          animations: sheetRowAnimations,
-          animationName,
-          cellWidth: dimension === "width" ? nextValue : row?.cellWidth ?? frameWidth,
-          cellHeight: dimension === "height" ? nextValue : row?.cellHeight ?? frameHeight,
-          margin: sheetMargin,
-          spacing: sheetSpacing
-        });
-        detectedSheetFramesRef.current = next;
-        detectedRowAnimationsRef.current = sheetRowAnimations;
-        setDetectedRowAnimations(sheetRowAnimations);
-        return next;
+  const updateScopedInputLayout = useCallback(
+    (field: InputSheetLayoutPatchField, value: number) => {
+      if (!canEditScopedInputLayout || !selectedAsset) {
+        return;
+      }
+
+      const baseFrames = detectedSheetFramesRef.current.length > 0 ? detectedSheetFramesRef.current : editableSheetFrames;
+      const baseAnimations = detectedRowAnimationsRef.current.length > 0 ? detectedRowAnimationsRef.current : sheetRowAnimations;
+      const selectedRowFrameNames = new Set(
+        inputSheetLayoutScope === "row" && selectedManualAnimation ? selectedManualAnimation.frameNames : []
+      );
+      const maxSourceWidth = selectedAsset.image.width;
+      const maxSourceHeight = selectedAsset.image.height;
+      const nextFrames = baseFrames.map((frame) => {
+        const rowName = getFrameAnimationName(frame, baseAnimations);
+        const selected =
+          inputSheetLayoutScope === "sheet" ||
+          (inputSheetLayoutScope === "row" && (selectedRowFrameNames.has(frame.name) || rowName === selectedManualAnimationName)) ||
+          (inputSheetLayoutScope === "frame" && frame.name === selectedDetectedFrame?.name);
+
+        if (!selected) {
+          return frame;
+        }
+
+        const sourceRect = getFrameSourceRectForLayout(frame, gridScaleX, gridScaleY);
+        const nextSourceRect = { ...sourceRect };
+        let nextPivot = { ...frame.pivot };
+
+        if (field === "sourceWidth") {
+          nextSourceRect.w = clampSheetInteger(value, 1, Math.max(1, maxSourceWidth - nextSourceRect.x));
+        } else if (field === "sourceHeight") {
+          nextSourceRect.h = clampSheetInteger(value, 1, Math.max(1, maxSourceHeight - nextSourceRect.y));
+        } else if (field === "offsetX") {
+          nextSourceRect.x = clampSheetInteger(value, 0, Math.max(0, maxSourceWidth - nextSourceRect.w));
+        } else if (field === "offsetY") {
+          nextSourceRect.y = clampSheetInteger(value, 0, Math.max(0, maxSourceHeight - nextSourceRect.h));
+        } else if (field === "pivotX") {
+          nextPivot = { ...nextPivot, x: clampSheetInteger(value, 0, Math.max(1, frame.rect.w)) };
+        } else if (field === "pivotY") {
+          nextPivot = { ...nextPivot, y: clampSheetInteger(value, 0, Math.max(1, frame.rect.h)) };
+        }
+
+        return {
+          ...frame,
+          sourceRect: nextSourceRect,
+          pivot: nextPivot
+        };
       });
+
+      detectedSheetFramesRef.current = nextFrames;
+      detectedRowAnimationsRef.current = baseAnimations;
+      setDetectedSheetFrames(nextFrames);
+      setDetectedRowAnimations(baseAnimations);
+      const nextSnapshot = createFrameEditSnapshot({
+        frames: nextFrames,
+        animations: baseAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        selectedAnimationName: selectedAnimationNameRef.current
+      });
+      setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
       setFixResult(null);
       setIsPlaying(false);
+      appendLog(`Updated ${inputSheetLayoutScope} ${getInputLayoutPatchLabel(field)} to ${Math.round(value)}`);
     },
-    [editableSheetFrames, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRowAnimations, sheetRows, sheetSpacing]
+    [
+      appendLog,
+      canEditScopedInputLayout,
+      editableSheetFrames,
+      gridScaleX,
+      gridScaleY,
+      inputSheetLayoutScope,
+      selectedAsset,
+      selectedDetectedFrame?.name,
+      selectedManualAnimation,
+      selectedManualAnimationName,
+      sheetRowAnimations
+    ]
   );
 
   const updateScopedSheetLayout = useCallback(
-    (field: SheetLayoutPatchField, value: number) => {
-      if (!canEditScopedSheetLayout) {
+    (field: SheetLayoutPatchField, value: number, scopeOverride: SheetLayoutOverrideScope = sheetLayoutScope) => {
+      const canEditRequestedScope =
+        sheetMode &&
+        editableSheetFrames.length > 0 &&
+        sheetRowAnimations.length > 0 &&
+        (scopeOverride !== "row" || selectedManualAnimation !== undefined) &&
+        (scopeOverride !== "frame" || selectedDetectedFrame !== undefined);
+      if (!canEditRequestedScope) {
         return;
       }
 
@@ -3766,11 +3901,11 @@ export function App() {
       const baseFrames = detectedSheetFramesRef.current.length > 0 ? detectedSheetFramesRef.current : editableSheetFrames;
       const baseAnimations = detectedRowAnimationsRef.current.length > 0 ? detectedRowAnimationsRef.current : sheetRowAnimations;
       const nextMargin = sheetMargin;
-      const nextSpacing = sheetLayoutScope === "sheet" && field === "spacing" ? nextValue : sheetSpacing;
+      const nextSpacing = scopeOverride === "sheet" && field === "spacing" ? nextValue : sheetSpacing;
       const nextFrames = applyScopedSheetLayoutPatch({
         frames: baseFrames,
         animations: baseAnimations,
-        scope: sheetLayoutScope,
+        scope: scopeOverride,
         patch,
         margin: nextMargin,
         spacing: nextSpacing,
@@ -3782,7 +3917,7 @@ export function App() {
       detectedRowAnimationsRef.current = baseAnimations;
       setDetectedSheetFrames(nextFrames);
       setDetectedRowAnimations(baseAnimations);
-      if (sheetLayoutScope === "sheet") {
+      if (scopeOverride === "sheet") {
         if (field === "spacing") {
           setSheetSpacing(nextValue);
         }
@@ -3799,16 +3934,18 @@ export function App() {
       setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
       setFixResult(null);
       setIsPlaying(false);
-      appendLog(`Updated ${sheetLayoutScope} ${field} to ${nextValue}`);
+      appendLog(`Updated ${scopeOverride} ${field} to ${nextValue}`);
     },
     [
       appendLog,
-      canEditScopedSheetLayout,
       editableSheetFrames,
+      selectedDetectedFrame,
       selectedDetectedFrame?.name,
+      selectedManualAnimation,
       selectedManualAnimationName,
       sheetLayoutScope,
       sheetMargin,
+      sheetMode,
       sheetRowAnimations,
       sheetSpacing
     ]
@@ -4018,132 +4155,6 @@ export function App() {
       `Removed row ${selectedManualAnimationName}`
     );
   }, [applyManualSheetEdit, editableSheetFrames, selectedManualAnimationName, sheetMargin, sheetRowAnimations, sheetSpacing]);
-
-  const recoverFirstCellForSelectedRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
-      return;
-    }
-
-    applyManualSheetEdit(
-      insertFrameAtRowEdge({
-        frames: editableSheetFrames,
-        animations: sheetRowAnimations,
-        selectedAnimationName: selectedSparseRow.rowName,
-        edge: "start",
-        margin: sheetMargin,
-        spacing: sheetSpacing,
-        scaleX: gridScaleX,
-        scaleY: gridScaleY,
-        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
-      }),
-      `Recovered first cell for ${selectedSparseRow.rowName}`
-    );
-  }, [
-    applyManualSheetEdit,
-    editableSheetFrames,
-    gridScaleX,
-    gridScaleY,
-    selectedAsset,
-    selectedSparseRow,
-    sheetMargin,
-    sheetRowAnimations,
-    sheetSpacing
-  ]);
-
-  const recoverLastCellForSelectedRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
-      return;
-    }
-
-    applyManualSheetEdit(
-      insertFrameAtRowEdge({
-        frames: editableSheetFrames,
-        animations: sheetRowAnimations,
-        selectedAnimationName: selectedSparseRow.rowName,
-        edge: "end",
-        margin: sheetMargin,
-        spacing: sheetSpacing,
-        scaleX: gridScaleX,
-        scaleY: gridScaleY,
-        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
-      }),
-      `Recovered last cell for ${selectedSparseRow.rowName}`
-    );
-  }, [
-    applyManualSheetEdit,
-    editableSheetFrames,
-    gridScaleX,
-    gridScaleY,
-    selectedAsset,
-    selectedSparseRow,
-    sheetMargin,
-    sheetRowAnimations,
-    sheetSpacing
-  ]);
-
-  const fillSelectedSparseRow = useCallback(() => {
-    if (!selectedAsset || !selectedSparseRow || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
-      return;
-    }
-
-    applyManualSheetEdit(
-      fillRowToFrameCount({
-        frames: editableSheetFrames,
-        animations: sheetRowAnimations,
-        selectedAnimationName: selectedSparseRow.rowName,
-        targetFrameCount: selectedSparseRow.targetFrameCount,
-        margin: sheetMargin,
-        spacing: sheetSpacing,
-        scaleX: gridScaleX,
-        scaleY: gridScaleY,
-        sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
-      }),
-      `Filled ${selectedSparseRow.rowName} to ${selectedSparseRow.targetFrameCount} cells`
-    );
-  }, [
-    applyManualSheetEdit,
-    editableSheetFrames,
-    gridScaleX,
-    gridScaleY,
-    selectedAsset,
-    selectedSparseRow,
-    sheetMargin,
-    sheetRowAnimations,
-    sheetSpacing
-  ]);
-
-  const applySheetDetectorCandidate = useCallback(
-    (candidate: SheetDetectorCandidate) => {
-      if (!selectedAsset || candidate.action !== "fillSparseRows" || editableSheetFrames.length === 0 || sheetRowAnimations.length === 0) {
-        return;
-      }
-
-      applyManualSheetEdit(
-        fillSparseRowsToFrameCount({
-          frames: editableSheetFrames,
-          animations: sheetRowAnimations,
-          targetFrameCount: sheetDetectorReview?.summary.maxFrameCount ?? 0,
-          margin: sheetMargin,
-          spacing: sheetSpacing,
-          scaleX: gridScaleX,
-          scaleY: gridScaleY,
-          sourceSize: { width: selectedAsset.image.width, height: selectedAsset.image.height }
-        }),
-        `Applied detector candidate: ${candidate.title}`
-      );
-    },
-    [
-      applyManualSheetEdit,
-      editableSheetFrames,
-      gridScaleX,
-      gridScaleY,
-      selectedAsset,
-      sheetDetectorReview?.summary.maxFrameCount,
-      sheetMargin,
-      sheetRowAnimations,
-      sheetSpacing
-    ]
-  );
 
   const moveDetectedSourceFrame = useCallback(
     (frameIndex: number, delta: { x: number; y: number }) => {
@@ -4718,17 +4729,53 @@ export function App() {
     setAlphaColorKey(rgbToHex(data[0]!, data[1]!, data[2]!));
   };
 
-  const toggleOutlineSourceColor = useCallback((color: string) => {
+  const addOutlineSourceColor = useCallback((color: string) => {
     const [normalized] = normalizeOutlineSourceColors([color]);
     if (!normalized) {
       return;
     }
 
     setOutlineSourceMode("manual");
-    setSelectedOutlineSourceColors((current) =>
-      current.includes(normalized) ? current.filter((item) => item !== normalized) : [...current, normalized]
-    );
+    setOutlineManualColor(normalized);
+    setSelectedOutlineSourceColors((current) => normalizeOutlineSourceColors([...current, normalized]));
   }, []);
+
+  const removeOutlineSourceColor = useCallback((color: string) => {
+    const [normalized] = normalizeOutlineSourceColors([color]);
+    if (!normalized) {
+      return;
+    }
+
+    setSelectedOutlineSourceColors((current) => current.filter((item) => item !== normalized));
+  }, []);
+
+  const toggleOutlineSourceColor = useCallback((color: string) => {
+    const [normalized] = normalizeOutlineSourceColors([color]);
+    if (!normalized) {
+      return;
+    }
+
+    setSelectedOutlineSourceColors((current) =>
+      current.includes(normalized) ? current.filter((item) => item !== normalized) : normalizeOutlineSourceColors([...current, normalized])
+    );
+    setOutlineSourceMode("manual");
+  }, []);
+
+  const pickOutlineSourceColor = useCallback(async () => {
+    const EyeDropperConstructor = (window as WindowWithEyeDropper).EyeDropper;
+    if (!EyeDropperConstructor) {
+      appendLog("Browser eyedropper is not available. Use the manual color field instead.");
+      return;
+    }
+
+    try {
+      const result = await new EyeDropperConstructor().open();
+      addOutlineSourceColor(result.sRGBHex);
+      appendLog(`Added outline source color ${result.sRGBHex}`);
+    } catch {
+      appendLog("Outline color pick cancelled.");
+    }
+  }, [addOutlineSourceColor, appendLog]);
 
   const alphaWarningMessages = getAssetTypeCleanupPreset(assetType).alphaWarningCodes
     .map((code) => assetTypeWarnings.find((warning) => warning.code === code)?.message)
@@ -5063,7 +5110,7 @@ export function App() {
             />
             {outlineSourceCandidates.length > 0 ? (
               <div className="outline-source-swatches">
-                {outlineSourceCandidates.map((candidate) => {
+                {outlineSourcePreviewCandidates.map((candidate) => {
                   const active =
                     outlineSourceMode === "auto"
                       ? outlineSourceCandidates.slice(0, 3).some((item) => item.color === candidate.color)
@@ -5081,10 +5128,55 @@ export function App() {
                     </button>
                   );
                 })}
+                {outlineSourceHiddenCount > 0 ? (
+                  <button
+                    type="button"
+                    className="outline-source-more-button"
+                    title="Show all outline source colors"
+                    aria-label={`Show ${outlineSourceHiddenCount} more outline source colors`}
+                    onClick={openOutlineSourcePaletteModal}
+                  >
+                    +{outlineSourceHiddenCount}
+                  </button>
+                ) : null}
               </div>
             ) : (
               <p className="field-note">No dark edge colors detected.</p>
             )}
+            {outlineSourceMode === "manual" ? (
+              <>
+                <div className="outline-source-actions">
+                  <label>
+                    <span>Manual</span>
+                    <input type="color" value={outlineManualColor} onChange={(event) => setOutlineManualColor(event.currentTarget.value)} />
+                  </label>
+                  <button type="button" onClick={() => addOutlineSourceColor(outlineManualColor)}>
+                    <Plus size={13} />
+                    Add
+                  </button>
+                  <button type="button" onClick={pickOutlineSourceColor}>
+                    <Eye size={13} />
+                    Pick
+                  </button>
+                  <button type="button" onClick={openOutlineSourcePaletteModal} disabled={outlineSourceCandidates.length === 0}>
+                    All
+                  </button>
+                </div>
+                {selectedOutlineSourceColors.length > 0 ? (
+                  <div className="outline-source-selected" aria-label="Selected manual outline source colors">
+                    {selectedOutlineSourceColors.map((color) => (
+                      <button key={color} type="button" title={`Remove ${color}`} onClick={() => removeOutlineSourceColor(color)}>
+                        <span style={{ background: color }} />
+                        <code>{color}</code>
+                        <Trash2 size={12} />
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="field-note">Choose one or more outline colors from the source image, or add a color manually.</p>
+                )}
+              </>
+            ) : null}
           </div>
         ) : null}
         <NumberField label="Outline px" value={outlineSize} min={1} max={8} disabled={outlineMode === "none"} onChange={setOutlineSize} />
@@ -5223,61 +5315,6 @@ export function App() {
             <small>Detected rows keep their source boxes. Cell edits change the packed output canvas, not the source selection.</small>
           </div>
         ) : null}
-        {sheetDetectorReview ? (
-          <div className="sheet-detector-review" aria-label="Sheet detector review">
-            <div className="sheet-detector-review-heading">
-              <strong>Detector review</strong>
-              <span>
-                {sheetDetectorReview.summary.rowCount} rows / {sheetDetectorReview.summary.frameCount} cells
-              </span>
-            </div>
-            <div className="sheet-detector-confidence-grid">
-              {sheetDetectorReview.confidenceItems.map((item) => (
-                <div key={item.label} className={`sheet-detector-confidence is-${item.tone}`}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  <small>{item.detail}</small>
-                </div>
-              ))}
-            </div>
-            <div className="sheet-detector-candidates">
-              {sheetDetectorReview.candidates.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  disabled={candidate.action === "none" || !canFillSparseRows}
-                  onClick={() => applySheetDetectorCandidate(candidate)}
-                >
-                  <span>{candidate.title}</span>
-                  <strong>{candidate.frameCount} cells</strong>
-                  <small>{candidate.description}</small>
-                </button>
-              ))}
-            </div>
-            {selectedSparseRow ? (
-              <div className="sheet-detector-row-recovery">
-                <div>
-                  <strong>{selectedSparseRow.rowName}</strong>
-                  <span>
-                    {selectedSparseRow.frameCount} / {selectedSparseRow.targetFrameCount} cells
-                  </span>
-                </div>
-                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={recoverFirstCellForSelectedRow}>
-                  <SkipBack size={13} />
-                  First
-                </button>
-                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={recoverLastCellForSelectedRow}>
-                  <SkipForward size={13} />
-                  Last
-                </button>
-                <button type="button" disabled={!canRecoverSelectedSparseRow} onClick={fillSelectedSparseRow}>
-                  <WandSparkles size={13} />
-                  Fill row
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
         {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="manual-sheet-corrections" aria-label="Manual sheet correction tools">
             <div className="manual-sheet-correction-heading">
@@ -5315,48 +5352,101 @@ export function App() {
             <small>Add missing cells before or after the selected frame, then adjust the new source box in the Input view.</small>
           </div>
         ) : null}
-        {hasStoredSheetLayout ? (
-          <div className="animation-cell-controls" aria-label="Animation row output cell sizes">
-            <div className="animation-cell-header">
-              <span>Animation</span>
-              <span>Frames</span>
-              <span>Output W</span>
-              <span>Output H</span>
-            </div>
-            {sheetRowAnimations.map((animation) => {
-              const row = plannedSheetLayout.rows.find((item) => item.name === animation.name);
-              return (
-                <div key={animation.name} className="animation-cell-row">
-                  <strong>{animation.name}</strong>
-                  <span>{animation.frameNames.length}</span>
-                  <input
-                    aria-label={`${animation.name} output cell width`}
-                    type="number"
-                    min="1"
-                    max="1024"
-                    value={row?.cellWidth ?? frameWidth}
-                    onChange={(event) => updateDetectedAnimationOutputCellSize(animation.name, "width", Number(event.currentTarget.value))}
-                  />
-                  <input
-                    aria-label={`${animation.name} output cell height`}
-                    type="number"
-                    min="1"
-                    max="1024"
-                    value={row?.cellHeight ?? frameHeight}
-                    onChange={(event) => updateDetectedAnimationOutputCellSize(animation.name, "height", Number(event.currentTarget.value))}
-                  />
-                </div>
-              );
-            })}
-          </div>
-        ) : (
+        {!hasStoredSheetLayout ? (
           <>
             <NumberField label="Input frame W" value={frameWidth} min={1} onChange={updateManualFrameWidth} />
             <NumberField label="Input frame H" value={frameHeight} min={1} onChange={updateManualFrameHeight} />
             <NumberField label="Rows" value={sheetRows} min={1} onChange={updateManualSheetRows} />
             <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
           </>
-        )}
+        ) : null}
+        {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
+          <div className="sheet-layout-scope-controls" aria-label="Scoped sheet input layout">
+            <div className="sheet-layout-scope-heading">
+              <strong>Input layout</strong>
+              <span>
+                {inputSheetLayoutScope === "sheet"
+                  ? `${plannedSheetLayout.rowCount} rows`
+                  : inputSheetLayoutScope === "row"
+                    ? selectedManualAnimation?.name ?? "No row"
+                    : selectedDetectedFrame?.name ?? "No frame"}
+              </span>
+            </div>
+            <SelectField
+              label="Apply to"
+              value={inputSheetLayoutScope}
+              options={sheetLayoutScopeOptions}
+              onChange={(value) => setInputSheetLayoutScope(value as SheetLayoutOverrideScope)}
+            />
+            <div className="sheet-layout-scope-grid">
+              <NumberField
+                label="Input W"
+                value={scopedInputLayoutValues.sourceWidth}
+                min={1}
+                max={selectedAsset?.image.width ?? 4096}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("sourceWidth", value)}
+              />
+              <NumberField
+                label="Input H"
+                value={scopedInputLayoutValues.sourceHeight}
+                min={1}
+                max={selectedAsset?.image.height ?? 4096}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("sourceHeight", value)}
+              />
+              <NumberField
+                label="Offset X"
+                value={scopedInputLayoutValues.offsetX}
+                min={0}
+                max={selectedAsset?.image.width ?? 4096}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("offsetX", value)}
+              />
+              <NumberField
+                label="Offset Y"
+                value={scopedInputLayoutValues.offsetY}
+                min={0}
+                max={selectedAsset?.image.height ?? 4096}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("offsetY", value)}
+              />
+              <NumberField
+                label="Spacing"
+                value={scopedInputLayoutValues.spacing}
+                min={0}
+                max={1024}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedSheetLayout("spacing", value, inputSheetLayoutScope)}
+              />
+              <NumberField
+                label="Extrude"
+                value={scopedInputLayoutValues.extrude}
+                min={0}
+                max={8}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedSheetLayout("extrude", value, inputSheetLayoutScope)}
+              />
+              <NumberField
+                label="Pivot X"
+                value={scopedInputLayoutValues.pivotX}
+                min={0}
+                max={scopedSheetLayoutValues.cellWidth}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("pivotX", value)}
+              />
+              <NumberField
+                label="Pivot Y"
+                value={scopedInputLayoutValues.pivotY}
+                min={0}
+                max={scopedSheetLayoutValues.cellHeight}
+                disabled={!canEditScopedInputLayout}
+                onChange={(value) => updateScopedInputLayout("pivotY", value)}
+              />
+            </div>
+            <small>Input edits change source boxes and pivots before Fix. Output cells stay separate so resizing the export does not move the source selection.</small>
+          </div>
+        ) : null}
         {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="sheet-layout-scope-controls" aria-label="Scoped sheet output layout">
             <div className="sheet-layout-scope-heading">
@@ -5392,40 +5482,8 @@ export function App() {
                 disabled={!canEditScopedSheetLayout}
                 onChange={(value) => updateScopedSheetLayout("cellHeight", value)}
               />
-              <NumberField
-                label="Offset X"
-                value={scopedSheetLayoutValues.offsetX}
-                min={-1024}
-                max={1024}
-                disabled={!canEditScopedSheetLayout}
-                onChange={(value) => updateScopedSheetLayout("offsetX", value)}
-              />
-              <NumberField
-                label="Offset Y"
-                value={scopedSheetLayoutValues.offsetY}
-                min={-1024}
-                max={1024}
-                disabled={!canEditScopedSheetLayout}
-                onChange={(value) => updateScopedSheetLayout("offsetY", value)}
-              />
-              <NumberField
-                label="Spacing"
-                value={scopedSheetLayoutValues.spacing}
-                min={0}
-                max={1024}
-                disabled={!canEditScopedSheetLayout}
-                onChange={(value) => updateScopedSheetLayout("spacing", value)}
-              />
-              <NumberField
-                label="Extrude"
-                value={scopedSheetLayoutValues.extrude}
-                min={0}
-                max={8}
-                disabled={!canEditScopedSheetLayout}
-                onChange={(value) => updateScopedSheetLayout("extrude", value)}
-              />
             </div>
-            <small>Scoped output edits repack the fixed sheet only. Source boxes stay editable in the Input view.</small>
+            <small>Output edits repack the fixed sheet cells only. Source boxes stay editable in Input layout.</small>
           </div>
         ) : null}
         <NumberField label="Sheet margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
@@ -6937,12 +6995,27 @@ export function App() {
               </button>
             </div>
             <div className="palette-modal-grid" aria-label={`${paletteModal.title} colors`}>
-              {paletteModalWindow.colors.map((color, index) => (
-                <span key={`${color}-${paletteModalWindow.start + index}`} className="palette-modal-swatch">
-                  <span style={{ backgroundColor: color }} />
-                  <code>{color}</code>
-                </span>
-              ))}
+              {paletteModalWindow.colors.map((color, index) =>
+                paletteModal.kind === "outlineSource" ? (
+                  <button
+                    key={`${color}-${paletteModalWindow.start + index}`}
+                    type="button"
+                    className={`palette-modal-swatch palette-modal-swatch-button${
+                      selectedOutlineSourceColors.includes(color) ? " active" : ""
+                    }`}
+                    aria-pressed={selectedOutlineSourceColors.includes(color)}
+                    onClick={() => toggleOutlineSourceColor(color)}
+                  >
+                    <span style={{ backgroundColor: color }} />
+                    <code>{color}</code>
+                  </button>
+                ) : (
+                  <span key={`${color}-${paletteModalWindow.start + index}`} className="palette-modal-swatch">
+                    <span style={{ backgroundColor: color }} />
+                    <code>{color}</code>
+                  </span>
+                )
+              )}
             </div>
             <div className="palette-modal-controls">
               <button
