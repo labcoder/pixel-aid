@@ -5,6 +5,8 @@ import { tickPlayback, type PlaybackDirection, type PlaybackStepDirection } from
 import { getTimelineViewportLayout, type TimelineViewportPane } from "../lib/timelineViewportLayout";
 import type { TimelineViewportSourceMode } from "../lib/timelineViewportSources";
 import type { DiagnosticOverlayMask, DiagnosticOverlayModel } from "../lib/diagnosticOverlays";
+import { rgbaImageToCanvas } from "../lib/canvasImage";
+import { useDisposableCanvas } from "../lib/useDisposableCanvas";
 
 export type TimelineViewportCanvasProps = {
   inputImage: RGBAImage | null;
@@ -59,6 +61,11 @@ export function TimelineViewportCanvas({
     () => (diagnosticOverlay?.fixedMask ? maskToCanvas(diagnosticOverlay.fixedMask) : null),
     [diagnosticOverlay?.fixedMask]
   );
+
+  useDisposableCanvas(inputCanvas);
+  useDisposableCanvas(outputCanvas);
+  useDisposableCanvas(inputOverlayCanvas);
+  useDisposableCanvas(outputOverlayCanvas);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -463,17 +470,7 @@ function clampFrameIndex(index: number, frameCount: number): number {
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create timeline preview canvas");
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-  return canvas;
+  return rgbaImageToCanvas(image, "Unable to create timeline preview canvas");
 }
 
 function maskToCanvas(mask: DiagnosticOverlayMask): HTMLCanvasElement {

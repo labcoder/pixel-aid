@@ -11,6 +11,8 @@ import {
   type SandboxSourceId
 } from "../lib/spriteSandbox";
 import type { TimelineViewportSourceMode } from "../lib/timelineViewportSources";
+import { rgbaImageToCanvas } from "../lib/canvasImage";
+import { useDisposableCanvas } from "../lib/useDisposableCanvas";
 
 export type SpriteSandboxCanvasProps = {
   inputImage: RGBAImage | null;
@@ -67,6 +69,9 @@ export function SpriteSandboxCanvas({
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
   const inputCanvas = useMemo(() => (inputImage ? imageToCanvas(inputImage) : null), [inputImage]);
   const outputCanvas = useMemo(() => (outputImage ? imageToCanvas(outputImage) : null), [outputImage]);
+
+  useDisposableCanvas(inputCanvas);
+  useDisposableCanvas(outputCanvas);
 
   useEffect(() => {
     positionRef.current = null;
@@ -379,17 +384,7 @@ function getFrameTargetRect(
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create sandbox preview canvas");
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-  return canvas;
+  return rgbaImageToCanvas(image, "Unable to create sandbox preview canvas");
 }
 
 function drawSceneBackground(context: CanvasRenderingContext2D, width: number, height: number): void {

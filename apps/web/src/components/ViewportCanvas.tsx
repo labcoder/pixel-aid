@@ -16,6 +16,8 @@ import type { FrameResizeHandle } from "../lib/frameEditing";
 import { hasFrameEditModifier, resolveFrameEditIntent } from "../lib/frameEditIntent";
 import type { Point } from "../lib/viewportMath";
 import type { DiagnosticOverlayGrid, DiagnosticOverlayMask, DiagnosticOverlayModel } from "../lib/diagnosticOverlays";
+import { rgbaImageToCanvas } from "../lib/canvasImage";
+import { useDisposableCanvas } from "../lib/useDisposableCanvas";
 
 export type ViewMode = "before" | "after" | "split";
 
@@ -85,6 +87,11 @@ export function ViewportCanvas({
   );
   const sourceCanvas = useMemo(() => (sourceImage ? imageToCanvas(sourceImage) : null), [sourceImage]);
   const fixedCanvas = useMemo(() => (fixedImage ? imageToCanvas(fixedImage) : null), [fixedImage]);
+
+  useDisposableCanvas(sourceOverlayCanvas);
+  useDisposableCanvas(fixedOverlayCanvas);
+  useDisposableCanvas(sourceCanvas);
+  useDisposableCanvas(fixedCanvas);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
 
@@ -478,17 +485,7 @@ function getSelectedFrameResizeHit(
 }
 
 function imageToCanvas(image: RGBAImage): HTMLCanvasElement {
-  const canvas = document.createElement("canvas");
-  canvas.width = image.width;
-  canvas.height = image.height;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create preview canvas");
-  }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-  return canvas;
+  return rgbaImageToCanvas(image, "Unable to create preview canvas");
 }
 
 function drawChecker(ctx: CanvasRenderingContext2D, width: number, height: number): void {
