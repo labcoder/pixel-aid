@@ -7,8 +7,11 @@
   "scripts": {
     "dev": "tauri dev",
     "check": "node scripts/check-desktop-prereqs.mjs",
+    "release:check": "node scripts/check-desktop-release-env.mjs --platform all",
+    "checksums": "node scripts/create-desktop-checksums.mjs",
     "desktop:build": "tauri build",
-    "info": "tauri info"
+    "info": "tauri info",
+    "test": "node --test scripts/*.test.mjs"
   },
   "dependencies": {
     "@tauri-apps/plugin-dialog": "^2.7.0",

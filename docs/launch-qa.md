@@ -17,12 +17,14 @@ npm run lint
 npm run build
 npm run benchmark -w @pixelaid/core
 npm run desktop:check
+npm run desktop:release:check
 ```
 
 On a packaging machine with Rust/Cargo and platform prerequisites:
 
 ```sh
 npm run desktop:build
+npm run desktop:checksums
 ```
 
 Record the commit SHA, operating system, Node/npm versions, whether desktop packaging was run, and the result of `npm run bundle:budget` after a production web build.
@@ -83,7 +85,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | CLI/MCP codec coverage is intentionally small. | PNG is canonical output and JPEG/JPG input is supported; WebP or other sources should be converted externally for now. | WebP/additional codec follow-up. |
 | Tiled/LDtk tilemap project export is deferred. | PixelAid exports generic canonical tilemap metadata, but not full editor project/map files yet. | Engine-specific tilemap adapter milestone. |
 | Tileset seam repair is conservative. | Low-risk edge/lighting drift can be applied to the fixed output; severe seams and semantic repainting still need manual work. | Advanced tileset repair milestone. |
-| Desktop signing/auto-update not configured. | Packaged builds may be unsigned until release infrastructure is set. | Desktop distribution milestone. |
+| Desktop auto-update is deferred. | Public desktop builds should use signed artifacts where supported plus `SHA256SUMS.txt`; in-app updates remain future work. | Update feed/signing-key milestone. |
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
 

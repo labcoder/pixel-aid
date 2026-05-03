@@ -15,6 +15,8 @@
     "desktop:check": "npm run check -w @pixelaid/desktop",
     "desktop:build": "npm run check -w @pixelaid/desktop && npm run desktop:build -w @pixelaid/desktop",
     "desktop:info": "npm run info -w @pixelaid/desktop",
+    "desktop:release:check": "node apps/desktop/scripts/check-desktop-release-env.mjs --platform all",
+    "desktop:checksums": "node apps/desktop/scripts/create-desktop-checksums.mjs",
     "brand:sync": "node scripts/sync-brand-assets.mjs",
     "bundle:budget": "node scripts/check-web-bundle-budget.mjs",
     "license:report": "node scripts/license-report.mjs",

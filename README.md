@@ -15,6 +15,8 @@ npm install
 npm run dev
 npm run desktop:dev
 npm run desktop:check
+npm run desktop:release:check
+npm run desktop:checksums
 npm run mcp:serve
 npm run test
 npm run lint
@@ -23,7 +25,7 @@ npm run build
 npm run benchmark
 ```
 
-The web app runs from `apps/web` through the root `npm run dev` command. The desktop shell runs through `npm run desktop:dev`, wraps the same editor UI with native import/export dialogs, and requires Rust/Cargo for Tauri.
+The web app runs from `apps/web` through the root `npm run dev` command. The desktop shell runs through `npm run desktop:dev`, wraps the same editor UI with native import/export dialogs, and requires Rust/Cargo for Tauri. Public desktop releases should run `npm run desktop:release:check` before packaging and `npm run desktop:checksums` after packaging.
 
 Useful scoped commands:
 
@@ -97,7 +99,7 @@ Editor:
 
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
-- Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri.
+- Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri. Desktop release checks validate signing/notarization prerequisites from environment variables, and checksum generation writes deterministic `SHA256SUMS.txt` files for packaged artifacts.
 - Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, saved user presets, and saved palette libraries across web and desktop sessions. Manual asset type remains per imported asset.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
 - Guided recommendation panel that keeps advanced inspector groups collapsed until the user asks for them.
@@ -153,6 +155,7 @@ Automation:
 - Tilesets support seam diagnostics, preview-only repair suggestions, and tile-engine metadata sidecars. Tilemaps support inspect-first classification and tile-size candidates, while full map-data import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 - CLI and MCP-ready automation currently support PNG input/output plus JPEG input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA. The MCP stdio server is available locally, while a local HTTP API, WebP/additional codecs, and streaming progress are future work.
+- Desktop auto-update delivery is deferred. Public desktop artifacts should be signed/notarized where supported and published with `SHA256SUMS.txt` until an update feed and updater signing-key workflow are added.
 
 ## Prioritized Roadmap
 
