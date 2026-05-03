@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { createSingleSpriteCleanupFixture, paletteDriftAnimationFixtures } from "@pixelaid/fixtures";
+import { createSingleSpriteCleanupFixture, paletteDriftAnimationFixtures, presentationSpriteSheetFixtures } from "@pixelaid/fixtures";
 import {
   applyAlphaMode,
   applyDenoise,
@@ -1552,6 +1552,30 @@ describe("sheet slicing", () => {
     expect(detection.frames[0]!.sourceRect).toEqual({ x: 112, y: 20, w: 64, h: 64 });
     expect(detection.rowAnimations.map((animation) => animation.name)).toEqual(["idle", "walk", "jump"]);
     expect(detection.diagnostics!.conditioning?.issues.map((issue) => issue.code)).toContain("footer-like-band");
+  });
+
+  test("conditions poster-style AI sheet artifacts around true sprite cells", () => {
+    const fixture = presentationSpriteSheetFixtures[0]!;
+    const detection = detectSheetLayout(fixture.createImage());
+
+    expect(detection).toMatchObject({
+      frameWidth: 96,
+      frameHeight: 120,
+      rows: 2,
+      columns: 6,
+      spacing: 8,
+      rowFrameCounts: [6, 6]
+    });
+    expect(detection.frames).toHaveLength(12);
+    expect(detection.frames[0]!.rect).toEqual({ x: 46, y: 64, w: 96, h: 120 });
+    expect(detection.frames[0]!.sourceRect).toEqual({ x: 74, y: 80, w: 57, h: 81 });
+    expect(detection.frames[0]!.sourceRect!.w).toBeLessThan(detection.frames[0]!.rect.w);
+    expect(detection.frames[0]!.sourceRect!.h).toBeLessThan(detection.frames[0]!.rect.h);
+    expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual([6, 6]);
+    expect(detection.warnings).toEqual(expect.arrayContaining(["Presentation-style sheet artifacts detected; captions, brackets, and decorative background should be ignored before final output."]));
+    expect(detection.diagnostics!.conditioning?.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["presentation-sheet-artifacts", "baked-checkerboard-cells", "caption-bracket-ignored"])
+    );
   });
 
   test("generates deterministic frame rects from rows columns margin and spacing", () => {

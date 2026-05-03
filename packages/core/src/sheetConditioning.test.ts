@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { presentationSpriteSheetFixtures } from "@pixelaid/fixtures";
 import { analyzeSheetConditioning } from "./index";
 import type { RGBAImage } from "@pixelaid/shared";
 
@@ -63,6 +64,16 @@ describe("sheet source conditioning diagnostics", () => {
     expect(diagnostics.recommendFrameFirst).toBe(true);
     expect(diagnostics.issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining(["opaque-dark-background", "low-foreground-coverage"])
+    );
+  });
+
+  test("flags presentation mockup sheets with checkerboard cells and captions", () => {
+    const diagnostics = analyzeSheetConditioning(presentationSpriteSheetFixtures[0]!.createImage());
+
+    expect(diagnostics.presentationLike).toBe(true);
+    expect(diagnostics.recommendFrameFirst).toBe(true);
+    expect(diagnostics.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["presentation-sheet-artifacts", "baked-checkerboard-cells", "caption-bracket-ignored"])
     );
   });
 

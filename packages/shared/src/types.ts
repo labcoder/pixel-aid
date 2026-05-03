@@ -133,7 +133,10 @@ export type SheetConditioningIssueCode =
   | "opaque-dark-background"
   | "low-foreground-coverage"
   | "footer-like-band"
-  | "outlined-cell-grid";
+  | "outlined-cell-grid"
+  | "presentation-sheet-artifacts"
+  | "baked-checkerboard-cells"
+  | "caption-bracket-ignored";
 
 export type SheetConditioningIssue = {
   code: SheetConditioningIssueCode;

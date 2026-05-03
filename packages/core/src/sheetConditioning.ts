@@ -48,6 +48,8 @@ export function analyzeSheetConditioning(
     background.a >= 240 &&
     (background.r + background.g + background.b) / 3 <= darkBackgroundThreshold;
   const lowForegroundCoverage = foregroundPixelRatio > 0 && foregroundPixelRatio <= lowForegroundRatio;
+  const checkerboardCells = detectBakedCheckerboardCells(image, background);
+  const captionOrBracketMarks = detectCaptionOrBracketMarks(image, background);
   const issues: SheetConditioningIssue[] = [];
 
   if (exactColors.size > maxExactColors) {
@@ -82,7 +84,31 @@ export function analyzeSheetConditioning(
     });
   }
 
-  const presentationLike = opaqueDarkBackground && lowForegroundCoverage;
+  if (opaqueDarkBackground && (checkerboardCells.detected || captionOrBracketMarks.detected)) {
+    issues.push({
+      code: "presentation-sheet-artifacts",
+      severity: "warning",
+      message: "Sheet looks like a presentation mockup; condition frames so poster background, captions, brackets, and decorative marks are not treated as sprite pixels."
+    });
+  }
+
+  if (checkerboardCells.detected) {
+    issues.push({
+      code: "baked-checkerboard-cells",
+      severity: "warning",
+      message: `Detected checkerboard-like cell backgrounds across ${Math.round(checkerboardCells.coverage * 100)}% of sampled cell tiles.`
+    });
+  }
+
+  if (captionOrBracketMarks.detected) {
+    issues.push({
+      code: "caption-bracket-ignored",
+      severity: "info",
+      message: "Detected bright low-saturation caption or bracket marks; exclude them from true sprite content bounds."
+    });
+  }
+
+  const presentationLike = opaqueDarkBackground && (lowForegroundCoverage || checkerboardCells.detected || captionOrBracketMarks.detected);
   const recommendFrameFirst =
     presentationLike ||
     exactColors.size > maxExactColors ||
@@ -97,6 +123,176 @@ export function analyzeSheetConditioning(
     recommendFrameFirst,
     issues
   };
+}
+
+function detectBakedCheckerboardCells(
+  image: RGBAImage,
+  background: SheetConditioningDiagnostics["background"]
+): { detected: boolean; coverage: number } {
+  const columns = Math.floor(image.width / 8);
+  const rows = Math.floor(image.height / 8);
+  const grayTiles = new Uint8Array(columns * rows);
+  const luminanceTiles = new Float32Array(columns * rows);
+  let checkerLike = 0;
+  let sampled = 0;
+  const step = 8;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const x = column * step;
+      const y = row * step;
+      const average = averageBlockRgb(image, x, y, step, step);
+      if (colorDistance(average.r, average.g, average.b, background.r, background.g, background.b) <= 36) {
+        continue;
+      }
+      sampled += 1;
+      const channelSpread = Math.max(average.r, average.g, average.b) - Math.min(average.r, average.g, average.b);
+      const luminance = (average.r + average.g + average.b) / 3;
+      if (channelSpread <= 18 && luminance >= 42 && luminance <= 118) {
+        checkerLike += 1;
+        grayTiles[row * columns + column] = 1;
+        luminanceTiles[row * columns + column] = luminance;
+      }
+    }
+  }
+
+  let adjacentPairs = 0;
+  let alternatingPairs = 0;
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const index = row * columns + column;
+      if (grayTiles[index] === 0) {
+        continue;
+      }
+      const right = column + 1 < columns ? index + 1 : -1;
+      const down = row + 1 < rows ? index + columns : -1;
+      if (right >= 0 && grayTiles[right] === 1) {
+        adjacentPairs += 1;
+        const diff = Math.abs(luminanceTiles[index]! - luminanceTiles[right]!);
+        if (diff >= 14 && diff <= 42) {
+          alternatingPairs += 1;
+        }
+      }
+      if (down >= 0 && grayTiles[down] === 1) {
+        adjacentPairs += 1;
+        const diff = Math.abs(luminanceTiles[index]! - luminanceTiles[down]!);
+        if (diff >= 14 && diff <= 42) {
+          alternatingPairs += 1;
+        }
+      }
+    }
+  }
+
+  const coverage = sampled > 0 ? checkerLike / sampled : 0;
+  const alternatingRatio = adjacentPairs > 0 ? alternatingPairs / adjacentPairs : 0;
+  const phaseAgnosticAlternation = estimatePhaseAgnosticCheckerAlternation(image, background);
+  return {
+    detected:
+      checkerLike >= 24 &&
+      coverage >= 0.22 &&
+      (alternatingRatio >= 0.22 || phaseAgnosticAlternation >= 0.18),
+    coverage
+  };
+}
+
+function estimatePhaseAgnosticCheckerAlternation(image: RGBAImage, background: SheetConditioningDiagnostics["background"]): number {
+  let graySamples = 0;
+  let alternatingSamples = 0;
+
+  for (let y = 0; y < image.height - 8; y += 4) {
+    for (let x = 0; x < image.width - 8; x += 4) {
+      const current = readGrayCheckerSample(image, x, y, background);
+      if (!current) {
+        continue;
+      }
+      graySamples += 1;
+      const right = readGrayCheckerSample(image, x + 8, y, background);
+      const down = readGrayCheckerSample(image, x, y + 8, background);
+      if ((right !== undefined && isCheckerLuminancePair(current, right)) || (down !== undefined && isCheckerLuminancePair(current, down))) {
+        alternatingSamples += 1;
+      }
+    }
+  }
+
+  return graySamples > 0 ? alternatingSamples / graySamples : 0;
+}
+
+function readGrayCheckerSample(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  background: SheetConditioningDiagnostics["background"]
+): number | undefined {
+  const offset = (y * image.width + x) * 4;
+  const r = image.data[offset] ?? 0;
+  const g = image.data[offset + 1] ?? 0;
+  const b = image.data[offset + 2] ?? 0;
+  const a = image.data[offset + 3] ?? 0;
+  if (a <= 0 || colorDistance(r, g, b, background.r, background.g, background.b) <= 36) {
+    return undefined;
+  }
+  const channelSpread = Math.max(r, g, b) - Math.min(r, g, b);
+  const luminance = (r + g + b) / 3;
+  return channelSpread <= 18 && luminance >= 42 && luminance <= 118 ? luminance : undefined;
+}
+
+function isCheckerLuminancePair(a: number, b: number): boolean {
+  const diff = Math.abs(a - b);
+  return diff >= 14 && diff <= 42;
+}
+
+function detectCaptionOrBracketMarks(
+  image: RGBAImage,
+  background: SheetConditioningDiagnostics["background"]
+): { detected: boolean; coverage: number } {
+  let foreground = 0;
+  let brightNeutral = 0;
+
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset] ?? 0;
+    const g = image.data[offset + 1] ?? 0;
+    const b = image.data[offset + 2] ?? 0;
+    const a = image.data[offset + 3] ?? 0;
+    if (a <= 0 || colorDistance(r, g, b, background.r, background.g, background.b) <= 42) {
+      continue;
+    }
+    foreground += 1;
+    const channelSpread = Math.max(r, g, b) - Math.min(r, g, b);
+    const luminance = (r + g + b) / 3;
+    if (luminance >= 168 && channelSpread <= 52) {
+      brightNeutral += 1;
+    }
+  }
+
+  const coverage = foreground > 0 ? brightNeutral / foreground : 0;
+  return { detected: brightNeutral >= 60 && coverage >= 0.015, coverage };
+}
+
+function averageBlockRgb(image: RGBAImage, x: number, y: number, w: number, h: number): { r: number; g: number; b: number } {
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let count = 0;
+
+  for (let yy = y; yy < y + h; yy += 1) {
+    for (let xx = x; xx < x + w; xx += 1) {
+      const offset = (yy * image.width + xx) * 4;
+      const alpha = image.data[offset + 3] ?? 0;
+      if (alpha <= 0) {
+        continue;
+      }
+      r += image.data[offset] ?? 0;
+      g += image.data[offset + 1] ?? 0;
+      b += image.data[offset + 2] ?? 0;
+      count += 1;
+    }
+  }
+
+  if (count === 0) {
+    return { r: 0, g: 0, b: 0 };
+  }
+
+  return { r: r / count, g: g / count, b: b / count };
 }
 
 function sampleCornerBackground(image: RGBAImage): SheetConditioningDiagnostics["background"] {

@@ -223,6 +223,32 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
     });
   }
 
+  if (isSheetAsset(assetType) && sheetLayout.diagnostics?.conditioning?.recommendFrameFirst) {
+    const issueSummary = sheetLayout.diagnostics.conditioning.issues.map((issue) => issue.message).join(" ");
+    findings.push({
+      id: "sheet-conditioning-needed",
+      severity: "warning",
+      category: "sheet",
+      title: "Condition sheet before final output",
+      detail: issueSummary || "The source sheet contains presentation or palette artifacts that should be cleaned before final resizing.",
+      recommendationId: "condition-sheet-first"
+    });
+    recommendations.push({
+      id: "condition-sheet-first",
+      label: "Condition frames first",
+      rationale: "Presentation-style sheets should remove captions, checkerboards, and decorative marks before final palette locking or output resizing.",
+      settings: {
+        grid: { detect: "manual" },
+        alpha: "backgroundFloodFill",
+        alphaSettings: {
+          tolerance: 18,
+          decontaminateRgb: true,
+          transparentRgb: "#000000"
+        }
+      }
+    });
+  }
+
   if (outlineCandidates.length > 1) {
     findings.push({
       id: "outline-candidates",
