@@ -39,7 +39,7 @@ describe("asset type cleanup presets", () => {
 
     expect(preset.alpha).toBe("preserve");
     expect(preset.denoiseStrength).toBe(0);
-    expect(getAssetTypeWarnings("tilemap").map((warning) => warning.code)).toContain("tilemap-inspect-only");
+    expect(getAssetTypeWarnings("tilemap").map((warning) => warning.code)).toContain("tilemap-grid-review");
   });
 
   test("preserves backgrounds with a larger palette budget and no denoise", () => {

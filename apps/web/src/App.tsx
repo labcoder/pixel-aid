@@ -57,6 +57,7 @@ import {
   analyzeSceneAssetDiagnostics,
   analyzeTilesetSeams,
   detectOutlineColorCandidates,
+  extractTilemapMetadata,
   sliceSheetFrames
 } from "@pixelaid/core";
 import type { QualityFinding, QualityRecommendation, QualityReport } from "@pixelaid/core";
@@ -64,6 +65,7 @@ import {
   analyzeFrameStability,
   createEngineExportBundle,
   createExportValidationReport,
+  createGenericTilemapExport,
   createGplPaletteFile,
   createHexPaletteFile,
   createPaletteJsonFile,
@@ -599,6 +601,9 @@ export function App() {
   const [sheetMargin, setSheetMargin] = useState(initialSettings.sheetMargin);
   const [sheetSpacing, setSheetSpacing] = useState(initialSettings.sheetSpacing);
   const [sheetExtrude, setSheetExtrude] = useState(initialSettings.sheetExtrude);
+  const [tilemapOffsetX, setTilemapOffsetX] = useState(0);
+  const [tilemapOffsetY, setTilemapOffsetY] = useState(0);
+  const [tilemapIdentityThreshold, setTilemapIdentityThreshold] = useState(2);
   const [pivotPreset, setPivotPreset] = useState<PivotPreset>(initialSettings.pivotPreset);
   const [customPivotX, setCustomPivotX] = useState(initialSettings.customPivotX);
   const [customPivotY, setCustomPivotY] = useState(initialSettings.customPivotY);
@@ -1183,6 +1188,33 @@ export function App() {
           })
         : null,
     [assetType, frameHeight, frameWidth, previewImage, sheetMargin, sheetMode, sheetSpacing]
+  );
+  const tilemapMetadataPreview = useMemo(
+    () =>
+      assetType === "tilemap" && previewImage
+        ? extractTilemapMetadata(previewImage, {
+            tileWidth: frameWidth,
+            tileHeight: frameHeight,
+            offsetX: tilemapOffsetX,
+            offsetY: tilemapOffsetY,
+            spacing: sheetSpacing,
+            rows: sheetRows,
+            columns: sheetColumns,
+            identityThreshold: tilemapIdentityThreshold / 100
+          })
+        : null,
+    [
+      assetType,
+      frameHeight,
+      frameWidth,
+      previewImage,
+      sheetColumns,
+      sheetRows,
+      sheetSpacing,
+      tilemapIdentityThreshold,
+      tilemapOffsetX,
+      tilemapOffsetY
+    ]
   );
   const sceneDiagnostics = useMemo(
     () =>
@@ -4155,6 +4187,22 @@ export function App() {
       manifest,
       targets: engineExportTargets
     });
+    const tilemapBundle =
+      assetType === "tilemap"
+        ? createGenericTilemapExport(
+            extractTilemapMetadata(exportResult.image, {
+              tileWidth: exportSheet.frameWidth,
+              tileHeight: exportSheet.frameHeight,
+              offsetX: tilemapOffsetX,
+              offsetY: tilemapOffsetY,
+              spacing: exportSheet.spacing,
+              rows: exportSheet.rows,
+              columns: exportSheet.columns,
+              identityThreshold: tilemapIdentityThreshold / 100
+            }),
+            { name: baseName }
+          )
+        : { files: [], warnings: [] };
 
     void (async () => {
       const frameSequence = sheetMode && exportFrames.length > 0 ? createFrameSequenceImages({ image: exportResult.image, frames: exportFrames }) : [];
@@ -4176,13 +4224,14 @@ export function App() {
         `palettes/${baseName}.palette.json`,
         `reports/${baseName}_validation.json`,
         ...engineBundle.files.map((file) => file.path),
+        ...tilemapBundle.files.map((file) => file.path),
         ...framePngFiles.map((file) => file.path)
       ];
       const validation = createExportValidationReport({
         manifest,
         files: filePaths,
         frameSequenceNames: frameSequence.map((frame) => frame.frameName),
-        extraIssues: engineWarningsToValidationIssues(engineBundle.warnings)
+        extraIssues: engineWarningsToValidationIssues([...engineBundle.warnings, ...tilemapBundle.warnings])
       });
       const fixedPng = await rgbaImageToPngBlob(exportResult.image);
       const bundleFiles: AssetBundleFile[] = [
@@ -4196,6 +4245,7 @@ export function App() {
         jsonBundleFile(`palettes/${baseName}.palette.json`, createPaletteJsonFile(exportResult.palette, { image: imageName })),
         jsonBundleFile(`reports/${baseName}_validation.json`, validation),
         ...engineBundle.files.map(engineExportFileToBundleFile),
+        ...tilemapBundle.files.map(engineExportFileToBundleFile),
         ...framePngFiles
       ];
       const bundle = createAssetBundleZip({ files: bundleFiles });
@@ -4235,6 +4285,7 @@ export function App() {
     });
   }, [
     appendLog,
+    assetType,
     engineExportTargets,
     exportBundleName,
     fixResult,
@@ -4251,7 +4302,10 @@ export function App() {
     sheetMode,
     sheetOptions,
     sheetRowAnimations,
-    sheetSpacing
+    sheetSpacing,
+    tilemapIdentityThreshold,
+    tilemapOffsetX,
+    tilemapOffsetY
   ]);
 
   useEffect(() => {
@@ -5120,6 +5174,39 @@ export function App() {
         <NumberField label="Sheet margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
         <NumberField label="Sheet spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
         <NumberField label="Sheet extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
+        {assetType === "tilemap" ? (
+          <div className="sheet-layout-scope-controls" aria-label="Tilemap grid confirmation">
+            <div className="sheet-layout-scope-heading">
+              <strong>Tilemap grid</strong>
+              <span>
+                {tilemapMetadataPreview
+                  ? `${tilemapMetadataPreview.uniqueTileCount} unique / ${Math.round(tilemapMetadataPreview.repeatedTileRatio * 100)}% repeated`
+                  : "No map preview"}
+              </span>
+            </div>
+            <div className="sheet-layout-scope-grid">
+              <NumberField label="Offset X" value={tilemapOffsetX} min={0} max={4096} onChange={setTilemapOffsetX} />
+              <NumberField label="Offset Y" value={tilemapOffsetY} min={0} max={4096} onChange={setTilemapOffsetY} />
+              <NumberField
+                label="Identity %"
+                value={tilemapIdentityThreshold}
+                min={0}
+                max={25}
+                onChange={(value) => setTilemapIdentityThreshold(clampSheetInteger(value, 0, 25))}
+              />
+              <ReadonlyField label="Status" value={tilemapMetadataPreview?.status ?? "inspectOnly"} text />
+            </div>
+            {tilemapMetadataPreview?.warnings.length ? (
+              <div className="asset-type-warning-list" aria-label="Tilemap workflow warnings">
+                {tilemapMetadataPreview.warnings.slice(0, 3).map((warning) => (
+                  <p key={warning.code}>{warning.message}</p>
+                ))}
+              </div>
+            ) : (
+              <small>Generic tilemap export will include a canonical tile ID layer and first-use tile rectangles.</small>
+            )}
+          </div>
+        ) : null}
         {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="sheet-fit-summary is-valid">
             <strong>{plannedSheetLayout.frameCount} frames</strong>

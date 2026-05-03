@@ -69,3 +69,5 @@ export { analyzeTilesetSeams } from "./tileDiagnostics";
 export type { TilesetSeamAnalysisOptions } from "./tileDiagnostics";
 export { analyzeTilemapDiagnostics, detectTilemapGridCandidates } from "./tilemapDiagnostics";
 export type { TilemapDiagnosticsOptions } from "./tilemapDiagnostics";
+export { extractTilemapMetadata } from "./tilemapWorkflow";
+export type { TilemapExtractionOptions } from "./tilemapWorkflow";

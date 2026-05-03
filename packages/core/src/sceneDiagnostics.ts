@@ -109,9 +109,9 @@ function buildWarnings(
     });
   } else {
     warnings.push({
-      code: "tilemap-inspect-only",
-      severity: "warning",
-      message: "Tilemap assets are inspect-only; preserve source layout and validate engine metadata before export."
+      code: "tilemap-grid-review",
+      severity: "info",
+      message: "Tilemap assets need grid, offset, and tile identity review before exporting structured map metadata."
     });
   }
 

@@ -146,9 +146,9 @@ function buildTilemapWarnings(
 ): AssetTypeWarning[] {
   const warnings: AssetTypeWarning[] = [
     {
-      code: "tilemap-inspect-only",
-      severity: "warning",
-      message: "Tilemap sources are inspect-first; review tile candidates before applying destructive cleanup."
+      code: "tilemap-grid-review",
+      severity: "info",
+      message: "Tilemap sources need grid, offset, and tile identity review before exporting structured map metadata."
     }
   ];
 

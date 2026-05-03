@@ -89,11 +89,24 @@ Detected row animation tags can also be corrected in the timeline. Renaming a ro
 
 Diagnostics report checked seam count, average and maximum edge delta, seam risk, lighting risk, and issue records for edge mismatch or lighting discontinuity. The pass is inspect-first: it warns and powers the repeat preview, but it does not rewrite tile pixels or invent tile metadata. Engine-specific tileset metadata remains an exporter concern.
 
+## Tilemap Metadata Workflow
+
+Tilemaps are now handled as structured map candidates rather than generic scene images only. The workflow still starts conservatively because a source can be a true tilemap, a rendered level screenshot, a tileset, or a painted background.
+
+`extractTilemapMetadata` accepts a confirmed grid: tile width, tile height, X/Y offset, spacing, optional rows/columns, and a tile identity threshold. It walks the grid in row-major order, compares each tile against existing canonical tiles with an average RGBA distance, and emits:
+
+- `tiles`: canonical tile records with ID, first source rect, first row/column occurrence, occurrence count, coarse signature, and average color.
+- `layers[0].data`: a stable row-major matrix of canonical tile IDs.
+- `status`: `ready` when the grid and repeated tile identity are plausible, or `inspectOnly` when the map appears mostly unique or structurally ambiguous.
+- warnings for empty grids, remainder pixels, low repeat confidence, or very high unique tile counts.
+
+The generic tilemap export writes `tilemap/<name>.tilemap.json`. This is engine-agnostic metadata, not a full Tiled or LDtk project file. Tiled and LDtk map adapters should build from this canonical representation later, after the user has confirmed grid bounds and tile identity behavior.
+
 ## Scene Diagnostics
 
 `analyzeSceneAssetDiagnostics` is used for backgrounds and tilemaps. It samples large images with a bounded deterministic stride, counts coarse 5-bit RGB bins, and estimates detail density from local luminance differences. The result tells the UI when an asset has broad palette density or dense scene detail that would be harmed by sprite-style cleanup.
 
-Background diagnostics always bias toward preservation-first cleanup. Tilemap diagnostics add an inspect-only warning because PixelAid can inspect a map-like image today but does not yet import or export structured map data.
+Background diagnostics always bias toward preservation-first cleanup. Tilemap diagnostics now bias toward grid review: they surface map-like repeated tile candidates and keep low-confidence exports marked as inspect-only instead of claiming engine-ready map data.
 
 ### Animation Stability Diagnostics
 
