@@ -664,7 +664,7 @@ export function App() {
   );
   const [selectedAnimationName, setSelectedAnimationName] = useState(ALL_ANIMATIONS);
   const [bottomPanelHeight, setBottomPanelHeight] = useState(initialSettings.bottomPanelHeight);
-  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelSection>("timeline");
+  const [bottomPanelTab, setBottomPanelTab] = useState<BottomPanelSection>("diagnostics");
   const [showBottomPanel, setShowBottomPanel] = useState(true);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackFps, setPlaybackFps] = useState(initialSettings.playbackFps);
@@ -1507,6 +1507,7 @@ export function App() {
     selectedAnimationName !== ALL_ANIMATIONS ? selectedAnimationName : selectedDetectedFrameRowName ?? sheetRowAnimations[0]?.name ?? ALL_ANIMATIONS;
   const selectedManualAnimation = sheetRowAnimations.find((animation) => animation.name === selectedManualAnimationName);
   const canEditManualSheetCell = sheetMode && selectedDetectedFrame !== undefined && sheetRowAnimations.length > 0;
+  const canRemoveManualSheetCell = canEditManualSheetCell && editableSheetFrames.length > 1;
   const canEditManualSheetRow = sheetMode && selectedManualAnimation !== undefined;
   const canRemoveManualSheetRow = canEditManualSheetRow && sheetRowAnimations.length > 1;
   const selectedSheetLayoutRow = plannedSheetLayout.rows.find((row) => row.name === selectedManualAnimationName);
@@ -1598,7 +1599,10 @@ export function App() {
   const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
   const timelineState = getTimelineState(mode, timelineFrames.length);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
-  const bottomPanelSections = useMemo(() => getBottomPanelSections(mode, assetType), [assetType, mode]);
+  const bottomPanelSections = useMemo(
+    () => getBottomPanelSections(mode, assetType, selectedAsset && sheetMode ? timelineFrames.length : 0),
+    [assetType, mode, selectedAsset, sheetMode, timelineFrames.length]
+  );
   const activeBottomPanelTab = bottomPanelSections.includes(bottomPanelTab) ? bottomPanelTab : (bottomPanelSections[0] ?? "diagnostics");
   const showTimelinePanel = activeBottomPanelTab === "timeline";
   const showTilePreviewPanel = activeBottomPanelTab === "tilePreview";
@@ -6365,6 +6369,16 @@ export function App() {
                 <span>{timelineSourceModeLabel}</span>
                 <span>{timelineFrames.length} frames</span>
                 <span>{playbackFps} FPS</span>
+              </div>
+              <div className="timeline-panel-actions" aria-label="Timeline frame and row actions">
+                <button type="button" disabled={!canRemoveManualSheetCell} onClick={removeSelectedCell}>
+                  <Trash2 size={13} />
+                  Frame
+                </button>
+                <button type="button" disabled={!canRemoveManualSheetRow} onClick={removeSelectedRow}>
+                  <Trash2 size={13} />
+                  Row
+                </button>
               </div>
             </div>
             {timelineState.enabled ? (
