@@ -2833,6 +2833,26 @@ button:focus-visible {
   color: #78837e;
 }
 
+.tile-repair-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.2rem 0;
+}
+
+.tile-repair-actions button {
+  min-height: 28px;
+  padding: 0 0.55rem;
+  font-size: 0.72rem;
+}
+
+.tile-repair-actions button:first-child:not(:disabled) {
+  color: #101112;
+  background: var(--green);
+  border-color: var(--green);
+  font-weight: 800;
+}
+
 .stability-summary {
   display: grid;
   gap: 0.25rem;

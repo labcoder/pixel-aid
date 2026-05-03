@@ -83,6 +83,35 @@ export type TilesetSeamRepairSuggestion = {
   message: string;
 };
 
+export type TilesetSeamRepairApplication = {
+  id: string;
+  issueCode: TilesetSeamIssueCode;
+  strategy: TilesetSeamRepairStrategy;
+  edge: TilesetSeamEdge;
+  tileA: { row: number; column: number };
+  tileB: { row: number; column: number };
+  confidence: number;
+  changedPixels: number;
+  beforeScore: number;
+  afterScore: number;
+};
+
+export type TilesetSeamRepairSkipped = {
+  id: string;
+  issueCode: TilesetSeamIssueCode;
+  strategy: TilesetSeamRepairStrategy;
+  edge: TilesetSeamEdge;
+  tileA: { row: number; column: number };
+  tileB: { row: number; column: number };
+  confidence: number;
+  reason: "manual-review-required" | "unsupported-strategy" | "score-too-high" | "transparent-edge" | "no-change";
+};
+
+export type TilesetSeamRepairDiagnostics = {
+  applied: TilesetSeamRepairApplication[];
+  skipped: TilesetSeamRepairSkipped[];
+};
+
 export type TilesetSeamDiagnostics = {
   tileWidth: number;
   tileHeight: number;
@@ -280,6 +309,7 @@ export type PixelFixDiagnostics = {
   morphology?: MorphologyDiagnostics;
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
+  tilesetRepairs?: TilesetSeamRepairDiagnostics;
 };
 
 export type ContrastExpansionSettings = {

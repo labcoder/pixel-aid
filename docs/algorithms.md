@@ -87,7 +87,11 @@ Detected row animation tags can also be corrected in the timeline. Renaming a ro
 
 `analyzeTilesetSeams` compares adjacent tile edges in native pixel space using the current frame/cell layout. It checks each right-left neighbor pair and each bottom-top neighbor pair. RGB edge distance is normalized against the maximum RGB distance, and alpha mismatches contribute seam risk when one edge is visible and the other is transparent.
 
-Diagnostics report checked seam count, average and maximum edge delta, seam risk, lighting risk, and issue records for edge mismatch or lighting discontinuity. The pass is inspect-first: it warns and powers the repeat preview, but it does not rewrite tile pixels or invent tile metadata. Engine-specific tileset metadata remains an exporter concern.
+Diagnostics report checked seam count, average and maximum edge delta, seam risk, lighting risk, and issue records for edge mismatch or lighting discontinuity. The repeat preview uses those issues to draw seam guides.
+
+`applyTilesetSeamRepairs` is a conservative output-only repair pass. It clones the current fixed image, applies only low-risk `edgeColorHarmonization` and `lightingHarmonization` suggestions, and edits the one-pixel edge pair on each affected seam by averaging the two neighboring edge colors. Severe seams, transparent-edge mismatches, crop/phase review, and manual repaint suggestions remain skipped records. The web app exposes this as an explicit Apply/Undo action after Fix, and export diagnostics record applied/skipped repair metadata so the result remains auditable.
+
+This is not a semantic tile painter. It is meant to remove small repeat seams caused by slight edge or lighting drift while preserving intentional hard borders and leaving high-risk repairs to manual review. Engine-specific tileset metadata remains an exporter concern.
 
 ## Tilemap Metadata Workflow
 

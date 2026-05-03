@@ -67,6 +67,8 @@ export type { SheetConditioningOptions } from "./sheetConditioning";
 export { detectSheetLayout, sliceSheetFrames } from "./sheet";
 export { analyzeTilesetSeams } from "./tileDiagnostics";
 export type { TilesetSeamAnalysisOptions } from "./tileDiagnostics";
+export { applyTilesetSeamRepairs } from "./tilesetRepair";
+export type { TilesetSeamRepairOptions, TilesetSeamRepairResult } from "./tilesetRepair";
 export { analyzeTilemapDiagnostics, detectTilemapGridCandidates } from "./tilemapDiagnostics";
 export type { TilemapDiagnosticsOptions } from "./tilemapDiagnostics";
 export { extractTilemapMetadata } from "./tilemapWorkflow";

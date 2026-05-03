@@ -56,6 +56,7 @@ import {
   analyzeQualityReport,
   analyzeSceneAssetDiagnostics,
   analyzeTilesetSeams,
+  applyTilesetSeamRepairs,
   detectOutlineColorCandidates,
   extractTilemapMetadata,
   sliceSheetFrames
@@ -655,6 +656,7 @@ export function App() {
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
+  const [tilesetRepairBackup, setTilesetRepairBackup] = useState<PixelFixResult | null>(null);
   const [lastExportValidation, setLastExportValidation] = useState<{
     ok: boolean;
     warningCount: number;
@@ -942,6 +944,9 @@ export function App() {
     setExportBundleName(selectedAsset ? defaultExportBundleFilename(selectedAsset.name) : "");
   }, [selectedAsset?.id, selectedAsset?.name]);
   useEffect(() => {
+    setTilesetRepairBackup(null);
+  }, [selectedAsset?.id]);
+  useEffect(() => {
     setLastExportValidation(null);
   }, [engineExportTargets, exportBundleName, fixResult, selectedAsset?.id]);
   const sourcePaletteAnalysis = useMemo(
@@ -1224,6 +1229,14 @@ export function App() {
     [assetType, selectedAsset]
   );
   const tileDiagnosticsSummary = useMemo(() => formatTilesetDiagnosticsSummary(tilesetDiagnostics), [tilesetDiagnostics]);
+  const autoRepairableTilesetSuggestions = useMemo(
+    () =>
+      (tilesetDiagnostics?.repairSuggestions ?? []).filter(
+        (suggestion) =>
+          (suggestion.strategy === "edgeColorHarmonization" || suggestion.strategy === "lightingHarmonization") && suggestion.confidence < 0.6
+      ),
+    [tilesetDiagnostics]
+  );
   const sceneDiagnosticsSummary = useMemo(() => formatSceneDiagnosticsSummary(sceneDiagnostics), [sceneDiagnostics]);
   const tilePreviewFrame = useMemo(
     () => getTilePreviewFrame(fixResult ? sheetFrames : sourceSheetFrames, selectedFrameIndex),
@@ -2346,6 +2359,7 @@ export function App() {
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
     lastLoggedFixStageRef.current = undefined;
+    setTilesetRepairBackup(null);
     const operation = nextBusyOperation("fix", sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
     setFixOperation(operation);
     setFixProgress({ requestId: "pending", stage: "decode-prep", percent: 0 });
@@ -2419,6 +2433,76 @@ export function App() {
     sheetFrames.length,
     sheetMode
   ]);
+
+  const applyTilesetRepairs = useCallback(async () => {
+    if (!fixResult || !tilesetDiagnostics || isEditorBusy) {
+      return;
+    }
+
+    const operation = nextBusyOperation("fix", "Applying tileset seam repairs...");
+    setFixOperation(operation);
+    await waitForNextPaint();
+
+    try {
+      const result = applyTilesetSeamRepairs(fixResult.image, {
+        tileWidth: frameWidth,
+        tileHeight: frameHeight,
+        margin: sheetMargin,
+        spacing: sheetSpacing,
+        suggestions: tilesetDiagnostics.repairSuggestions
+      });
+
+      if (result.appliedRepairs.length === 0) {
+        appendLog(`Tileset seam repair skipped: ${result.skippedRepairs.length} suggestion(s) require review.`);
+        return;
+      }
+
+      setTilesetRepairBackup((current) => current ?? fixResult);
+      setFixResult({
+        ...fixResult,
+        image: result.image,
+        diagnostics: {
+          ...fixResult.diagnostics,
+          tilesetRepairs: {
+            applied: result.appliedRepairs,
+            skipped: result.skippedRepairs
+          }
+        }
+      });
+      appendLog(`Tileset seam repair applied: ${result.appliedRepairs.length} seam(s), ${result.skippedRepairs.length} skipped.`);
+    } catch (error) {
+      recordOperationError("tileset repair", error, "Review tile width/height, spacing, and margin before retrying seam repair.", {
+        asset: selectedAsset?.name,
+        tileWidth: frameWidth,
+        tileHeight: frameHeight,
+        spacing: sheetSpacing,
+        margin: sheetMargin
+      });
+    } finally {
+      setFixOperation((current) => clearBusyOperation(current, operation.id));
+    }
+  }, [
+    appendLog,
+    fixResult,
+    frameHeight,
+    frameWidth,
+    isEditorBusy,
+    nextBusyOperation,
+    recordOperationError,
+    selectedAsset?.name,
+    sheetMargin,
+    sheetSpacing,
+    tilesetDiagnostics
+  ]);
+
+  const undoTilesetRepairs = useCallback(() => {
+    if (!tilesetRepairBackup || isEditorBusy) {
+      return;
+    }
+    setFixResult(tilesetRepairBackup);
+    setTilesetRepairBackup(null);
+    appendLog("Tileset seam repair undone.");
+  }, [appendLog, isEditorBusy, tilesetRepairBackup]);
 
   const autoSuggest = useCallback(async () => {
     if (!selectedAsset || isEditorBusy) {
@@ -6538,6 +6622,25 @@ export function App() {
                 <div className="frame-preview-meta">
                   <strong>{tilePreviewFrame ? `${tilePreviewFrame.rect.w}x${tilePreviewFrame.rect.h} tile` : "No tile selected"}</strong>
                   <span>{tileDiagnosticsSummary.summary}</span>
+                  <div className="tile-repair-actions">
+                    <button
+                      type="button"
+                      disabled={!fixResult || autoRepairableTilesetSuggestions.length === 0 || isEditorBusy}
+                      onClick={applyTilesetRepairs}
+                    >
+                      Apply seam repair
+                    </button>
+                    <button type="button" disabled={!tilesetRepairBackup || isEditorBusy} onClick={undoTilesetRepairs}>
+                      Undo repair
+                    </button>
+                  </div>
+                  {fixResult?.diagnostics?.tilesetRepairs ? (
+                    <small>
+                      Repairs: {fixResult.diagnostics.tilesetRepairs.applied.length} applied / {fixResult.diagnostics.tilesetRepairs.skipped.length} skipped
+                    </small>
+                  ) : (
+                    <small>{autoRepairableTilesetSuggestions.length} conservative repair suggestion(s) can be applied after Fix.</small>
+                  )}
                   {tileDiagnosticsSummary.warnings.length > 0 ? (
                     tileDiagnosticsSummary.warnings.slice(0, 3).map((warning, index) => (
                       <small key={`${warning}-${index}`}>{warning}</small>
