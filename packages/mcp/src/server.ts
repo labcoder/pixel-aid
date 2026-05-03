@@ -1,7 +1,6 @@
 #!/usr/bin/env node
-import { stderr, stdin, stdout } from "node:process";
+import { stdin, stdout } from "node:process";
 import type { Readable, Writable } from "node:stream";
-import { pathToFileURL } from "node:url";
 import {
   createJsonRpcErrorResponse,
   handlePixelAidMcpRequest,
@@ -157,14 +156,3 @@ function toBuffer(chunk: unknown): Buffer {
   return Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk), "utf8");
 }
 
-function isMainModule(): boolean {
-  const entry = process.argv[1];
-  return !!entry && import.meta.url === pathToFileURL(entry).href;
-}
-
-if (isMainModule()) {
-  runPixelAidMcpStdioServer().catch((error: unknown) => {
-    stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-    process.exitCode = 1;
-  });
-}

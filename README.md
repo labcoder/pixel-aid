@@ -15,6 +15,7 @@ npm install
 npm run dev
 npm run desktop:dev
 npm run desktop:check
+npm run mcp:serve
 npm run test
 npm run lint
 npm run typecheck
@@ -88,7 +89,7 @@ Automation workflow:
 2. Run `pixelaid report input.png more.jpg --json` when an agent or script needs ranked quality findings and setting recommendations before changing files.
 3. Run `pixelaid suggest input.png --asset-type sprite --target 64x64 --json` when an agent or script needs normalized settings without writing files.
 4. Run `pixelaid fix`, `pixelaid fix-sheet`, `pixelaid palette`, or `pixelaid export` to produce PNG, manifest, palette, engine sidecars, and optional ZIP output. For quick local validation, build the CLI and run `node packages/cli/dist/bin.cjs fix generated.jpg --out fixed.png --auto --asset-type sprite --json`.
-5. Use `@pixelaid/mcp` tool definitions and handlers for MCP-ready agent integrations without launching the editor.
+5. Use `@pixelaid/mcp` tool definitions, direct handlers, or `npm run mcp:serve` for stdio MCP agent integrations without launching the editor.
 
 ## Implemented Features
 
@@ -140,7 +141,7 @@ Automation:
 
 - `@pixelaid/automation` wraps core/exporter operations for Node: PNG/JPEG input decode with format metadata, PNG encode, inspect, quality reports, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
 - `@pixelaid/cli` provides `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, direct bundled execution, `fix --auto`, explicit frame metadata support, palette strategy/dithering options, cleanup/outline validation flags, engine targets, and optional ZIP bundling.
-- `@pixelaid/mcp` provides MCP-ready tool definitions and direct handlers for `inspect_image`, `quality_report`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
+- `@pixelaid/mcp` provides MCP-ready tool definitions, direct handlers, and a bundled stdio server process for `inspect_image`, `quality_report`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
 
 ## Known Limitations
 
@@ -151,7 +152,7 @@ Automation:
 - Export currently supports generic manifests plus Godot, Unity, Phaser, TexturePacker-compatible, Tiled, and LDtk helper files.
 - Tilesets support seam diagnostics, preview-only repair suggestions, and tile-engine metadata sidecars. Tilemaps support inspect-first classification and tile-size candidates, while full map-data import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
-- CLI and MCP-ready automation currently support PNG input/output plus JPEG input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA. Quality reports are handler-ready, but a long-running MCP server, local HTTP API, WebP/additional codecs, and streaming progress are future work.
+- CLI and MCP-ready automation currently support PNG input/output plus JPEG input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA. The MCP stdio server is available locally, while a local HTTP API, WebP/additional codecs, and streaming progress are future work.
 
 ## Prioritized Roadmap
 
@@ -161,7 +162,7 @@ Automation:
 4. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
 5. Exporters: deepen tilemap metadata and project-specific map editor workflows when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
-7. Automation hardening: turn the MCP-ready handlers into a server process, add a local HTTP API, add WebP/additional codecs, and support progress events for long batch jobs.
+7. Automation hardening: add a local HTTP API, add WebP/additional codecs, and support progress events for long batch jobs.
 8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
 
 ## Suggested Next Step

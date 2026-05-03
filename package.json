@@ -19,6 +19,7 @@
     "bundle:budget": "node scripts/check-web-bundle-budget.mjs",
     "license:report": "node scripts/license-report.mjs",
     "license:check": "node scripts/license-report.mjs --check",
+    "mcp:serve": "npm run build -w @pixelaid/mcp && node packages/mcp/dist/server.cjs",
     "build": "npm run build --workspaces --if-present",
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",

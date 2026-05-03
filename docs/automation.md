@@ -190,6 +190,21 @@ node packages\cli\dist\bin.cjs fix generated.jpg `
 
 `@pixelaid/mcp` exports `pixelaidMcpTools`, `validateToolInput`, and `handlePixelAidTool`.
 
+For a long-running stdio MCP server from the repo:
+
+```sh
+npm run mcp:serve
+```
+
+For a package-style binary after building the workspace:
+
+```sh
+npm run build -w @pixelaid/mcp
+node packages/mcp/dist/server.cjs
+```
+
+The server reads JSON-RPC messages from stdin and writes content-length-framed JSON-RPC responses to stdout. It does not open a network port, call AI providers, or request broad filesystem access. Tools can read and write only the paths supplied in tool arguments, so MCP clients should run it from a trusted local workspace and pass explicit output paths. Bad paths, unsupported formats, malformed requests, and processing failures use the same sanitized automation error envelope as the direct handlers.
+
 Tool names:
 
 - `inspect_image`
@@ -215,7 +230,6 @@ Errors keep the same PixelAid automation envelope as the CLI.
 
 ## Deferred
 
-- A long-running MCP server process.
 - Local HTTP API.
 - WebP and other non-PNG codecs beyond JPEG input.
 - Direct AI-provider generation or editing calls.

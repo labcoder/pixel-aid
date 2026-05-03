@@ -41,7 +41,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | Tilesets/tilemaps | Repeat preview, seam diagnostics, conservative seam repair, tilemap grid confirmation, canonical tile ID export. | Broken tileset sample and one map-like image. | Seam warnings appear for known-bad sample, low-risk repair can be applied/undone, and tilemaps export generic metadata when ready while staying `inspectOnly` when tile identity confidence is low. |
 | Export | ZIP bundle, manifest, palette files, validation report, frame sequence, engine sidecars. | Sprite and animation sheet outputs. | Bundle opens, manifest frame rects/pivots/animations match preview, selected engine helper files exist. |
 | CLI | `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, `export`, `--diagnostics`. | Fixture-generated PNGs and one real beta PNG. | JSON envelopes and exit codes are stable; diagnostics sidecars are sanitized. |
-| MCP-ready handlers | Tool schema validation and handler responses. | Minimal fixture paths. | Structured content includes `ok`, tool name, result/warnings, and stable error envelopes. |
+| MCP server | Tool schema validation, handler responses, and stdio server process. | Minimal fixture paths plus `tools/list` over content-length framing. | Structured content includes `ok`, tool name, result/warnings, stable error envelopes, and the built server exits cleanly after stdin closes. |
 | Desktop | Native import/export dialogs, app icon, packaged metadata, ZIP save path. | Same sprite and sheet samples. | Packaged app uses PixelAid icon and exports through native save dialog. |
 | Recovery | Failed import/analyze/fix/export, crash boundary, diagnostic JSON export. | Non-image file, blocked output path, intentionally bad CLI flags. | User sees recovery guidance, source asset remains available, diagnostics redact secrets/prompts. |
 
@@ -79,7 +79,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 
 | Limitation | User-facing note | Follow-up |
 | --- | --- | --- |
-| Full MCP server process is deferred. | MCP-ready handlers exist, but a long-running server is future work. | Post-1.0 automation milestone. |
+| MCP server is local stdio only. | The bundled MCP process is available for trusted local agents; remote/network serving remains future work. | Local HTTP/API milestone. |
 | CLI/MCP codec coverage is intentionally small. | PNG is canonical output and JPEG/JPG input is supported; WebP or other sources should be converted externally for now. | WebP/additional codec follow-up. |
 | Tiled/LDtk tilemap project export is deferred. | PixelAid exports generic canonical tilemap metadata, but not full editor project/map files yet. | Engine-specific tilemap adapter milestone. |
 | Tileset seam repair is conservative. | Low-risk edge/lighting drift can be applied to the fixed output; severe seams and semantic repainting still need manual work. | Advanced tileset repair milestone. |
