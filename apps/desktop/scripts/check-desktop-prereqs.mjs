@@ -12,7 +12,7 @@ const checks = [
 const missing = [];
 
 for (const check of checks) {
-  const result = spawnSync(check.command, check.args, { encoding: "utf8", shell: true });
+  const result = spawnSync(check.command, check.args, { encoding: "utf8" });
   if (result.status === 0) {
     const version = result.stdout.trim() || result.stderr.trim();
     console.log(`ok ${check.label}: ${version}`);
@@ -29,3 +29,5 @@ if (missing.length > 0) {
   console.error("https://rustup.rs/");
   process.exit(1);
 }
+
+console.log("release signing: run `npm run release:check -w @pixelaid/desktop` before producing public desktop artifacts.");

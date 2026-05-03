@@ -9,9 +9,13 @@ npm run desktop:dev
 npm run desktop:check
 npm run desktop:build
 npm run desktop:info
+npm run desktop:release:check
+npm run desktop:checksums
 ```
 
 The desktop build commands require the Rust toolchain and Cargo to be installed. `npm run desktop:check` reports missing prerequisites before packaging starts. The normal root `npm run build` command intentionally stays focused on the TypeScript workspaces so web/core verification can pass on machines that do not have Rust installed yet.
+
+Unsigned local builds can use `npm run desktop:build`. Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory.
 
 ## Structure
 
@@ -23,13 +27,13 @@ apps/desktop/src-tauri/tauri.conf.json
 
 The Tauri config runs the existing web dev server in development and builds `@pixelaid/web` before packaging. The packaged app loads `apps/web/dist`.
 
-See `docs/desktop-release.md` for the release packaging checklist, artifact notes, and signing/update gaps.
+See `docs/desktop-release.md` for the release packaging checklist, artifact notes, signing prerequisites, checksum generation, and update policy.
 
 ## Current Scope
 
 The desktop shell wraps the web editor and enables native image import plus ZIP bundle export through the operating system's open/save dialogs. Drag/drop and paste still use the browser path, and the browser build still uses the web file picker and download behavior.
 
-Editor settings and user presets persist through the same local preference store used by the web app. App icons are generated from the first-party PixelAid brand source and referenced by the Tauri bundle config. Signing and installer artifact publication are tracked as separate release-owner steps.
+Editor settings and user presets persist through the same local preference store used by the web app. App icons are generated from the first-party PixelAid brand source and referenced by the Tauri bundle config. Signing, notarization, checksum generation, and installer artifact publication are release-owner steps documented in `docs/desktop-release.md`.
 
 ## Filesystem Permissions
 
