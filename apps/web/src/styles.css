@@ -168,12 +168,12 @@ button:focus-visible {
   display: flex;
   align-items: center;
   gap: 0.7rem;
-  min-width: 220px;
+  min-width: 150px;
 }
 
 .brand-logo {
-  width: 100px;
-  height: 34px;
+  width: 128px;
+  height: 44px;
   flex: 0 0 auto;
   object-fit: contain;
   image-rendering: auto;
@@ -1468,6 +1468,12 @@ button:focus-visible {
   opacity: 0.38;
 }
 
+.mini-icon-button.active {
+  color: #101112;
+  background: var(--cyan);
+  border-color: var(--cyan);
+}
+
 .help-button {
   position: relative;
   width: 24px;
@@ -2225,10 +2231,66 @@ button:focus-visible {
   text-align: right;
 }
 
+.grid-candidate-review {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+
+.grid-candidate-summary {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.55rem;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.grid-candidate-summary span {
+  min-width: 0;
+  display: grid;
+  gap: 0.16rem;
+}
+
+.grid-candidate-summary strong {
+  color: var(--text);
+  font-size: 0.76rem;
+}
+
+.grid-candidate-summary small {
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid-candidate-summary button {
+  min-height: 28px;
+  padding: 0 0.55rem;
+  font-size: 0.7rem;
+}
+
+.grid-candidate-review details {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.grid-candidate-review summary {
+  cursor: pointer;
+  color: var(--cyan);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
 .grid-candidate-list {
   display: grid;
   gap: 0.5rem;
-  margin-top: 0.7rem;
+  margin-top: 0.45rem;
 }
 
 .grid-candidate-card {
@@ -2786,14 +2848,23 @@ button:focus-visible {
   border-radius: 5px;
 }
 
-.timeline-metadata-panel {
-  order: 4;
+.timeline-workspace {
   min-width: 0;
+  min-height: 0;
   display: grid;
-  grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
+  grid-template-columns: minmax(280px, 0.9fr) minmax(420px, 1.35fr);
   align-items: start;
   gap: 0.65rem;
   margin-top: 0.65rem;
+}
+
+.timeline-metadata-panel,
+.timeline-editing-column {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.65rem;
 }
 
 .timeline-bottom-panel {
@@ -2986,10 +3057,32 @@ button:focus-visible {
 }
 
 .frame-metadata-heading {
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  min-width: 0;
 }
 
-.frame-metadata-heading strong,
+.frame-metadata-toggle {
+  min-width: 0;
+  justify-content: flex-start;
+  padding: 0 0.35rem;
+  color: var(--text);
+  background: transparent;
+  border-color: transparent;
+}
+
+.frame-metadata-toggle svg {
+  color: var(--cyan);
+  transition: transform 0.15s ease;
+}
+
+.frame-metadata-editor.is-expanded .frame-metadata-toggle svg {
+  transform: rotate(180deg);
+}
+
+.frame-metadata-heading .mini-icon-button {
+  min-height: 26px;
+}
+
+.frame-metadata-toggle strong,
 .frame-anchor-title strong {
   color: var(--cyan);
 }
@@ -3096,12 +3189,17 @@ button:focus-visible {
   text-align: right;
 }
 
+.frame-metadata-collapsed-note {
+  color: #78837e;
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 .clip-editor {
-  order: 2;
   min-width: 0;
   display: grid;
   gap: 5px;
-  margin-top: 0.7rem;
+  margin-top: 0;
   color: var(--muted);
   font-size: 0.68rem;
   overflow-x: auto;
@@ -3197,13 +3295,18 @@ button:focus-visible {
 }
 
 .timeline-rail {
-  order: 3;
   flex: 0 0 auto;
   min-height: 64px;
   display: flex;
   gap: 8px;
-  margin-top: 0.7rem;
+  margin-top: 0;
   overflow: auto;
+}
+
+@media (max-width: 1320px) {
+  .timeline-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .timeline-rail button {

@@ -33,6 +33,7 @@ export type ViewportCanvasProps = {
   frames?: SpriteFrame[];
   selectedFrameIndex?: number;
   canEditSourceFrames?: boolean;
+  showFrameMetadataOverlays?: boolean;
   onZoomChange: (zoom: number) => void;
   onFrameSelect?: (index: number) => void;
   onSourceFrameMove?: (index: number, delta: Point) => void;
@@ -53,6 +54,7 @@ export function ViewportCanvas({
   frames = [],
   selectedFrameIndex = -1,
   canEditSourceFrames = false,
+  showFrameMetadataOverlays = true,
   onZoomChange,
   onFrameSelect,
   onSourceFrameMove,
@@ -255,6 +257,7 @@ export function ViewportCanvas({
         frames,
         selectedFrameIndex,
         canEditSourceFrames,
+        showFrameMetadataOverlays,
         panRef.current,
         splitRatioRef.current
       );
@@ -272,6 +275,7 @@ export function ViewportCanvas({
     frames,
     renderKey,
     selectedFrameIndex,
+    showFrameMetadataOverlays,
     showGrid,
     sourceCanvas,
     sourceFrames,
@@ -587,6 +591,7 @@ function drawImageView(
   frames: SpriteFrame[],
   selectedFrameIndex: number,
   canEditSourceFrames: boolean,
+  showFrameMetadataOverlays: boolean,
   pan: Point,
   splitRatio: number
 ): void {
@@ -626,7 +631,7 @@ function drawImageView(
       });
     }
     drawClippedOverlay(ctx, 0, splitX, () => {
-      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex, canEditSourceFrames);
+      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex, canEditSourceFrames, showFrameMetadataOverlays);
     });
 
     ctx.fillStyle = "#101112";
@@ -656,7 +661,7 @@ function drawImageView(
       });
     }
     drawClippedOverlay(ctx, splitX, width - splitX, () => {
-      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex, false);
+      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex, false, showFrameMetadataOverlays);
     });
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
@@ -678,9 +683,9 @@ function drawImageView(
       drawPixelGrid(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
     }
     if (viewMode === "after" && fixedCanvas) {
-      drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex, false);
+      drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex, false, showFrameMetadataOverlays);
     } else {
-      drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex, canEditSourceFrames);
+      drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex, canEditSourceFrames, showFrameMetadataOverlays);
     }
     drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
   }
@@ -783,7 +788,8 @@ function drawFrameOverlays(
   frames: SpriteFrame[],
   zoom: number,
   selectedFrameIndex: number,
-  showResizeHandles: boolean
+  showResizeHandles: boolean,
+  showFrameMetadataOverlays: boolean
 ): void {
   if (frames.length === 0) {
     return;
@@ -810,7 +816,9 @@ function drawFrameOverlays(
     ctx.moveTo(geometry.pivotX + 0.5, geometry.pivotY - 5);
     ctx.lineTo(geometry.pivotX + 0.5, geometry.pivotY + 5);
     ctx.stroke();
-    drawFrameMetadataOverlays(ctx, frame, geometry, zoom);
+    if (showFrameMetadataOverlays) {
+      drawFrameMetadataOverlays(ctx, frame, geometry, zoom);
+    }
 
     if (selected) {
       ctx.fillRect(geometry.x, geometry.y - 16, Math.max(46, frame.name.length * 6), 14);
