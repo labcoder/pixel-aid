@@ -2104,6 +2104,59 @@ button:focus-visible {
   text-align: right;
 }
 
+.sheet-layout-scope-controls {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.6rem;
+  padding: 0.55rem;
+  background: #101414;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.sheet-layout-scope-heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.sheet-layout-scope-heading strong {
+  color: var(--text);
+  font-size: 0.74rem;
+}
+
+.sheet-layout-scope-heading span,
+.sheet-layout-scope-controls small {
+  min-width: 0;
+  color: #78837e;
+  font-size: 0.68rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sheet-layout-scope-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+.sheet-layout-scope-grid .field-row {
+  grid-template-columns: 1fr;
+  gap: 0.18rem;
+  margin-top: 0;
+}
+
+.sheet-layout-scope-grid .field-row span {
+  font-size: 0.64rem;
+}
+
+.sheet-layout-scope-grid .field-row input {
+  text-align: right;
+}
+
 .grid-candidate-list {
   display: grid;
   gap: 0.5rem;

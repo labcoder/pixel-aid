@@ -430,6 +430,20 @@ export type SheetSliceOptions = {
   pivot?: Pivot;
 };
 
+export type SheetLayoutOverrideScope = "sheet" | "row" | "frame";
+
+export type SheetFrameLayoutOverride = {
+  scope: SheetLayoutOverrideScope;
+  rowName?: string;
+  cellWidth?: number;
+  cellHeight?: number;
+  margin?: number;
+  spacing?: number;
+  extrude?: number;
+  offsetX?: number;
+  offsetY?: number;
+};
+
 export type SpriteFrame = {
   name: string;
   rect: Rect;
@@ -439,6 +453,7 @@ export type SpriteFrame = {
   tags?: string[];
   anchors?: SpriteFrameAnchor[];
   boxes?: SpriteFrameBox[];
+  sheetLayout?: SheetFrameLayoutOverride;
 };
 
 export type AnimationTag = {
