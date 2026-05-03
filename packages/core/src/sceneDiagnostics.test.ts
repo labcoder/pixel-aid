@@ -92,7 +92,7 @@ describe("scene asset diagnostics", () => {
     expect(diagnostics.warnings.find((warning) => warning.code === "scene-detail-density")?.severity).toBe("warning");
   });
 
-  test("marks tilemaps as inspect-only while still reporting scene statistics", () => {
+  test("marks tilemaps for grid review while still reporting scene statistics", () => {
     const diagnostics = analyzeSceneAssetDiagnostics(variedBackground(16, 16), {
       assetType: "tilemap",
       spritePaletteBudget: 32
@@ -101,7 +101,7 @@ describe("scene asset diagnostics", () => {
     expect(diagnostics.assetType).toBe("tilemap");
     expect(diagnostics.sampledPixelCount).toBe(256);
     expect(diagnostics.colorBinCount).toBeGreaterThan(1);
-    expect(diagnostics.warnings.map((warning) => warning.code)).toContain("tilemap-inspect-only");
+    expect(diagnostics.warnings.map((warning) => warning.code)).toContain("tilemap-grid-review");
     expect(diagnostics.warnings.map((warning) => warning.code)).not.toContain("background-preserve-detail");
   });
 

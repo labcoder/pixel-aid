@@ -66,14 +66,14 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
     type: "tilemap",
     label: "Tilemap",
     shortLabel: "Tilemap",
-    support: "inspectOnly",
+    support: "full",
     processingMode: "tileSheet",
-    description: "Placed map data or map screenshots that need map-aware import before export.",
+    description: "Placed map data or map screenshots that need grid confirmation and tile identity export.",
     defaultWarnings: [
       {
-        code: "tilemap-inspect-only",
-        severity: "warning",
-        message: "Tilemap data import/export is inspect-only; use tile candidates and scene diagnostics before destructive cleanup."
+        code: "tilemap-grid-review",
+        severity: "info",
+        message: "Tilemap export is metadata-first; confirm grid, offsets, and tile identity threshold before using map data in an engine."
       }
     ]
   },

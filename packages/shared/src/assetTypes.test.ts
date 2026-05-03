@@ -45,17 +45,17 @@ describe("asset type taxonomy", () => {
     expect(getAssetTypeDefinition("animationSheet").support).toBe("full");
     expect(getAssetTypeDefinition("characterSheet").support).toBe("full");
     expect(getAssetTypeDefinition("tileset").support).toBe("full");
-    expect(getAssetTypeDefinition("tilemap").support).toBe("inspectOnly");
+    expect(getAssetTypeDefinition("tilemap").support).toBe("full");
   });
 
-  it("marks 0.2 tileset diagnostics as supported while keeping tilemaps inspect-first", () => {
+  it("marks tileset and tilemap metadata workflows as supported", () => {
     expect(getAssetTypeDefinition("tileset").support).toBe("full");
     expect(getAssetTypeDefinition("tileset").defaultWarnings.map((warning) => warning.code)).toContain(
       "tileset-engine-metadata-next"
     );
-    expect(getAssetTypeDefinition("tilemap").support).toBe("inspectOnly");
+    expect(getAssetTypeDefinition("tilemap").support).toBe("full");
     expect(getAssetTypeDefinition("tilemap").defaultWarnings.map((warning) => warning.code)).toContain(
-      "tilemap-inspect-only"
+      "tilemap-grid-review"
     );
     expect(getAssetTypeDefinition("background").support).toBe("inspectOnly");
   });

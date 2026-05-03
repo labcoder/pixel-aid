@@ -114,7 +114,7 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         removeHalos: false,
         denoiseStrength: 0,
         lockPaletteAcrossFrames: true,
-        warningCodes: ["tilemap-inspect-only"]
+        warningCodes: ["tilemap-grid-review"]
       };
     case "portrait":
     case "uiElement":
@@ -157,8 +157,8 @@ export function getAssetTypeWarnings(assetType: AssetType): AssetTypeWarning[] {
 }
 
 function codeToAssetTypeWarningMessage(code: string): string {
-  if (code === "tilemap-inspect-only") {
-    return "Tilemap data import/export is inspect-only until map metadata support is scoped.";
+  if (code === "tilemap-grid-review") {
+    return "Tilemap export is metadata-first; confirm grid, offsets, and tile identity threshold before using map data in an engine.";
   }
   if (code === "tileset-engine-metadata-next") {
     return "Tileset seam diagnostics are available; engine-specific tileset metadata arrives with export adapters.";

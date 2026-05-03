@@ -35,6 +35,8 @@ export { createTiledTileset, createTiledTilesetExport } from "./tiled";
 export type { TiledProperty, TiledTileset, TiledTilesetOptions } from "./tiled";
 export { createLdtkTilesetCompanion, createLdtkTilesetExport } from "./ldtk";
 export type { LdtkTilesetCompanion, LdtkTilesetOptions } from "./ldtk";
+export { createGenericTilemapExport, validateTilemapMetadata } from "./tilemap";
+export type { GenericTilemapExportOptions } from "./tilemap";
 export { createAsepriteCompanionExport, importAsepriteWorkflow } from "./aseprite";
 export type {
   AsepriteCompanionExport,

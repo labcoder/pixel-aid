@@ -127,6 +127,56 @@ export type TilemapDiagnostics = {
   warnings: AssetTypeWarning[];
 };
 
+export type TilemapWorkflowStatus = "ready" | "inspectOnly";
+
+export type TilemapWorkflowWarningCode =
+  | "tilemap-empty-grid"
+  | "tilemap-grid-remainder"
+  | "tilemap-low-repeat-confidence"
+  | "tilemap-high-unique-count";
+
+export type TilemapWorkflowWarning = {
+  code: TilemapWorkflowWarningCode;
+  severity: DiagnosticSeverity;
+  message: string;
+};
+
+export type TilemapCanonicalTile = {
+  id: number;
+  rect: Rect;
+  firstOccurrence: { row: number; column: number };
+  occurrenceCount: number;
+  signature: string;
+  averageColor: string;
+};
+
+export type TilemapLayerMetadata = {
+  name: string;
+  rows: number;
+  columns: number;
+  data: number[][];
+};
+
+export type TilemapExportMetadata = {
+  type: "tilemap";
+  status: TilemapWorkflowStatus;
+  tileWidth: number;
+  tileHeight: number;
+  offsetX: number;
+  offsetY: number;
+  spacing: number;
+  rows: number;
+  columns: number;
+  tileCount: number;
+  uniqueTileCount: number;
+  repeatedTileRatio: number;
+  identityThreshold: number;
+  confidence: number;
+  tiles: TilemapCanonicalTile[];
+  layers: TilemapLayerMetadata[];
+  warnings: TilemapWorkflowWarning[];
+};
+
 export type SheetConditioningIssueCode =
   | "excessive-exact-colors"
   | "dense-coarse-palette"
