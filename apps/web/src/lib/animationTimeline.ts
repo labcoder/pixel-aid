@@ -13,7 +13,8 @@ export function getAnimationFrameIndexes(frames: SpriteFrame[], animations: Anim
   }
 
   const frameIndexByName = new Map(frames.map((frame, index) => [frame.name, index]));
-  return animation.frameNames.map((name) => frameIndexByName.get(name)).filter((index): index is number => index !== undefined);
+  const animationIndexes = animation.frameNames.map((name) => frameIndexByName.get(name)).filter((index): index is number => index !== undefined);
+  return animationIndexes.length > 0 ? animationIndexes : frames.map((_, index) => index);
 }
 
 export function getTimelinePositionForFrame(frameIndexes: number[], selectedFrameIndex: number): number {

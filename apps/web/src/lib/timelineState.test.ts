@@ -16,6 +16,13 @@ describe("timeline state", () => {
     });
   });
 
+  test("keeps one-frame clips editable even though playback is disabled", () => {
+    expect(getTimelineState("spriteSheet", 1)).toEqual({
+      enabled: true,
+      message: "1 frame ready for timeline preview."
+    });
+  });
+
   test("treats sprite and tile sheets as the only sheet-like processing modes", () => {
     expect(isSheetLikeMode("single")).toBe(false);
     expect(isSheetLikeMode("spriteSheet")).toBe(true);
