@@ -52,6 +52,7 @@ export type FixSettingSuggestion = {
   categoryConfidence: number;
   categoryReason: string;
   categoryWarnings: AssetTypeWarning[];
+  qualityReport: QualityReport;
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
@@ -179,7 +180,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     modeConfidence,
     categoryConfidence: classification.confidence,
     categoryReason: classification.reason,
-    categoryWarnings
+    categoryWarnings,
+    qualityReport
   };
 }
 

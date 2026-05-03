@@ -43,6 +43,7 @@ import type {
   PixelFixResult,
   RGBAImage,
   SheetLayoutDiagnostics,
+  SheetLayoutDetection,
   SheetLayoutOverrideScope,
   SpriteFrameAnchor,
   SpriteFrameBox,
@@ -103,6 +104,7 @@ import {
   updateAssetTypeMetadata,
   type AssetProvenancePatch
 } from "./lib/assets";
+import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections, type BottomPanelSection } from "./lib/bottomPanelLayout";
@@ -310,6 +312,11 @@ type PaletteModalState = {
   truncated: boolean;
 };
 
+type SourceAssetAnalysis = {
+  palette: ReturnType<typeof analyzeVisiblePalettePreview>;
+  outlineCandidates: ReturnType<typeof detectOutlineColorCandidates>;
+};
+
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
 const onboardingSampleCards = getOnboardingSampleCards();
 const DocsPage = lazy(() => import("./components/DocsPage").then((module) => ({ default: module.DocsPage })));
@@ -381,6 +388,40 @@ function createUniquePaletteLibraryId(
 
 function waitForNextPaint(): Promise<void> {
   return new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+}
+
+function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
+  return buildSourceAnalysisCacheKey({
+    assetId: asset.id,
+    width: asset.image.width,
+    height: asset.image.height,
+    byteLength: asset.image.data.byteLength
+  });
+}
+
+function createSourceAssetAnalysis(asset: ImportedImageAsset): SourceAssetAnalysis {
+  return {
+    palette: analyzeVisiblePalettePreview(asset.image, 8, { maxUniqueColors: 10000 }),
+    outlineCandidates: detectOutlineColorCandidates(asset.image, { maxCandidates: 6 })
+  };
+}
+
+function createSheetLayoutAnalysisSignature(layout: SheetLayoutDetection | undefined): string {
+  if (!layout) {
+    return "none";
+  }
+
+  return [
+    layout.frameWidth,
+    layout.frameHeight,
+    layout.rows,
+    layout.columns,
+    layout.margin,
+    layout.spacing,
+    layout.frames.length,
+    layout.rowAnimations.map((animation) => `${animation.name}:${animation.frameNames.length}`).join(","),
+    layout.warnings.join(",")
+  ].join("|");
 }
 
 function createSampleAnimationName(title: string): string {
@@ -667,6 +708,8 @@ export function App() {
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
+  const [sourceAnalysisCache, setSourceAnalysisCache] = useState<Record<string, SourceAssetAnalysis>>({});
+  const [qualityReportCache, setQualityReportCache] = useState<Record<string, QualityReport>>({});
   const [showAdvancedControls, setShowAdvancedControls] = useState(initialSettings.showAdvancedControls);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
@@ -684,6 +727,7 @@ export function App() {
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
+  const qualityReportSwitchFallbackRef = useRef<{ assetId: string; cacheKey?: string } | null>(null);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const selectedAnimationNameRef = useRef(selectedAnimationName);
   const detectedSheetFramesRef = useRef<SpriteFrame[]>(detectedSheetFrames);
@@ -695,6 +739,22 @@ export function App() {
 
   const setPaletteBudget = useCallback((value: number) => {
     setMaxColors(normalizePaletteBudget(value));
+  }, []);
+
+  const cacheFixSuggestionAnalysis = useCallback((asset: ImportedImageAsset, suggestion: FixSettingSuggestion) => {
+    const sourceKey = getSourceAnalysisCacheKey(asset);
+    const sourceAnalysis = createSourceAssetAnalysis(asset);
+    const qualityKey = buildQualityAnalysisCacheKey({
+      assetId: asset.id,
+      assetType: suggestion.assetType,
+      maxColors: suggestion.maxColors,
+      alpha: suggestion.alpha,
+      gridCandidates: suggestion.gridCandidates,
+      sheetLayoutSignature: createSheetLayoutAnalysisSignature(suggestion.sheetLayout)
+    });
+
+    setSourceAnalysisCache((current) => (current[sourceKey] ? current : { ...current, [sourceKey]: sourceAnalysis }));
+    setQualityReportCache((current) => (current[qualityKey] ? current : { ...current, [qualityKey]: suggestion.qualityReport }));
   }, []);
 
   const applyPreferenceSettings = useCallback(
@@ -949,16 +1009,36 @@ export function App() {
   useEffect(() => {
     setLastExportValidation(null);
   }, [engineExportTargets, exportBundleName, fixResult, selectedAsset?.id]);
-  const sourcePaletteAnalysis = useMemo(
-    () => (selectedAsset ? analyzeVisiblePalettePreview(selectedAsset.image, 8, { maxUniqueColors: 10000 }) : null),
-    [selectedAsset]
-  );
+  useEffect(() => {
+    const assetIds = new Set(assets.map((asset) => asset.id));
+    setSourceAnalysisCache((current) => pruneAnalysisCache(current, assetIds));
+    setQualityReportCache((current) => pruneAnalysisCache(current, assetIds));
+  }, [assets]);
+  const selectedSourceAnalysisKey = selectedAsset ? getSourceAnalysisCacheKey(selectedAsset) : "";
+  const selectedSourceAnalysis = selectedSourceAnalysisKey ? sourceAnalysisCache[selectedSourceAnalysisKey] : undefined;
+  const sourcePaletteAnalysis = selectedSourceAnalysis?.palette ?? null;
   const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
   const sourceColorCount = sourcePaletteAnalysis?.totalColors ?? 0;
-  const outlineSourceCandidates = useMemo(
-    () => (selectedAsset ? detectOutlineColorCandidates(selectedAsset.image, { maxCandidates: 6 }) : []),
-    [selectedAsset]
-  );
+  const outlineSourceCandidates = selectedSourceAnalysis?.outlineCandidates ?? [];
+  useEffect(() => {
+    if (!selectedAsset || !selectedSourceAnalysisKey || selectedSourceAnalysis) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      const analysis = createSourceAssetAnalysis(selectedAsset);
+      if (cancelled) {
+        return;
+      }
+      setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -1334,19 +1414,87 @@ export function App() {
       sheetSpacing
     ]
   );
-  const qualityReport = useMemo(
-    () =>
-      selectedAsset
-        ? analyzeQualityReport(selectedAsset.image, {
+  const qualityReportSheetLayoutSignature = useMemo(
+    () => createSheetLayoutAnalysisSignature(qualityReportSheetLayout),
+    [qualityReportSheetLayout]
+  );
+  const qualityReportCacheKey = selectedAsset
+    ? buildQualityAnalysisCacheKey({
+        assetId: selectedAsset.id,
+        assetType,
+        maxColors,
+        alpha,
+        gridCandidates,
+        sheetLayoutSignature: qualityReportSheetLayoutSignature
+      })
+    : "";
+  const exactQualityReport = qualityReportCacheKey ? qualityReportCache[qualityReportCacheKey] : undefined;
+  const fallbackQualityReport = selectedAsset ? findCachedAnalysisForAsset(qualityReportCache, selectedAsset.id) : undefined;
+  const qualityReport = exactQualityReport ?? fallbackQualityReport ?? null;
+  useEffect(() => {
+    if (!selectedAsset || !qualityReportCacheKey || exactQualityReport) {
+      return undefined;
+    }
+
+    const switchFallback = qualityReportSwitchFallbackRef.current;
+    if (fallbackQualityReport && switchFallback?.assetId === selectedAsset.id) {
+      if (!switchFallback.cacheKey) {
+        switchFallback.cacheKey = qualityReportCacheKey;
+      }
+      if (switchFallback.cacheKey === qualityReportCacheKey) {
+        return undefined;
+      }
+      qualityReportSwitchFallbackRef.current = null;
+    }
+
+    let cancelled = false;
+    let frameId = 0;
+    const timeoutId = window.setTimeout(() => {
+      const operation = nextBusyOperation("analysis", `Preparing diagnostics for ${selectedAsset.name}...`);
+      setAnalysisOperation(operation);
+      frameId = window.requestAnimationFrame(() => {
+        if (cancelled) {
+          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
+          return;
+        }
+
+        try {
+          const report = analyzeQualityReport(selectedAsset.image, {
             assetType,
             maxColors,
             alpha,
             ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
             ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
-          })
-        : null,
-    [alpha, assetType, gridCandidates, maxColors, qualityReportSheetLayout, selectedAsset]
-  );
+          });
+
+          if (!cancelled) {
+            setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
+          }
+        } finally {
+          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
+        }
+      });
+    }, 0);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [
+    alpha,
+    assetType,
+    exactQualityReport,
+    fallbackQualityReport,
+    gridCandidates,
+    maxColors,
+    nextBusyOperation,
+    qualityReportCacheKey,
+    qualityReportSheetLayout,
+    selectedAsset
+  ]);
   const selectedDetectedFrame =
     selectedFrameIndex >= 0 && selectedFrameIndex < editableSheetFrames.length ? editableSheetFrames[selectedFrameIndex] : undefined;
   const selectedDetectedFrameRowName = selectedDetectedFrame?.tags?.find((tag) =>
@@ -2063,6 +2211,7 @@ export function App() {
 
             const suggestion = suggestFixSettings(asset.image);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
+            cacheFixSuggestionAnalysis(asset, suggestion);
             applyFixSuggestion(suggestion, asset);
             setLastOperationError(null);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
@@ -2078,7 +2227,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, isEditorBusy, nextBusyOperation, recordOperationError]
+    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -2196,6 +2345,7 @@ export function App() {
         setLastExportValidation(null);
         setShowAdvancedControls(false);
         setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
+        cacheFixSuggestionAnalysis(sampleImport.asset, suggestion);
         applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
         setLastOperationError(null);
         appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
@@ -2207,7 +2357,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyOnboardingSampleSettings, isEditorBusy, nextBusyOperation, recordOperationError]
+    [appendLog, applyOnboardingSampleSettings, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError]
   );
 
   const openSamplePicker = useCallback(() => {
@@ -2516,6 +2666,7 @@ export function App() {
     try {
       const suggestion = suggestFixSettings(selectedAsset.image);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+      cacheFixSuggestionAnalysis(selectedAsset, suggestion);
       applyFixSuggestion(suggestion, selectedAsset);
       setLastOperationError(null);
       appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
@@ -2528,7 +2679,7 @@ export function App() {
     } finally {
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, isEditorBusy, nextBusyOperation, recordOperationError, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -4145,12 +4296,12 @@ export function App() {
       setIsPlaying(false);
       setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
       sourceFrameEditStartSnapshotRef.current = null;
-      await waitForNextPaint();
 
       try {
         const nextMode = assetTypeToMode(nextAsset.assetType);
         setMode(nextMode);
         setCropToBounds(nextMode === "single");
+        qualityReportSwitchFallbackRef.current = { assetId };
         setSelectedAssetId(assetId);
         appendLog(`Selected ${nextAsset.name}`);
         await waitForNextPaint();
