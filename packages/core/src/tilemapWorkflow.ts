@@ -82,7 +82,14 @@ export function extractTilemapMetadata(image: RGBAImage, options: TilemapExtract
     repeatedTileRatio,
     identityThreshold,
     confidence,
-    tiles: tiles.map(({ sourceRect: _sourceRect, ...tile }) => tile),
+    tiles: tiles.map((tile) => ({
+      id: tile.id,
+      rect: tile.rect,
+      firstOccurrence: tile.firstOccurrence,
+      occurrenceCount: tile.occurrenceCount,
+      signature: tile.signature,
+      averageColor: tile.averageColor
+    })),
     layers: [
       {
         name: "Tilemap",

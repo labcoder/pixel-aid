@@ -1,5 +1,3 @@
-/* global console, process */
-
 import { readFile, writeFile } from "node:fs/promises";
 
 const allowedLicenses = new Set([

@@ -21,5 +21,14 @@ export default [
       "@typescript-eslint/no-explicit-any": "error",
       "no-undef": "off"
     }
+  },
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        console: "readonly",
+        process: "readonly"
+      }
+    }
   }
 ];
