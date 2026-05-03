@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.worktrees/**"]
+    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.worktrees/**", "docs/internal/**"]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
