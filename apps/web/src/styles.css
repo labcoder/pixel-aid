@@ -2719,6 +2719,7 @@ button:focus-visible {
 }
 
 .timeline-metadata-panel {
+  order: 4;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(320px, 1.2fr);
@@ -3016,6 +3017,7 @@ button:focus-visible {
 }
 
 .clip-editor {
+  order: 2;
   min-width: 0;
   display: grid;
   gap: 5px;
@@ -3115,6 +3117,7 @@ button:focus-visible {
 }
 
 .timeline-rail {
+  order: 3;
   flex: 0 0 auto;
   min-height: 64px;
   display: flex;

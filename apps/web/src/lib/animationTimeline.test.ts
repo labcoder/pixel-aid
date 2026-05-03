@@ -24,6 +24,12 @@ describe("animation timeline mapping", () => {
     expect(getAnimationFrameIndexes(frames, animations, "all")).toEqual([0, 1, 2, 3, 4]);
   });
 
+  test("falls back to all frames when a stale clip references removed frames", () => {
+    expect(
+      getAnimationFrameIndexes(frames, [{ name: "stale", frameNames: ["missing_000"], fps: 8, loop: true }], "stale")
+    ).toEqual([0, 1, 2, 3, 4]);
+  });
+
   test("converts between global frame indexes and clip-local positions", () => {
     const frameIndexes = getAnimationFrameIndexes(frames, animations, "row_2");
 

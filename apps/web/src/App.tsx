@@ -650,6 +650,7 @@ export function App() {
   const [customPivotX, setCustomPivotX] = useState(initialSettings.customPivotX);
   const [customPivotY, setCustomPivotY] = useState(initialSettings.customPivotY);
   const [selectedFrameIndex, setSelectedFrameIndex] = useState(-1);
+  const [sourceFrameEditActive, setSourceFrameEditActive] = useState(false);
   const [detectedSheetFrames, setDetectedSheetFrames] = useState<SpriteFrame[]>([]);
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
@@ -1431,6 +1432,7 @@ export function App() {
   const exactQualityReport = qualityReportCacheKey ? qualityReportCache[qualityReportCacheKey] : undefined;
   const fallbackQualityReport = selectedAsset ? findCachedAnalysisForAsset(qualityReportCache, selectedAsset.id) : undefined;
   const qualityReport = exactQualityReport ?? fallbackQualityReport ?? null;
+  const qualityReportDebounceMs = sourceFrameEditActive ? 500 : sheetMode ? 220 : 60;
   useEffect(() => {
     if (!selectedAsset || !qualityReportCacheKey || exactQualityReport) {
       return undefined;
@@ -1474,7 +1476,7 @@ export function App() {
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
         }
       });
-    }, 0);
+    }, qualityReportDebounceMs);
 
     return () => {
       cancelled = true;
@@ -1492,6 +1494,7 @@ export function App() {
     maxColors,
     nextBusyOperation,
     qualityReportCacheKey,
+    qualityReportDebounceMs,
     qualityReportSheetLayout,
     selectedAsset
   ]);
@@ -3224,6 +3227,9 @@ export function App() {
     (index: number) => {
       const nextPosition = scrubPlayback({ frameCount: timelineFrames.length, frameIndex: index });
       const nextIndex = getFrameIndexFromTimelinePosition(animationFrameIndexes, nextPosition);
+      if (nextIndex < 0) {
+        return;
+      }
       setIsPlaying(false);
       resetPlaybackStepDirection(playbackDirection);
       selectedFrameIndexRef.current = nextIndex;
@@ -3241,6 +3247,7 @@ export function App() {
 
       const rowTag = sheetFrames[nextIndex]?.tags?.[0];
       if (rowTag && sheetRowAnimations.some((animation) => animation.name === rowTag)) {
+        selectedAnimationNameRef.current = rowTag;
         setSelectedAnimationName(rowTag);
       }
       setIsPlaying(false);
@@ -3296,9 +3303,11 @@ export function App() {
 
   const changeSelectedAnimation = useCallback(
     (value: string) => {
+      const nextName = value === ALL_ANIMATIONS || sheetRowAnimations.some((animation) => animation.name === value) ? value : ALL_ANIMATIONS;
       setIsPlaying(false);
-      setSelectedAnimationName(value);
-      const animation = sheetRowAnimations.find((item) => item.name === value);
+      selectedAnimationNameRef.current = nextName;
+      setSelectedAnimationName(nextName);
+      const animation = sheetRowAnimations.find((item) => item.name === nextName);
       if (animation) {
         const nextDirection = animation.direction ?? playbackDirection;
         setPlaybackFps(clampFps(animation.fps ?? playbackFps));
@@ -3332,6 +3341,9 @@ export function App() {
         return nextPivotOverrides;
       });
       setSelectedAnimationName((current) => (current === fromName ? result.selectedAnimationName : current));
+      if (selectedAnimationNameRef.current === fromName) {
+        selectedAnimationNameRef.current = result.selectedAnimationName;
+      }
     },
     [editableSheetFrames, sheetRowAnimations]
   );
@@ -3692,7 +3704,7 @@ export function App() {
       detectedSheetFramesRef.current = editableSheetFrames;
       setDetectedRowAnimations(nextAnimations);
       setDetectedSheetFrames(editableSheetFrames);
-      if (selectedAnimationName === name) {
+      if (selectedAnimationNameRef.current === name) {
         const nextSelectedName = nextAnimations[0]?.name ?? ALL_ANIMATIONS;
         selectedAnimationNameRef.current = nextSelectedName;
         setSelectedAnimationName(nextSelectedName);
@@ -3701,7 +3713,7 @@ export function App() {
       setIsPlaying(false);
       appendLog(`Removed animation clip ${name}`);
     },
-    [appendLog, editableSheetFrames, selectedAnimationName, sheetMargin, sheetRowAnimations, sheetSpacing]
+    [appendLog, editableSheetFrames, sheetMargin, sheetRowAnimations, sheetSpacing]
   );
 
   const updateDetectedAnimationOutputCellSize = useCallback(
@@ -4202,6 +4214,7 @@ export function App() {
     sourceFrameEditGestureRef.current = edit;
     detectedSheetFramesRef.current = snapshot.frames;
     detectedRowAnimationsRef.current = snapshot.animations;
+    setSourceFrameEditActive(true);
     if (!hasStoredSheetLayout) {
       setDetectedSheetFrames(snapshot.frames);
       setDetectedRowAnimations(snapshot.animations);
@@ -4215,6 +4228,7 @@ export function App() {
       const gesture = sourceFrameEditGestureRef.current;
       sourceFrameEditStartSnapshotRef.current = null;
       sourceFrameEditGestureRef.current = null;
+      setSourceFrameEditActive(false);
       if (!startSnapshot || !changed) {
         return;
       }
@@ -4296,6 +4310,8 @@ export function App() {
       setIsPlaying(false);
       setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
       sourceFrameEditStartSnapshotRef.current = null;
+      sourceFrameEditGestureRef.current = null;
+      setSourceFrameEditActive(false);
 
       try {
         const nextMode = assetTypeToMode(nextAsset.assetType);
@@ -4338,6 +4354,8 @@ export function App() {
           setFixResult(null);
           setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
           sourceFrameEditStartSnapshotRef.current = null;
+          sourceFrameEditGestureRef.current = null;
+          setSourceFrameEditActive(false);
         }
         setGridCandidateCache((current) => {
           const next = { ...current };
@@ -6647,7 +6665,15 @@ export function App() {
                     const rangeStart = range.startIndex >= 0 ? range.startIndex + 1 : 1;
                     const rangeEnd = range.endIndex >= 0 ? range.endIndex + 1 : rangeStart;
                     return (
-                      <div key={animation.name} className={animation.name === selectedAnimationName ? "clip-row active" : "clip-row"}>
+                      <div
+                        key={animation.name}
+                        className={animation.name === selectedAnimationName ? "clip-row active" : "clip-row"}
+                        onFocusCapture={(event) => {
+                          if (!(event.target as HTMLElement).closest(".clip-delete-button")) {
+                            changeSelectedAnimation(animation.name);
+                          }
+                        }}
+                      >
                         <input
                           aria-label={`Rename ${animation.name}`}
                           title="Renaming a detected clip also updates matching frame names, timing overrides, and export manifest IDs."

@@ -10,7 +10,7 @@ export function isSheetLikeMode(mode: AssetMode): boolean {
 }
 
 export function getTimelineState(mode: AssetMode, frameCount: number): TimelineState {
-  if (!isSheetLikeMode(mode) || frameCount <= 1) {
+  if (!isSheetLikeMode(mode) || frameCount <= 0) {
     return {
       enabled: false,
       message: "Timeline is available after choosing a sheet mode and defining frames."
@@ -19,6 +19,6 @@ export function getTimelineState(mode: AssetMode, frameCount: number): TimelineS
 
   return {
     enabled: true,
-    message: `${frameCount} frames ready for timeline preview.`
+    message: `${frameCount} frame${frameCount === 1 ? "" : "s"} ready for timeline preview.`
   };
 }

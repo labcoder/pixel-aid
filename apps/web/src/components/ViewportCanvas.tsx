@@ -73,6 +73,13 @@ export function ViewportCanvas({
     sourceZoom: number;
     changed: boolean;
   } | null>(null);
+  const pendingFrameDeltaRef = useRef<{
+    mode: "move" | "resize";
+    frameIndex: number;
+    handle?: FrameResizeHandle;
+    delta: Point;
+  } | null>(null);
+  const frameDeltaRafRef = useRef<number | null>(null);
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
   const autoFitSignatureRef = useRef("");
@@ -94,6 +101,70 @@ export function ViewportCanvas({
   useDisposableCanvas(fixedCanvas);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
+
+  const applyQueuedFrameDelta = useCallback(() => {
+    const pending = pendingFrameDeltaRef.current;
+    pendingFrameDeltaRef.current = null;
+    if (!pending) {
+      return;
+    }
+
+    if (pending.mode === "resize" && pending.handle) {
+      onSourceFrameResize?.(pending.frameIndex, pending.handle, pending.delta);
+    } else {
+      onSourceFrameMove?.(pending.frameIndex, pending.delta);
+    }
+    invalidate();
+  }, [invalidate, onSourceFrameMove, onSourceFrameResize]);
+
+  const flushQueuedFrameDelta = useCallback(() => {
+    if (frameDeltaRafRef.current !== null) {
+      window.cancelAnimationFrame(frameDeltaRafRef.current);
+      frameDeltaRafRef.current = null;
+    }
+    applyQueuedFrameDelta();
+  }, [applyQueuedFrameDelta]);
+
+  const queueFrameDelta = useCallback(
+    (delta: { mode: "move" | "resize"; frameIndex: number; handle?: FrameResizeHandle; delta: Point }) => {
+      const pending = pendingFrameDeltaRef.current;
+      if (
+        pending &&
+        pending.mode === delta.mode &&
+        pending.frameIndex === delta.frameIndex &&
+        pending.handle === delta.handle
+      ) {
+        pending.delta = {
+          x: pending.delta.x + delta.delta.x,
+          y: pending.delta.y + delta.delta.y
+        };
+      } else {
+        pendingFrameDeltaRef.current = {
+          ...delta,
+          delta: { ...delta.delta }
+        };
+      }
+
+      if (frameDeltaRafRef.current === null) {
+        frameDeltaRafRef.current = window.requestAnimationFrame(() => {
+          frameDeltaRafRef.current = null;
+          applyQueuedFrameDelta();
+        });
+      }
+    },
+    [applyQueuedFrameDelta]
+  );
+
+  useEffect(
+    () => () => {
+      if (frameDeltaRafRef.current !== null) {
+        window.cancelAnimationFrame(frameDeltaRafRef.current);
+      }
+      frameDeltaRafRef.current = null;
+      pendingFrameDeltaRef.current = null;
+    },
+    []
+  );
 
   const resetPan = useCallback(() => {
     panRef.current = { x: 0, y: 0 };
@@ -306,12 +377,12 @@ export function ViewportCanvas({
       }
       frameDrag.lastX = event.clientX;
       frameDrag.lastY = event.clientY;
-      if (frameDrag.mode === "resize" && frameDrag.handle) {
-        onSourceFrameResize?.(frameDrag.frameIndex, frameDrag.handle, delta);
-      } else {
-        onSourceFrameMove?.(frameDrag.frameIndex, delta);
-      }
-      invalidate();
+      queueFrameDelta({
+        mode: frameDrag.mode,
+        frameIndex: frameDrag.frameIndex,
+        ...(frameDrag.handle ? { handle: frameDrag.handle } : {}),
+        delta
+      });
       return;
     }
 
@@ -337,6 +408,7 @@ export function ViewportCanvas({
 
   const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
     if (frameDragRef.current?.pointerId === event.pointerId) {
+      flushQueuedFrameDelta();
       onSourceFrameEditCommit?.(frameDragRef.current.changed);
       frameDragRef.current = null;
     }
