@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
-import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./sheetLayoutModel";
+import { applyScopedSheetLayoutPatch, deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./sheetLayoutModel";
 
 const frames: SpriteFrame[] = [
   ...makeRow("idle", 3, 64, 64),
@@ -164,6 +164,53 @@ describe("sheet layout model", () => {
     expect(repacked[2]?.rect).toEqual({ x: 138, y: 4, w: 64, h: 64 });
     expect(repacked[3]?.rect).toEqual({ x: 4, y: 71, w: 64, h: 64 });
     expect(repacked.at(-1)?.rect).toEqual({ x: 473, y: 71, w: 64, h: 64 });
+  });
+
+  test("applies sheet-scoped output cell sizing without changing source footprints", () => {
+    const patched = applyScopedSheetLayoutPatch({
+      frames,
+      animations,
+      scope: "sheet",
+      patch: { cellWidth: 80, cellHeight: 72 },
+      margin: 1,
+      spacing: 2
+    });
+
+    expect(patched.map((frame) => frame.rect.w)).toEqual(Array.from({ length: frames.length }, () => 80));
+    expect(patched.map((frame) => frame.rect.h)).toEqual(Array.from({ length: frames.length }, () => 72));
+    expect(patched[0]?.rect).toEqual({ x: 1, y: 1, w: 80, h: 72 });
+    expect(patched[3]?.rect).toEqual({ x: 1, y: 75, w: 80, h: 72 });
+    expect(patched.map((frame) => frame.sourceRect)).toEqual(frames.map((frame) => frame.sourceRect));
+    expect(patched[0]?.sheetLayout).toMatchObject({ scope: "sheet", cellWidth: 80, cellHeight: 72 });
+  });
+
+  test("applies row and frame scoped layout overrides while preserving manifest metadata", () => {
+    const rowPatched = applyScopedSheetLayoutPatch({
+      frames,
+      animations,
+      scope: "row",
+      animationName: "run",
+      patch: { spacing: 3, extrude: 2, offsetX: 1, offsetY: 2 },
+      margin: 1,
+      spacing: 2
+    });
+    const framePatched = applyScopedSheetLayoutPatch({
+      frames: rowPatched,
+      animations,
+      scope: "frame",
+      frameName: "run_001",
+      patch: { cellWidth: 96, offsetX: -2 },
+      margin: 1,
+      spacing: 2
+    });
+
+    const runFrames = framePatched.filter((frame) => frame.tags?.includes("run"));
+
+    expect(runFrames[0]?.rect).toEqual({ x: 2, y: 69, w: 64, h: 64 });
+    expect(runFrames[1]?.rect).toEqual({ x: 66, y: 69, w: 96, h: 64 });
+    expect(runFrames[2]?.rect).toEqual({ x: 168, y: 69, w: 64, h: 64 });
+    expect(runFrames[0]?.sheetLayout).toMatchObject({ scope: "row", rowName: "run", spacing: 3, extrude: 2, offsetX: 1, offsetY: 2 });
+    expect(runFrames[1]?.sheetLayout).toMatchObject({ scope: "frame", rowName: "run", cellWidth: 96, spacing: 3, extrude: 2, offsetX: -2, offsetY: 2 });
   });
 });
 

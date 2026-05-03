@@ -43,6 +43,7 @@ import type {
   PixelFixResult,
   RGBAImage,
   SheetLayoutDiagnostics,
+  SheetLayoutOverrideScope,
   SpriteFrameAnchor,
   SpriteFrameBox,
   SpriteFrameBoxType,
@@ -253,7 +254,7 @@ import {
 import { formatSheetDetectionNotes } from "./lib/sheetDetectionNotes";
 import { createSheetDetectorReview, reconcileSheetDetectorWarnings, type SheetDetectorCandidate } from "./lib/sheetDetectorReview";
 import { createSheetFixFramePlan } from "./lib/sheetFixFrames";
-import { deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./lib/sheetLayoutModel";
+import { applyScopedSheetLayoutPatch, deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells, type SheetLayoutPatch } from "./lib/sheetLayoutModel";
 import {
   createManualSheetLayout,
   fillRowToFrameCount,
@@ -324,6 +325,12 @@ const frameBoxTypeOptions: Array<[SpriteFrameBoxType, string]> = [
   ["hurtbox", "Hurtbox"],
   ["hitbox", "Hitbox"]
 ];
+const sheetLayoutScopeOptions: Array<[SheetLayoutOverrideScope, string]> = [
+  ["sheet", "Whole sheet"],
+  ["row", "Selected row"],
+  ["frame", "Selected frame"]
+];
+type SheetLayoutPatchField = "cellWidth" | "cellHeight" | "spacing" | "extrude" | "offsetX" | "offsetY";
 const primaryAnchorId = "anchor_01";
 
 function paletteBudgetAtLeast(colorCount: number): number {
@@ -600,6 +607,7 @@ export function App() {
   const [detectedRowAnimations, setDetectedRowAnimations] = useState<AnimationTag[]>([]);
   const [detectedSheetWarnings, setDetectedSheetWarnings] = useState<string[]>([]);
   const [detectedSheetDiagnostics, setDetectedSheetDiagnostics] = useState<SheetLayoutDiagnostics | undefined>(undefined);
+  const [sheetLayoutScope, setSheetLayoutScope] = useState<SheetLayoutOverrideScope>("row");
   const [frameDurationOverrides, setFrameDurationOverrides] = useState<Record<string, number>>({});
   const [pivotOverrides, setPivotOverrides] = useState<PivotOverrideState>(emptyPivotOverrides);
   const [frameMetadataOverrides, setFrameMetadataOverrides] = useState<FrameMetadataState>(emptyFrameMetadata);
@@ -1305,6 +1313,64 @@ export function App() {
   const canEditManualSheetCell = sheetMode && selectedDetectedFrame !== undefined && sheetRowAnimations.length > 0;
   const canEditManualSheetRow = sheetMode && selectedManualAnimation !== undefined;
   const canRemoveManualSheetRow = canEditManualSheetRow && sheetRowAnimations.length > 1;
+  const selectedSheetLayoutRow = plannedSheetLayout.rows.find((row) => row.name === selectedManualAnimationName);
+  const selectedRowLayoutFrame = useMemo(() => {
+    if (!selectedManualAnimation) {
+      return undefined;
+    }
+
+    const selectedRowNames = new Set(selectedManualAnimation.frameNames);
+    return (
+      sheetFrames.find((frame) => selectedRowNames.has(frame.name) && frame.sheetLayout?.scope === "row") ??
+      sheetFrames.find((frame) => selectedRowNames.has(frame.name))
+    );
+  }, [selectedManualAnimation, sheetFrames]);
+  const scopedSheetLayoutValues = useMemo(() => {
+    const firstRow = plannedSheetLayout.rows[0];
+    const layoutSource =
+      sheetLayoutScope === "frame"
+        ? currentFrame
+        : sheetLayoutScope === "row"
+          ? selectedRowLayoutFrame
+          : sheetFrames.find((frame) => frame.sheetLayout?.scope === "sheet") ?? sheetFrames[0];
+    const layout = layoutSource?.sheetLayout;
+
+    return {
+      cellWidth:
+        sheetLayoutScope === "frame"
+          ? currentFrame?.rect.w ?? selectedSheetLayoutRow?.cellWidth ?? frameWidth
+          : sheetLayoutScope === "row"
+            ? selectedSheetLayoutRow?.cellWidth ?? frameWidth
+            : firstRow?.cellWidth ?? frameWidth,
+      cellHeight:
+        sheetLayoutScope === "frame"
+          ? currentFrame?.rect.h ?? selectedSheetLayoutRow?.cellHeight ?? frameHeight
+          : sheetLayoutScope === "row"
+            ? selectedSheetLayoutRow?.cellHeight ?? frameHeight
+            : firstRow?.cellHeight ?? frameHeight,
+      offsetX: layout?.offsetX ?? 0,
+      offsetY: layout?.offsetY ?? 0,
+      spacing: layout?.spacing ?? sheetSpacing,
+      extrude: layout?.extrude ?? sheetExtrude
+    };
+  }, [
+    currentFrame,
+    frameHeight,
+    frameWidth,
+    plannedSheetLayout.rows,
+    selectedRowLayoutFrame,
+    selectedSheetLayoutRow,
+    sheetExtrude,
+    sheetFrames,
+    sheetLayoutScope,
+    sheetSpacing
+  ]);
+  const canEditScopedSheetLayout =
+    sheetMode &&
+    editableSheetFrames.length > 0 &&
+    sheetRowAnimations.length > 0 &&
+    (sheetLayoutScope !== "row" || selectedManualAnimation !== undefined) &&
+    (sheetLayoutScope !== "frame" || selectedDetectedFrame !== undefined);
   const sheetDetectorReview = useMemo(
     () =>
       sheetMode && editableSheetFrames.length > 0 && sheetRowAnimations.length > 0
@@ -3404,6 +3470,67 @@ export function App() {
     [editableSheetFrames, frameHeight, frameWidth, sheetColumns, sheetMargin, sheetRowAnimations, sheetRows, sheetSpacing]
   );
 
+  const updateScopedSheetLayout = useCallback(
+    (field: SheetLayoutPatchField, value: number) => {
+      if (!canEditScopedSheetLayout) {
+        return;
+      }
+
+      const maxValue = 1024;
+      const minValue = field === "offsetX" || field === "offsetY" ? -1024 : field === "cellWidth" || field === "cellHeight" ? 1 : 0;
+      const nextValue = clampSheetInteger(value, minValue, maxValue);
+      const patch: SheetLayoutPatch = { [field]: nextValue };
+      const baseFrames = detectedSheetFramesRef.current.length > 0 ? detectedSheetFramesRef.current : editableSheetFrames;
+      const baseAnimations = detectedRowAnimationsRef.current.length > 0 ? detectedRowAnimationsRef.current : sheetRowAnimations;
+      const nextMargin = sheetMargin;
+      const nextSpacing = sheetLayoutScope === "sheet" && field === "spacing" ? nextValue : sheetSpacing;
+      const nextFrames = applyScopedSheetLayoutPatch({
+        frames: baseFrames,
+        animations: baseAnimations,
+        scope: sheetLayoutScope,
+        patch,
+        margin: nextMargin,
+        spacing: nextSpacing,
+        ...(selectedManualAnimationName ? { animationName: selectedManualAnimationName } : {}),
+        ...(selectedDetectedFrame?.name ? { frameName: selectedDetectedFrame.name } : {})
+      });
+
+      detectedSheetFramesRef.current = nextFrames;
+      detectedRowAnimationsRef.current = baseAnimations;
+      setDetectedSheetFrames(nextFrames);
+      setDetectedRowAnimations(baseAnimations);
+      if (sheetLayoutScope === "sheet") {
+        if (field === "spacing") {
+          setSheetSpacing(nextValue);
+        }
+        if (field === "extrude") {
+          setSheetExtrude(nextValue);
+        }
+      }
+      const nextSnapshot = createFrameEditSnapshot({
+        frames: nextFrames,
+        animations: baseAnimations,
+        selectedFrameIndex: selectedFrameIndexRef.current,
+        selectedAnimationName: selectedAnimationNameRef.current
+      });
+      setFrameEditHistory((current) => pushFrameEditHistoryEntry(current, nextSnapshot));
+      setFixResult(null);
+      setIsPlaying(false);
+      appendLog(`Updated ${sheetLayoutScope} ${field} to ${nextValue}`);
+    },
+    [
+      appendLog,
+      canEditScopedSheetLayout,
+      editableSheetFrames,
+      selectedDetectedFrame?.name,
+      selectedManualAnimationName,
+      sheetLayoutScope,
+      sheetMargin,
+      sheetRowAnimations,
+      sheetSpacing
+    ]
+  );
+
   const changePlaybackDirection = useCallback(
     (value: string) => {
       const nextDirection = value as PlaybackDirection;
@@ -4919,9 +5046,80 @@ export function App() {
             <NumberField label="Columns" value={sheetColumns} min={1} onChange={updateManualSheetColumns} />
           </>
         )}
-        <NumberField label="Margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
-        <NumberField label="Spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
-        <NumberField label="Extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
+        {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
+          <div className="sheet-layout-scope-controls" aria-label="Scoped sheet output layout">
+            <div className="sheet-layout-scope-heading">
+              <strong>Output layout</strong>
+              <span>
+                {sheetLayoutScope === "sheet"
+                  ? `${plannedSheetLayout.rowCount} rows`
+                  : sheetLayoutScope === "row"
+                    ? selectedManualAnimation?.name ?? "No row"
+                    : selectedDetectedFrame?.name ?? "No frame"}
+              </span>
+            </div>
+            <SelectField
+              label="Apply to"
+              value={sheetLayoutScope}
+              options={sheetLayoutScopeOptions}
+              onChange={(value) => setSheetLayoutScope(value as SheetLayoutOverrideScope)}
+            />
+            <div className="sheet-layout-scope-grid">
+              <NumberField
+                label="Output W"
+                value={scopedSheetLayoutValues.cellWidth}
+                min={1}
+                max={1024}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("cellWidth", value)}
+              />
+              <NumberField
+                label="Output H"
+                value={scopedSheetLayoutValues.cellHeight}
+                min={1}
+                max={1024}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("cellHeight", value)}
+              />
+              <NumberField
+                label="Offset X"
+                value={scopedSheetLayoutValues.offsetX}
+                min={-1024}
+                max={1024}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("offsetX", value)}
+              />
+              <NumberField
+                label="Offset Y"
+                value={scopedSheetLayoutValues.offsetY}
+                min={-1024}
+                max={1024}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("offsetY", value)}
+              />
+              <NumberField
+                label="Spacing"
+                value={scopedSheetLayoutValues.spacing}
+                min={0}
+                max={1024}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("spacing", value)}
+              />
+              <NumberField
+                label="Extrude"
+                value={scopedSheetLayoutValues.extrude}
+                min={0}
+                max={8}
+                disabled={!canEditScopedSheetLayout}
+                onChange={(value) => updateScopedSheetLayout("extrude", value)}
+              />
+            </div>
+            <small>Scoped output edits repack the fixed sheet only. Source boxes stay editable in the Input view.</small>
+          </div>
+        ) : null}
+        <NumberField label="Sheet margin" value={sheetMargin} min={0} onChange={updateManualSheetMargin} />
+        <NumberField label="Sheet spacing" value={sheetSpacing} min={0} onChange={updateManualSheetSpacing} />
+        <NumberField label="Sheet extrude" value={sheetExtrude} min={0} max={8} onChange={setSheetExtrude} />
         {editableSheetFrames.length > 0 && sheetRowAnimations.length > 0 ? (
           <div className="sheet-fit-summary is-valid">
             <strong>{plannedSheetLayout.frameCount} frames</strong>

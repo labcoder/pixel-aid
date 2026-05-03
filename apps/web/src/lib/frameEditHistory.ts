@@ -113,7 +113,8 @@ function cloneFrame(frame: SpriteFrame): SpriteFrame {
     pivot: { ...frame.pivot },
     ...(frame.tags ? { tags: [...frame.tags] } : {}),
     ...(frame.anchors ? { anchors: frame.anchors.map((anchor) => ({ ...anchor, point: { ...anchor.point } })) } : {}),
-    ...(frame.boxes ? { boxes: frame.boxes.map((box) => ({ ...box, rect: { ...box.rect } })) } : {})
+    ...(frame.boxes ? { boxes: frame.boxes.map((box) => ({ ...box, rect: { ...box.rect } })) } : {}),
+    ...(frame.sheetLayout ? { sheetLayout: { ...frame.sheetLayout } } : {})
   };
 }
 

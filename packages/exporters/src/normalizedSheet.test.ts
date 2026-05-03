@@ -105,4 +105,39 @@ describe("normalized sheet packing", () => {
       }
     ]);
   });
+
+  test("preserves scoped sheet layout metadata when normalizing frames", () => {
+    const packing = createNormalizedSheetPacking({
+      frames: [
+        {
+          ...frames[0]!,
+          sheetLayout: {
+            scope: "frame",
+            rowName: "row_1",
+            cellWidth: 24,
+            cellHeight: 30,
+            spacing: 2,
+            extrude: 1,
+            offsetX: -1,
+            offsetY: 3
+          }
+        }
+      ],
+      rowFrameCounts: [1],
+      margin: 0,
+      spacing: 0,
+      extrude: 0
+    });
+
+    expect(packing.frames[0]?.sheetLayout).toEqual({
+      scope: "frame",
+      rowName: "row_1",
+      cellWidth: 24,
+      cellHeight: 30,
+      spacing: 2,
+      extrude: 1,
+      offsetX: -1,
+      offsetY: 3
+    });
+  });
 });

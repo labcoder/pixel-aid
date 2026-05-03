@@ -197,6 +197,44 @@ describe("generic manifest export", () => {
     expect(validateManifest(manifest)).toEqual([]);
   });
 
+  test("serializes scoped sheet layout overrides in frame metadata", () => {
+    const manifest = createPixelAssetManifest({
+      result,
+      imageName: "hero_sheet.png",
+      frames: [
+        {
+          name: "row_1_000",
+          rect: { x: 0, y: 0, w: 16, h: 16 },
+          pivot: { x: 8, y: 14 },
+          durationMs: 120,
+          tags: ["row_1"],
+          sheetLayout: {
+            scope: "row",
+            rowName: "row_1",
+            cellWidth: 48,
+            cellHeight: 64,
+            spacing: 2,
+            extrude: 1,
+            offsetX: 0,
+            offsetY: 4
+          }
+        }
+      ]
+    });
+
+    expect(manifest.frames[0]?.sheetLayout).toEqual({
+      scope: "row",
+      rowName: "row_1",
+      cellWidth: 48,
+      cellHeight: 64,
+      spacing: 2,
+      extrude: 1,
+      offsetX: 0,
+      offsetY: 4
+    });
+    expect(validateManifest(manifest)).toEqual([]);
+  });
+
   test("preserves alpha cleanup settings and diagnostics in operation metadata", () => {
     const alphaResult: PixelFixResult = {
       ...result,

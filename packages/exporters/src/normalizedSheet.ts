@@ -116,6 +116,7 @@ function copyFrameWithRect(frame: SpriteFrame, rect: Rect, pivot: { x: number; y
     pivot: { ...pivot },
     ...(frame.sourceRect ? { sourceRect: { ...frame.sourceRect } } : {}),
     ...(frame.tags ? { tags: [...frame.tags] } : {}),
+    ...(frame.sheetLayout ? { sheetLayout: { ...frame.sheetLayout } } : {}),
     ...(frame.anchors
       ? {
           anchors: frame.anchors.map((anchor) => ({
