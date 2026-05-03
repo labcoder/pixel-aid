@@ -8,6 +8,7 @@ import {
   decodeJpegFile,
   decodePngFile,
   encodePngFile,
+  readImageFile,
   readRgbaImageFile,
 } from "./imageIo";
 
@@ -83,6 +84,38 @@ describe("image IO", () => {
     });
   });
 
+  it("reports original format and normalized RGBA metadata", async () => {
+    await withTempDir(async (dir) => {
+      const pngPath = path.join(dir, "asset.png");
+      const jpgPath = path.join(dir, "asset.jpeg");
+      await encodePngFile(sampleImage, pngPath);
+      await writeFile(jpgPath, encodeJpeg({
+        width: sampleImage.width,
+        height: sampleImage.height,
+        data: Buffer.from(sampleImage.data),
+      }, 100).data);
+
+      const png = await readImageFile(pngPath);
+      const jpeg = await readImageFile(jpgPath);
+
+      expect(png.ok).toBe(true);
+      expect(jpeg.ok).toBe(true);
+      if (!png.ok || !jpeg.ok) return;
+      expect(png.value.metadata).toMatchObject({
+        path: pngPath,
+        format: "png",
+        normalizedFormat: "rgba",
+        alpha: "preserved",
+      });
+      expect(jpeg.value.metadata).toMatchObject({
+        path: jpgPath,
+        format: "jpeg",
+        normalizedFormat: "rgba",
+        alpha: "opaque",
+      });
+    });
+  });
+
   it("returns unsupported_format for unsupported image extensions", async () => {
     await withTempDir(async (dir) => {
       const filePath = path.join(dir, "asset.gif");
@@ -93,7 +126,22 @@ describe("image IO", () => {
       expect(result.ok).toBe(false);
       if (result.ok) return;
       expect(result.error.code).toBe("unsupported_format");
-      expect(result.error.exitCode).toBe(3);
+      expect(result.error.exitCode).toBe(6);
+      expect(result.error.details?.supportedFormats).toEqual(["png", "jpg", "jpeg"]);
+    });
+  });
+
+  it("returns input_too_large before decoding oversized files", async () => {
+    await withTempDir(async (dir) => {
+      const filePath = path.join(dir, "asset.png");
+      await encodePngFile(sampleImage, filePath);
+
+      const result = await readRgbaImageFile(filePath, { maxBytes: 4 });
+
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.error.code).toBe("input_too_large");
+      expect(result.error.details).toMatchObject({ maxBytes: 4 });
     });
   });
 

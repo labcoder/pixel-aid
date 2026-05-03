@@ -11,6 +11,7 @@ PixelAid source code is licensed under `AGPL-3.0-only`. Third-party dependencies
 | lucide-react | 1.11.0 | ISC | Runtime editor icons |
 | fflate | 0.8.2 | MIT | Runtime ZIP export |
 | pngjs | 7.0.0 | MIT | Node CLI/MCP PNG decode and encode |
+| jpeg-js | 0.4.4 | BSD-3-Clause | Node CLI/MCP JPEG input decode |
 | Vite | 8.0.10 | MIT | Build/dev server |
 | @vitejs/plugin-react | 6.0.1 | MIT | Build React transform |
 | TypeScript | 6.0.3 | Apache-2.0 | Compiler |

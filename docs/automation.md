@@ -34,6 +34,18 @@ pixelaid palette input.png --max-colors 24 --out palette.hex
 pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip
 ```
 
+## Image Formats
+
+Automation decodes source images into deterministic `RGBAImage` data before calling the core fixer.
+
+| Format | Input | Output | Alpha behavior |
+| --- | --- | --- | --- |
+| PNG | Yes | Yes | Preserved |
+| JPEG/JPG | Yes | No | Normalized to opaque RGBA |
+| WebP | Deferred | No | Use an external conversion step for now |
+
+PNG remains the canonical lossless output for CLI and MCP-ready workflows. `inspect_image` reports the original source format, the normalized processing format (`rgba`), and whether alpha was preserved or normalized to opaque. Unsupported formats return `unsupported_format` with exit code `6`; oversized inputs return `input_too_large` before decoding.
+
 Useful fix flags:
 
 - `--asset-type sprite|sprite-sheet|animation|character|tileset|tilemap|portrait|icon|ui|background`
@@ -131,10 +143,10 @@ Exit codes:
 | 0 | Success |
 | 1 | Unexpected error |
 | 2 | Invalid arguments or options |
-| 3 | Input, format, decode, encode, or write failure |
+| 3 | Input, decode, encode, write, or input-size failure |
 | 4 | Processing failure |
 | 5 | Unsafe output path or output already exists |
-| 6 | Export failure |
+| 6 | Unsupported format |
 | 8 | Cancelled |
 
 ## AI-Agent Workflow
@@ -151,7 +163,7 @@ A typical local AI workflow should avoid guessing settings:
 
 For tilemap-like images, `inspect`, `suggest`, and `quality_report` include repeated-tile candidates when the source appears to be a map rather than a tileset. Candidates include tile size, row/column count, repeated signature ratio, dimension fit, grid consistency, confidence, and warnings. PixelAid keeps tilemaps inspect-first; use those candidates as manual tile-size guidance before applying destructive cleanup.
 
-For tilesets, seam diagnostics now include preview-only repair suggestions. A quality report can flag edge mismatch or lighting discontinuity and attach a repair strategy such as edge color harmonization, lighting harmonization, crop/phase review, or manual repaint guidance. These suggestions are metadata for review and automation planning; they do not mutate the source image.
+For tilesets, seam diagnostics now include conservative repair suggestions. A quality report can flag edge mismatch or lighting discontinuity and attach a repair strategy such as edge color harmonization, lighting harmonization, crop/phase review, or manual repaint guidance. The editor can apply low-risk edge/lighting repairs to the fixed output, while automation keeps suggestions and diagnostics available for planning.
 
 For outline-sensitive assets, pass source outline colors when known:
 
@@ -205,6 +217,6 @@ Errors keep the same PixelAid automation envelope as the CLI.
 
 - A long-running MCP server process.
 - Local HTTP API.
-- Additional non-PNG codecs beyond JPEG input.
+- WebP and other non-PNG codecs beyond JPEG input.
 - Direct AI-provider generation or editing calls.
 - Streaming progress events for CLI/MCP jobs.

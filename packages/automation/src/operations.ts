@@ -35,7 +35,7 @@ import {
   type SheetSliceOptions,
   type SpriteFrame,
 } from "@pixelaid/shared";
-import { encodePngFile, readRgbaImageFile } from "./imageIo";
+import { encodePngFile, readImageFile, readRgbaImageFile, type ImageFileMetadata } from "./imageIo";
 import {
   normalizeFixOptions,
   parseAutomationAssetType,
@@ -80,6 +80,7 @@ export type AutomationFileRecord = {
 
 export type ImageInspection = {
   inputPath: string;
+  source: ImageFileMetadata;
   image: { width: number; height: number };
   palette: {
     exactColorCount: number;
@@ -197,14 +198,14 @@ export async function inspectImage(
   try {
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "input-read", 5, "Reading source image");
-    const imageResult = await readRgbaImageFile(request.inputPath);
+    const imageResult = await readImageFile(request.inputPath);
     if (!imageResult.ok) {
       return imageResult;
     }
     assertAutomationNotCancelled(scopedRuntime);
 
     reportAutomationProgress(scopedRuntime, operation, "analysis", 30, "Analyzing source structure");
-    const image = imageResult.value;
+    const image = imageResult.value.image;
     const suggestion = createFixSuggestion(image, request.options);
     if (!suggestion.ok) {
       return suggestion;
@@ -230,6 +231,7 @@ export async function inspectImage(
     const sheetLayout = detectSheetLayout(image);
     const inspection: ImageInspection = {
       inputPath: request.inputPath,
+      source: imageResult.value.metadata,
       image: { width: image.width, height: image.height },
       palette: {
         exactColorCount: countVisibleExactColors(image),

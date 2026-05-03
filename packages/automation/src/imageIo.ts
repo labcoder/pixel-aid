@@ -12,28 +12,52 @@ import {
 export type ImageFileMetadata = {
   path: string;
   format: "png" | "jpeg";
+  normalizedFormat: "rgba";
+  alpha: "preserved" | "opaque";
+};
+
+export type DecodedImageFile = {
+  image: RGBAImage;
+  metadata: ImageFileMetadata;
+};
+
+export type ImageReadOptions = {
+  maxBytes?: number;
 };
 
 const PNG_EXTENSION = ".png";
 const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg"]);
+const SUPPORTED_FORMATS = ["png", "jpg", "jpeg"];
+const DEFAULT_MAX_IMAGE_BYTES = 64 * 1024 * 1024;
 
-export async function readRgbaImageFile(filePath: string): Promise<AutomationResult<RGBAImage>> {
+export async function readImageFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<DecodedImageFile>> {
   const extension = path.extname(filePath).toLowerCase();
   if (extension === PNG_EXTENSION) {
-    return decodePngFile(filePath);
+    const image = await decodePngFile(filePath, options);
+    return image.ok
+      ? automationOk({ image: image.value, metadata: imageMetadata(filePath, "png", "preserved") })
+      : image;
   }
   if (JPEG_EXTENSIONS.has(extension)) {
-    return decodeJpegFile(filePath);
+    const image = await decodeJpegFile(filePath, options);
+    return image.ok
+      ? automationOk({ image: image.value, metadata: imageMetadata(filePath, "jpeg", "opaque") })
+      : image;
   }
 
-  return automationError("unsupported_format", `Unsupported image format "${extension || "unknown"}". PixelAid automation currently supports PNG and JPEG files.`, 3, {
+  return automationError("unsupported_format", `Unsupported image format "${extension || "unknown"}". PixelAid automation currently supports PNG and JPEG files.`, 6, {
     path: filePath,
-    supportedFormats: ["png", "jpg", "jpeg"],
+    supportedFormats: SUPPORTED_FORMATS,
   });
 }
 
-export async function decodePngFile(filePath: string): Promise<AutomationResult<RGBAImage>> {
-  const bytes = await readImageBytes(filePath, "PNG");
+export async function readRgbaImageFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<RGBAImage>> {
+  const decoded = await readImageFile(filePath, options);
+  return decoded.ok ? automationOk(decoded.value.image, decoded.warnings) : decoded;
+}
+
+export async function decodePngFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<RGBAImage>> {
+  const bytes = await readImageBytes(filePath, "PNG", options);
   if (!bytes.ok) return bytes;
 
   try {
@@ -51,8 +75,8 @@ export async function decodePngFile(filePath: string): Promise<AutomationResult<
   }
 }
 
-export async function decodeJpegFile(filePath: string): Promise<AutomationResult<RGBAImage>> {
-  const bytes = await readImageBytes(filePath, "JPEG");
+export async function decodeJpegFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<RGBAImage>> {
+  const bytes = await readImageBytes(filePath, "JPEG", options);
   if (!bytes.ok) return bytes;
 
   try {
@@ -88,7 +112,7 @@ export async function encodePngFile(image: RGBAImage, filePath: string): Promise
     png.data = Buffer.from(image.data);
     const bytes = PNG.sync.write(png, { colorType: 6, inputColorType: 6 });
     await writeFile(filePath, bytes);
-    return automationOk({ path: filePath, format: "png" });
+    return automationOk(imageMetadata(filePath, "png", "preserved"));
   } catch (error) {
     return automationError("write_failed", `Could not write PNG file: ${filePath}`, 3, {
       path: filePath,
@@ -97,7 +121,7 @@ export async function encodePngFile(image: RGBAImage, filePath: string): Promise
   }
 }
 
-async function readImageBytes(filePath: string, formatLabel: string): Promise<AutomationResult<Buffer>> {
+async function readImageBytes(filePath: string, formatLabel: string, options: ImageReadOptions = {}): Promise<AutomationResult<Buffer>> {
   try {
     await access(filePath);
   } catch {
@@ -105,11 +129,29 @@ async function readImageBytes(filePath: string, formatLabel: string): Promise<Au
   }
 
   try {
-    return automationOk(await readFile(filePath));
+    const bytes = await readFile(filePath);
+    const maxBytes = options.maxBytes ?? DEFAULT_MAX_IMAGE_BYTES;
+    if (bytes.byteLength > maxBytes) {
+      return automationError("input_too_large", `${formatLabel} file is too large for PixelAid automation: ${filePath}`, 3, {
+        path: filePath,
+        byteLength: bytes.byteLength,
+        maxBytes,
+      });
+    }
+    return automationOk(bytes);
   } catch (error) {
     return automationError("decode_failed", `Could not read ${formatLabel} file: ${filePath}`, 3, {
       path: filePath,
       cause: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+function imageMetadata(filePath: string, format: ImageFileMetadata["format"], alpha: ImageFileMetadata["alpha"]): ImageFileMetadata {
+  return {
+    path: filePath,
+    format,
+    normalizedFormat: "rgba",
+    alpha,
+  };
 }
