@@ -55,6 +55,28 @@ function largeAnimationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function cleanAnimationSheetLikeSource(): RGBAImage {
+  const image = blankImage(768, 512);
+  const rows = [
+    { y: 24, cells: 5 },
+    { y: 98, cells: 8 },
+    { y: 172, cells: 6 },
+    { y: 246, cells: 9 },
+    { y: 320, cells: 7 },
+    { y: 394, cells: 9 }
+  ];
+
+  for (const row of rows) {
+    for (let column = 0; column < row.cells; column += 1) {
+      const x = 92 + column * 62;
+      drawRect(image, x, row.y, 60, 56, [70, 75, 75, 255]);
+      drawRect(image, x + 16, row.y + 10, 28, 32, [90, 178, 166, 255]);
+    }
+  }
+
+  return image;
+}
+
 function complexPresentationSheetLikeSource(): RGBAImage {
   const image = blankImage(512, 320);
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -626,7 +648,7 @@ describe("fix setting suggestions", () => {
   });
 
   test("keeps normal animation sheet cleanup defaults when conditioning is not needed", () => {
-    const suggestion = suggestFixSettings(largeAnimationSheetLikeSource());
+    const suggestion = suggestFixSettings(cleanAnimationSheetLikeSource());
 
     expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.mode).toBe("spriteSheet");

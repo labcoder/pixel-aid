@@ -3029,16 +3029,28 @@ button:focus-visible {
 
 .pivot-correction-controls {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
-  gap: 0.35rem;
+  grid-template-columns: repeat(auto-fit, minmax(116px, 1fr));
+  gap: 0.45rem;
 }
 
 .pivot-correction-controls .field-row {
-  gap: 0.25rem;
+  grid-template-columns: 1fr;
+  gap: 0.18rem;
+  margin-top: 0;
+}
+
+.pivot-correction-controls .field-row span {
+  font-size: 0.64rem;
+}
+
+.pivot-correction-controls .field-row input {
+  text-align: right;
 }
 
 .pivot-correction-controls button {
   min-height: 28px;
+  min-width: 0;
+  white-space: nowrap;
 }
 
 .frame-metadata-editor {
@@ -3189,12 +3201,6 @@ button:focus-visible {
   text-align: right;
 }
 
-.frame-metadata-collapsed-note {
-  color: #78837e;
-  font-size: 0.68rem;
-  line-height: 1.35;
-}
-
 .clip-editor {
   min-width: 0;
   display: grid;
@@ -3303,7 +3309,7 @@ button:focus-visible {
   overflow: auto;
 }
 
-@media (max-width: 1320px) {
+@media (max-width: 920px) {
   .timeline-workspace {
     grid-template-columns: minmax(0, 1fr);
   }

@@ -1,8 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
+
+const workspacePackage = (path: string) => fileURLToPath(new URL(`../../packages/${path}`, import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: [
+      { find: "@pixelaid/worker/fix.worker", replacement: workspacePackage("worker/src/fix.worker.ts") },
+      { find: "@pixelaid/worker", replacement: workspacePackage("worker/src/index.ts") },
+      { find: "@pixelaid/core", replacement: workspacePackage("core/src/index.ts") },
+      { find: "@pixelaid/exporters", replacement: workspacePackage("exporters/src/index.ts") },
+      { find: "@pixelaid/fixtures", replacement: workspacePackage("fixtures/src/index.ts") },
+      { find: "@pixelaid/shared", replacement: workspacePackage("shared/src/index.ts") }
+    ]
+  },
   build: {
     chunkSizeWarningLimit: 700,
     rolldownOptions: {
