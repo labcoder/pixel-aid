@@ -4,6 +4,19 @@ PixelAid fixtures are deterministic TypeScript generators. The repo does not com
 
 Release-facing onboarding/demo samples are documented in `docs/onboarding-samples.md`. The canonical sample registry is `releaseOnboardingSamples` in `packages/fixtures/src/onboardingSamples.ts`; it links demo workflows to existing deterministic fixtures and records first-party provenance.
 
+## Privacy-Safe Beta Fixture Intake
+
+When beta feedback exposes a repeatable failure, classify the source before adding anything to the repo:
+
+| Intake status | Repo action | Notes |
+| --- | --- | --- |
+| Public/reusable | Add a minimized first-party fixture or small committed asset only if redistribution is explicit. | Keep the permission note in fixture docs or metadata. |
+| Private for debugging | Use locally to understand the failure, then replace it with a deterministic synthetic fixture. | Do not commit the user's source art, prompt text, API metadata, or diagnostics bundle. |
+| Cannot share | Ask for symptoms/settings only and create a synthetic reproduction from scratch. | Capture the failure mode, not the user's asset. |
+| Synthetic replacement required | Add a generator under `packages/fixtures/src` with first-party provenance. | Prefer simple shapes that isolate one algorithmic failure. |
+
+New bugs should become fixtures when they affect grid detection, alpha/background cleanup, palette stability, sheet/tile structure, export metadata, or a release workflow that otherwise needs manual QA. Keep large sources lazy and prefer compact golden signatures over checked-in PNG outputs.
+
 ## Visual Regression Goldens
 
 `packages/fixtures/src/visualRegression.ts` defines the compact golden-signature suite used by `packages/core/src/visualRegression.test.ts`. Each case runs a real `fixImage` path and compares:
@@ -44,6 +57,8 @@ When a signature changes, the test writes JSON artifacts under `packages/core/.v
 | `palette-drift-walk-4f` | Animation sheet | 4 frames at 24x32 | Shared palette behavior, frame names, pivots, animation metadata. |
 | `uneven-gutter-labeled-sheet` | Animation sheet | 640x360 row sheet | Row counts, labels, source rectangles, uneven gutter warnings. |
 | `drifted-effect-sheet` | Animation sheet | 640x360 effect-heavy row sheet | Component merging and drift warning metadata. |
+| `baseline-drift-animation-sheet` | Animation sheet | 160x40, 4 frames | Baseline/pivot drift and content-center instability. |
+| `presentation-mockup-2x6-sheet` | Animation sheet | 720x420 poster-style sheet | Fake checkerboard cells, captions, brackets, watermark marks, and true sprite bounds inside presentation cells. |
 | `tileset-seams-4x4-16` | Tileset | 4x4 tiles, 16x16 cells | Tile frame rects, seam samples, palette consistency. |
 | `large-landscape-bands` | Background | 1440x810 scene | Large-canvas behavior and crop conservatism. |
 | `large-non-sprite-background` | Background | 1280x960 scene | Preservation-oriented non-sprite handling. |

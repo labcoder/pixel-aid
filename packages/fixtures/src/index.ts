@@ -8,6 +8,7 @@ export { largeBackgroundFixtures } from "./largeBackgrounds";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
+export { presentationSpriteSheetFixtures } from "./presentationSpriteSheets";
 export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 export { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
@@ -26,6 +27,7 @@ export type {
 import { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";
 import { largeBackgroundFixtures } from "./largeBackgrounds";
 import { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
+import { presentationSpriteSheetFixtures } from "./presentationSpriteSheets";
 import { tilesetSeamFixtures } from "./tilesetSeams";
 import { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 import { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
@@ -36,6 +38,7 @@ export const cleanupFixtureCatalog: CleanupFixture[] = [
   ...transparentMatteHaloSprites,
   ...paletteDriftAnimationFixtures,
   ...unevenSpriteSheetFixtures,
+  ...presentationSpriteSheetFixtures,
   ...tilesetSeamFixtures,
   ...largeBackgroundFixtures
 ];
