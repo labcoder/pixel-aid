@@ -1,5 +1,15 @@
 import type { RGBAImage } from "@pixelaid/shared";
 
+export function imageDataViewForCanvas(image: RGBAImage): Uint8ClampedArray<ArrayBuffer> {
+  if (image.data.buffer instanceof ArrayBuffer) {
+    return new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength) as Uint8ClampedArray<ArrayBuffer>;
+  }
+
+  const copy = new Uint8ClampedArray(image.data.byteLength);
+  copy.set(image.data);
+  return copy;
+}
+
 export function rgbaImageToCanvas(image: RGBAImage, errorMessage: string): HTMLCanvasElement {
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
@@ -9,12 +19,8 @@ export function rgbaImageToCanvas(image: RGBAImage, errorMessage: string): HTMLC
     throw new Error(errorMessage);
   }
 
-  const imageData =
-    image.data.buffer instanceof ArrayBuffer
-      ? new Uint8ClampedArray(image.data.buffer, image.data.byteOffset, image.data.byteLength)
-      : new Uint8ClampedArray(image.data);
   context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(imageData, image.width, image.height), 0, 0);
+  context.putImageData(new ImageData(imageDataViewForCanvas(image), image.width, image.height), 0, 0);
   return canvas;
 }
 

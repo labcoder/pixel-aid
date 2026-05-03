@@ -1,24 +1,29 @@
 import type { RGBAImage } from "@pixelaid/shared";
+import { disposeCanvas, imageDataViewForCanvas } from "./canvasImage";
 
 export async function rgbaImageToPngBlob(image: RGBAImage): Promise<Blob> {
   const canvas = document.createElement("canvas");
   canvas.width = image.width;
   canvas.height = image.height;
 
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create PNG export canvas");
+  try {
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Unable to create PNG export canvas");
+    }
+
+    context.imageSmoothingEnabled = false;
+    context.putImageData(new ImageData(imageDataViewForCanvas(image), image.width, image.height), 0, 0);
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      throw new Error("Browser failed to encode PNG");
+    }
+
+    return blob;
+  } finally {
+    disposeCanvas(canvas);
   }
-
-  context.imageSmoothingEnabled = false;
-  context.putImageData(new ImageData(new Uint8ClampedArray(image.data), image.width, image.height), 0, 0);
-
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
-  if (!blob) {
-    throw new Error("Browser failed to encode PNG");
-  }
-
-  return blob;
 }
 
 export function downloadBlob(blob: Blob, filename: string): void {

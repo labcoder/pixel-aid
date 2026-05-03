@@ -49,6 +49,14 @@ export function selectVisibleBusyOperation({
   return importOperation ?? activationOperation ?? analysisOperation ?? fixOperation;
 }
 
+export function hasBlockingBusyOperation({
+  importOperation = null,
+  activationOperation = null,
+  fixOperation = null
+}: VisibleBusyOperationInput): boolean {
+  return importOperation !== null || activationOperation !== null || fixOperation !== null;
+}
+
 export function formatBusyOperationLabel(operation: BusyOperation | null): string | null {
   if (!operation) {
     return null;

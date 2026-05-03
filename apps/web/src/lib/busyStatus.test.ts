@@ -3,6 +3,7 @@ import {
   clearBusyOperation,
   createBusyOperation,
   formatBusyOperationLabel,
+  hasBlockingBusyOperation,
   selectVisibleBusyOperation,
   updateBusyOperation
 } from "./busyStatus";
@@ -47,5 +48,13 @@ describe("busy status", () => {
 
     expect(clearBusyOperation(operation, 3)).toEqual(operation);
     expect(clearBusyOperation(operation, 4)).toBeNull();
+  });
+
+  test("does not treat background diagnostics as a global editor lock", () => {
+    const analysis = createBusyOperation(6, "analysis", "Preparing diagnostics for cover.jpg...");
+    const fix = createBusyOperation(7, "fix", "Fixing image...");
+
+    expect(hasBlockingBusyOperation({ analysisOperation: analysis })).toBe(false);
+    expect(hasBlockingBusyOperation({ analysisOperation: analysis, fixOperation: fix })).toBe(true);
   });
 });

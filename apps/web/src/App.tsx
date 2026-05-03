@@ -127,6 +127,7 @@ import {
   clearBusyOperation,
   createBusyOperation,
   formatBusyOperationLabel,
+  hasBlockingBusyOperation,
   selectVisibleBusyOperation,
   updateBusyOperation,
   type BusyOperation,
@@ -1036,7 +1037,9 @@ export function App() {
   const isAssetActivating = assetActivationOperation !== null;
   const isAnalyzing = analysisOperation !== null;
   const isFixing = fixOperation !== null || fixProgress !== null;
-  const isEditorBusy = isImporting || isAssetActivating || isAnalyzing || isFixing;
+  const isEditorBusy =
+    hasBlockingBusyOperation({ importOperation, activationOperation: assetActivationOperation, fixOperation }) ||
+    fixProgress !== null;
   const visibleFixOperation = fixProgress
     ? updateBusyOperation(fixOperation ?? createBusyOperation(0, "fix", formatFixProgress(fixProgress)), formatFixProgress(fixProgress))
     : fixOperation;
@@ -1566,6 +1569,11 @@ export function App() {
     qualityReportSheetLayout,
     selectedAsset
   ]);
+  useEffect(() => {
+    if (analysisOperation && (!selectedAsset || exactQualityReport)) {
+      setAnalysisOperation(null);
+    }
+  }, [analysisOperation, exactQualityReport, selectedAsset]);
   const selectedDetectedFrame =
     selectedFrameIndex >= 0 && selectedFrameIndex < editableSheetFrames.length ? editableSheetFrames[selectedFrameIndex] : undefined;
   const selectedDetectedFrameRowName = selectedDetectedFrame?.tags?.find((tag) =>
@@ -2600,6 +2608,8 @@ export function App() {
     const frameCount = sheetMode ? sheetFrames.length : 1;
     lastLoggedFixStageRef.current = undefined;
     setTilesetRepairBackup(null);
+    setFixResult(null);
+    setLastExportValidation(null);
     const operation = nextBusyOperation("fix", sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
     setFixOperation(operation);
     setFixProgress({ requestId: "pending", stage: "decode-prep", percent: 0 });
