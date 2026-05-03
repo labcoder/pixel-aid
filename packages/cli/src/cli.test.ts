@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { encode as encodeJpeg } from "jpeg-js";
 import { describe, expect, it } from "vitest";
 import type { RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { encodePngFile } from "@pixelaid/automation";
@@ -260,12 +261,17 @@ describe("pixelaid CLI", () => {
     });
   });
 
-  it("batch fixes all pngs from a folder", async () => {
+  it("batch fixes supported PNG and JPEG sources from a folder", async () => {
     await withFixture(async ({ dir, input }) => {
       const assetsDir = path.join(dir, "assets");
       await mkdir(assetsDir);
+      const fixture = createFixtureImage();
       await writeFile(path.join(assetsDir, "hero.png"), await readFile(input));
-      await writeFile(path.join(assetsDir, "enemy.png"), await readFile(input));
+      await writeFile(path.join(assetsDir, "enemy.jpeg"), encodeJpeg({
+        width: fixture.width,
+        height: fixture.height,
+        data: Buffer.from(fixture.data),
+      }, 100).data);
 
       const capture = createCapture();
       const outDir = path.join(dir, "batch-out");
@@ -289,7 +295,7 @@ describe("pixelaid CLI", () => {
       expect(code).toBe(0);
       expect(body.command).toBe("batch");
       expect(body.result.summary).toMatchObject({ inputCount: 2, successCount: 2, failureCount: 0 });
-      expect(body.result.items.map((item: { inputPath: string }) => path.basename(item.inputPath))).toEqual(["enemy.png", "hero.png"]);
+      expect(body.result.items.map((item: { inputPath: string }) => path.basename(item.inputPath))).toEqual(["enemy.jpeg", "hero.png"]);
       await expect(stat(path.join(outDir, "enemy.fixed.png"))).resolves.toBeTruthy();
       await expect(stat(path.join(outDir, "hero.fixed.png"))).resolves.toBeTruthy();
     });

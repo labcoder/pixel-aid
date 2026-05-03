@@ -4,6 +4,7 @@ export type AutomationErrorCode =
   | "unexpected_error"
   | "invalid_options"
   | "input_not_found"
+  | "input_too_large"
   | "unsupported_format"
   | "decode_failed"
   | "encode_failed"

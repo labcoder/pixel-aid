@@ -10,8 +10,11 @@ export {
   decodeJpegFile,
   decodePngFile,
   encodePngFile,
+  readImageFile,
   readRgbaImageFile,
+  type DecodedImageFile,
   type ImageFileMetadata,
+  type ImageReadOptions,
 } from "./imageIo";
 export {
   normalizeFixOptions,

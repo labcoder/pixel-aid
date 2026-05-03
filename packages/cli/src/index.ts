@@ -90,6 +90,7 @@ type CliDiagnosticMetadata = {
 
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
 const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "@pixelaid/cli" };
+const supportedBatchImageExtensions = new Set([".png", ".jpg", ".jpeg"]);
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
@@ -519,7 +520,7 @@ async function expandBatchInputs(patterns: readonly string[], options: { recursi
     const resolved = path.resolve(pattern);
     const info = await stat(resolved).catch(() => undefined);
     if (info?.isDirectory()) {
-      inputPaths.push(...await listPngFiles(resolved, options.recursive));
+      inputPaths.push(...await listSupportedImageFiles(resolved, options.recursive));
       continue;
     }
 
@@ -536,11 +537,11 @@ async function expandGlob(pattern: string, options: { recursive: boolean }): Pro
   const filePattern = slash >= 0 ? normalized.slice(slash + 1) : normalized;
   const baseDir = path.resolve(directory);
   const matcher = globFileMatcher(filePattern);
-  const files = await listPngFiles(baseDir, options.recursive || filePattern.includes("**"));
+  const files = await listSupportedImageFiles(baseDir, options.recursive || filePattern.includes("**"));
   return files.filter((filePath) => matcher(path.basename(filePath)));
 }
 
-async function listPngFiles(directory: string, recursive: boolean): Promise<string[]> {
+async function listSupportedImageFiles(directory: string, recursive: boolean): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });
   const files: string[] = [];
 
@@ -548,12 +549,12 @@ async function listPngFiles(directory: string, recursive: boolean): Promise<stri
     const filePath = path.join(directory, entry.name);
     if (entry.isDirectory()) {
       if (recursive) {
-        files.push(...await listPngFiles(filePath, recursive));
+        files.push(...await listSupportedImageFiles(filePath, recursive));
       }
       continue;
     }
 
-    if (entry.isFile() && entry.name.toLowerCase().endsWith(".png")) {
+    if (entry.isFile() && supportedBatchImageExtensions.has(path.extname(entry.name).toLowerCase())) {
       files.push(filePath);
     }
   }

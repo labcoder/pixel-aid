@@ -36,6 +36,11 @@ describe("automation operations", () => {
       if (!result.ok) return;
       expect(result.value.image.width).toBe(4);
       expect(result.value.image.height).toBe(4);
+      expect(result.value.source).toMatchObject({
+        format: "png",
+        normalizedFormat: "rgba",
+        alpha: "preserved",
+      });
       expect(result.value.palette.exactColorCount).toBeGreaterThan(1);
       expect(result.value.gridCandidates.length).toBeGreaterThan(0);
       expect(result.value.suggestion.options.assetType).toBe("sprite");
