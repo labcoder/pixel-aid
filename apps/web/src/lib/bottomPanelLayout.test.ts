@@ -6,9 +6,10 @@ describe("bottom panel layout", () => {
     expect(getBottomPanelSections("single")).toEqual(["diagnostics"]);
   });
 
-  test("keeps timeline and diagnostics for sheet-like modes", () => {
-    expect(getBottomPanelSections("spriteSheet")).toEqual(["timeline", "diagnostics"]);
-    expect(getBottomPanelSections("tileSheet", "spriteSheet")).toEqual(["timeline", "diagnostics"]);
+  test("keeps timeline and diagnostics for sheet-like modes with frames", () => {
+    expect(getBottomPanelSections("spriteSheet")).toEqual(["diagnostics"]);
+    expect(getBottomPanelSections("spriteSheet", "spriteSheet", 6)).toEqual(["timeline", "diagnostics"]);
+    expect(getBottomPanelSections("tileSheet", "spriteSheet", 12)).toEqual(["timeline", "diagnostics"]);
   });
 
   test("uses repeat preview for tilesets and no timeline for backgrounds", () => {

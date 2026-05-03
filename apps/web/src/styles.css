@@ -48,7 +48,7 @@ button {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
-  cursor: default;
+  cursor: pointer;
 }
 
 button:hover {
@@ -2781,6 +2781,18 @@ button:focus-visible {
   font-size: 0.68rem;
   font-weight: 800;
   text-transform: uppercase;
+}
+
+.timeline-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.timeline-panel-actions button {
+  min-height: 28px;
+  padding: 0 0.5rem;
+  font-size: 0.72rem;
 }
 
 .timeline-clip-pills {
