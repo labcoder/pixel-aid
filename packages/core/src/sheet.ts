@@ -73,6 +73,8 @@ const rowLabelTemplates: LabelTemplate[] = [
   { name: "idle", rawText: "IDLE", text: "IDLE" },
   { name: "walk", rawText: "WALK", text: "WALK" },
   { name: "jump", rawText: "JUMP", text: "JUMP" },
+  { name: "run", rawText: "RUN", text: "RUN" },
+  { name: "cast", rawText: "CAST", text: "CAST" },
   { name: "shoot", rawText: "SHOOT", text: "SHOOT" },
   { name: "take_damage", rawText: "TAKE DAMAGE", text: "TAKE\nDAMAGE" },
   { name: "death", rawText: "DEATH", text: "DEATH" }
@@ -156,8 +158,11 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     })
     .filter((row) => row.segments.length > 0);
   const footerFilter = filterFooterRows(candidateRows, image.height);
-  const rawRows = alignDetectedRowsToSharedColumns(footerFilter.rows);
   const conditioning = withFooterConditioningIssue(sourceConditioning, footerFilter.removedCount);
+  const hasPresentationArtifacts = conditioning.issues.some((issue) => issue.code === "presentation-sheet-artifacts");
+  const rawRows = hasPresentationArtifacts
+    ? normalizePresentationRows(alignDetectedRowsToSharedColumns(footerFilter.rows), image.height)
+    : alignDetectedRowsToSharedColumns(footerFilter.rows);
 
   if (rawRows.length === 0) {
     return emptyDetection("No repeated sheet rows detected");
@@ -202,10 +207,12 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
 
     for (let column = 0; column < row.segments.length; column += 1) {
       const segment = row.segments[column]!;
+      const rect = { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight };
+      const sourceRect = hasPresentationArtifacts ? detectPresentationContentBounds(image, rect, background) : rect;
       frames.push({
         name: `${rowName}_${column.toString().padStart(3, "0")}`,
-        rect: { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight },
-        sourceRect: { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight },
+        rect,
+        sourceRect,
         pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
         durationMs: 120,
         tags: [rowName]
@@ -240,6 +247,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
   if (rows < 2 || columns < 2) {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
+  }
+  if (hasPresentationArtifacts) {
+    warnings.push("Presentation-style sheet artifacts detected; captions, brackets, and decorative background should be ignored before final output.");
   }
 
   const repeatedConfidence = Math.min(0.96, 0.52 + Math.min(0.24, rows * 0.06) + Math.min(0.2, columns * 0.04));
@@ -318,6 +328,60 @@ function isForeground(image: RGBAImage, x: number, y: number, background: [numbe
     Math.abs(image.data[offset + 2]! - background[2]) +
     Math.abs(image.data[offset + 3]! - background[3]);
   return distance > 42;
+}
+
+function detectPresentationContentBounds(image: RGBAImage, rect: Rect, background: [number, number, number, number]): Rect {
+  let minX = rect.x + rect.w;
+  let minY = rect.y + rect.h;
+  let maxX = rect.x - 1;
+  let maxY = rect.y - 1;
+
+  const xEnd = Math.min(image.width, rect.x + rect.w);
+  const yEnd = Math.min(image.height, rect.y + rect.h);
+  for (let y = Math.max(0, rect.y); y < yEnd; y += 1) {
+    for (let x = Math.max(0, rect.x); x < xEnd; x += 1) {
+      if (!isPresentationSpritePixel(image, x, y, background)) {
+        continue;
+      }
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+  }
+
+  if (maxX < minX || maxY < minY) {
+    return rect;
+  }
+
+  const padding = 2;
+  const x = Math.max(rect.x, minX - padding);
+  const y = Math.max(rect.y, minY - padding);
+  const right = Math.min(rect.x + rect.w, maxX + padding + 1);
+  const bottom = Math.min(rect.y + rect.h, maxY + padding + 1);
+  return { x, y, w: Math.max(1, right - x), h: Math.max(1, bottom - y) };
+}
+
+function isPresentationSpritePixel(image: RGBAImage, x: number, y: number, background: [number, number, number, number]): boolean {
+  const offset = (y * image.width + x) * 4;
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const a = image.data[offset + 3]!;
+  if (a <= 0) {
+    return false;
+  }
+
+  const backgroundDistance = Math.abs(r - background[0]) + Math.abs(g - background[1]) + Math.abs(b - background[2]) + Math.abs(a - background[3]);
+  if (backgroundDistance <= 28) {
+    return false;
+  }
+
+  const channelSpread = Math.max(r, g, b) - Math.min(r, g, b);
+  const luminance = (r + g + b) / 3;
+  const checkerboardGray = channelSpread <= 18 && luminance >= 42 && luminance <= 118;
+  const captionOrBracket = channelSpread <= 52 && luminance >= 168;
+  return !checkerboardGray && !captionOrBracket;
 }
 
 function bandsFromCounts(counts: Uint16Array, threshold: number, maxGap: number, minSize: number): Band[] {
@@ -898,6 +962,39 @@ function filterFooterRows(rows: DetectedRow[], imageHeight: number): { rows: Det
     rows: filtered,
     removedCount: rows.length - filtered.length
   };
+}
+
+function normalizePresentationRows(rows: DetectedRow[], imageHeight: number): DetectedRow[] {
+  if (rows.length === 0) {
+    return rows;
+  }
+
+  const rowStartGaps = gapsBetweenStarts(rows.map((row) => ({ x: row.band.start, w: row.band.end - row.band.start + 1 })));
+  const rowPitch = rowStartGaps.length > 0 ? Math.max(1, medianInteger(rowStartGaps)) : 0;
+
+  return rows.map((row) => {
+    if (row.segments.length < 2) {
+      return row;
+    }
+
+    const startGaps = gapsBetweenStarts(row.segments);
+    const pitch = startGaps.length > 0 ? Math.max(1, medianInteger(startGaps)) : 0;
+    const currentWidth = Math.max(1, medianInteger(row.segments.map((segment) => segment.w)));
+    const currentHeight = row.band.end - row.band.start + 1;
+    const detectedGap = Math.max(0, pitch - currentWidth);
+    const expandedWidth = pitch > 0 && detectedGap >= 8 ? Math.min(pitch, currentWidth + Math.round(detectedGap * 0.5)) : currentWidth;
+    const leftExpansion = pitch > 0 && detectedGap >= 8 ? Math.round(detectedGap * 0.375) : 0;
+    const aspectHeight = Math.round(expandedWidth * 1.25);
+    const expandedHeight =
+      rowPitch > 0 ? Math.max(currentHeight, Math.min(Math.max(currentHeight, rowPitch - 24), aspectHeight)) : currentHeight;
+
+    return {
+      ...row,
+      band: { start: row.band.start, end: Math.min(imageHeight - 1, row.band.start + expandedHeight - 1) },
+      segments: row.segments.map((segment) => ({ x: Math.max(0, segment.x - leftExpansion), w: expandedWidth })),
+      usedOutlinedCells: true
+    };
+  });
 }
 
 function isFooterLikeRow(row: DetectedRow, imageHeight: number, typicalHeight: number, typicalSegmentWidth: number): boolean {

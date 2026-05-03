@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { transparentMatteHaloSprites } from "@pixelaid/fixtures";
+import { presentationSpriteSheetFixtures, transparentMatteHaloSprites } from "@pixelaid/fixtures";
 import { analyzeQualityReport, createImage, writePixel } from "./index";
 
 describe("quality report", () => {
@@ -117,6 +117,27 @@ describe("quality report", () => {
         id: "tileset-seam-risk",
         category: "sheet",
         recommendationId: "preview-seam-repair"
+      })
+    );
+  });
+
+  test("recommends frame-first conditioning for presentation-style sheets", () => {
+    const report = analyzeQualityReport(presentationSpriteSheetFixtures[0]!.createImage(), {
+      assetType: "animationSheet",
+      maxColors: 24
+    });
+
+    expect(report.findings).toContainEqual(
+      expect.objectContaining({
+        id: "sheet-conditioning-needed",
+        category: "sheet",
+        recommendationId: "condition-sheet-first"
+      })
+    );
+    expect(report.recommendations).toContainEqual(
+      expect.objectContaining({
+        id: "condition-sheet-first",
+        settings: expect.objectContaining({ alpha: "backgroundFloodFill" })
       })
     );
   });
