@@ -138,7 +138,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   );
   const outline = suggestOutlineRepair(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
   const sheetLayout =
-    mode === "spriteSheet" && detectedSheetLayout.confidence >= 0.65
+    mode === "spriteSheet" && shouldSurfaceDetectedSheetLayout(detectedSheetLayout)
       ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
       : undefined;
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
@@ -186,6 +186,47 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     categoryReason: classification.reason,
     categoryWarnings,
     qualityReport
+  };
+}
+
+export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: AssetType): FixSettingSuggestion {
+  const suggestion = suggestFixSettings(image);
+  const mode = assetTypeToMode(assetType);
+  const definition = getAssetTypeDefinition(assetType);
+  const preset = getAssetTypeCleanupPreset(assetType);
+  const warnings = getAssetTypeWarnings(assetType);
+  const detectedSheetLayout =
+    mode === "spriteSheet" ? (suggestion.sheetLayout ?? detectSheetLayout(image)) : undefined;
+  const sheetLayout =
+    mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
+      ? scaleSheetLayoutDetection(detectedSheetLayout, suggestion.gridScaleX, suggestion.gridScaleY)
+      : undefined;
+  const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: suggestion.targetWidth, height: suggestion.targetHeight };
+
+  return {
+    ...suggestion,
+    assetType,
+    mode,
+    targetWidth: targetSize.width,
+    targetHeight: targetSize.height,
+    maxColors: preset.maxColors,
+    alpha: assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha,
+    alphaSettings: assetType === "sprite" || assetType === "icon" ? suggestion.alphaSettings : { ...preset.alphaSettings },
+    removeOrphans: preset.removeOrphans,
+    jaggyCleanup: preset.jaggyCleanup,
+    preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+    removeHalos: preset.removeHalos,
+    denoiseStrength: preset.denoiseStrength,
+    downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
+    contrastExpansionEnabled: assetType === "sprite" || assetType === "icon" ? suggestion.contrastExpansionEnabled : false,
+    outlineMode: assetType === "sprite" || assetType === "icon" ? suggestion.outlineMode : "none",
+    outlineSourceColors: assetType === "sprite" || assetType === "icon" ? suggestion.outlineSourceColors : [],
+    ...(sheetLayout ? { sheetLayout } : {}),
+    reason: `Manual asset type override applied. ${mode === "spriteSheet" && sheetLayout ? "Reprocessed source for sheet rows and frames. " : ""}${suggestion.reason}`,
+    modeConfidence: 1,
+    categoryConfidence: 1,
+    categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
+    categoryWarnings: warnings
   };
 }
 
@@ -712,7 +753,20 @@ function shouldAnalyzeSheetSuggestion(image: RGBAImage, initialMode: AssetMode, 
   }
 
   const ratio = image.width / image.height;
+  const pixelCount = image.width * image.height;
+  if (image.width >= 384 && image.height >= 240 && ratio >= 1.15 && ratio <= 2.4 && pixelCount <= 4_000_000) {
+    return true;
+  }
+
   return image.width >= 384 && image.height >= 240 && ratio >= 1.15 && ratio <= 2.4 && quickSheetLayoutScore >= 0.2;
+}
+
+function shouldSurfaceDetectedSheetLayout(layout: SheetLayoutDetection): boolean {
+  if (layout.confidence >= 0.65) {
+    return true;
+  }
+
+  return layout.frames.length >= 2 && layout.columns >= 2 && layout.rowFrameCounts.some((count) => count >= 2);
 }
 
 function emptySheetLayoutDetection(): SheetLayoutDetection {

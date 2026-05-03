@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import { cleanupFixtureCatalog, createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
+import { cleanupFixtureCatalog, createSingleSpriteCleanupFixture, presentationSpriteSheetFixtures } from "@pixelaid/fixtures";
 import { fixImage } from "@pixelaid/core";
-import { chooseSuggestionGrid, suggestFixSettings } from "./fixSuggestions";
+import { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetType } from "./fixSuggestions";
 import type { FixOptions, GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
 
 function blankImage(width: number, height: number): RGBAImage {
@@ -136,6 +136,73 @@ function detailedPresentationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function singleRowDitherBridgeSheetLikeSource(): RGBAImage {
+  const image = blankImage(520, 144);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 62;
+    image.data[offset + 1] = 62;
+    image.data[offset + 2] = 61;
+    image.data[offset + 3] = 255;
+  }
+
+  const centers = [68, 196, 324, 452];
+  for (let index = 0; index < centers.length; index += 1) {
+    const centerX = centers[index]!;
+    drawRect(image, centerX - 42, 24, 84, 96, [5, 10, 62, 255]);
+    drawRect(image, centerX - 28, 38, 56, 68, [48, 150, 204, 255]);
+    drawRect(image, centerX - 10, 52, 42, 42, [152, 244, 244, 255]);
+    if (index === 2) {
+      drawSparseBridge(image, centerX - 68, centerX + 68, 72);
+    }
+  }
+
+  for (let index = 0; index < centers.length - 1; index += 1) {
+    drawSparseBridge(image, centers[index]! + 44, centers[index + 1]! - 44, 72);
+  }
+
+  return image;
+}
+
+function darkLandscapePresentationSheetLikeSource(): RGBAImage {
+  const image = blankImage(1376, 768);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 21;
+    image.data[offset + 1] = 24;
+    image.data[offset + 2] = 29;
+    image.data[offset + 3] = 255;
+  }
+
+  const rows = [
+    { y: 88, cells: 6 },
+    { y: 409, cells: 6 }
+  ];
+  const startX = 20;
+  const cellWidth = 210;
+  const cellHeight = 230;
+  const pitch = 229;
+
+  for (const row of rows) {
+    for (let column = 0; column < row.cells; column += 1) {
+      const x = startX + column * pitch;
+      for (let tileY = row.y; tileY < row.y + cellHeight; tileY += 16) {
+        for (let tileX = x; tileX < x + cellWidth; tileX += 16) {
+          const darkTile = (Math.floor((tileX - x) / 16) + Math.floor((tileY - row.y) / 16)) % 2 === 0;
+          drawRect(image, tileX, tileY, 16, 16, darkTile ? [37, 42, 48, 255] : [52, 58, 65, 255]);
+        }
+      }
+
+      drawRect(image, x, row.y, cellWidth, 2, [170, 180, 190, 255]);
+      drawRect(image, x, row.y + cellHeight - 2, cellWidth, 2, [170, 180, 190, 255]);
+      drawRect(image, x, row.y, 2, cellHeight, [170, 180, 190, 255]);
+      drawRect(image, x + cellWidth - 2, row.y, 2, cellHeight, [170, 180, 190, 255]);
+      drawRect(image, x + 40, row.y + 55, 120, 100, [24, 28, 70, 255]);
+      drawRect(image, x + 70, row.y + 70, 64, 70, [20, 210, 245, 255]);
+    }
+  }
+
+  return image;
+}
+
 function lowScaleBakedCheckerboardPandaSource(): RGBAImage {
   const scale = 3;
   const nativeWidth = 91;
@@ -188,6 +255,18 @@ function drawRect(image: RGBAImage, startX: number, startY: number, width: numbe
       image.data[offset + 1] = rgba[1];
       image.data[offset + 2] = rgba[2];
       image.data[offset + 3] = rgba[3];
+    }
+  }
+}
+
+function drawSparseBridge(image: RGBAImage, x0: number, x1: number, centerY: number): void {
+  for (let x = Math.max(0, x0); x <= Math.min(image.width - 1, x1); x += 1) {
+    for (let y = centerY - 18; y <= centerY + 18; y += 3) {
+      const offset = (y * image.width + x) * 4;
+      image.data[offset] = 56;
+      image.data[offset + 1] = 123;
+      image.data[offset + 2] = 148;
+      image.data[offset + 3] = 255;
     }
   }
 }
@@ -645,6 +724,44 @@ describe("fix setting suggestions", () => {
       ])
     );
     expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(true);
+  });
+
+  test("classifies two-row presentation mockups as animation sheets instead of backgrounds", () => {
+    const source = presentationSpriteSheetFixtures[0]!.createImage();
+    const suggestion = suggestFixSettings(source);
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout?.rowFrameCounts).toEqual([6, 6]);
+    expect(suggestion.categoryReason).toMatch(/animation|sheet|timeline/i);
+  });
+
+  test("runs full sheet analysis for dark landscape presentation mockups", () => {
+    const suggestion = suggestFixSettings(darkLandscapePresentationSheetLikeSource());
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout?.rowFrameCounts).toEqual([6, 6]);
+    expect(suggestion.categoryReason).toMatch(/animation|sheet|timeline/i);
+  });
+
+  test("keeps detected cells for single-row dither-bridged sheets", () => {
+    const suggestion = suggestFixSettings(singleRowDitherBridgeSheetLikeSource());
+
+    expect(suggestion.assetType).toBe("spriteSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout?.rowFrameCounts).toEqual([4]);
+    expect(suggestion.sheetLayout?.frames).toHaveLength(4);
+  });
+
+  test("reprocesses manual animation-sheet overrides through sheet detection", () => {
+    const source = presentationSpriteSheetFixtures[0]!.createImage();
+    const suggestion = suggestFixSettingsForAssetType(source, "animationSheet");
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout?.rowFrameCounts).toEqual([6, 6]);
+    expect(suggestion.targetWidth).toBe((suggestion.sheetLayout?.columns ?? 0) * (suggestion.sheetLayout?.frameWidth ?? 0));
   });
 
   test("keeps normal animation sheet cleanup defaults when conditioning is not needed", () => {

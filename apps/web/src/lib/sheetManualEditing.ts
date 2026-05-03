@@ -448,6 +448,44 @@ export function removeAnimationOrSheetRow({
   };
 }
 
+export function joinSheetRowsIntoClip({
+  frames,
+  animations,
+  rowNames,
+  clipName = "joined_rows"
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  rowNames?: readonly string[];
+  clipName?: string;
+}): ManualSheetEditResult {
+  const selectedRows = rowNames && rowNames.length > 0
+    ? animations.filter((animation) => rowNames.includes(animation.name))
+    : animations.filter((animation) => isSheetRowAnimation(animation, frames));
+  const joinedFrameNames = selectedRows.flatMap((animation) => animation.frameNames);
+
+  if (selectedRows.length < 2 || joinedFrameNames.length === 0) {
+    return unchangedForRow(frames, animations, animations[0]?.name ?? "all");
+  }
+
+  const uniqueClipName = nextAnimationClipName(animations, clipName);
+  const fpsValues = selectedRows.map((animation) => animation.fps).filter((fps): fps is number => fps !== undefined);
+  const joinedClip: AnimationTag = {
+    name: uniqueClipName,
+    frameNames: joinedFrameNames,
+    fps: fpsValues.length > 0 ? Math.max(1, Math.round(fpsValues[0]!)) : 8,
+    loop: selectedRows.every((animation) => animation.loop),
+    direction: "forward"
+  };
+
+  return {
+    frames: frames.map(copyFrame),
+    animations: [...animations.map(copyAnimation), joinedClip],
+    selectedFrameIndex: joinedFrameNames[0] ? findFrameIndexByName(frames, joinedFrameNames[0]) : -1,
+    selectedAnimationName: uniqueClipName
+  };
+}
+
 function unchanged(frames: readonly SpriteFrame[], animations: readonly AnimationTag[], selectedFrameIndex: number): ManualSheetEditResult {
   const selectedFrame = frames[selectedFrameIndex];
   return {
@@ -682,6 +720,17 @@ function nextRowName(frames: readonly SpriteFrame[], animations: readonly Animat
   while (usedNames.has(candidate)) {
     next += 1;
     candidate = `row_${next}`;
+  }
+  return candidate;
+}
+
+function nextAnimationClipName(animations: readonly AnimationTag[], baseName: string): string {
+  const usedNames = new Set(animations.map((animation) => animation.name));
+  let candidate = baseName;
+  let suffix = 2;
+  while (usedNames.has(candidate)) {
+    candidate = `${baseName}_${suffix}`;
+    suffix += 1;
   }
   return candidate;
 }

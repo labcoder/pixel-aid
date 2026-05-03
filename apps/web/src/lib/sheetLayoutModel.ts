@@ -83,7 +83,7 @@ function deriveAnimationRows(frames: readonly SpriteFrame[], animations: readonl
   return animations
     .map((animation) => {
       const animationFrames = animation.frameNames.map((name) => framesByName.get(name)).filter((frame): frame is SpriteFrame => frame !== undefined);
-      if (animationFrames.length === 0) {
+      if (animationFrames.length === 0 || !isPhysicalSheetRow(animationFrames)) {
         return null;
       }
 
@@ -163,10 +163,19 @@ export function applyScopedSheetLayoutPatch({
   margin: number;
   spacing: number;
 }): SpriteFrame[] {
+  const framesByName = new Map(frames.map((frame) => [frame.name, frame]));
   const rowNameByFrame = new Map<string, string>();
   for (const animation of animations) {
+    const animationFrames = animation.frameNames
+      .map((name) => framesByName.get(name))
+      .filter((frame): frame is SpriteFrame => frame !== undefined);
+    if (!isPhysicalSheetRow(animationFrames)) {
+      continue;
+    }
     for (const name of animation.frameNames) {
-      rowNameByFrame.set(name, animation.name);
+      if (!rowNameByFrame.has(name)) {
+        rowNameByFrame.set(name, animation.name);
+      }
     }
   }
 
@@ -229,7 +238,7 @@ export function repackAnimationRows({
 
   for (const animation of animations) {
     const rowFrames = animation.frameNames.map((name) => framesByName.get(name)).filter((frame): frame is SpriteFrame => frame !== undefined);
-    if (rowFrames.length === 0) {
+    if (rowFrames.length === 0 || !isPhysicalSheetRow(rowFrames)) {
       continue;
     }
 
@@ -301,6 +310,15 @@ export function repackAnimationRows({
   }
 
   return packedFrames;
+}
+
+function isPhysicalSheetRow(animationFrames: readonly SpriteFrame[]): boolean {
+  if (animationFrames.length === 0) {
+    return false;
+  }
+
+  const firstTags = animationFrames[0]?.tags ?? [];
+  return firstTags.some((tag) => animationFrames.every((frame) => frame.tags?.includes(tag)));
 }
 
 function copyFrameForCell(frame: SpriteFrame, rect: SpriteFrame["rect"], sourceRect?: Rect, sheetLayout?: SheetFrameLayoutOverride): SpriteFrame {

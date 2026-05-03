@@ -161,15 +161,19 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   const conditioning = withFooterConditioningIssue(sourceConditioning, footerFilter.removedCount);
   const hasPresentationArtifacts = conditioning.issues.some((issue) => issue.code === "presentation-sheet-artifacts");
   const rawRows = hasPresentationArtifacts
-    ? normalizePresentationRows(alignDetectedRowsToSharedColumns(footerFilter.rows), image.height)
+    ? normalizePresentationRows(alignDetectedRowsToSharedColumns(footerFilter.rows), image.width, image.height)
     : alignDetectedRowsToSharedColumns(footerFilter.rows);
 
   if (rawRows.length === 0) {
     return emptyDetection("No repeated sheet rows detected");
   }
 
-  const frameWidths = rawRows.flatMap((row) => row.segments.map((segment) => segment.w));
-  const frameHeights = rawRows.map((row) => row.band.end - row.band.start + 1);
+  const frameSizeRows = selectFrameSizeReferenceRows(rawRows);
+  const frameWidths = frameSizeRows.flatMap((row) => {
+    const referenceWidth = rowReferenceCellWidth(row);
+    return row.segments.map((segment) => Math.max(segment.w, referenceWidth));
+  });
+  const frameHeights = frameSizeRows.map((row) => row.band.end - row.band.start + 1);
   const frameWidth = Math.max(1, medianInteger(frameWidths));
   const frameHeight = Math.max(1, medianInteger(frameHeights));
   const rowFrameCounts = rawRows.map((row) => row.segments.length);
@@ -203,11 +207,11 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     const rowName = rowNames[rowIndex]!;
     const minX = Math.min(...row.segments.map((segment) => segment.x));
     const maxX = Math.max(...row.segments.map((segment) => segment.x + segment.w));
-    rowRects.push({ x: minX, y: row.band.start, w: maxX - minX, h: row.band.end - row.band.start + 1 });
+    rowRects.push(clampRectInside({ x: minX, y: row.band.start, w: maxX - minX, h: row.band.end - row.band.start + 1 }, image.width, image.height));
 
     for (let column = 0; column < row.segments.length; column += 1) {
       const segment = row.segments[column]!;
-      const rect = { x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight };
+      const rect = clampRectInside({ x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight }, image.width, image.height);
       const sourceRect = hasPresentationArtifacts ? detectPresentationContentBounds(image, rect, background) : rect;
       frames.push({
         name: `${rowName}_${column.toString().padStart(3, "0")}`,
@@ -434,11 +438,90 @@ function segmentsForBand(image: RGBAImage, band: Band, background: [number, numb
   }));
 }
 
+function splitMergedFrameSegments(
+  image: RGBAImage,
+  band: Band,
+  background: [number, number, number, number],
+  segments: Segment[]
+): Segment[] {
+  if (segments.length === 0) {
+    return segments;
+  }
+
+  const bandHeight = band.end - band.start + 1;
+  const baseThreshold = Math.max(2, Math.floor(bandHeight * 0.08));
+  const typicalWidth =
+    segments.length >= 2 ? Math.max(1, medianInteger(segments.map((segment) => segment.w))) : Math.max(1, Math.round(bandHeight * 0.9));
+  const splitSegments: Segment[] = [];
+  let didSplit = false;
+
+  for (const segment of segments) {
+    if (segment.w < Math.max(48, typicalWidth * 1.45, bandHeight * 0.8)) {
+      splitSegments.push(segment);
+      continue;
+    }
+
+    const localSegments = splitSegmentByColumnPeaks(image, band, background, segment, baseThreshold);
+    if (localSegments.length < 2) {
+      splitSegments.push(segment);
+      continue;
+    }
+
+    didSplit = true;
+    splitSegments.push(...localSegments);
+  }
+
+  return didSplit ? splitSegments : segments;
+}
+
+function splitSegmentByColumnPeaks(
+  image: RGBAImage,
+  band: Band,
+  background: [number, number, number, number],
+  segment: Segment,
+  baseThreshold: number
+): Segment[] {
+  const counts = new Uint16Array(segment.w);
+  let maxCount = 0;
+
+  for (let localX = 0; localX < segment.w; localX += 1) {
+    let count = 0;
+    const x = segment.x + localX;
+    for (let y = band.start; y <= band.end; y += 1) {
+      if (isForeground(image, x, y, background)) {
+        count += 1;
+      }
+    }
+    counts[localX] = count;
+    maxCount = Math.max(maxCount, count);
+  }
+
+  if (maxCount <= baseThreshold * 2) {
+    return [];
+  }
+
+  const strongThreshold = Math.max(baseThreshold + 1, Math.floor(maxCount * 0.28));
+  const minPeakWidth = Math.max(8, Math.floor((band.end - band.start + 1) * 0.12));
+  const peakBands = bandsFromCounts(counts, strongThreshold, Math.max(2, Math.floor(minPeakWidth * 0.18)), minPeakWidth);
+  if (peakBands.length < 2 || peakBands.length > 12) {
+    return [];
+  }
+
+  const medianPeakWidth = Math.max(1, medianInteger(peakBands.map((peak) => peak.end - peak.start + 1)));
+  const pad = Math.max(2, Math.round(medianPeakWidth * 0.08));
+  return peakBands.map((peak) => {
+    const x = Math.max(segment.x, segment.x + peak.start - pad);
+    const right = Math.min(segment.x + segment.w, segment.x + peak.end + pad + 1);
+    return { x, w: Math.max(1, right - x) };
+  });
+}
+
 function resolveFrameSegments(image: RGBAImage, band: Band, background: [number, number, number, number]): ResolvedSegments {
   const sourceSegments = segmentsForBand(image, band, background);
-  const contentSegments = chooseFrameSegments(sourceSegments);
-  const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, sourceSegments);
-  const labelFrameStart = frameStartForLabelSearch(sourceSegments, contentSegments, outlinedSegments);
+  const frameSegments = splitMergedFrameSegments(image, band, background, sourceSegments);
+  const contentSegments = chooseFrameSegments(frameSegments);
+  const outlinedSegments = outlinedCellSegmentsForBand(image, band, background, frameSegments);
+  const labelFrameStart = frameStartForLabelSearch(frameSegments, contentSegments, outlinedSegments);
   const rowLabel = Number.isFinite(labelFrameStart) ? detectRowLabel(image, band, background, labelFrameStart) : undefined;
 
   if (outlinedSegments.length >= 2 && outlinedSegments.length > contentSegments.length) {
@@ -778,7 +861,7 @@ function isLikelyLabelPrefix(segments: Segment[], cutIndex: number): boolean {
   const afterWidth = Math.max(1, medianInteger(after.slice(0, Math.min(4, after.length)).map((segment) => segment.w)));
   const prefixWidth = maxX - minX;
   const prefixIsInLeftLabelGutter = minX <= 72 && maxX <= nextFrameX * 0.72;
-  const prefixIsSingleLabelBlock = cutIndex === 0 && minX <= 72 && prefixWidth <= afterWidth * 0.95;
+  const prefixIsSingleLabelBlock = cutIndex === 0 && minX <= 72 && prefixWidth <= afterWidth * 0.65;
   const prefixIsMultiGlyphLabel = cutIndex > 0 && maxX <= nextFrameX * 0.78;
 
   return prefixIsInLeftLabelGutter || prefixIsSingleLabelBlock || prefixIsMultiGlyphLabel;
@@ -964,7 +1047,37 @@ function filterFooterRows(rows: DetectedRow[], imageHeight: number): { rows: Det
   };
 }
 
-function normalizePresentationRows(rows: DetectedRow[], imageHeight: number): DetectedRow[] {
+function selectFrameSizeReferenceRows(rows: DetectedRow[]): DetectedRow[] {
+  if (rows.length <= 1) {
+    return rows;
+  }
+
+  const rowWidths = rows.map(rowReferenceCellWidth);
+  const widest = Math.max(...rowWidths);
+  const narrowest = Math.max(1, Math.min(...rowWidths));
+  if (widest < narrowest * 1.8) {
+    return rows;
+  }
+
+  const largeRows = rows.filter((row, index) => {
+    const height = row.band.end - row.band.start + 1;
+    return rowWidths[index]! >= widest * 0.55 && height >= Math.max(36, rowWidths[index]! * 0.35);
+  });
+  return largeRows.length > 0 ? largeRows : rows;
+}
+
+function rowReferenceCellWidth(row: DetectedRow): number {
+  const segmentWidth = Math.max(1, medianInteger(row.segments.map((segment) => segment.w)));
+  const startGaps = gapsBetweenStarts(row.segments);
+  if (startGaps.length === 0) {
+    return segmentWidth;
+  }
+
+  const pitch = Math.max(1, medianInteger(startGaps));
+  return pitch >= segmentWidth * 1.65 ? pitch : segmentWidth;
+}
+
+function normalizePresentationRows(rows: DetectedRow[], imageWidth: number, imageHeight: number): DetectedRow[] {
   if (rows.length === 0) {
     return rows;
   }
@@ -991,10 +1104,18 @@ function normalizePresentationRows(rows: DetectedRow[], imageHeight: number): De
     return {
       ...row,
       band: { start: row.band.start, end: Math.min(imageHeight - 1, row.band.start + expandedHeight - 1) },
-      segments: row.segments.map((segment) => ({ x: Math.max(0, segment.x - leftExpansion), w: expandedWidth })),
+      segments: row.segments.map((segment) => clampSegmentInside({ x: segment.x - leftExpansion, w: expandedWidth }, imageWidth)),
       usedOutlinedCells: true
     };
   });
+}
+
+function clampSegmentInside(segment: Segment, imageWidth: number): Segment {
+  const w = Math.max(1, Math.min(imageWidth, Math.round(segment.w)));
+  return {
+    x: Math.max(0, Math.min(Math.max(0, imageWidth - w), Math.round(segment.x))),
+    w
+  };
 }
 
 function isFooterLikeRow(row: DetectedRow, imageHeight: number, typicalHeight: number, typicalSegmentWidth: number): boolean {
@@ -1512,6 +1633,17 @@ function emptyDetection(reason: string): SheetLayoutDetection {
     confidence: 0,
     reason,
     warnings: [reason]
+  };
+}
+
+function clampRectInside(rect: Rect, imageWidth: number, imageHeight: number): Rect {
+  const w = Math.max(1, Math.min(imageWidth, Math.round(rect.w)));
+  const h = Math.max(1, Math.min(imageHeight, Math.round(rect.h)));
+  return {
+    x: Math.max(0, Math.min(Math.max(0, imageWidth - w), Math.round(rect.x))),
+    y: Math.max(0, Math.min(Math.max(0, imageHeight - h), Math.round(rect.y))),
+    w,
+    h
   };
 }
 
