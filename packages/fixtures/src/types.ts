@@ -6,6 +6,7 @@ export const cleanupFixtureCategories = [
   "transparentMatteHaloSprite",
   "paletteDriftAnimationFrames",
   "unevenSpriteSheet",
+  "presentationSpriteSheet",
   "tilesetSeams",
   "largeBackground",
   "largeFakePixelSource"

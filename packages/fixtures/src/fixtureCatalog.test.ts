@@ -7,6 +7,7 @@ const expectedCategories = [
   "transparentMatteHaloSprite",
   "paletteDriftAnimationFrames",
   "unevenSpriteSheet",
+  "presentationSpriteSheet",
   "tilesetSeams",
   "largeBackground",
   "largeFakePixelSource"
@@ -44,6 +45,7 @@ describe("cleanup fixture catalog", () => {
         "uneven-gutter-labeled-sheet",
         "drifted-effect-sheet",
         "baseline-drift-animation-sheet",
+        "presentation-mockup-2x6-sheet",
         "tileset-seams-4x4-16",
         "tileset-broken-seams-2x2-16",
         "large-landscape-bands",
@@ -75,6 +77,22 @@ describe("cleanup fixture catalog", () => {
     expect(new Set(frames.map((frame) => `${frame.sourceRect?.x},${frame.sourceRect?.y}`)).size).toBeGreaterThan(1);
   });
 
+  test("includes presentation-style sheet fixture metadata", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "presentation-mockup-2x6-sheet");
+    const frames = fixture?.expected.sheet?.frames ?? [];
+
+    expect(fixture).toBeDefined();
+    expect(fixture?.category).toBe("presentationSpriteSheet");
+    expect(fixture?.expected.sheet?.options).toMatchObject({ frameWidth: 96, frameHeight: 120, rows: 2, columns: 6, margin: 46, spacing: 8 });
+    expect(fixture?.expected.sheet?.rowFrameCounts).toEqual([6, 6]);
+    expect(fixture?.expected.sheet?.animationNames).toEqual(["run", "cast"]);
+    expect(fixture?.expected.sheet?.expectedWarnings).toEqual(["presentation-sheet-artifacts", "baked-checkerboard-cells", "caption-bracket-ignored"]);
+    expect(fixture?.createImage()).toMatchObject({ width: 720, height: 420 });
+    expect(frames).toHaveLength(12);
+    expect(new Set(frames.map((frame) => frame.tags?.[0]))).toEqual(new Set(["run", "cast"]));
+    expect(frames.every((frame) => frame.sourceRect && frame.sourceRect.w < frame.rect.w && frame.sourceRect.h < frame.rect.h)).toBe(true);
+  });
+
   test("keeps large benchmark sources lazy", () => {
     expect(benchmarkFixtureCatalog.map((fixture) => fixture.id)).toEqual([
       "fake-pixel-720p-single",
@@ -96,8 +114,6 @@ describe("cleanup fixture catalog", () => {
       expect(fixtureIds.has(fixture.fixtureId)).toBe(true);
       expect(fixture.expected.checksum.length).toBeGreaterThan(0);
     }
-    expect(categories).toEqual(
-      new Set(["highResolutionPseudoPixelSprite", "transparentMatteHaloSprite", "paletteDriftAnimationFrames", "unevenSpriteSheet", "tilesetSeams"])
-    );
+    expect(categories).toEqual(new Set(["highResolutionPseudoPixelSprite", "transparentMatteHaloSprite", "paletteDriftAnimationFrames", "unevenSpriteSheet", "tilesetSeams"]));
   });
 });
