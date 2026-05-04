@@ -82,8 +82,9 @@ Separate commercial terms may be available from Oscar Sanchez for closed-source 
 3. Use the guided recommendation card for a first pass. Auto Suggest classifies the selected asset type, shows confidence and support warnings, and caches the grid candidates used by the preview cards. The manual Asset type selector is stored per imported asset.
 4. Run Fix. The editor shows a preparing/fixing status, then the Web Worker performs grid detection, block downsampling, alpha cleanup, outline cleanup, and palette remapping. In sheet modes, each frame cell is fixed independently and packed back into the output sheet.
 5. Inspect the result in mode-specific views. Single sprites use Input, Compare, and Output; sheet-like modes use Input, Output, and Timeline. Pan, zoom, inspect rulers, check sheet frame overlays, and watch source/output metrics.
-6. Save local editor presets and reusable palettes when the current cleanup settings or extracted palette should carry into future imports. Local presets, palette libraries, and editor defaults persist in browser/desktop storage without changing per-asset classification.
-7. Export a ZIP containing the fixed PNG and generic JSON manifest.
+6. Save the current imported asset as a `.pixelaid` working document when you want to preserve the source image, fixed output, settings, frames, timeline, metadata, and cached analysis for later editing.
+7. Save local editor presets and reusable palettes when the current cleanup settings or extracted palette should carry into future imports. Local presets, palette libraries, and editor defaults persist in browser/desktop storage without changing per-asset classification.
+8. Export a ZIP containing the fixed PNG and generic JSON manifest.
 
 Automation workflow:
 
@@ -99,6 +100,7 @@ Editor:
 
 - Editor-style shell with toolbar, asset browser, inspector, viewport, timeline/logs/metrics panels.
 - Drag/drop, file picker, and paste image import.
+- Per-asset `.pixelaid` working documents can be saved and reopened separately from game-ready ZIP exports. The document container stores `manifest.json`, a portable `source.png`, optional `fixed.png`, and metadata for the editable PixelAid session.
 - Desktop builds use native open/save dialogs for image import and ZIP bundle export when running inside Tauri. Desktop release checks validate signing/notarization prerequisites from environment variables, and checksum generation writes deterministic `SHA256SUMS.txt` files for packaged artifacts.
 - Local editor preferences persist grid, palette, cleanup, timeline, export target, inspector order, saved user presets, and saved palette libraries across web and desktop sessions. Manual asset type remains per imported asset.
 - Import, Auto Suggest, and Fix status labels for large images and sheets.
@@ -135,6 +137,7 @@ Processing:
 - Outline modes for none, repair existing outline, or add outline with custom size, RGB color, and alpha. Auto-cropped single sprites receive native-pixel padding before outline drawing so added outlines are not clipped by the crop.
 - Web Worker fix operation with transferable image buffers.
 - ZIP bundle export containing PNG and JSON manifest files. Manifests persist `assetType` directly in `meta` and inside operation settings. In sheet modes, the Normalize toggle exports a packed pivot-aligned sheet PNG with matching manifest frame rects. Selected engine sidecars now include Godot, Unity, Phaser, TexturePacker-compatible atlas metadata, and Tiled/LDtk tileset metadata; Godot, Unity, and Phaser also include compact import recipe JSON for automation-friendly texture settings, frames, pivots, durations, and animation tags.
+- `.pixelaid` document archives are ZIP-based working files with a custom extension, root `manifest.json`, portable source image copy, optional fixed output image, session metadata, grid candidates, source analysis, and quality reports.
 - Tilemap inspect workflow ranks candidate tile sizes by repeated tile signatures, dimension fit, and grid consistency, then adds non-destructive quality-report recommendations for reviewing map grids before cleanup.
 - Tileset seam diagnostics include conservative repair suggestions for edge mismatch, lighting discontinuity, crop/phase review, and manual repaint guidance. Low-risk edge/lighting repairs can be applied and undone against the fixed output, while high-risk suggestions stay inspect-only metadata.
 - Vitest coverage for core algorithms, worker protocol, and manifest generation.
@@ -154,6 +157,7 @@ Automation:
 - Export currently supports generic manifests plus Godot, Unity, Phaser, TexturePacker-compatible, Tiled, and LDtk helper files.
 - Tilesets support seam diagnostics, preview-only repair suggestions, and tile-engine metadata sidecars. Tilemaps support inspect-first classification and tile-size candidates, while full map-data import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
+- `.pixelaid` documents work through browser open/download flows. Desktop save-in-place, recent files, autosave, and overwrite-safe project paths are future desktop-specific layers over the same archive format.
 - CLI and MCP-ready automation currently support PNG input/output plus JPEG input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA. The MCP stdio server is available locally, while a local HTTP API, WebP/additional codecs, and streaming progress are future work.
 - Desktop auto-update delivery is deferred. Public desktop artifacts should be signed/notarized where supported and published with `SHA256SUMS.txt` until an update feed and updater signing-key workflow are added.
 

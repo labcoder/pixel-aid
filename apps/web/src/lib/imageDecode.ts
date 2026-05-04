@@ -14,7 +14,22 @@ export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
     throw new Error(`${file.name} is not an image file`);
   }
 
-  const bitmap = await createImageBitmap(file);
+  return decodeImageBlob(file, {
+    id: `${file.name}-${file.lastModified}-${file.size}`,
+    name: file.name,
+    importedAt: new Date().toISOString()
+  });
+}
+
+export async function decodeImageBlob(
+  blob: Blob,
+  metadata: {
+    id: string;
+    name: string;
+    importedAt: string;
+  }
+): Promise<ImportedImageAsset> {
+  const bitmap = await createImageBitmap(blob);
   try {
     const canvas = document.createElement("canvas");
     canvas.width = bitmap.width;
@@ -30,14 +45,14 @@ export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
     const imageData = context.getImageData(0, 0, bitmap.width, bitmap.height);
 
     return {
-      id: `${file.name}-${file.lastModified}-${file.size}`,
-      name: file.name,
+      id: metadata.id,
+      name: metadata.name,
       image: {
         width: bitmap.width,
         height: bitmap.height,
         data: new Uint8ClampedArray(imageData.data)
       },
-      importedAt: new Date().toISOString(),
+      importedAt: metadata.importedAt,
       ...createDefaultAssetTypeMetadata()
     };
   } finally {

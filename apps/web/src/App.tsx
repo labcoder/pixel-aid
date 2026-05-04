@@ -210,7 +210,7 @@ import type { FixJob } from "./lib/fixWorkerClient";
 import { startFixJob } from "./lib/fixWorkerClient";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
-import { decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
+import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
 import {
   getVisibleInspectorGroups,
@@ -243,6 +243,16 @@ import {
 } from "./lib/paletteLibrary";
 import { analyzeVisiblePalettePreview } from "./lib/palettePreview";
 import { drawRgbaImageNearest } from "./lib/previewCanvas";
+import {
+  createPixelAidDocumentArchive,
+  defaultPixelAidDocumentFilename,
+  hydratePixelFixResultFromDocument,
+  isPixelAidDocumentFile,
+  readPixelAidDocumentArchive,
+  serializePixelFixResultForDocument,
+  type PixelAidDocumentAssetMetadata,
+  type PixelAidDocumentFixResult
+} from "./lib/pixelaidDocument";
 import { getPaletteWindow } from "./lib/paletteWindow";
 import { getSamplePickerButtonLabel } from "./lib/samplePicker";
 import {
@@ -475,6 +485,10 @@ function waitForNextPaint(): Promise<void> {
   return waitForPaints();
 }
 
+function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
   return buildSourceAnalysisCacheKey({
     assetId: asset.id,
@@ -482,6 +496,62 @@ function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
     height: asset.image.height,
     byteLength: asset.image.data.byteLength
   });
+}
+
+function createDocumentAssetMetadata(asset: ImportedImageAsset): PixelAidDocumentAssetMetadata {
+  return {
+    id: asset.id,
+    name: asset.name,
+    importedAt: asset.importedAt,
+    width: asset.image.width,
+    height: asset.image.height,
+    assetType: asset.assetType,
+    assetTypeSource: asset.assetTypeSource,
+    assetTypeWarnings: asset.assetTypeWarnings,
+    categoryReason: asset.categoryReason,
+    categoryConfidence: asset.categoryConfidence,
+    ...(asset.provenance ? { provenance: asset.provenance } : {})
+  };
+}
+
+function serializeAssetSessionForDocument(session: AssetEditorSession): AssetEditorDocumentSession {
+  return {
+    ...session,
+    result: {
+      fixResult: serializePixelFixResultForDocument(session.result.fixResult),
+      tilesetRepairBackup: null,
+      lastExportValidation: session.result.lastExportValidation
+    }
+  };
+}
+
+function hydrateAssetSessionFromDocument(
+  payload: unknown,
+  asset: ImportedImageAsset,
+  fixedImage: RGBAImage | null
+): AssetEditorSession {
+  const session = payload as AssetEditorDocumentSession;
+  if (session.version !== 1) {
+    throw new Error("PixelAid document session version is unsupported");
+  }
+
+  return {
+    ...session,
+    assetId: asset.id,
+    settings: {
+      ...session.settings,
+      engineExportTargets: [...(session.settings.engineExportTargets ?? [])],
+      exportBundleName: session.settings.exportBundleName ?? ""
+    },
+    result: {
+      fixResult: hydratePixelFixResultFromDocument(session.result.fixResult, fixedImage),
+      tilesetRepairBackup: null,
+      lastExportValidation: session.result.lastExportValidation
+    },
+    cacheKeys: {
+      sourceAnalysisKey: getSourceAnalysisCacheKey(asset)
+    }
+  };
 }
 
 function createSheetLayoutAnalysisSignature(layout: SheetLayoutDetection | undefined): string {
@@ -762,6 +832,16 @@ type PendingAssetSwitchGuard = {
   targetAssetName: string;
   outgoingSession: AssetEditorSession;
   dirtyState: AssetDirtyState;
+};
+
+type AssetEditorDocumentSession = Omit<AssetEditorSession, "assetId" | "cacheKeys" | "result"> & {
+  assetId: string;
+  cacheKeys: AssetEditorSession["cacheKeys"];
+  result: {
+    fixResult: PixelAidDocumentFixResult | null;
+    tilesetRepairBackup: PixelAidDocumentFixResult | null;
+    lastExportValidation: ExportValidationSummary | null;
+  };
 };
 
 function cloneSessionValue<T>(value: T): T {
@@ -2923,19 +3003,76 @@ export function App() {
     );
   }, [applyAlphaSettings, fixedPaletteColors.length, paletteMode, selectedAsset, setPaletteBudget]);
 
+  const importPixelAidDocumentFile = useCallback(
+    async (file: File, operation: BusyOperation) => {
+      setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Opening ${file.name}...`) : current));
+      await waitForNextPaint();
+
+      const archive = readPixelAidDocumentArchive(new Uint8Array(await file.arrayBuffer()));
+      const openedAt = new Date().toISOString();
+      const assetId = `${archive.manifest.asset.id}-doc-${file.lastModified}-${file.size}`;
+      const decodedSource = await decodeImageBlob(new Blob([uint8ArrayToArrayBuffer(archive.sourcePngBytes)], { type: "image/png" }), {
+        id: assetId,
+        name: archive.manifest.asset.name,
+        importedAt: archive.manifest.asset.importedAt || openedAt
+      });
+      const asset: ImportedImageAsset = {
+        ...decodedSource,
+        assetType: archive.manifest.asset.assetType,
+        assetTypeSource: archive.manifest.asset.assetTypeSource,
+        assetTypeWarnings: archive.manifest.asset.assetTypeWarnings,
+        categoryReason: archive.manifest.asset.categoryReason,
+        categoryConfidence: archive.manifest.asset.categoryConfidence,
+        ...(archive.manifest.asset.provenance ? { provenance: archive.manifest.asset.provenance } : {})
+      };
+      const fixedImage = archive.fixedPngBytes
+        ? (
+            await decodeImageBlob(new Blob([uint8ArrayToArrayBuffer(archive.fixedPngBytes)], { type: "image/png" }), {
+              id: `${asset.id}-fixed`,
+              name: "fixed.png",
+              importedAt: openedAt
+            })
+          ).image
+        : null;
+      const session = hydrateAssetSessionFromDocument(archive.session, asset, fixedImage);
+
+      delete assetSessionsRef.current[asset.id];
+      previewSurfaceCacheRef.current.disposeAsset(asset.id);
+      setAssets((current) => {
+        const withoutDuplicate = current.filter((item) => item.id !== asset.id);
+        return [asset, ...withoutDuplicate];
+      });
+      assetSessionsRef.current[asset.id] = session;
+      markAssetSessionClean(session);
+      setGridCandidateCache((current) => ({ ...current, [asset.id]: archive.gridCandidates ?? [] }));
+      if (archive.sourceAnalysis) {
+        setSourceAnalysisCache((current) => ({ ...current, [getSourceAnalysisCacheKey(asset)]: archive.sourceAnalysis as SourceAssetAnalysis }));
+      }
+      if (archive.qualityReports && typeof archive.qualityReports === "object" && !Array.isArray(archive.qualityReports)) {
+        setQualityReportCache((current) => ({ ...current, ...(archive.qualityReports as Record<string, QualityReport>) }));
+      }
+      restoreAssetSession(session);
+      setSelectedAssetId(asset.id);
+      setShowAdvancedControls(session.settings.showAdvancedControls);
+      setLastOperationError(null);
+      appendLog(`Opened PixelAid document ${file.name}`);
+    },
+    [appendLog, markAssetSessionClean, restoreAssetSession]
+  );
+
   const importFiles = useCallback(
     async (files: FileList | File[]) => {
       if (isEditorBusy) {
         return;
       }
 
-      const imageFiles = Array.from(files).filter((file) => file.type.startsWith("image/"));
-      if (imageFiles.length === 0) {
-        appendLog("No image files found in import");
+      const importableFiles = Array.from(files).filter((file) => file.type.startsWith("image/") || isPixelAidDocumentFile(file));
+      if (importableFiles.length === 0) {
+        appendLog("No image or PixelAid document files found in import");
         return;
       }
 
-      const operation = nextBusyOperation("import", `Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
+      const operation = nextBusyOperation("import", `Preparing ${importableFiles.length} file${importableFiles.length === 1 ? "" : "s"}...`);
       setImportOperation(operation);
       saveCurrentAssetSession();
       setFixResult(null);
@@ -2945,8 +3082,13 @@ export function App() {
       await waitForNextPaint();
 
       try {
-        for (const file of imageFiles) {
+        for (const file of importableFiles) {
           try {
+            if (isPixelAidDocumentFile(file)) {
+              await importPixelAidDocumentFile(file, operation);
+              continue;
+            }
+
             setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Decoding ${file.name}...`) : current));
             await waitForNextPaint();
 
@@ -2984,7 +3126,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
+    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, importPixelAidDocumentFile, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -5239,6 +5381,61 @@ export function App() {
     await removeAsset(assetId);
   }, [isEditorBusy, pendingAssetDeletion, removeAsset]);
 
+  const savePixelAidDocument = useCallback(async () => {
+    if (!selectedAsset || isEditorBusy) {
+      return;
+    }
+
+    const session = captureCurrentAssetSession(selectedAsset);
+    const operation = nextBusyOperation("activation", `Saving ${selectedAsset.name} as .pixelaid...`);
+    setAssetActivationOperation(operation);
+    await waitForNextPaint();
+
+    try {
+      const sourcePng = await rgbaImageToPngBlob(selectedAsset.image);
+      const fixedPng = session.result.fixResult ? await rgbaImageToPngBlob(session.result.fixResult.image) : null;
+      const sourceAnalysisKey = getSourceAnalysisCacheKey(selectedAsset);
+      const qualityReports = Object.fromEntries(
+        Object.entries(qualityReportCache).filter(([key]) => key.startsWith(`${selectedAsset.id}|`))
+      );
+      const archive = createPixelAidDocumentArchive({
+        appVersion: PIXELAID_VERSION,
+        asset: createDocumentAssetMetadata(selectedAsset),
+        sourcePngBytes: new Uint8Array(await sourcePng.arrayBuffer()),
+        ...(fixedPng ? { fixedPngBytes: new Uint8Array(await fixedPng.arrayBuffer()) } : {}),
+        session: serializeAssetSessionForDocument(session),
+        gridCandidates: gridCandidateCache[selectedAsset.id] ?? [],
+        ...(sourceAnalysisCache[sourceAnalysisKey] ? { sourceAnalysis: sourceAnalysisCache[sourceAnalysisKey] } : {}),
+        ...(Object.keys(qualityReports).length > 0 ? { qualityReports } : {})
+      });
+      const filename = defaultPixelAidDocumentFilename(selectedAsset.name);
+
+      downloadBlob(new Blob([uint8ArrayToArrayBuffer(archive.bytes)], { type: "application/octet-stream" }), filename);
+      storeAssetSession(session);
+      markAssetSessionClean(session);
+      appendLog(`Saved PixelAid document ${filename}`);
+      setLastOperationError(null);
+    } catch (error) {
+      recordOperationError("document", error, "Try saving the PixelAid document again. Your in-memory edits are still available.", {
+        asset: selectedAsset.name
+      });
+    } finally {
+      setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
+    }
+  }, [
+    appendLog,
+    captureCurrentAssetSession,
+    gridCandidateCache,
+    isEditorBusy,
+    markAssetSessionClean,
+    nextBusyOperation,
+    qualityReportCache,
+    recordOperationError,
+    selectedAsset,
+    sourceAnalysisCache,
+    storeAssetSession
+  ]);
+
   const exportFixedAsset = useCallback(() => {
     if (!selectedAsset || !fixResult) {
       return;
@@ -6465,9 +6662,9 @@ export function App() {
         ref={fileInputRef}
         className="file-input"
         type="file"
-        accept="image/*"
+        accept="image/*,.pixelaid"
         multiple
-        aria-label="Import image files"
+        aria-label="Import image or PixelAid document files"
         onChange={(event) => {
           if (event.currentTarget.files) {
             void importFiles(event.currentTarget.files);
@@ -6492,8 +6689,20 @@ export function App() {
               }}
             >
               <Upload size={14} />
-              <span>Import images</span>
+              <span>Import images / documents</span>
               <kbd>Ctrl/Cmd O</kbd>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              disabled={!selectedAsset || isEditorBusy}
+              onClick={() => {
+                setActiveAppMenu(null);
+                void savePixelAidDocument();
+              }}
+            >
+              <Download size={14} />
+              <span>Save PixelAid document</span>
             </button>
             <button type="button" role="menuitem" disabled={isEditorBusy} onClick={openSamplePicker}>
               <Sparkles size={14} />

@@ -1,7 +1,7 @@
 const imageFilters = [
   {
-    name: "Images",
-    extensions: ["png", "jpg", "jpeg", "webp", "gif"]
+    name: "Images and PixelAid documents",
+    extensions: ["png", "jpg", "jpeg", "webp", "gif", "pixelaid"]
   }
 ];
 
@@ -37,6 +37,8 @@ export function fileNameFromDesktopPath(path: string): string {
 export function imageMimeTypeForPath(path: string): string {
   const extension = path.split(/[?#]/, 1)[0]?.split(".").at(-1)?.toLowerCase();
   switch (extension) {
+    case "pixelaid":
+      return "application/octet-stream";
     case "jpg":
     case "jpeg":
       return "image/jpeg";
