@@ -192,6 +192,7 @@ import {
   replaceFrameEditHistoryPresent,
   resetFrameEditHistory,
   undoFrameEditHistory,
+  type FrameEditHistoryState,
   type FrameEditSnapshot
 } from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
@@ -645,6 +646,121 @@ function createFrameEditSnapshot({
   };
 }
 
+type ExportValidationSummary = {
+  ok: boolean;
+  warningCount: number;
+  errorCount: number;
+};
+
+type AssetEditorSession = {
+  version: 1;
+  assetId: string;
+  savedAt: string;
+  settings: {
+    mode: AssetMode;
+    viewMode: EditorViewMode;
+    targetWidth: number;
+    targetHeight: number;
+    maxColors: number;
+    paletteMode: PaletteMode;
+    paletteStrategy: PaletteStrategy;
+    paletteLockScope: PaletteLockScope;
+    paletteDithering: PaletteDitheringMode;
+    palettePreset: string;
+    customPaletteText: string;
+    gridDetect: "auto" | "manual";
+    gridScaleX: number;
+    gridScaleY: number;
+    gridPhaseX: number;
+    gridPhaseY: number;
+    cropToBounds: boolean;
+    localCorrection: boolean;
+    aspectLocked: boolean;
+    frameWidth: number;
+    frameHeight: number;
+    sheetRows: number;
+    sheetColumns: number;
+    sheetMargin: number;
+    sheetSpacing: number;
+    sheetExtrude: number;
+    tilemapOffsetX: number;
+    tilemapOffsetY: number;
+    tilemapIdentityThreshold: number;
+    pivotPreset: PivotPreset;
+    customPivotX: number;
+    customPivotY: number;
+    inputSheetLayoutScope: SheetLayoutOverrideScope;
+    sheetLayoutScope: SheetLayoutOverrideScope;
+    downscale: DownscaleMethod;
+    alpha: AlphaMode;
+    alphaThreshold: number;
+    alphaTolerance: number;
+    alphaColorKey: string;
+    decontaminateRgb: boolean;
+    outlineMode: OutlineMode;
+    outlineSize: number;
+    outlineColor: string;
+    outlineAlpha: number;
+    outlineColorEdited: boolean;
+    outlineSourceMode: OutlineSourceMode;
+    outlineManualColor: string;
+    selectedOutlineSourceColors: string[];
+    removeOrphans: boolean;
+    jaggyCleanup: boolean;
+    preserveSinglePixelDetails: boolean;
+    removeHalos: boolean;
+    denoiseStrength: number;
+    contrastExpansionEnabled: boolean;
+    showAdvancedControls: boolean;
+    frameMetadataExpanded: boolean;
+    showFrameMetadataOverlays: boolean;
+  };
+  timeline: {
+    selectedFrameIndex: number;
+    selectedAnimationName: string;
+    bottomPanelTab: BottomPanelSection;
+    playbackFps: number;
+    playbackLoop: boolean;
+    playbackDirection: PlaybackDirection;
+    normalizeTimelineFrames: boolean;
+    showOnionSkin: boolean;
+    timelineViewportSourceMode: TimelineViewportSourceMode;
+    sandboxSpeed: number;
+    sandboxScale: number;
+    showSandboxGuides: boolean;
+  };
+  sheet: {
+    detectedFrames: SpriteFrame[];
+    detectedRowAnimations: AnimationTag[];
+    detectedWarnings: string[];
+    detectedDiagnostics?: SheetLayoutDiagnostics;
+    frameDurationOverrides: Record<string, number>;
+    pivotOverrides: PivotOverrideState;
+    frameMetadataOverrides: FrameMetadataState;
+    frameMetadataHistory: FrameMetadataHistoryState;
+    frameEditHistory: FrameEditHistoryState;
+  };
+  result: {
+    fixResult: PixelFixResult | null;
+    tilesetRepairBackup: PixelFixResult | null;
+    lastExportValidation: ExportValidationSummary | null;
+  };
+  recommendation: {
+    suggestionReason: string;
+    recommendationConfidence: number;
+  };
+  cacheKeys: {
+    sourceAnalysisKey: string;
+  };
+};
+
+function cloneSessionValue<T>(value: T): T {
+  if (typeof structuredClone === "function") {
+    return structuredClone(value);
+  }
+  return JSON.parse(JSON.stringify(value)) as T;
+}
+
 const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: string; tooltip: string }> = {
   asset: {
     title: "Asset",
@@ -781,11 +897,7 @@ export function App() {
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [tilesetRepairBackup, setTilesetRepairBackup] = useState<PixelFixResult | null>(null);
-  const [lastExportValidation, setLastExportValidation] = useState<{
-    ok: boolean;
-    warningCount: number;
-    errorCount: number;
-  } | null>(null);
+  const [lastExportValidation, setLastExportValidation] = useState<ExportValidationSummary | null>(null);
   const [engineExportTargets, setEngineExportTargets] = useState<EngineExportTarget[]>(initialSettings.engineExportTargets);
   const [exportBundleName, setExportBundleName] = useState("");
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
@@ -808,9 +920,11 @@ export function App() {
   const [selectedPaletteLibraryId, setSelectedPaletteLibraryId] = useState(initialPreferences.savedPaletteLibrary[0]?.id ?? "");
   const [newPaletteColor, setNewPaletteColor] = useState("#ffffff");
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
+  const assetSessionsRef = useRef<Record<string, AssetEditorSession>>({});
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
   const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
+  const suppressNextExportValidationResetRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const qualityReportSwitchFallbackRef = useRef<{ assetId: string; cacheKey?: string } | null>(null);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
@@ -1152,18 +1266,324 @@ export function App() {
     setExportBundleName(selectedAsset ? defaultExportBundleFilename(selectedAsset.name) : "");
   }, [selectedAsset?.id, selectedAsset?.name]);
   useEffect(() => {
-    setTilesetRepairBackup(null);
-  }, [selectedAsset?.id]);
-  useEffect(() => {
+    if (suppressNextExportValidationResetRef.current) {
+      suppressNextExportValidationResetRef.current = false;
+      return;
+    }
     setLastExportValidation(null);
-  }, [engineExportTargets, exportBundleName, fixResult, selectedAsset?.id]);
+  }, [engineExportTargets, fixResult]);
   useEffect(() => {
     const assetIds = new Set(assets.map((asset) => asset.id));
     setSourceAnalysisCache((current) => pruneAnalysisCache(current, assetIds));
     setQualityReportCache((current) => pruneAnalysisCache(current, assetIds));
+    for (const assetId of Object.keys(assetSessionsRef.current)) {
+      if (!assetIds.has(assetId)) {
+        delete assetSessionsRef.current[assetId];
+      }
+    }
   }, [assets]);
   const selectedSourceAnalysisKey = selectedAsset ? getSourceAnalysisCacheKey(selectedAsset) : "";
   const selectedSourceAnalysis = selectedSourceAnalysisKey ? sourceAnalysisCache[selectedSourceAnalysisKey] : undefined;
+  const captureCurrentAssetSession = useCallback(
+    (asset: ImportedImageAsset): AssetEditorSession => ({
+      version: 1,
+      assetId: asset.id,
+      savedAt: new Date().toISOString(),
+      settings: {
+        mode,
+        viewMode,
+        targetWidth,
+        targetHeight,
+        maxColors,
+        paletteMode,
+        paletteStrategy,
+        paletteLockScope,
+        paletteDithering,
+        palettePreset,
+        customPaletteText,
+        gridDetect,
+        gridScaleX,
+        gridScaleY,
+        gridPhaseX,
+        gridPhaseY,
+        cropToBounds,
+        localCorrection,
+        aspectLocked,
+        frameWidth,
+        frameHeight,
+        sheetRows,
+        sheetColumns,
+        sheetMargin,
+        sheetSpacing,
+        sheetExtrude,
+        tilemapOffsetX,
+        tilemapOffsetY,
+        tilemapIdentityThreshold,
+        pivotPreset,
+        customPivotX,
+        customPivotY,
+        inputSheetLayoutScope,
+        sheetLayoutScope,
+        downscale,
+        alpha,
+        alphaThreshold,
+        alphaTolerance,
+        alphaColorKey,
+        decontaminateRgb,
+        outlineMode,
+        outlineSize,
+        outlineColor,
+        outlineAlpha,
+        outlineColorEdited,
+        outlineSourceMode,
+        outlineManualColor,
+        selectedOutlineSourceColors: [...selectedOutlineSourceColors],
+        removeOrphans,
+        jaggyCleanup,
+        preserveSinglePixelDetails,
+        removeHalos,
+        denoiseStrength,
+        contrastExpansionEnabled,
+        showAdvancedControls,
+        frameMetadataExpanded,
+        showFrameMetadataOverlays
+      },
+      timeline: {
+        selectedFrameIndex,
+        selectedAnimationName,
+        bottomPanelTab,
+        playbackFps,
+        playbackLoop,
+        playbackDirection,
+        normalizeTimelineFrames,
+        showOnionSkin,
+        timelineViewportSourceMode,
+        sandboxSpeed,
+        sandboxScale,
+        showSandboxGuides
+      },
+      sheet: {
+        detectedFrames: cloneSessionValue(detectedSheetFrames),
+        detectedRowAnimations: cloneSessionValue(detectedRowAnimations),
+        detectedWarnings: [...detectedSheetWarnings],
+        ...(detectedSheetDiagnostics ? { detectedDiagnostics: cloneSessionValue(detectedSheetDiagnostics) } : {}),
+        frameDurationOverrides: { ...frameDurationOverrides },
+        pivotOverrides: cloneSessionValue(pivotOverrides),
+        frameMetadataOverrides: cloneSessionValue(frameMetadataOverrides),
+        frameMetadataHistory: cloneSessionValue(frameMetadataHistory),
+        frameEditHistory: cloneSessionValue(frameEditHistory)
+      },
+      result: {
+        fixResult,
+        tilesetRepairBackup,
+        lastExportValidation
+      },
+      recommendation: {
+        suggestionReason,
+        recommendationConfidence
+      },
+      cacheKeys: {
+        sourceAnalysisKey: getSourceAnalysisCacheKey(asset)
+      }
+    }),
+    [
+      alpha,
+      alphaColorKey,
+      alphaThreshold,
+      alphaTolerance,
+      aspectLocked,
+      bottomPanelTab,
+      contrastExpansionEnabled,
+      cropToBounds,
+      customPaletteText,
+      customPivotX,
+      customPivotY,
+      decontaminateRgb,
+      denoiseStrength,
+      detectedRowAnimations,
+      detectedSheetDiagnostics,
+      detectedSheetFrames,
+      detectedSheetWarnings,
+      downscale,
+      fixResult,
+      frameDurationOverrides,
+      frameEditHistory,
+      frameHeight,
+      frameMetadataExpanded,
+      frameMetadataHistory,
+      frameMetadataOverrides,
+      frameWidth,
+      gridDetect,
+      gridPhaseX,
+      gridPhaseY,
+      gridScaleX,
+      gridScaleY,
+      inputSheetLayoutScope,
+      jaggyCleanup,
+      lastExportValidation,
+      localCorrection,
+      maxColors,
+      mode,
+      normalizeTimelineFrames,
+      outlineAlpha,
+      outlineColor,
+      outlineColorEdited,
+      outlineManualColor,
+      outlineMode,
+      outlineSize,
+      outlineSourceMode,
+      paletteDithering,
+      paletteLockScope,
+      paletteMode,
+      palettePreset,
+      paletteStrategy,
+      pivotOverrides,
+      pivotPreset,
+      playbackDirection,
+      playbackFps,
+      playbackLoop,
+      preserveSinglePixelDetails,
+      recommendationConfidence,
+      removeHalos,
+      removeOrphans,
+      sandboxScale,
+      sandboxSpeed,
+      selectedAnimationName,
+      selectedFrameIndex,
+      selectedOutlineSourceColors,
+      sheetColumns,
+      sheetExtrude,
+      sheetLayoutScope,
+      sheetMargin,
+      sheetRows,
+      sheetSpacing,
+      showAdvancedControls,
+      showFrameMetadataOverlays,
+      showOnionSkin,
+      showSandboxGuides,
+      suggestionReason,
+      targetHeight,
+      targetWidth,
+      tilemapIdentityThreshold,
+      tilemapOffsetX,
+      tilemapOffsetY,
+      tilesetRepairBackup,
+      timelineViewportSourceMode,
+      viewMode
+    ]
+  );
+
+  const saveCurrentAssetSession = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+    assetSessionsRef.current[selectedAsset.id] = captureCurrentAssetSession(selectedAsset);
+  }, [captureCurrentAssetSession, selectedAsset]);
+
+  const restoreAssetSession = useCallback((session: AssetEditorSession) => {
+    const { settings, timeline, sheet, result, recommendation } = session;
+
+    setMode(settings.mode);
+    setViewMode(settings.viewMode);
+    setTargetWidth(settings.targetWidth);
+    setTargetHeight(settings.targetHeight);
+    setMaxColors(settings.maxColors);
+    setPaletteMode(settings.paletteMode);
+    setPaletteStrategy(settings.paletteStrategy);
+    setPaletteLockScope(settings.paletteLockScope);
+    setPaletteDithering(settings.paletteDithering);
+    setPalettePreset(settings.palettePreset);
+    setCustomPaletteText(settings.customPaletteText);
+    setGridDetect(settings.gridDetect);
+    setGridScaleX(settings.gridScaleX);
+    setGridScaleY(settings.gridScaleY);
+    setGridPhaseX(settings.gridPhaseX);
+    setGridPhaseY(settings.gridPhaseY);
+    setCropToBounds(settings.cropToBounds);
+    setLocalCorrection(settings.localCorrection);
+    setAspectLocked(settings.aspectLocked);
+    setFrameWidth(settings.frameWidth);
+    setFrameHeight(settings.frameHeight);
+    setSheetRows(settings.sheetRows);
+    setSheetColumns(settings.sheetColumns);
+    setSheetMargin(settings.sheetMargin);
+    setSheetSpacing(settings.sheetSpacing);
+    setSheetExtrude(settings.sheetExtrude);
+    setTilemapOffsetX(settings.tilemapOffsetX);
+    setTilemapOffsetY(settings.tilemapOffsetY);
+    setTilemapIdentityThreshold(settings.tilemapIdentityThreshold);
+    setPivotPreset(settings.pivotPreset);
+    setCustomPivotX(settings.customPivotX);
+    setCustomPivotY(settings.customPivotY);
+    setInputSheetLayoutScope(settings.inputSheetLayoutScope);
+    setSheetLayoutScope(settings.sheetLayoutScope);
+    setDownscale(settings.downscale);
+    setAlpha(settings.alpha);
+    setAlphaThreshold(settings.alphaThreshold);
+    setAlphaTolerance(settings.alphaTolerance);
+    setAlphaColorKey(settings.alphaColorKey);
+    setDecontaminateRgb(settings.decontaminateRgb);
+    setOutlineMode(settings.outlineMode);
+    setOutlineSize(settings.outlineSize);
+    setOutlineColor(settings.outlineColor);
+    setOutlineAlpha(settings.outlineAlpha);
+    setOutlineColorEdited(settings.outlineColorEdited);
+    setOutlineSourceMode(settings.outlineSourceMode);
+    setOutlineManualColor(settings.outlineManualColor);
+    setSelectedOutlineSourceColors([...settings.selectedOutlineSourceColors]);
+    setRemoveOrphans(settings.removeOrphans);
+    setJaggyCleanup(settings.jaggyCleanup);
+    setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
+    setRemoveHalos(settings.removeHalos);
+    setDenoiseStrength(settings.denoiseStrength);
+    setContrastExpansionEnabled(settings.contrastExpansionEnabled);
+    setShowAdvancedControls(settings.showAdvancedControls);
+    setFrameMetadataExpanded(settings.frameMetadataExpanded);
+    setShowFrameMetadataOverlays(settings.showFrameMetadataOverlays);
+
+    const restoredFrames = cloneSessionValue(sheet.detectedFrames);
+    const restoredAnimations = cloneSessionValue(sheet.detectedRowAnimations);
+    detectedSheetFramesRef.current = restoredFrames;
+    detectedRowAnimationsRef.current = restoredAnimations;
+    setDetectedSheetFrames(restoredFrames);
+    setDetectedRowAnimations(restoredAnimations);
+    setDetectedSheetWarnings([...sheet.detectedWarnings]);
+    setDetectedSheetDiagnostics(sheet.detectedDiagnostics ? cloneSessionValue(sheet.detectedDiagnostics) : undefined);
+    setFrameDurationOverrides({ ...sheet.frameDurationOverrides });
+    setPivotOverrides(cloneSessionValue(sheet.pivotOverrides));
+    setFrameMetadataOverrides(cloneSessionValue(sheet.frameMetadataOverrides));
+    setFrameMetadataHistory(cloneSessionValue(sheet.frameMetadataHistory));
+    setFrameEditHistory(cloneSessionValue(sheet.frameEditHistory));
+
+    selectedFrameIndexRef.current = timeline.selectedFrameIndex;
+    selectedAnimationNameRef.current = timeline.selectedAnimationName;
+    setSelectedFrameIndex(timeline.selectedFrameIndex);
+    setSelectedAnimationName(timeline.selectedAnimationName);
+    setBottomPanelTab(timeline.bottomPanelTab);
+    setPlaybackFps(timeline.playbackFps);
+    setPlaybackLoop(timeline.playbackLoop);
+    setPlaybackDirection(timeline.playbackDirection);
+    setNormalizeTimelineFrames(timeline.normalizeTimelineFrames);
+    setShowOnionSkin(timeline.showOnionSkin);
+    setTimelineViewportSourceMode(timeline.timelineViewportSourceMode);
+    setSandboxSpeed(timeline.sandboxSpeed);
+    setSandboxScale(timeline.sandboxScale);
+    setShowSandboxGuides(timeline.showSandboxGuides);
+    setIsPlaying(false);
+    playbackStepDirectionRef.current = getInitialPlayDirection(timeline.playbackDirection);
+
+    suppressNextExportValidationResetRef.current = result.lastExportValidation !== null;
+    setFixResult(result.fixResult);
+    setTilesetRepairBackup(result.tilesetRepairBackup);
+    setLastExportValidation(result.lastExportValidation);
+    setSuggestionReason(recommendation.suggestionReason);
+    setRecommendationConfidence(recommendation.recommendationConfidence);
+
+    sourceFrameEditStartSnapshotRef.current = null;
+    sourceFrameEditGestureRef.current = null;
+    setSourceFrameEditActive(false);
+  }, []);
+
   const sourcePaletteAnalysis = selectedSourceAnalysis?.palette ?? null;
   const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
   const sourceColorCount = sourcePaletteAnalysis?.totalColors ?? 0;
@@ -2412,7 +2832,9 @@ export function App() {
 
       const operation = nextBusyOperation("import", `Preparing ${imageFiles.length} image${imageFiles.length === 1 ? "" : "s"}...`);
       setImportOperation(operation);
+      saveCurrentAssetSession();
       setFixResult(null);
+      setTilesetRepairBackup(null);
       setLastExportValidation(null);
       setIsPlaying(false);
       await waitForNextPaint();
@@ -2424,6 +2846,7 @@ export function App() {
             await waitForNextPaint();
 
             const asset = await decodeImageFile(file);
+            delete assetSessionsRef.current[asset.id];
             setAssets((current) => {
               const withoutDuplicate = current.filter((item) => item.id !== asset.id);
               return [asset, ...withoutDuplicate];
@@ -2454,7 +2877,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError]
+    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -2554,7 +2977,9 @@ export function App() {
 
       const operation = nextBusyOperation("import", "Loading sample workflow...");
       setImportOperation(operation);
+      saveCurrentAssetSession();
       setFixResult(null);
+      setTilesetRepairBackup(null);
       setLastExportValidation(null);
       setIsPlaying(false);
       await waitForNextPaint();
@@ -2562,6 +2987,7 @@ export function App() {
       try {
         const sampleImport = createOnboardingSampleImport(sampleId);
         const suggestion = suggestFixSettings(sampleImport.asset.image);
+        delete assetSessionsRef.current[sampleImport.asset.id];
 
         setAssets((current) => {
           const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
@@ -2584,7 +3010,7 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyOnboardingSampleSettings, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError]
+    [appendLog, applyOnboardingSampleSettings, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
   );
 
   const openSamplePicker = useCallback(() => {
@@ -4424,6 +4850,8 @@ export function App() {
         return;
       }
 
+      saveCurrentAssetSession();
+      const nextSession = assetSessionsRef.current[assetId];
       const sourceAnalysisKey = getSourceAnalysisCacheKey(nextAsset);
       const timingReport = createAssetSwitchTimingReport({
         id: `asset-switch-${Date.now()}-${assetId}`,
@@ -4458,21 +4886,29 @@ export function App() {
 
       try {
         markActiveAssetSwitchTimingForAsset(assetId, "stateResetStarted");
-        setFixResult(null);
-        setLastExportValidation(null);
-        setIsPlaying(false);
-        setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
-        sourceFrameEditStartSnapshotRef.current = null;
-        sourceFrameEditGestureRef.current = null;
-        setSourceFrameEditActive(false);
-
-        const nextMode = assetTypeToMode(nextAsset.assetType);
-        setMode(nextMode);
-        setCropToBounds(nextMode === "single");
+        if (nextSession) {
+          restoreAssetSession(nextSession);
+        } else {
+          const nextMode = assetTypeToMode(nextAsset.assetType);
+          setFixResult(null);
+          setTilesetRepairBackup(null);
+          setLastExportValidation(null);
+          setIsPlaying(false);
+          setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+          sourceFrameEditStartSnapshotRef.current = null;
+          sourceFrameEditGestureRef.current = null;
+          setSourceFrameEditActive(false);
+          setMode(nextMode);
+          setViewMode(getImportViewMode());
+          setCropToBounds(nextMode === "single");
+          clearDetectedSheetLayout();
+          setSuggestionReason("Run Auto Suggest to seed this asset's controls.");
+          setRecommendationConfidence(0);
+        }
         qualityReportSwitchFallbackRef.current = { assetId };
         markActiveAssetSwitchTimingForAsset(assetId, "stateResetFinished");
         setSelectedAssetId(assetId);
-        appendLog(`Selected ${nextAsset.name}`);
+        appendLog(nextSession ? `Selected ${nextAsset.name} (restored session)` : `Selected ${nextAsset.name}`);
         await waitForPaints(2);
       } finally {
         setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
@@ -4483,6 +4919,7 @@ export function App() {
     [
       appendLog,
       assets,
+      clearDetectedSheetLayout,
       fixResult,
       gridCandidateCache,
       isEditorBusy,
@@ -4490,6 +4927,8 @@ export function App() {
       nextBusyOperation,
       publishAssetSwitchTimingReport,
       qualityReportCache,
+      restoreAssetSession,
+      saveCurrentAssetSession,
       selectedAsset?.id,
       selectedAsset?.name,
       sourceAnalysisCache
@@ -4528,24 +4967,38 @@ export function App() {
       setAssetActivationOperation(operation);
       await waitForNextPaint();
       try {
-        setAssets((current) => {
-          const result = removeAssetAndSelectNext(current, assetId, selectedAsset?.id ?? null);
-          const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
-          if (nextSelectedAsset) {
-            const nextMode = assetTypeToMode(nextSelectedAsset.assetType);
-            setMode(nextMode);
-            setCropToBounds(nextMode === "single");
-          }
-          setSelectedAssetId(result.selectedAssetId);
-          return result.assets;
-        });
-        if (assetId === selectedAsset?.id) {
-          setFixResult(null);
-          setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
-          sourceFrameEditStartSnapshotRef.current = null;
-          sourceFrameEditGestureRef.current = null;
-          setSourceFrameEditActive(false);
+        if (assetId !== selectedAsset?.id) {
+          saveCurrentAssetSession();
         }
+        delete assetSessionsRef.current[assetId];
+        const result = removeAssetAndSelectNext(assets, assetId, selectedAsset?.id ?? null);
+        const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
+        setAssets(result.assets);
+        if (assetId === selectedAsset?.id) {
+          const nextSession = result.selectedAssetId ? assetSessionsRef.current[result.selectedAssetId] : undefined;
+          if (nextSession) {
+            restoreAssetSession(nextSession);
+          } else if (nextSelectedAsset) {
+            const nextMode = assetTypeToMode(nextSelectedAsset.assetType);
+            setFixResult(null);
+            setTilesetRepairBackup(null);
+            setLastExportValidation(null);
+            setFrameEditHistory(resetFrameEditHistory(createEmptyFrameEditSnapshot()));
+            sourceFrameEditStartSnapshotRef.current = null;
+            sourceFrameEditGestureRef.current = null;
+            setSourceFrameEditActive(false);
+            setMode(nextMode);
+            setViewMode(getImportViewMode());
+            setCropToBounds(nextMode === "single");
+            clearDetectedSheetLayout();
+          } else {
+            setFixResult(null);
+            setTilesetRepairBackup(null);
+            setLastExportValidation(null);
+            clearDetectedSheetLayout();
+          }
+        }
+        setSelectedAssetId(result.selectedAssetId);
         setGridCandidateCache((current) => {
           const next = { ...current };
           delete next[assetId];
@@ -4558,7 +5011,7 @@ export function App() {
         setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, assets, isEditorBusy, nextBusyOperation, selectedAsset?.id]
+    [appendLog, assets, clearDetectedSheetLayout, isEditorBusy, nextBusyOperation, restoreAssetSession, saveCurrentAssetSession, selectedAsset?.id]
   );
 
   const requestAssetDeletion = useCallback((assetId: string) => {
