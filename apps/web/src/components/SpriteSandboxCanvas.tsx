@@ -30,6 +30,7 @@ export type SpriteSandboxCanvasProps = {
   showGuides: boolean;
   movementSpeed: number;
   spriteScale: number;
+  onPreviewRender?: () => void;
 };
 
 type LivePlaybackState = {
@@ -61,7 +62,8 @@ export function SpriteSandboxCanvas({
   showOnionSkin,
   showGuides,
   movementSpeed,
-  spriteScale
+  spriteScale,
+  onPreviewRender
 }: SpriteSandboxCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const inputRef = useRef<SandboxInputState>({ ...emptyInput });
@@ -140,6 +142,7 @@ export function SpriteSandboxCanvas({
         showOnionSkin,
         showGuides
       });
+      onPreviewRender?.();
 
       animationFrameId = window.requestAnimationFrame(draw);
     };
@@ -154,6 +157,7 @@ export function SpriteSandboxCanvas({
     isPlaying,
     loop,
     movementSpeed,
+    onPreviewRender,
     outputCanvas,
     outputPlacements,
     playDirection,

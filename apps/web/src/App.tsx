@@ -102,6 +102,16 @@ import {
   removeAssetAndSelectNext,
   updateAssetTypeMetadata
 } from "./lib/assets";
+import {
+  completeAssetSwitchTiming,
+  createAssetSwitchTimingReport,
+  formatAssetSwitchMarks,
+  formatAssetSwitchMetricRows,
+  markAssetSwitchTiming,
+  summarizeAssetSwitchTimings,
+  type AssetSwitchTimingPhase,
+  type AssetSwitchTimingReport
+} from "./lib/assetSwitchTimings";
 import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
@@ -780,6 +790,7 @@ export function App() {
   const [exportBundleName, setExportBundleName] = useState("");
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
+  const [assetSwitchTimingReports, setAssetSwitchTimingReports] = useState<AssetSwitchTimingReport[]>([]);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [sourceAnalysisCache, setSourceAnalysisCache] = useState<Record<string, SourceAssetAnalysis>>({});
   const [qualityReportCache, setQualityReportCache] = useState<Record<string, QualityReport>>({});
@@ -799,6 +810,7 @@ export function App() {
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
+  const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const qualityReportSwitchFallbackRef = useRef<{ assetId: string; cacheKey?: string } | null>(null);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
@@ -809,6 +821,44 @@ export function App() {
   const sourceFrameEditGestureRef = useRef<{ mode: "move" | "resize"; frameIndex: number } | null>(null);
   const playbackStepDirectionRef = useRef<PlaybackStepDirection>(getInitialPlaybackState(0).playDirection);
   const bottomResizeRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+
+  const publishAssetSwitchTimingReport = useCallback((report: AssetSwitchTimingReport) => {
+    setAssetSwitchTimingReports((current) => [report, ...current.filter((item) => item.id !== report.id)].slice(0, 5));
+  }, []);
+
+  const markActiveAssetSwitchTimingForAsset = useCallback(
+    (assetId: string, phase: AssetSwitchTimingPhase, detail?: string) => {
+      const current = activeAssetSwitchTimingRef.current;
+      if (!current || current.metadata.toAssetId !== assetId) {
+        return;
+      }
+
+      const next = markAssetSwitchTiming(current, phase, performance.now(), detail);
+      if (next === current) {
+        return;
+      }
+
+      activeAssetSwitchTimingRef.current = next;
+      publishAssetSwitchTimingReport(next);
+    },
+    [publishAssetSwitchTimingReport]
+  );
+
+  const appendLog = useCallback((line: string) => {
+    setLogs((current) => [line, ...current].slice(0, 8));
+  }, []);
+
+  const finishActiveAssetSwitchTiming = useCallback(() => {
+    const current = activeAssetSwitchTimingRef.current;
+    if (!current) {
+      return;
+    }
+
+    const next = completeAssetSwitchTiming(current, performance.now());
+    activeAssetSwitchTimingRef.current = null;
+    publishAssetSwitchTimingReport(next);
+    appendLog(`Asset switch: ${summarizeAssetSwitchTimings(next)}`);
+  }, [appendLog, publishAssetSwitchTimingReport]);
 
   const setPaletteBudget = useCallback((value: number) => {
     setMaxColors(normalizePaletteBudget(value));
@@ -1064,6 +1114,30 @@ export function App() {
   const visibleBusyOperation = selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation, fixOperation: visibleFixOperation });
   const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
   const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
+  const latestAssetSwitchTimingReport = assetSwitchTimingReports[0] ?? null;
+  const assetSwitchMetricRows = useMemo<Array<[string, string]>>(() => {
+    const rows = formatAssetSwitchMetricRows(latestAssetSwitchTimingReport);
+    if (!latestAssetSwitchTimingReport) {
+      return rows;
+    }
+    return [...rows, ["Marks", formatAssetSwitchMarks(latestAssetSwitchTimingReport)]];
+  }, [latestAssetSwitchTimingReport]);
+  useEffect(() => {
+    const activeReport = activeAssetSwitchTimingRef.current;
+    if (!activeReport) {
+      return;
+    }
+
+    const phases = new Set(activeReport.marks.map((mark) => mark.phase));
+    const hasFirstPreview =
+      phases.has("viewportPreviewRendered") || phases.has("timelinePreviewRendered") || phases.has("sandboxPreviewRendered");
+    const sourceReady = activeReport.metadata.sourceAnalysisCached || phases.has("sourceAnalysisFinished");
+    const qualityReady = activeReport.metadata.qualityReportCached || phases.has("qualityDiagnosticsFinished");
+
+    if (phases.has("postCommitSettled") && hasFirstPreview && sourceReady && qualityReady) {
+      finishActiveAssetSwitchTiming();
+    }
+  }, [assetSwitchTimingReports, finishActiveAssetSwitchTiming]);
   const editorPanelMenuItems = useMemo(() => getEditorPanelMenuItems({ bottomPanelVisible: showBottomPanel }), [showBottomPanel]);
   const samplePickerButtonLabel = getSamplePickerButtonLabel(onboardingSampleCards.length);
   const toggleAppMenu = useCallback((menu: AppMenuId) => {
@@ -1097,6 +1171,13 @@ export function App() {
   const outlineSourcePreviewCandidates = outlineSourceCandidates.slice(0, 12);
   const outlineSourceHiddenCount = Math.max(0, outlineSourceCandidates.length - outlineSourcePreviewCandidates.length);
   useEffect(() => {
+    if (!selectedAsset) {
+      return;
+    }
+    markActiveAssetSwitchTimingForAsset(selectedAsset.id, "selectedAssetCommitted");
+  }, [markActiveAssetSwitchTimingForAsset, selectedAsset?.id]);
+
+  useEffect(() => {
     if (!selectedAsset || !selectedSourceAnalysisKey || selectedSourceAnalysis) {
       return undefined;
     }
@@ -1111,11 +1192,13 @@ export function App() {
 
       frameId = window.requestAnimationFrame(() => {
         try {
+          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
           const analysis = createSourceAssetAnalysis(selectedAsset);
           if (cancelled) {
             return;
           }
           setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisFinished");
         } finally {
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
         }
@@ -1133,7 +1216,7 @@ export function App() {
         setAnalysisOperation((current) => clearBusyOperation(current, cancelledOperationId));
       }
     };
-  }, [nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
+  }, [markActiveAssetSwitchTimingForAsset, nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -1569,6 +1652,7 @@ export function App() {
         }
 
         try {
+          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
           const report = analyzeQualityReport(selectedAsset.image, {
             assetType,
             maxColors,
@@ -1579,6 +1663,7 @@ export function App() {
 
           if (!cancelled) {
             setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
+            markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsFinished");
           }
         } finally {
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
@@ -1599,6 +1684,7 @@ export function App() {
     exactQualityReport,
     fallbackQualityReport,
     gridCandidates,
+    markActiveAssetSwitchTimingForAsset,
     maxColors,
     nextBusyOperation,
     qualityReportCacheKey,
@@ -1887,10 +1973,6 @@ export function App() {
     setRoute("/");
   }, []);
 
-  const appendLog = useCallback((line: string) => {
-    setLogs((current) => [line, ...current].slice(0, 8));
-  }, []);
-
   const recordOperationError = useCallback(
     (operation: string, error: unknown, recovery: string, details?: Record<string, unknown>) => {
       const report = createOperationErrorReport(operation, error, recovery, new Date().toISOString(), details);
@@ -1973,7 +2055,8 @@ export function App() {
         fixMetrics: fixResult?.metrics ?? null,
         qualitySummary: qualityReport?.summary ?? null,
         lastExportValidation,
-        detectedSheetWarnings
+        detectedSheetWarnings,
+        assetSwitchTimings: assetSwitchTimingReports.slice(0, 5)
       },
       warnings: [
         ...assetTypeWarnings.map((warning) => warning.message),
@@ -1989,6 +2072,7 @@ export function App() {
     activePaletteLockScope,
     alpha,
     appendLog,
+    assetSwitchTimingReports,
     assetType,
     assetTypeWarnings,
     busyStatus,
@@ -4340,12 +4424,40 @@ export function App() {
         return;
       }
 
+      const sourceAnalysisKey = getSourceAnalysisCacheKey(nextAsset);
+      const timingReport = createAssetSwitchTimingReport({
+        id: `asset-switch-${Date.now()}-${assetId}`,
+        nowMs: performance.now(),
+        metadata: {
+          ...(selectedAsset
+            ? {
+                fromAssetId: selectedAsset.id,
+                fromAssetName: selectedAsset.name
+              }
+            : {}),
+          toAssetId: nextAsset.id,
+          toAssetName: nextAsset.name,
+          width: nextAsset.image.width,
+          height: nextAsset.image.height,
+          assetType: nextAsset.assetType,
+          hadActiveFixResult: fixResult !== null,
+          sourceAnalysisCached: sourceAnalysisCache[sourceAnalysisKey] !== undefined,
+          qualityReportCached: findCachedAnalysisForAsset(qualityReportCache, nextAsset.id) !== undefined,
+          gridCandidatesCached: (gridCandidateCache[nextAsset.id]?.length ?? 0) > 0
+        }
+      });
+      activeAssetSwitchTimingRef.current = timingReport;
+      publishAssetSwitchTimingReport(timingReport);
+      markActiveAssetSwitchTimingForAsset(assetId, "activationStarted");
+
       const operation = nextBusyOperation("activation", `Switching to ${nextAsset.name}...`);
       setAssetActivationOperation(operation);
       setAssetMenu(null);
       await waitForNextPaint();
+      markActiveAssetSwitchTimingForAsset(assetId, "busyPainted");
 
       try {
+        markActiveAssetSwitchTimingForAsset(assetId, "stateResetStarted");
         setFixResult(null);
         setLastExportValidation(null);
         setIsPlaying(false);
@@ -4358,15 +4470,52 @@ export function App() {
         setMode(nextMode);
         setCropToBounds(nextMode === "single");
         qualityReportSwitchFallbackRef.current = { assetId };
+        markActiveAssetSwitchTimingForAsset(assetId, "stateResetFinished");
         setSelectedAssetId(assetId);
         appendLog(`Selected ${nextAsset.name}`);
         await waitForPaints(2);
       } finally {
         setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
+        await waitForNextPaint();
+        markActiveAssetSwitchTimingForAsset(assetId, "postCommitSettled");
       }
     },
-    [appendLog, assets, isEditorBusy, nextBusyOperation, selectedAsset?.id]
+    [
+      appendLog,
+      assets,
+      fixResult,
+      gridCandidateCache,
+      isEditorBusy,
+      markActiveAssetSwitchTimingForAsset,
+      nextBusyOperation,
+      publishAssetSwitchTimingReport,
+      qualityReportCache,
+      selectedAsset?.id,
+      selectedAsset?.name,
+      sourceAnalysisCache
+    ]
   );
+
+  const markViewportPreviewRendered = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+    markActiveAssetSwitchTimingForAsset(selectedAsset.id, "viewportPreviewRendered");
+  }, [markActiveAssetSwitchTimingForAsset, selectedAsset?.id]);
+
+  const markTimelinePreviewRendered = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+    markActiveAssetSwitchTimingForAsset(selectedAsset.id, "timelinePreviewRendered");
+  }, [markActiveAssetSwitchTimingForAsset, selectedAsset?.id]);
+
+  const markSandboxPreviewRendered = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+    markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sandboxPreviewRendered");
+  }, [markActiveAssetSwitchTimingForAsset, selectedAsset?.id]);
 
   const removeAsset = useCallback(
     async (assetId: string) => {
@@ -6187,6 +6336,7 @@ export function App() {
               diagnosticOverlay={diagnosticOverlay}
               onFrameCommit={commitTimelineViewportFrame}
               onPlaybackStop={stopTimelinePlayback}
+              onPreviewRender={markTimelinePreviewRendered}
             />
             <div className="sprite-sandbox-panel" aria-label="2D sprite sandbox">
               <div className="sprite-sandbox-header">
@@ -6238,6 +6388,7 @@ export function App() {
                 showGuides={showSandboxGuides}
                 movementSpeed={sandboxSpeed}
                 spriteScale={sandboxScale}
+                onPreviewRender={markSandboxPreviewRendered}
               />
             </div>
           </div>
@@ -6261,6 +6412,7 @@ export function App() {
             onSourceFrameResize={resizeDetectedSourceFrame}
             onSourceFrameEditStart={beginSourceFrameEdit}
             onSourceFrameEditCommit={commitSourceFrameEdit}
+            onPreviewRender={markViewportPreviewRendered}
           />
         )}
         {busyStatus ? (
@@ -6962,6 +7114,7 @@ export function App() {
                         ["Grid", fixResult ? `${Math.round(fixResult.grid.confidence * 100)}%` : "--"]
                       ]}
                     />
+                    <MetricGroup title="Asset Switch" metrics={assetSwitchMetricRows} />
                   </div>
                 </div>
               </div>

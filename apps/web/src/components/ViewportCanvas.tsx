@@ -40,6 +40,7 @@ export type ViewportCanvasProps = {
   onSourceFrameResize?: (index: number, handle: FrameResizeHandle, delta: Point) => void;
   onSourceFrameEditStart?: (edit: { mode: "move" | "resize"; frameIndex: number }) => void;
   onSourceFrameEditCommit?: (changed: boolean) => void;
+  onPreviewRender?: () => void;
 };
 
 export function ViewportCanvas({
@@ -60,7 +61,8 @@ export function ViewportCanvas({
   onSourceFrameMove,
   onSourceFrameResize,
   onSourceFrameEditStart,
-  onSourceFrameEditCommit
+  onSourceFrameEditCommit,
+  onPreviewRender
 }: ViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
@@ -261,6 +263,7 @@ export function ViewportCanvas({
         panRef.current,
         splitRatioRef.current
       );
+      onPreviewRender?.();
     };
 
     draw();
@@ -273,6 +276,7 @@ export function ViewportCanvas({
     fixedOverlayCanvas,
     fixedSourceRect,
     frames,
+    onPreviewRender,
     renderKey,
     selectedFrameIndex,
     showFrameMetadataOverlays,
