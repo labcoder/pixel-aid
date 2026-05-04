@@ -54,15 +54,14 @@ import type {
 } from "@pixelaid/shared";
 import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition, PIXELAID_VERSION } from "@pixelaid/shared";
 import {
-  analyzeQualityReport,
   analyzeSceneAssetDiagnostics,
   analyzeTilesetSeams,
   applyTilesetSeamRepairs,
-  detectOutlineColorCandidates,
   extractTilemapMetadata,
   sliceSheetFrames
 } from "@pixelaid/core";
 import type { QualityFinding, QualityRecommendation, QualityReport } from "@pixelaid/core";
+import type { SourceAssetAnalysisResult } from "@pixelaid/worker";
 import {
   analyzeFrameStability,
   createEngineExportBundle,
@@ -86,6 +85,7 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
+import { startQualityAnalysisJob, startSourceAnalysisJob, type AnalysisJob } from "./lib/analysisWorkerClient";
 import {
   applyFrameDurationOverrides,
   createAnimationTagFromRange,
@@ -322,10 +322,7 @@ type PaletteModalState = {
   kind?: "palette" | "outlineSource";
 };
 
-type SourceAssetAnalysis = {
-  palette: ReturnType<typeof analyzeVisiblePalettePreview>;
-  outlineCandidates: ReturnType<typeof detectOutlineColorCandidates>;
-};
+type SourceAssetAnalysis = SourceAssetAnalysisResult;
 
 type BrowserEyeDropper = {
   open: () => Promise<{ sRGBHex: string }>;
@@ -477,13 +474,6 @@ function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
     height: asset.image.height,
     byteLength: asset.image.data.byteLength
   });
-}
-
-function createSourceAssetAnalysis(asset: ImportedImageAsset): SourceAssetAnalysis {
-  return {
-    palette: analyzeVisiblePalettePreview(asset.image, 8, { maxUniqueColors: 10000 }),
-    outlineCandidates: detectOutlineColorCandidates(asset.image, { maxCandidates: 64 })
-  };
 }
 
 function createSheetLayoutAnalysisSignature(layout: SheetLayoutDetection | undefined): string {
@@ -925,6 +915,8 @@ export function App() {
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
+  const activeSourceAnalysisJobRef = useRef<AnalysisJob<SourceAssetAnalysis> | null>(null);
+  const activeQualityAnalysisJobRef = useRef<AnalysisJob<QualityReport> | null>(null);
   const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
   const suppressNextExportValidationResetRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
@@ -981,8 +973,6 @@ export function App() {
   }, []);
 
   const cacheFixSuggestionAnalysis = useCallback((asset: ImportedImageAsset, suggestion: FixSettingSuggestion) => {
-    const sourceKey = getSourceAnalysisCacheKey(asset);
-    const sourceAnalysis = createSourceAssetAnalysis(asset);
     const qualityKey = buildQualityAnalysisCacheKey({
       assetId: asset.id,
       assetType: suggestion.assetType,
@@ -992,7 +982,6 @@ export function App() {
       sheetLayoutSignature: createSheetLayoutAnalysisSignature(suggestion.sheetLayout)
     });
 
-    setSourceAnalysisCache((current) => (current[sourceKey] ? current : { ...current, [sourceKey]: sourceAnalysis }));
     setQualityReportCache((current) => (current[qualityKey] ? current : { ...current, [qualityKey]: suggestion.qualityReport }));
   }, []);
 
@@ -1619,40 +1608,55 @@ export function App() {
     }
 
     let cancelled = false;
-    let frameId = 0;
+    let job: AnalysisJob<SourceAssetAnalysis> | null = null;
     let operationId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       const operation = nextBusyOperation("analysis", `Preparing source analysis for ${selectedAsset.name}...`);
       operationId = operation.id;
       setAnalysisOperation(operation);
+      markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
 
-      frameId = window.requestAnimationFrame(() => {
-        try {
-          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
-          const analysis = createSourceAssetAnalysis(selectedAsset);
+      job = startSourceAnalysisJob(selectedAsset.image, {
+        paletteMaxColors: 8,
+        maxUniqueColors: 10000,
+        outlineMaxCandidates: 64
+      });
+      activeSourceAnalysisJobRef.current = job;
+
+      void job.promise
+        .then((analysis) => {
+          if (cancelled || activeSourceAnalysisJobRef.current?.requestId !== job?.requestId) {
+            return;
+          }
+
+          setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisFinished");
+        })
+        .catch((error) => {
           if (cancelled) {
             return;
           }
-          setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
-          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisFinished");
-        } finally {
+
+          appendLog(`Source analysis failed: ${error instanceof Error ? error.message : "unknown worker error"}`);
+        })
+        .finally(() => {
+          if (activeSourceAnalysisJobRef.current?.requestId === job?.requestId) {
+            activeSourceAnalysisJobRef.current = null;
+          }
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
-        }
-      });
+        });
     }, 0);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
-      }
+      job?.cancel();
       if (operationId !== null) {
         const cancelledOperationId = operationId;
         setAnalysisOperation((current) => clearBusyOperation(current, cancelledOperationId));
       }
     };
-  }, [markActiveAssetSwitchTimingForAsset, nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
+  }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -2077,45 +2081,59 @@ export function App() {
     }
 
     let cancelled = false;
-    let frameId = 0;
+    let job: AnalysisJob<QualityReport> | null = null;
+    let operationId: number | null = null;
     const timeoutId = window.setTimeout(() => {
       const operation = nextBusyOperation("analysis", `Preparing diagnostics for ${selectedAsset.name}...`);
+      operationId = operation.id;
       setAnalysisOperation(operation);
-      frameId = window.requestAnimationFrame(() => {
-        if (cancelled) {
-          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
-          return;
-        }
 
-        try {
-          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
-          const report = analyzeQualityReport(selectedAsset.image, {
-            assetType,
-            maxColors,
-            alpha,
-            ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
-            ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
-          });
-
-          if (!cancelled) {
-            setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
-            markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsFinished");
-          }
-        } finally {
-          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
-        }
+      markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
+      job = startQualityAnalysisJob(selectedAsset.image, {
+        assetType,
+        maxColors,
+        alpha,
+        ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
+        ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
       });
+      activeQualityAnalysisJobRef.current = job;
+
+      void job.promise
+        .then((report) => {
+          if (cancelled || activeQualityAnalysisJobRef.current?.requestId !== job?.requestId) {
+            return;
+          }
+
+          setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
+          markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsFinished");
+        })
+        .catch((error) => {
+          if (cancelled) {
+            return;
+          }
+
+          appendLog(`Quality diagnostics failed: ${error instanceof Error ? error.message : "unknown worker error"}`);
+        })
+        .finally(() => {
+          if (activeQualityAnalysisJobRef.current?.requestId === job?.requestId) {
+            activeQualityAnalysisJobRef.current = null;
+          }
+          setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
+        });
     }, qualityReportDebounceMs);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timeoutId);
-      if (frameId) {
-        window.cancelAnimationFrame(frameId);
+      job?.cancel();
+      if (operationId !== null) {
+        const cancelledOperationId = operationId;
+        setAnalysisOperation((current) => clearBusyOperation(current, cancelledOperationId));
       }
     };
   }, [
     alpha,
+    appendLog,
     assetType,
     exactQualityReport,
     fallbackQualityReport,
