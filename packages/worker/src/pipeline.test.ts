@@ -78,6 +78,49 @@ describe("worker fix pipeline", () => {
     });
   });
 
+  test("runs source analysis without returning image buffers", () => {
+    const request: WorkerRequest = {
+      type: "analyze-source",
+      requestId: "source-analysis-job",
+      image: image(),
+      paletteMaxColors: 2,
+      maxUniqueColors: 10,
+      outlineMaxCandidates: 4
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("source-analysis-result");
+    if (response.type !== "source-analysis-result") {
+      throw new Error("Expected source analysis response");
+    }
+    expect(response.result.palette.colors).toEqual(["#ff0000", "#fc0200"]);
+    expect(response.result.palette.totalColors).toBe(4);
+    expect(response.result.outlineCandidates.length).toBeLessThanOrEqual(4);
+  });
+
+  test("runs quality analysis in the worker protocol", () => {
+    const request: WorkerRequest = {
+      type: "analyze-quality",
+      requestId: "quality-analysis-job",
+      image: image(),
+      options: {
+        assetType: "sprite",
+        maxColors: 4,
+        alpha: "preserve"
+      }
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("quality-analysis-result");
+    if (response.type !== "quality-analysis-result") {
+      throw new Error("Expected quality analysis response");
+    }
+    expect(response.result.assetType).toBe("sprite");
+    expect(response.result.metrics.palette.exactColorCount).toBeGreaterThan(0);
+  });
+
   test("emits progress events before returning a result", () => {
     const request: WorkerRequest = {
       type: "fix-image",
