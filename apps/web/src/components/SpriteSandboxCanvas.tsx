@@ -17,6 +17,8 @@ import { useDisposableCanvas } from "../lib/useDisposableCanvas";
 export type SpriteSandboxCanvasProps = {
   inputImage: RGBAImage | null;
   outputImage: RGBAImage | null;
+  inputSurface?: HTMLCanvasElement | null;
+  outputSurface?: HTMLCanvasElement | null;
   inputPlacements: readonly FramePreviewPlacement[];
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
@@ -50,6 +52,8 @@ const emptyInput: SandboxInputState = { left: false, right: false, up: false, do
 export function SpriteSandboxCanvas({
   inputImage,
   outputImage,
+  inputSurface = null,
+  outputSurface = null,
   inputPlacements,
   outputPlacements,
   sourceMode,
@@ -69,11 +73,13 @@ export function SpriteSandboxCanvas({
   const inputRef = useRef<SandboxInputState>({ ...emptyInput });
   const positionRef = useRef<SandboxPosition | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
-  const inputCanvas = useMemo(() => (inputImage ? imageToCanvas(inputImage) : null), [inputImage]);
-  const outputCanvas = useMemo(() => (outputImage ? imageToCanvas(outputImage) : null), [outputImage]);
+  const ownedInputCanvas = useMemo(() => (!inputSurface && inputImage ? imageToCanvas(inputImage) : null), [inputImage, inputSurface]);
+  const ownedOutputCanvas = useMemo(() => (!outputSurface && outputImage ? imageToCanvas(outputImage) : null), [outputImage, outputSurface]);
+  const inputCanvas = inputSurface ?? ownedInputCanvas;
+  const outputCanvas = outputSurface ?? ownedOutputCanvas;
 
-  useDisposableCanvas(inputCanvas);
-  useDisposableCanvas(outputCanvas);
+  useDisposableCanvas(ownedInputCanvas);
+  useDisposableCanvas(ownedOutputCanvas);
 
   useEffect(() => {
     positionRef.current = null;

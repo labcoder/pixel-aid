@@ -11,6 +11,8 @@ import { useDisposableCanvas } from "../lib/useDisposableCanvas";
 export type TimelineViewportCanvasProps = {
   inputImage: RGBAImage | null;
   outputImage: RGBAImage | null;
+  inputSurface?: HTMLCanvasElement | null;
+  outputSurface?: HTMLCanvasElement | null;
   inputPlacements: readonly FramePreviewPlacement[];
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
@@ -36,6 +38,8 @@ type LivePlaybackState = {
 export function TimelineViewportCanvas({
   inputImage,
   outputImage,
+  inputSurface = null,
+  outputSurface = null,
   inputPlacements,
   outputPlacements,
   sourceMode,
@@ -53,8 +57,10 @@ export function TimelineViewportCanvas({
 }: TimelineViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
-  const inputCanvas = useMemo(() => (inputImage ? imageToCanvas(inputImage) : null), [inputImage]);
-  const outputCanvas = useMemo(() => (outputImage ? imageToCanvas(outputImage) : null), [outputImage]);
+  const ownedInputCanvas = useMemo(() => (!inputSurface && inputImage ? imageToCanvas(inputImage) : null), [inputImage, inputSurface]);
+  const ownedOutputCanvas = useMemo(() => (!outputSurface && outputImage ? imageToCanvas(outputImage) : null), [outputImage, outputSurface]);
+  const inputCanvas = inputSurface ?? ownedInputCanvas;
+  const outputCanvas = outputSurface ?? ownedOutputCanvas;
   const inputOverlayCanvas = useMemo(
     () => (diagnosticOverlay?.sourceMask ? maskToCanvas(diagnosticOverlay.sourceMask) : null),
     [diagnosticOverlay?.sourceMask]
@@ -64,8 +70,8 @@ export function TimelineViewportCanvas({
     [diagnosticOverlay?.fixedMask]
   );
 
-  useDisposableCanvas(inputCanvas);
-  useDisposableCanvas(outputCanvas);
+  useDisposableCanvas(ownedInputCanvas);
+  useDisposableCanvas(ownedOutputCanvas);
   useDisposableCanvas(inputOverlayCanvas);
   useDisposableCanvas(outputOverlayCanvas);
 

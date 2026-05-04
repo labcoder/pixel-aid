@@ -219,6 +219,7 @@ import {
   type OutlineSourceMode
 } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
+import { createPreviewSurfaceCache } from "./lib/previewSurfaceCache";
 import { formatPaletteText, normalizePaletteBudget, normalizePaletteHex, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
 import {
   addPaletteColor,
@@ -921,6 +922,7 @@ export function App() {
   const [newPaletteColor, setNewPaletteColor] = useState("#ffffff");
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const assetSessionsRef = useRef<Record<string, AssetEditorSession>>({});
+  const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
   const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
@@ -1276,14 +1278,28 @@ export function App() {
     const assetIds = new Set(assets.map((asset) => asset.id));
     setSourceAnalysisCache((current) => pruneAnalysisCache(current, assetIds));
     setQualityReportCache((current) => pruneAnalysisCache(current, assetIds));
+    previewSurfaceCacheRef.current.retainAssets(assetIds);
     for (const assetId of Object.keys(assetSessionsRef.current)) {
       if (!assetIds.has(assetId)) {
         delete assetSessionsRef.current[assetId];
       }
     }
   }, [assets]);
+  useEffect(() => () => previewSurfaceCacheRef.current.clear(), []);
   const selectedSourceAnalysisKey = selectedAsset ? getSourceAnalysisCacheKey(selectedAsset) : "";
   const selectedSourceAnalysis = selectedSourceAnalysisKey ? sourceAnalysisCache[selectedSourceAnalysisKey] : undefined;
+  const selectedSourceSurface = useMemo(
+    () => (selectedAsset ? previewSurfaceCacheRef.current.getSurface({ assetId: selectedAsset.id, role: "source", image: selectedAsset.image }) : null),
+    [selectedAsset?.id, selectedAsset?.image]
+  );
+  const selectedFixedSurface = useMemo(
+    () =>
+      selectedAsset && fixResult
+        ? previewSurfaceCacheRef.current.getSurface({ assetId: selectedAsset.id, role: "fixed", image: fixResult.image })
+        : null,
+    [fixResult?.image, selectedAsset?.id]
+  );
+  const previewSurfaceStats = previewSurfaceCacheRef.current.getStats();
   const captureCurrentAssetSession = useCallback(
     (asset: ImportedImageAsset): AssetEditorSession => ({
       version: 1,
@@ -2476,7 +2492,8 @@ export function App() {
         qualitySummary: qualityReport?.summary ?? null,
         lastExportValidation,
         detectedSheetWarnings,
-        assetSwitchTimings: assetSwitchTimingReports.slice(0, 5)
+        assetSwitchTimings: assetSwitchTimingReports.slice(0, 5),
+        previewSurfaceCache: previewSurfaceStats
       },
       warnings: [
         ...assetTypeWarnings.map((warning) => warning.message),
@@ -2528,6 +2545,7 @@ export function App() {
     paletteStrategy,
     paletteWarningMessages,
     preserveSinglePixelDetails,
+    previewSurfaceStats,
     qualityReport?.findings,
     qualityReport?.summary,
     removeHalos,
@@ -2847,6 +2865,7 @@ export function App() {
 
             const asset = await decodeImageFile(file);
             delete assetSessionsRef.current[asset.id];
+            previewSurfaceCacheRef.current.disposeAsset(asset.id);
             setAssets((current) => {
               const withoutDuplicate = current.filter((item) => item.id !== asset.id);
               return [asset, ...withoutDuplicate];
@@ -2988,6 +3007,7 @@ export function App() {
         const sampleImport = createOnboardingSampleImport(sampleId);
         const suggestion = suggestFixSettings(sampleImport.asset.image);
         delete assetSessionsRef.current[sampleImport.asset.id];
+        previewSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
 
         setAssets((current) => {
           const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
@@ -3163,6 +3183,7 @@ export function App() {
     const frameCount = sheetMode ? sheetFrames.length : 1;
     lastLoggedFixStageRef.current = undefined;
     setTilesetRepairBackup(null);
+    previewSurfaceCacheRef.current.disposeRole(selectedAsset.id, "fixed");
     setFixResult(null);
     setLastExportValidation(null);
     const operation = nextBusyOperation("fix", sheetMode ? `Preparing ${frameCount} frame fix...` : "Preparing fix...");
@@ -3263,6 +3284,9 @@ export function App() {
       }
 
       setTilesetRepairBackup((current) => current ?? fixResult);
+      if (selectedAsset) {
+        previewSurfaceCacheRef.current.disposeRole(selectedAsset.id, "fixed");
+      }
       setFixResult({
         ...fixResult,
         image: result.image,
@@ -3294,7 +3318,7 @@ export function App() {
     isEditorBusy,
     nextBusyOperation,
     recordOperationError,
-    selectedAsset?.name,
+    selectedAsset,
     sheetMargin,
     sheetSpacing,
     tilesetDiagnostics
@@ -3304,10 +3328,13 @@ export function App() {
     if (!tilesetRepairBackup || isEditorBusy) {
       return;
     }
+    if (selectedAsset) {
+      previewSurfaceCacheRef.current.disposeRole(selectedAsset.id, "fixed");
+    }
     setFixResult(tilesetRepairBackup);
     setTilesetRepairBackup(null);
     appendLog("Tileset seam repair undone.");
-  }, [appendLog, isEditorBusy, tilesetRepairBackup]);
+  }, [appendLog, isEditorBusy, selectedAsset, tilesetRepairBackup]);
 
   const autoSuggest = useCallback(async () => {
     if (!selectedAsset || isEditorBusy) {
@@ -6435,7 +6462,11 @@ export function App() {
                       setAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
                     }}
                   >
-                    <AssetThumbnail image={asset.image} label={asset.name} />
+                    <AssetThumbnail
+                      image={asset.image}
+                      label={asset.name}
+                      surface={previewSurfaceCacheRef.current.getSurface({ assetId: asset.id, role: "source", image: asset.image })}
+                    />
                     <span className="asset-meta">
                       <strong>{asset.name}</strong>
                       <small>
@@ -6776,6 +6807,8 @@ export function App() {
             <TimelineViewportCanvas
               inputImage={selectedAsset?.image ?? null}
               outputImage={fixResult?.image ?? null}
+              inputSurface={selectedSourceSurface}
+              outputSurface={selectedFixedSurface}
               inputPlacements={inputTimelinePlacements}
               outputPlacements={outputTimelinePlacements}
               sourceMode={timelineViewportSourceMode}
@@ -6828,6 +6861,8 @@ export function App() {
               <SpriteSandboxCanvas
                 inputImage={selectedAsset?.image ?? null}
                 outputImage={fixResult?.image ?? null}
+                inputSurface={selectedSourceSurface}
+                outputSurface={selectedFixedSurface}
                 inputPlacements={inputTimelinePlacements}
                 outputPlacements={outputTimelinePlacements}
                 sourceMode={timelineViewportSourceMode}
@@ -6849,6 +6884,8 @@ export function App() {
           <ViewportCanvas
             sourceImage={selectedAsset?.image ?? null}
             fixedImage={fixResult?.image ?? null}
+            sourceSurface={selectedSourceSurface}
+            fixedSurface={selectedFixedSurface}
             fixedSourceRect={fixedComparisonSourceRect}
             diagnosticOverlay={diagnosticOverlay}
             viewMode={canvasViewMode}
@@ -7541,7 +7578,13 @@ export function App() {
                         ["Type", selectedAsset ? assetTypeDefinition.shortLabel : "--"],
                         ["Origin", selectedAsset ? provenanceSummary : "--"],
                         ["Mode", mode],
-                        ["Frames", sheetMode ? String(sheetFrames.length) : "single"]
+                        ["Frames", sheetMode ? String(sheetFrames.length) : "single"],
+                        [
+                          "Preview cache",
+                          `${previewSurfaceStats.surfaces} surface${previewSurfaceStats.surfaces === 1 ? "" : "s"} / ${Math.round(
+                            previewSurfaceStats.estimatedBytes / 1024 / 1024
+                          )} MB`
+                        ]
                       ]}
                     />
                     <MetricGroup
