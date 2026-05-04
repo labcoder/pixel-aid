@@ -112,6 +112,14 @@ import {
   type AssetSwitchTimingPhase,
   type AssetSwitchTimingReport
 } from "./lib/assetSwitchTimings";
+import {
+  compareAssetDirtySnapshots,
+  createAssetDirtySnapshot,
+  createCleanAssetDirtyState,
+  formatAssetDirtyReason,
+  type AssetDirtySnapshot,
+  type AssetDirtyState
+} from "./lib/assetSessionDirty";
 import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
@@ -705,6 +713,8 @@ type AssetEditorSession = {
     showAdvancedControls: boolean;
     frameMetadataExpanded: boolean;
     showFrameMetadataOverlays: boolean;
+    engineExportTargets: EngineExportTarget[];
+    exportBundleName: string;
   };
   timeline: {
     selectedFrameIndex: number;
@@ -743,6 +753,15 @@ type AssetEditorSession = {
   cacheKeys: {
     sourceAnalysisKey: string;
   };
+};
+
+type PendingAssetSwitchGuard = {
+  fromAssetId: string;
+  fromAssetName: string;
+  targetAssetId: string;
+  targetAssetName: string;
+  outgoingSession: AssetEditorSession;
+  dirtyState: AssetDirtyState;
 };
 
 function cloneSessionValue<T>(value: T): T {
@@ -897,6 +916,8 @@ export function App() {
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [sourceAnalysisCache, setSourceAnalysisCache] = useState<Record<string, SourceAssetAnalysis>>({});
   const [qualityReportCache, setQualityReportCache] = useState<Record<string, QualityReport>>({});
+  const [assetDirtyStates, setAssetDirtyStates] = useState<Record<string, AssetDirtyState>>({});
+  const [pendingAssetSwitchGuard, setPendingAssetSwitchGuard] = useState<PendingAssetSwitchGuard | null>(null);
   const [showAdvancedControls, setShowAdvancedControls] = useState(initialSettings.showAdvancedControls);
   const [assetMenu, setAssetMenu] = useState<{ assetId: string; x: number; y: number } | null>(null);
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
@@ -912,6 +933,8 @@ export function App() {
   const [newPaletteColor, setNewPaletteColor] = useState("#ffffff");
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
   const assetSessionsRef = useRef<Record<string, AssetEditorSession>>({});
+  const assetCleanSnapshotsRef = useRef<Record<string, AssetDirtySnapshot>>({});
+  const pendingCleanSnapshotAssetIdRef = useRef<string | null>(null);
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
@@ -1351,7 +1374,9 @@ export function App() {
         contrastExpansionEnabled,
         showAdvancedControls,
         frameMetadataExpanded,
-        showFrameMetadataOverlays
+        showFrameMetadataOverlays,
+        engineExportTargets: [...engineExportTargets],
+        exportBundleName
       },
       timeline: {
         selectedFrameIndex,
@@ -1410,6 +1435,8 @@ export function App() {
       detectedSheetFrames,
       detectedSheetWarnings,
       downscale,
+      engineExportTargets,
+      exportBundleName,
       fixResult,
       frameDurationOverrides,
       frameEditHistory,
@@ -1478,12 +1505,43 @@ export function App() {
     ]
   );
 
+  const getAssetDirtyStateForSession = useCallback((session: AssetEditorSession): AssetDirtyState => {
+    return compareAssetDirtySnapshots(createAssetDirtySnapshot(session), assetCleanSnapshotsRef.current[session.assetId]);
+  }, []);
+
+  const markAssetSessionClean = useCallback((session: AssetEditorSession) => {
+    assetCleanSnapshotsRef.current[session.assetId] = createAssetDirtySnapshot(session);
+    setAssetDirtyStates((current) => {
+      const clean = createCleanAssetDirtyState();
+      if (current[session.assetId]?.isDirty === false) {
+        return current;
+      }
+      return { ...current, [session.assetId]: clean };
+    });
+  }, []);
+
+  const storeAssetSession = useCallback(
+    (session: AssetEditorSession): AssetDirtyState => {
+      assetSessionsRef.current[session.assetId] = session;
+      const dirtyState = getAssetDirtyStateForSession(session);
+      setAssetDirtyStates((current) => {
+        const existing = current[session.assetId];
+        if (existing?.isDirty === dirtyState.isDirty && existing.reasons.join("|") === dirtyState.reasons.join("|")) {
+          return current;
+        }
+        return { ...current, [session.assetId]: dirtyState };
+      });
+      return dirtyState;
+    },
+    [getAssetDirtyStateForSession]
+  );
+
   const saveCurrentAssetSession = useCallback(() => {
     if (!selectedAsset) {
       return;
     }
-    assetSessionsRef.current[selectedAsset.id] = captureCurrentAssetSession(selectedAsset);
-  }, [captureCurrentAssetSession, selectedAsset]);
+    storeAssetSession(captureCurrentAssetSession(selectedAsset));
+  }, [captureCurrentAssetSession, selectedAsset, storeAssetSession]);
 
   const restoreAssetSession = useCallback((session: AssetEditorSession) => {
     const { settings, timeline, sheet, result, recommendation } = session;
@@ -1545,6 +1603,8 @@ export function App() {
     setShowAdvancedControls(settings.showAdvancedControls);
     setFrameMetadataExpanded(settings.frameMetadataExpanded);
     setShowFrameMetadataOverlays(settings.showFrameMetadataOverlays);
+    setEngineExportTargets([...settings.engineExportTargets]);
+    setExportBundleName(settings.exportBundleName);
 
     const restoredFrames = cloneSessionValue(sheet.detectedFrames);
     const restoredAnimations = cloneSessionValue(sheet.detectedRowAnimations);
@@ -1588,6 +1648,15 @@ export function App() {
     sourceFrameEditGestureRef.current = null;
     setSourceFrameEditActive(false);
   }, []);
+
+  useEffect(() => {
+    if (!selectedAsset || pendingCleanSnapshotAssetIdRef.current !== selectedAsset.id) {
+      return;
+    }
+
+    markAssetSessionClean(captureCurrentAssetSession(selectedAsset));
+    pendingCleanSnapshotAssetIdRef.current = null;
+  }, [captureCurrentAssetSession, markAssetSessionClean, selectedAsset]);
 
   const sourcePaletteAnalysis = selectedSourceAnalysis?.palette ?? null;
   const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
@@ -2900,6 +2969,7 @@ export function App() {
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             cacheFixSuggestionAnalysis(asset, suggestion);
             applyFixSuggestion(suggestion, asset);
+            pendingCleanSnapshotAssetIdRef.current = asset.id;
             setLastOperationError(null);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
           } catch (error) {
@@ -3038,6 +3108,7 @@ export function App() {
         setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
         cacheFixSuggestionAnalysis(sampleImport.asset, suggestion);
         applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
+        pendingCleanSnapshotAssetIdRef.current = sampleImport.asset.id;
         setLastOperationError(null);
         appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
       } catch (error) {
@@ -4878,8 +4949,14 @@ export function App() {
     [appendLog, clearDetectedSheetLayout, mode]
   );
 
-  const selectAsset = useCallback(
-    async (assetId: string) => {
+  const performAssetSwitch = useCallback(
+    async (
+      assetId: string,
+      options: {
+        outgoingSession?: AssetEditorSession;
+        discardOutgoingAssetId?: string;
+      } = {}
+    ) => {
       const nextAsset = assets.find((asset) => asset.id === assetId);
       if (!nextAsset) {
         setAssetMenu(null);
@@ -4895,7 +4972,16 @@ export function App() {
         return;
       }
 
-      saveCurrentAssetSession();
+      if (options.discardOutgoingAssetId) {
+        const discardedAssetId = options.discardOutgoingAssetId;
+        delete assetSessionsRef.current[discardedAssetId];
+        setAssetDirtyStates((current) => ({ ...current, [discardedAssetId]: createCleanAssetDirtyState() }));
+      } else if (options.outgoingSession) {
+        storeAssetSession(options.outgoingSession);
+      } else {
+        saveCurrentAssetSession();
+      }
+
       const nextSession = assetSessionsRef.current[assetId];
       const sourceAnalysisKey = getSourceAnalysisCacheKey(nextAsset);
       const timingReport = createAssetSwitchTimingReport({
@@ -4976,9 +5062,78 @@ export function App() {
       saveCurrentAssetSession,
       selectedAsset?.id,
       selectedAsset?.name,
-      sourceAnalysisCache
+      sourceAnalysisCache,
+      storeAssetSession
     ]
   );
+
+  const selectAsset = useCallback(
+    async (assetId: string) => {
+      const nextAsset = assets.find((asset) => asset.id === assetId);
+      if (!nextAsset) {
+        setAssetMenu(null);
+        return;
+      }
+
+      if (assetId === selectedAsset?.id) {
+        setAssetMenu(null);
+        return;
+      }
+
+      if (isEditorBusy) {
+        return;
+      }
+
+      if (selectedAsset) {
+        const outgoingSession = captureCurrentAssetSession(selectedAsset);
+        const dirtyState = getAssetDirtyStateForSession(outgoingSession);
+        setAssetDirtyStates((current) => ({ ...current, [selectedAsset.id]: dirtyState }));
+
+        if (dirtyState.isDirty) {
+          setAssetMenu(null);
+          setPendingAssetSwitchGuard({
+            fromAssetId: selectedAsset.id,
+            fromAssetName: selectedAsset.name,
+            targetAssetId: nextAsset.id,
+            targetAssetName: nextAsset.name,
+            outgoingSession,
+            dirtyState
+          });
+          return;
+        }
+
+        await performAssetSwitch(assetId, { outgoingSession });
+        return;
+      }
+
+      await performAssetSwitch(assetId);
+    },
+    [assets, captureCurrentAssetSession, getAssetDirtyStateForSession, isEditorBusy, performAssetSwitch, selectedAsset]
+  );
+
+  const cancelPendingAssetSwitch = useCallback(() => {
+    setPendingAssetSwitchGuard(null);
+  }, []);
+
+  const keepPendingAssetSwitchInMemory = useCallback(async () => {
+    if (!pendingAssetSwitchGuard || isEditorBusy) {
+      return;
+    }
+
+    const guard = pendingAssetSwitchGuard;
+    setPendingAssetSwitchGuard(null);
+    await performAssetSwitch(guard.targetAssetId, { outgoingSession: guard.outgoingSession });
+  }, [isEditorBusy, pendingAssetSwitchGuard, performAssetSwitch]);
+
+  const discardPendingAssetSwitchEdits = useCallback(async () => {
+    if (!pendingAssetSwitchGuard || isEditorBusy) {
+      return;
+    }
+
+    const guard = pendingAssetSwitchGuard;
+    setPendingAssetSwitchGuard(null);
+    await performAssetSwitch(guard.targetAssetId, { discardOutgoingAssetId: guard.fromAssetId });
+  }, [isEditorBusy, pendingAssetSwitchGuard, performAssetSwitch]);
 
   const markViewportPreviewRendered = useCallback(() => {
     if (!selectedAsset) {
@@ -5016,6 +5171,7 @@ export function App() {
           saveCurrentAssetSession();
         }
         delete assetSessionsRef.current[assetId];
+        delete assetCleanSnapshotsRef.current[assetId];
         const result = removeAssetAndSelectNext(assets, assetId, selectedAsset?.id ?? null);
         const nextSelectedAsset = result.assets.find((asset) => asset.id === result.selectedAssetId);
         setAssets(result.assets);
@@ -5045,6 +5201,11 @@ export function App() {
         }
         setSelectedAssetId(result.selectedAssetId);
         setGridCandidateCache((current) => {
+          const next = { ...current };
+          delete next[assetId];
+          return next;
+        });
+        setAssetDirtyStates((current) => {
           const next = { ...current };
           delete next[assetId];
           return next;
@@ -6467,12 +6628,16 @@ export function App() {
                 <span>No asset selected</span>
               </li>
             ) : (
-              assets.map((asset) => (
-                <li key={asset.id} className="asset-list-entry">
+              assets.map((asset) => {
+                const dirtyState = assetDirtyStates[asset.id];
+                const isDirty = dirtyState?.isDirty ?? false;
+
+                return (
+                  <li key={asset.id} className="asset-list-entry">
                   <button
                     type="button"
-                    className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}`}
-                    aria-label={`Select ${asset.name}`}
+                    className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}${isDirty ? " dirty-asset" : ""}`}
+                    aria-label={`Select ${asset.name}${isDirty ? ", unsaved edits in memory" : ""}`}
                     disabled={isEditorBusy}
                     onClick={() => void selectAsset(asset.id)}
                     onContextMenu={(event) => {
@@ -6490,13 +6655,15 @@ export function App() {
                       <small>
                         {getAssetTypeDefinition(asset.assetType).shortLabel} · Source {asset.image.width}x{asset.image.height}
                       </small>
+                      {isDirty ? <small className="asset-dirty-label">Unsaved in memory</small> : null}
                     </span>
                   </button>
                   <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} disabled={isEditorBusy} onClick={() => requestAssetDeletion(asset.id)}>
                     <Trash2 size={14} />
                   </button>
-                </li>
-              ))
+                  </li>
+                );
+              })
             )}
           </ul>
           {assetMenu ? (
@@ -7735,6 +7902,40 @@ export function App() {
                   </span>
                 </button>
               ))}
+            </div>
+          </section>
+        </div>
+      ) : null}
+      {pendingAssetSwitchGuard ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            cancelPendingAssetSwitch();
+          }
+        }}>
+          <section className="confirmation-modal unsaved-switch-modal" role="dialog" aria-modal="true" aria-labelledby="unsaved-switch-title">
+            <div className="confirmation-modal-heading">
+              <CircleHelp size={18} />
+              <h2 id="unsaved-switch-title">Keep Edits In Memory?</h2>
+            </div>
+            <p>
+              {pendingAssetSwitchGuard.fromAssetName} has unsaved PixelAid edits. You can keep them in memory while switching to{" "}
+              {pendingAssetSwitchGuard.targetAssetName}, discard only this asset's edits, or cancel.
+            </p>
+            <ul className="dirty-reason-list" aria-label="Unsaved edit categories">
+              {pendingAssetSwitchGuard.dirtyState.reasons.map((reason) => (
+                <li key={reason}>{formatAssetDirtyReason(reason)}</li>
+              ))}
+            </ul>
+            <div className="confirmation-modal-actions">
+              <button type="button" onClick={cancelPendingAssetSwitch} disabled={isAssetActivating}>
+                Cancel
+              </button>
+              <button type="button" className="danger-action" onClick={() => void discardPendingAssetSwitchEdits()} disabled={isAssetActivating}>
+                Discard edits
+              </button>
+              <button type="button" className="primary-action" onClick={() => void keepPendingAssetSwitchInMemory()} disabled={isAssetActivating}>
+                Keep in memory
+              </button>
             </div>
           </section>
         </div>
