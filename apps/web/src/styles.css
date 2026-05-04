@@ -815,6 +815,15 @@ button:focus-visible {
   box-shadow: inset 3px 0 0 var(--cyan), 0 0 0 1px #35c6b638, 0 8px 20px #00000028;
 }
 
+.asset-list .asset-row.dirty-asset:not(.active-asset) {
+  border-color: #7d6a31;
+  box-shadow: inset 3px 0 0 #f2c94c55;
+}
+
+.asset-meta .asset-dirty-label {
+  color: #f2c94c;
+}
+
 .asset-list .asset-row:disabled {
   cursor: wait;
   opacity: 0.72;
@@ -1044,6 +1053,29 @@ button:focus-visible {
   line-height: 1.45;
 }
 
+.dirty-reason-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dirty-reason-list li {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  color: #f2c94c;
+  background: #2a2518;
+  border: 1px solid #7d6a31;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
 .confirmation-modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1059,6 +1091,17 @@ button:focus-visible {
 
 .danger-action:hover:not(:disabled) {
   border-color: #ff8f98;
+}
+
+.primary-action {
+  color: #041110;
+  background: var(--cyan);
+  border-color: #7df9ee;
+  font-weight: 800;
+}
+
+.primary-action:hover:not(:disabled) {
+  border-color: #b9fff9;
 }
 
 .swatch-row {
