@@ -219,6 +219,13 @@ These are starting targets, not hard product promises:
 
 Track operation time and memory use in a small internal metrics panel.
 
+## Secrets and sensitive data
+
+- Never print secrets (tokens, private keys, credentials) to terminal output.
+- Do not request users paste secrets.
+- Avoid commands that might expose secrets (e.g., dumping env vars broadly, `cat ~/.ssh/*`).
+- Prefer existing authenticated CLIs; redact sensitive strings in any displayed output.
+
 ## Core fixing pipeline
 
 Implement the pipeline in phases. Each phase should be testable independently.
