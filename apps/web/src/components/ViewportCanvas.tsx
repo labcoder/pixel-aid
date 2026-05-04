@@ -24,6 +24,8 @@ export type ViewMode = "before" | "after" | "split";
 export type ViewportCanvasProps = {
   sourceImage: RGBAImage | null;
   fixedImage: RGBAImage | null;
+  sourceSurface?: HTMLCanvasElement | null;
+  fixedSurface?: HTMLCanvasElement | null;
   viewMode: ViewMode;
   zoom: number;
   showGrid: boolean;
@@ -46,6 +48,8 @@ export type ViewportCanvasProps = {
 export function ViewportCanvas({
   sourceImage,
   fixedImage,
+  sourceSurface = null,
+  fixedSurface = null,
   viewMode,
   zoom,
   showGrid,
@@ -96,13 +100,15 @@ export function ViewportCanvas({
     () => (diagnosticOverlay?.fixedMask ? maskToCanvas(diagnosticOverlay.fixedMask) : null),
     [diagnosticOverlay?.fixedMask]
   );
-  const sourceCanvas = useMemo(() => (sourceImage ? imageToCanvas(sourceImage) : null), [sourceImage]);
-  const fixedCanvas = useMemo(() => (fixedImage ? imageToCanvas(fixedImage) : null), [fixedImage]);
+  const ownedSourceCanvas = useMemo(() => (!sourceSurface && sourceImage ? imageToCanvas(sourceImage) : null), [sourceImage, sourceSurface]);
+  const ownedFixedCanvas = useMemo(() => (!fixedSurface && fixedImage ? imageToCanvas(fixedImage) : null), [fixedImage, fixedSurface]);
+  const sourceCanvas = sourceSurface ?? ownedSourceCanvas;
+  const fixedCanvas = fixedSurface ?? ownedFixedCanvas;
 
   useDisposableCanvas(sourceOverlayCanvas);
   useDisposableCanvas(fixedOverlayCanvas);
-  useDisposableCanvas(sourceCanvas);
-  useDisposableCanvas(fixedCanvas);
+  useDisposableCanvas(ownedSourceCanvas);
+  useDisposableCanvas(ownedFixedCanvas);
 
   const invalidate = useCallback(() => setRenderKey((key) => key + 1), []);
 

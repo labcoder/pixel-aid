@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { drawRgbaImageNearest } from "../lib/previewCanvas";
 import { getContainedDrawRect } from "../lib/previewGeometry";
 
-export function AssetThumbnail({ image, label }: { image: RGBAImage; label: string }) {
+export function AssetThumbnail({ image, label, surface }: { image: RGBAImage; label: string; surface?: HTMLCanvasElement | null }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
@@ -28,13 +28,17 @@ export function AssetThumbnail({ image, label }: { image: RGBAImage; label: stri
     drawChecker(context, rect.width, rect.height);
 
     const drawRect = getContainedDrawRect({ width: rect.width, height: rect.height }, image);
-    drawRgbaImageNearest(
-      context,
-      image,
-      { x: 0, y: 0, w: image.width, h: image.height },
-      { x: drawRect.x, y: drawRect.y, w: drawRect.width, h: drawRect.height }
-    );
-  }, [image]);
+    if (surface) {
+      context.drawImage(surface, drawRect.x, drawRect.y, drawRect.width, drawRect.height);
+    } else {
+      drawRgbaImageNearest(
+        context,
+        image,
+        { x: 0, y: 0, w: image.width, h: image.height },
+        { x: drawRect.x, y: drawRect.y, w: drawRect.width, h: drawRect.height }
+      );
+    }
+  }, [image, surface]);
 
   return <canvas ref={canvasRef} className="asset-thumb" aria-label={`${label} thumbnail`} />;
 }
