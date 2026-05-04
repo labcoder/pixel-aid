@@ -24,6 +24,7 @@ export type TimelineViewportCanvasProps = {
   diagnosticOverlay?: DiagnosticOverlayModel | undefined;
   onFrameCommit: (timelinePosition: number, playDirection: PlaybackStepDirection) => void;
   onPlaybackStop?: () => void;
+  onPreviewRender?: () => void;
 };
 
 type LivePlaybackState = {
@@ -47,7 +48,8 @@ export function TimelineViewportCanvas({
   showOnionSkin,
   diagnosticOverlay,
   onFrameCommit,
-  onPlaybackStop
+  onPlaybackStop,
+  onPreviewRender
 }: TimelineViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
@@ -122,6 +124,7 @@ export function TimelineViewportCanvas({
         showOnionSkin,
         wrapOnion: loop && direction !== "ping-pong" && direction !== "hold"
       });
+      onPreviewRender?.();
 
       if (isPlaying && frameCount > 0) {
         const activeState = liveStateRef.current;
@@ -153,6 +156,7 @@ export function TimelineViewportCanvas({
     loop,
     onFrameCommit,
     onPlaybackStop,
+    onPreviewRender,
     outputCanvas,
     outputOverlayCanvas,
     outputPlacements,
