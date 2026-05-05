@@ -299,7 +299,7 @@ import {
   removeRowAtSelection,
   type ManualSheetEditResult
 } from "./lib/sheetManualEditing";
-import { mapFrameToSource } from "./lib/sourceFrameMapping";
+import { createSourceFrameMappingKey, mapFrameToSource } from "./lib/sourceFrameMapping";
 import {
   getSimpleAlphaChoice,
   getSimpleDenoiseChoice,
@@ -1018,6 +1018,7 @@ export function App() {
   const assetCleanSnapshotsRef = useRef<Record<string, AssetDirtySnapshot>>({});
   const pendingCleanSnapshotAssetIdRef = useRef<string | null>(null);
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
+  const sourceSheetFramesCacheRef = useRef<{ key: string; frames: SpriteFrame[] }>({ key: "", frames: [] });
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<FixJob | null>(null);
   const activeSourceAnalysisJobRef = useRef<AnalysisJob<SourceAssetAnalysis> | null>(null);
@@ -1977,9 +1978,26 @@ export function App() {
   );
   const effectiveTargetWidth = sheetMode ? plannedSheetLayout.width : targetWidth;
   const effectiveTargetHeight = sheetMode ? plannedSheetLayout.height : targetHeight;
-  const sourceSheetFrames = useMemo(
-    () => (sheetMode ? sheetFrames.map((frame) => mapFrameToSource(frame, gridScaleX, gridScaleY)) : []),
+  const sourceSheetFrameKey = useMemo(
+    () => (sheetMode ? createSourceFrameMappingKey(sheetFrames, gridScaleX, gridScaleY) : ""),
     [gridScaleX, gridScaleY, sheetFrames, sheetMode]
+  );
+  const sourceSheetFrames = useMemo(
+    () => {
+      if (!sheetMode) {
+        sourceSheetFramesCacheRef.current = { key: "", frames: [] };
+        return [];
+      }
+
+      if (sourceSheetFramesCacheRef.current.key === sourceSheetFrameKey) {
+        return sourceSheetFramesCacheRef.current.frames;
+      }
+
+      const frames = sheetFrames.map((frame) => mapFrameToSource(frame, gridScaleX, gridScaleY));
+      sourceSheetFramesCacheRef.current = { key: sourceSheetFrameKey, frames };
+      return frames;
+    },
+    [gridScaleX, gridScaleY, sheetFrames, sheetMode, sourceSheetFrameKey]
   );
   const sheetCanvasSize = useMemo(
     () => ({
