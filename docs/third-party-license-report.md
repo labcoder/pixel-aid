@@ -4,7 +4,7 @@ Generated from `package-lock.json` by `npm run license:report`.
 
 ## Policy Summary
 
-- Allowed packages: 203
+- Allowed packages: 205
 - Review-required packages: 13
 - Blocked packages: 0
 - Unknown-license packages: 0
@@ -85,6 +85,7 @@ None.
 | @humanwhocodes/module-importer | 1.0.1 | Apache-2.0 | allowed |
 | @humanwhocodes/retry | 0.4.3 | Apache-2.0 | allowed |
 | @jridgewell/sourcemap-codec | 1.5.5 | MIT | allowed |
+| @jsquash/webp | 1.5.0 | Apache-2.0 | allowed |
 | @napi-rs/wasm-runtime | 1.1.4 | MIT | allowed |
 | @oxc-project/types | 0.127.0 | MIT | allowed |
 | @rolldown/binding-android-arm64 | 1.0.0-rc.17 | MIT | allowed |
@@ -253,6 +254,7 @@ None.
 | uri-js | 4.4.1 | BSD-2-Clause | allowed |
 | vite | 8.0.10 | MIT | allowed |
 | vitest | 4.1.5 | MIT | allowed |
+| wasm-feature-detect | 1.8.0 | Apache-2.0 | allowed |
 | which | 2.0.2 | ISC | allowed |
 | why-is-node-running | 2.3.0 | MIT | allowed |
 | word-wrap | 1.2.5 | MIT | allowed |

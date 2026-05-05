@@ -23,6 +23,10 @@ const sampleImage: RGBAImage = {
   ]),
 };
 
+function tinyWebpBytes(): Buffer {
+  return Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
+}
+
 async function withTempDir<T>(run: (dir: string) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-io-"));
   try {
@@ -84,6 +88,27 @@ describe("image IO", () => {
     });
   });
 
+  it("reads supported WebP files through the generic image reader", async () => {
+    await withTempDir(async (dir) => {
+      const filePath = path.join(dir, "asset.webp");
+      await writeFile(filePath, tinyWebpBytes());
+
+      const result = await readImageFile(filePath);
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.image.width).toBe(1);
+      expect(result.value.image.height).toBe(1);
+      expect(result.value.image.data).toHaveLength(4);
+      expect(result.value.metadata).toMatchObject({
+        path: filePath,
+        format: "webp",
+        normalizedFormat: "rgba",
+        alpha: "preserved",
+      });
+    });
+  });
+
   it("reports original format and normalized RGBA metadata", async () => {
     await withTempDir(async (dir) => {
       const pngPath = path.join(dir, "asset.png");
@@ -127,7 +152,7 @@ describe("image IO", () => {
       if (result.ok) return;
       expect(result.error.code).toBe("unsupported_format");
       expect(result.error.exitCode).toBe(6);
-      expect(result.error.details?.supportedFormats).toEqual(["png", "jpg", "jpeg"]);
+      expect(result.error.details?.supportedFormats).toEqual(["png", "jpg", "jpeg", "webp"]);
     });
   });
 

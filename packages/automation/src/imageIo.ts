@@ -1,5 +1,7 @@
 import { access, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
+import decodeWebp, { init as initWebpDecode } from "@jsquash/webp/decode";
 import { decode as decodeJpeg } from "jpeg-js";
 import { PNG } from "pngjs";
 import type { RGBAImage } from "@pixelaid/shared";
@@ -11,7 +13,7 @@ import {
 
 export type ImageFileMetadata = {
   path: string;
-  format: "png" | "jpeg";
+  format: "png" | "jpeg" | "webp";
   normalizedFormat: "rgba";
   alpha: "preserved" | "opaque";
 };
@@ -27,8 +29,10 @@ export type ImageReadOptions = {
 
 const PNG_EXTENSION = ".png";
 const JPEG_EXTENSIONS = new Set([".jpg", ".jpeg"]);
-const SUPPORTED_FORMATS = ["png", "jpg", "jpeg"];
+const WEBP_EXTENSION = ".webp";
+const SUPPORTED_FORMATS = ["png", "jpg", "jpeg", "webp"];
 const DEFAULT_MAX_IMAGE_BYTES = 64 * 1024 * 1024;
+let webpDecoderReady: Promise<void> | undefined;
 
 export async function readImageFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<DecodedImageFile>> {
   const extension = path.extname(filePath).toLowerCase();
@@ -44,8 +48,14 @@ export async function readImageFile(filePath: string, options: ImageReadOptions 
       ? automationOk({ image: image.value, metadata: imageMetadata(filePath, "jpeg", "opaque") })
       : image;
   }
+  if (extension === WEBP_EXTENSION) {
+    const image = await decodeWebpFile(filePath, options);
+    return image.ok
+      ? automationOk({ image: image.value, metadata: imageMetadata(filePath, "webp", "preserved") })
+      : image;
+  }
 
-  return automationError("unsupported_format", `Unsupported image format "${extension || "unknown"}". PixelAid automation currently supports PNG and JPEG files.`, 6, {
+  return automationError("unsupported_format", `Unsupported image format "${extension || "unknown"}". PixelAid automation currently supports PNG, JPEG, and WebP files.`, 6, {
     path: filePath,
     supportedFormats: SUPPORTED_FORMATS,
   });
@@ -96,6 +106,47 @@ export async function decodeJpegFile(filePath: string, options: ImageReadOptions
       cause: error instanceof Error ? error.message : String(error),
     });
   }
+}
+
+export async function decodeWebpFile(filePath: string, options: ImageReadOptions = {}): Promise<AutomationResult<RGBAImage>> {
+  const bytes = await readImageBytes(filePath, "WebP", options);
+  if (!bytes.ok) return bytes;
+
+  try {
+    await ensureWebpDecoder();
+    const source = Uint8Array.from(bytes.value).buffer;
+    const decoded = await decodeWebp(source);
+
+    return automationOk({
+      width: decoded.width,
+      height: decoded.height,
+      data: new Uint8ClampedArray(decoded.data.buffer.slice(decoded.data.byteOffset, decoded.data.byteOffset + decoded.data.byteLength)),
+    });
+  } catch (error) {
+    return automationError("decode_failed", `Could not decode WebP file: ${filePath}`, 3, {
+      path: filePath,
+      cause: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function ensureWebpDecoder(): Promise<void> {
+  webpDecoderReady ??= (async () => {
+    const wasmPath = resolveWebpDecoderWasmPath();
+    const wasmBytes = await readFile(wasmPath);
+    const wasmModule = await WebAssembly.compile(wasmBytes);
+    const initWithModule = initWebpDecode as unknown as (module: WebAssembly.Module) => Promise<void>;
+    await initWithModule(wasmModule);
+  })();
+  return webpDecoderReady;
+}
+
+function resolveWebpDecoderWasmPath(): string {
+  const moduleRequire =
+    typeof require === "function" && typeof require.resolve === "function"
+      ? require
+      : createRequire(path.join(process.cwd(), "package.json"));
+  return moduleRequire.resolve("@jsquash/webp/codec/dec/webp_dec.wasm");
 }
 
 export async function encodePngFile(image: RGBAImage, filePath: string): Promise<AutomationResult<ImageFileMetadata>> {

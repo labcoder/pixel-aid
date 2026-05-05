@@ -82,7 +82,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Limitation | User-facing note | Follow-up |
 | --- | --- | --- |
 | MCP server is local stdio only. | The bundled MCP process is available for trusted local agents; remote/network serving remains future work. | Local HTTP/API milestone. |
-| CLI/MCP codec coverage is intentionally small. | PNG is canonical output and JPEG/JPG input is supported; WebP or other sources should be converted externally for now. | WebP/additional codec follow-up. |
+| CLI/MCP codec coverage is intentionally small. | PNG is canonical output, while JPEG/JPG and WebP input are supported for inspect/fix/report/batch workflows. Other formats should be converted externally for now. | Additional codec follow-up. |
 | Tiled/LDtk tilemap project export is deferred. | PixelAid exports generic canonical tilemap metadata, but not full editor project/map files yet. | Engine-specific tilemap adapter milestone. |
 | Tileset seam repair is conservative. | Low-risk edge/lighting drift can be applied to the fixed output; severe seams and semantic repainting still need manual work. | Advanced tileset repair milestone. |
 | Desktop auto-update is deferred. | Public desktop builds should use signed artifacts where supported plus `SHA256SUMS.txt`; in-app updates remain future work. | Update feed/signing-key milestone. |

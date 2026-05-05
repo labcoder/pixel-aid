@@ -179,7 +179,7 @@ function recoveryHintsFor(status: DiagnosticStatus, code: AutomationErrorCode | 
     case "input_not_found":
     case "unsupported_format":
     case "decode_failed":
-      return ["Verify the input file exists, is readable, and is a supported PNG image."];
+      return ["Verify the input file exists, is readable, and is a supported PNG, JPEG, or WebP image."];
     case "output_exists":
       return ["Choose a different output path or pass --overwrite when replacing generated files is intended."];
     case "unsafe_output":

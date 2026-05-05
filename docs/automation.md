@@ -4,7 +4,7 @@ PixelAid automation exposes the same deterministic fix/export pipeline used by t
 
 The automation surface is split into three packages:
 
-- `@pixelaid/automation`: shared Node-safe operations, PNG/JPEG input IO, PNG output encoding, option normalization, safe output planning, and JSON result envelopes.
+- `@pixelaid/automation`: shared Node-safe operations, PNG/JPEG/WebP input IO, PNG output encoding, option normalization, safe output planning, and JSON result envelopes.
 - `@pixelaid/cli`: the `pixelaid` command-line interface.
 - `@pixelaid/mcp`: MCP-ready tool definitions and direct handlers. A long-running MCP server process is intentionally deferred.
 
@@ -42,7 +42,7 @@ Automation decodes source images into deterministic `RGBAImage` data before call
 | --- | --- | --- | --- |
 | PNG | Yes | Yes | Preserved |
 | JPEG/JPG | Yes | No | Normalized to opaque RGBA |
-| WebP | Deferred | No | Use an external conversion step for now |
+| WebP | Yes | No | Decoded to RGBA; alpha is preserved when present |
 
 PNG remains the canonical lossless output for CLI and MCP-ready workflows. `inspect_image` reports the original source format, the normalized processing format (`rgba`), and whether alpha was preserved or normalized to opaque. Unsupported formats return `unsupported_format` with exit code `6`; oversized inputs return `input_too_large` before decoding.
 
@@ -76,6 +76,7 @@ Diagnostics:
 - `--diagnostics <path>` writes a local JSON diagnostic report for the command without changing normal stdout or `--json` output.
 - Reports include the PixelAid package version, command, operation, timestamp, exit code, sanitized options, paths, metadata, warnings, errors, and recovery hints.
 - Likely secrets, tokens, API keys, authorization headers, and prompt/private-prompt fields are redacted before writing the file.
+- `fix` and `fix-sheet` JSON stdout reports fixed image dimensions and byte length, but intentionally omits raw RGBA buffers so large sheet outputs stay usable in scripts and agent workflows.
 
 Sprite sheet flags:
 
@@ -231,6 +232,6 @@ Errors keep the same PixelAid automation envelope as the CLI.
 ## Deferred
 
 - Local HTTP API.
-- WebP and other non-PNG codecs beyond JPEG input.
+- Additional codecs beyond PNG/JPEG/WebP input.
 - Direct AI-provider generation or editing calls.
 - Streaming progress events for CLI/MCP jobs.
