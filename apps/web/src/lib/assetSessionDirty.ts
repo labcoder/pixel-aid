@@ -86,6 +86,7 @@ const outputSettingKeys = [
   "preserveSinglePixelDetails",
   "removeHalos",
   "denoiseStrength",
+  "inferNativeScale",
   "contrastExpansionEnabled"
 ] as const;
 

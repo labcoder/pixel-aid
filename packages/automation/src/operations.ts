@@ -725,8 +725,8 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
 
   const sheetConditioning = sheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
   const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(image, assetType.value.mode, sheetLayout, sheetConditioning);
-  const strictSourceSheetMaxColors = suggestStrictSourceSheetMaxColors(sheetConditioning);
-  const strictSourceSheetDenoiseStrength = suggestStrictSourceSheetDenoiseStrength(sheetConditioning);
+  const strictSourceSheetMaxColors = suggestStrictSourceSheetMaxColors();
+  const strictSourceSheetDenoiseStrength = suggestStrictSourceSheetDenoiseStrength();
   const suggestedCleanup = suggestAutomationCleanupOverrides(
     overrides?.cleanup,
     assetType.value.assetType,
@@ -825,21 +825,12 @@ function shouldUseStrictSourceSheetCleanup(
   );
 }
 
-function suggestStrictSourceSheetMaxColors(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): number {
-  return hasSevereAiAtlasNoise(sheetConditioning) ? 8 : 16;
+function suggestStrictSourceSheetMaxColors(): number {
+  return 16;
 }
 
-function suggestStrictSourceSheetDenoiseStrength(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): number {
-  return hasSevereAiAtlasNoise(sheetConditioning) ? 55 : 45;
-}
-
-function hasSevereAiAtlasNoise(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): boolean {
-  const codes = new Set(sheetConditioning.issues.map((issue) => issue.code));
-  return (
-    codes.has("soft-alpha-noise") &&
-    codes.has("chroma-matte-artifacts") &&
-    (codes.has("excessive-exact-colors") || codes.has("dense-coarse-palette"))
-  );
+function suggestStrictSourceSheetDenoiseStrength(): number {
+  return 20;
 }
 
 function alphaSettingsFromOverrides(overrides: AutomationFixOptionsInput | undefined): NonNullable<FixOptions["alphaSettings"]> {
@@ -866,6 +857,7 @@ function suggestAutomationCleanupOverrides(
       jaggyCleanup: true,
       removeHalos: true,
       denoiseStrength: strictSourceSheetDenoiseStrength,
+      inferNativeScale: true,
       ...overrides,
     };
   }

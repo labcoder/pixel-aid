@@ -42,6 +42,7 @@ export type FixSettingSuggestion = {
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
+  inferNativeScale: boolean;
   contrastExpansionEnabled: boolean;
   outlineMode: OutlineMode;
   outlineSize: number;
@@ -92,10 +93,10 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const preset = getAssetTypeCleanupPreset(classification.assetType);
   const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning);
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetMaxColors(preset.maxColors, sheetConditioning)
+    ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength, sheetConditioning)
+    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength)
     : preset.denoiseStrength;
   const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
   const suggestedMaxColors = strictSourceSheetMaxColors;
@@ -189,6 +190,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
     removeHalos: cleanup.removeHalos,
     denoiseStrength: cleanup.denoiseStrength,
+    inferNativeScale: strictSourceSheetCleanup,
     contrastExpansionEnabled,
     outlineMode: outline.mode,
     outlineSize: outline.size,
@@ -217,10 +219,10 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
   const strictSourceSheetCleanup =
     mode === "spriteSheet" && detectedSheetLayout ? shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning) : false;
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetMaxColors(preset.maxColors, sheetConditioning)
+    ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength, sheetConditioning)
+    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength)
     : preset.denoiseStrength;
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
@@ -245,6 +247,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
     removeHalos: strictSourceSheetCleanup ? true : preset.removeHalos,
     denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : preset.denoiseStrength,
+    inferNativeScale: strictSourceSheetCleanup,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
     contrastExpansionEnabled: assetType === "sprite" || assetType === "icon" ? suggestion.contrastExpansionEnabled : false,
     outlineMode: assetType === "sprite" || assetType === "icon" ? suggestion.outlineMode : "none",
@@ -300,21 +303,12 @@ function isSourceSizedSheetLayout(image: RGBAImage, sheetLayout: SheetLayoutDete
   );
 }
 
-function suggestStrictSourceSheetMaxColors(maxColors: number, sheetConditioning: SheetConditioningDiagnostics): number {
-  return Math.min(maxColors, hasSevereAiAtlasNoise(sheetConditioning) ? 8 : 16);
+function suggestStrictSourceSheetMaxColors(maxColors: number): number {
+  return Math.min(maxColors, 16);
 }
 
-function suggestStrictSourceSheetDenoiseStrength(denoiseStrength: number, sheetConditioning: SheetConditioningDiagnostics): number {
-  return Math.max(denoiseStrength, hasSevereAiAtlasNoise(sheetConditioning) ? 55 : 45);
-}
-
-function hasSevereAiAtlasNoise(sheetConditioning: SheetConditioningDiagnostics): boolean {
-  const codes = new Set(sheetConditioning.issues.map((issue) => issue.code));
-  return (
-    codes.has("soft-alpha-noise") &&
-    codes.has("chroma-matte-artifacts") &&
-    (codes.has("excessive-exact-colors") || codes.has("dense-coarse-palette"))
-  );
+function suggestStrictSourceSheetDenoiseStrength(denoiseStrength: number): number {
+  return Math.max(denoiseStrength, 20);
 }
 
 function suggestDownscaleMethod(input: {

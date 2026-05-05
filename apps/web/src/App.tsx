@@ -781,6 +781,7 @@ type AssetEditorSession = {
     preserveSinglePixelDetails: boolean;
     removeHalos: boolean;
     denoiseStrength: number;
+    inferNativeScale: boolean;
     contrastExpansionEnabled: boolean;
     showAdvancedControls: boolean;
     frameMetadataExpanded: boolean;
@@ -984,6 +985,7 @@ export function App() {
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(initialSettings.preserveSinglePixelDetails);
   const [removeHalos, setRemoveHalos] = useState(initialSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(initialSettings.denoiseStrength);
+  const [inferNativeScale, setInferNativeScale] = useState(false);
   const [contrastExpansionEnabled, setContrastExpansionEnabled] = useState(initialSettings.contrastExpansionEnabled);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
@@ -1454,6 +1456,7 @@ export function App() {
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        inferNativeScale,
         contrastExpansionEnabled,
         showAdvancedControls,
         frameMetadataExpanded,
@@ -1513,6 +1516,7 @@ export function App() {
       customPivotY,
       decontaminateRgb,
       denoiseStrength,
+      inferNativeScale,
       detectedRowAnimations,
       detectedSheetDiagnostics,
       detectedSheetFrames,
@@ -1682,6 +1686,7 @@ export function App() {
     setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
     setRemoveHalos(settings.removeHalos);
     setDenoiseStrength(settings.denoiseStrength);
+    setInferNativeScale(settings.inferNativeScale ?? false);
     setContrastExpansionEnabled(settings.contrastExpansionEnabled);
     setShowAdvancedControls(settings.showAdvancedControls);
     setFrameMetadataExpanded(settings.frameMetadataExpanded);
@@ -2651,6 +2656,7 @@ export function App() {
           preserveSinglePixelDetails,
           removeHalos,
           denoiseStrength,
+          inferNativeScale,
           contrastExpansionEnabled,
           outlineMode,
           outlineSize,
@@ -2703,6 +2709,7 @@ export function App() {
     contrastExpansionEnabled,
     cropToBounds,
     denoiseStrength,
+    inferNativeScale,
     detectedSheetWarnings,
     downscale,
     effectiveTargetHeight,
@@ -3003,6 +3010,7 @@ export function App() {
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
+    setInferNativeScale(resolvedMode === "spriteSheet" && suggestion.inferNativeScale);
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
     setOutlineColorEdited(false);
@@ -3223,6 +3231,7 @@ export function App() {
       setPreserveSinglePixelDetails(settings.cleanup.preserveSinglePixelDetails);
       setRemoveHalos(settings.cleanup.removeHalos ?? false);
       setDenoiseStrength(settings.cleanup.denoiseStrength ?? 0);
+      setInferNativeScale(settings.cleanup.inferNativeScale ?? false);
       setOutlineMode(settings.cleanup.outlineMode ?? "none");
       setOutlineSize(settings.cleanup.outlineSize ?? initialSettings.outlineSize);
       setOutlineColor(settings.cleanup.outlineColor ?? initialSettings.outlineColor);
@@ -3369,6 +3378,7 @@ export function App() {
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        inferNativeScale,
         ...(contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
         outlineMode,
         outlineSize,
@@ -3401,6 +3411,7 @@ export function App() {
     cropToBounds,
     fixedPaletteColors,
     jaggyCleanup,
+    inferNativeScale,
     localCorrection,
     maxColors,
     mode,
@@ -6065,6 +6076,12 @@ export function App() {
           labelValue={denoiseStrengthLabel(denoiseStrength)}
           onChange={setDenoiseStrength}
         />
+        {sheetMode ? (
+          <label className="toggle-row">
+            <input type="checkbox" checked={inferNativeScale} onChange={(event) => setInferNativeScale(event.currentTarget.checked)} />
+            Infer native cell scale
+          </label>
+        ) : null}
         <label className="toggle-row">
           <input type="checkbox" checked={contrastExpansionEnabled} onChange={(event) => setContrastExpansionEnabled(event.currentTarget.checked)} />
           Expand high-contrast details
