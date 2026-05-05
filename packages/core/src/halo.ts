@@ -237,7 +237,8 @@ function isChromaMattePixel(image: RGBAImage, offset: number, background: Backgr
 function isGreenDominantColor(r: number, g: number, b: number): boolean {
   const neonGreen = g >= 150 && r <= 80 && b <= 100 && g - r >= 72 && g - b >= 56;
   const darkMatteGreen = g >= 90 && r <= 48 && b <= 72 && g > r * 1.8 && g > b * 1.35;
-  return neonGreen || darkMatteGreen;
+  const mutedMatteGreen = g >= 64 && r <= 56 && b <= 96 && g >= r + 22 && g >= b - 8;
+  return neonGreen || darkMatteGreen || mutedMatteGreen;
 }
 
 function isPaleNeutralPixel(image: RGBAImage, offset: number): boolean {

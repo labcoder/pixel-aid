@@ -251,6 +251,33 @@ function codexPetAtlasLikeSource(): RGBAImage {
   return image;
 }
 
+function noisyCodexPetAtlasLikeSource(): RGBAImage {
+  const image = codexPetAtlasLikeSource();
+  const cellWidth = 192;
+  const cellHeight = 208;
+  const columns = 8;
+  const rows = 9;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * cellWidth;
+      const cellY = row * cellHeight;
+      drawRect(image, cellX + 16, cellY + 92, cellWidth - 32, 12, [0, 255, 0, 170]);
+      for (let y = cellY + 44; y < cellY + 154; y += 1) {
+        for (let x = cellX + 52; x < cellX + 140; x += 1) {
+          const offset = (y * image.width + x) * 4;
+          image.data[offset] = (x * 17 + y * 11 + row * 19 + column * 23) % 256;
+          image.data[offset + 1] = (x * 7 + y * 29 + row * 31 + column * 13) % 256;
+          image.data[offset + 2] = (x * 37 + y * 5 + row * 17 + column * 41) % 256;
+          image.data[offset + 3] = 255;
+        }
+      }
+    }
+  }
+
+  return image;
+}
+
 function lowScaleBakedCheckerboardPandaSource(): RGBAImage {
   const scale = 3;
   const nativeWidth = 91;
@@ -798,13 +825,35 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.alpha).toBe("binary");
+    expect(suggestion.maxColors).toBe(16);
+    expect(suggestion.removeHalos).toBe(true);
+    expect(suggestion.denoiseStrength).toBeGreaterThanOrEqual(45);
+    expect(suggestion.alphaSettings.decontaminateRgb).toBe(true);
     expect(suggestion.sheetLayout).toMatchObject({
       frameWidth: 192,
       frameHeight: 208,
       rows: 9,
       columns: 8
     });
+    expect(suggestion.sheetLayout?.diagnostics?.conditioning?.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["chroma-matte-artifacts"])
+    );
     expect(suggestion.categoryReason).toMatch(/atlas|animation|sheet|timeline/i);
+  });
+
+  test("uses a stricter palette budget for noisy AI pet atlases", () => {
+    const suggestion = suggestFixSettings(noisyCodexPetAtlasLikeSource());
+
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.maxColors).toBe(8);
+    expect(suggestion.alpha).toBe("binary");
+    expect(suggestion.removeHalos).toBe(true);
+    expect(suggestion.denoiseStrength).toBeGreaterThanOrEqual(55);
+    expect(suggestion.sheetLayout?.diagnostics?.conditioning?.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["soft-alpha-noise", "chroma-matte-artifacts", "excessive-exact-colors"])
+    );
   });
 
   test("keeps detected cells for single-row dither-bridged sheets", () => {

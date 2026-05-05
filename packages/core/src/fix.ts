@@ -4,6 +4,7 @@ import type {
   GridCandidate,
   GridDriftDiagnostics,
   MorphologyDiagnostics,
+  PaletteDiagnostics,
   PaletteSettings,
   PixelFixResult,
   Rect,
@@ -11,7 +12,7 @@ import type {
   SpriteFrame
 } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
-import { parseHexColor, rgbToHex } from "./color";
+import { colorDistanceSq, parseHexColor, rgbToHex } from "./color";
 import { applyContrastExpansion } from "./contrastExpansion";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
@@ -101,12 +102,14 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     fallbackMaxColors: options.maxColors,
     reservedColors: reservedPalette
   });
-  const remapped = remapToPalette(outlineCleaned, paletteResult.palette, {
+  const effectivePalette = refinePaletteForCleanup(paletteResult.palette, options);
+  const paletteDiagnostics = refreshPaletteDiagnostics(paletteResult.diagnostics, effectivePalette);
+  const remapped = remapToPalette(outlineCleaned, effectivePalette, {
     runtime,
     stage: "palette-remap",
     startPercent: 78,
     endPercent: 90,
-    dithering: paletteResult.diagnostics.dithering
+    dithering: paletteDiagnostics.dithering
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
@@ -115,7 +118,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
 
   const result = {
     image: remapped,
-    palette: paletteResult.palette,
+    palette: effectivePalette,
     grid: resultGrid,
     metrics: {
       durationMs: 0,
@@ -123,7 +126,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       sourceHeight: image.height,
       outputWidth: remapped.width,
       outputHeight: remapped.height,
-      paletteCount: paletteResult.palette.length,
+      paletteCount: effectivePalette.length,
       gridConfidence: resultGrid.confidence
     },
     settings: options,
@@ -131,7 +134,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       alpha: alphaDiagnostics,
       contrastExpansion: contrastExpanded.diagnostics,
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
-      palette: paletteResult.diagnostics
+      palette: paletteDiagnostics
     }
   };
   reportProgress(runtime, "complete", 100);
@@ -229,12 +232,14 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     reservedColors: reservedPalette,
     frames
   });
-  const remapped = remapToPalette(packed, paletteResult.palette, {
+  const effectivePalette = refinePaletteForCleanup(paletteResult.palette, options);
+  const paletteDiagnostics = refreshPaletteDiagnostics(paletteResult.diagnostics, effectivePalette);
+  const remapped = remapToPalette(packed, effectivePalette, {
     runtime,
     stage: "palette-remap",
     startPercent: 82,
     endPercent: 92,
-    dithering: paletteResult.diagnostics.dithering
+    dithering: paletteDiagnostics.dithering
   });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
@@ -256,7 +261,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
 
   const result = {
     image: remapped,
-    palette: paletteResult.palette,
+    palette: effectivePalette,
     grid,
     metrics: {
       durationMs: 0,
@@ -264,7 +269,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
       sourceHeight: image.height,
       outputWidth: remapped.width,
       outputHeight: remapped.height,
-      paletteCount: paletteResult.palette.length,
+      paletteCount: effectivePalette.length,
       gridConfidence: grid.confidence
     },
     settings: options,
@@ -272,7 +277,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
       ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
       ...(morphologyDiagnostics ? { morphology: morphologyDiagnostics } : {}),
-      palette: paletteResult.diagnostics
+      palette: paletteDiagnostics
     }
   };
   reportProgress(runtime, "complete", 100);
@@ -295,6 +300,78 @@ function resolvePaletteSettings(options: FixOptions, reservedColors: readonly st
     };
   }
   return undefined;
+}
+
+function refinePaletteForCleanup(palette: readonly string[], options: FixOptions): string[] {
+  if (!shouldMergeNearbyAutoPaletteColors(options)) {
+    return [...palette];
+  }
+
+  return mergeNearbyPaletteColors(palette, 24 * 24);
+}
+
+function shouldMergeNearbyAutoPaletteColors(options: FixOptions): boolean {
+  return (
+    options.mode !== "single" &&
+    options.alpha === "binary" &&
+    (options.cleanup.denoiseStrength ?? 0) >= 55 &&
+    options.paletteSettings?.mode !== "fixed" &&
+    options.palette === undefined
+  );
+}
+
+function refreshPaletteDiagnostics(diagnostics: PaletteDiagnostics, palette: readonly string[]): PaletteDiagnostics {
+  return {
+    ...diagnostics,
+    outputColorCount: palette.length,
+    palette: [...palette]
+  };
+}
+
+function mergeNearbyPaletteColors(palette: readonly string[], distanceSq: number): string[] {
+  const merged: number[] = [];
+
+  for (const color of palette) {
+    const parsed = tryParseHexColor(color);
+    if (parsed === null) {
+      continue;
+    }
+
+    const existingIndex = merged.findIndex((candidate) => colorDistanceSq(candidate, parsed) <= distanceSq);
+    if (existingIndex < 0) {
+      merged.push(parsed);
+      continue;
+    }
+
+    const existing = merged[existingIndex]!;
+    if (preferPaletteRepresentative(parsed, existing)) {
+      merged[existingIndex] = parsed;
+    }
+  }
+
+  return merged.map((color) => rgbToHex(color));
+}
+
+function preferPaletteRepresentative(candidate: number, existing: number): boolean {
+  const candidateLuma = approximateLuma(candidate);
+  const existingLuma = approximateLuma(existing);
+  if (candidateLuma >= 220 && existingLuma >= 220) {
+    return candidateLuma > existingLuma;
+  }
+
+  return false;
+}
+
+function approximateLuma(color: number): number {
+  return (((color >> 16) & 0xff) * 299 + ((color >> 8) & 0xff) * 587 + (color & 0xff) * 114) / 1000;
+}
+
+function tryParseHexColor(color: string): number | null {
+  try {
+    return parseHexColor(color);
+  } catch {
+    return null;
+  }
 }
 
 function countReservedColorsOutsidePalette(palette: readonly string[], reservedColors: readonly string[]): number {

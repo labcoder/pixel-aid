@@ -209,6 +209,8 @@ export type TilemapExportMetadata = {
 export type SheetConditioningIssueCode =
   | "excessive-exact-colors"
   | "dense-coarse-palette"
+  | "soft-alpha-noise"
+  | "chroma-matte-artifacts"
   | "opaque-dark-background"
   | "low-foreground-coverage"
   | "footer-like-band"

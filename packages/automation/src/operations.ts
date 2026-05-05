@@ -25,6 +25,7 @@ import {
 import {
   getAssetTypeDefinition,
   type AnimationTag,
+  type AssetMode,
   type AssetType,
   type FixOptions,
   type GridCandidate,
@@ -722,19 +723,34 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     gridOverrides.localCorrection = overrides.grid.localCorrection;
   }
 
-  const suggestedCleanup = suggestAutomationCleanupOverrides(overrides?.cleanup, assetType.value.assetType, bakedTransparencyDetected, bestGrid);
-  const suggestedAlpha = shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.alpha === undefined
+  const sheetConditioning = sheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
+  const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(image, assetType.value.mode, sheetLayout, sheetConditioning);
+  const strictSourceSheetMaxColors = suggestStrictSourceSheetMaxColors(sheetConditioning);
+  const strictSourceSheetDenoiseStrength = suggestStrictSourceSheetDenoiseStrength(sheetConditioning);
+  const suggestedCleanup = suggestAutomationCleanupOverrides(
+    overrides?.cleanup,
+    assetType.value.assetType,
+    bakedTransparencyDetected,
+    bestGrid,
+    strictSourceSheetCleanup,
+    strictSourceSheetDenoiseStrength
+  );
+  const suggestedAlpha = strictSourceSheetCleanup && overrides?.alpha === undefined
+    ? "binary"
+    : shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.alpha === undefined
     ? "backgroundFloodFill"
     : overrides?.alpha;
   const suggestedDownscale = shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.downscale === undefined
     ? "dominant"
     : overrides?.downscale;
+  const suggestedMaxColors = strictSourceSheetCleanup && overrides?.maxColors === undefined ? strictSourceSheetMaxColors : overrides?.maxColors;
 
   const normalized = normalizeFixOptions({
     assetType: assetType.value.assetType,
     targetWidth: defaultTarget.width,
     targetHeight: defaultTarget.height,
     ...overrides,
+    ...(suggestedMaxColors ? { maxColors: suggestedMaxColors } : {}),
     ...(suggestedAlpha ? { alpha: suggestedAlpha } : {}),
     ...(suggestedDownscale ? { downscale: suggestedDownscale } : {}),
     grid: gridOverrides,
@@ -791,6 +807,41 @@ function shouldCleanBakedBackground(assetType: AssetType, bakedTransparencyDetec
   return bakedTransparencyDetected && (assetType === "sprite" || assetType === "icon");
 }
 
+function shouldUseStrictSourceSheetCleanup(
+  image: RGBAImage,
+  mode: AssetMode,
+  sheetLayout: SheetLayoutDetection,
+  sheetConditioning: ReturnType<typeof analyzeSheetConditioning>,
+): boolean {
+  if (mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
+    return false;
+  }
+
+  return sheetConditioning.issues.some((issue) =>
+    issue.code === "soft-alpha-noise" ||
+    issue.code === "chroma-matte-artifacts" ||
+    issue.code === "excessive-exact-colors" ||
+    issue.code === "dense-coarse-palette"
+  );
+}
+
+function suggestStrictSourceSheetMaxColors(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): number {
+  return hasSevereAiAtlasNoise(sheetConditioning) ? 8 : 16;
+}
+
+function suggestStrictSourceSheetDenoiseStrength(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): number {
+  return hasSevereAiAtlasNoise(sheetConditioning) ? 55 : 45;
+}
+
+function hasSevereAiAtlasNoise(sheetConditioning: ReturnType<typeof analyzeSheetConditioning>): boolean {
+  const codes = new Set(sheetConditioning.issues.map((issue) => issue.code));
+  return (
+    codes.has("soft-alpha-noise") &&
+    codes.has("chroma-matte-artifacts") &&
+    (codes.has("excessive-exact-colors") || codes.has("dense-coarse-palette"))
+  );
+}
+
 function alphaSettingsFromOverrides(overrides: AutomationFixOptionsInput | undefined): NonNullable<FixOptions["alphaSettings"]> {
   return {
     threshold: overrides?.alphaThreshold ?? 128,
@@ -806,7 +857,19 @@ function suggestAutomationCleanupOverrides(
   assetType: AssetType,
   bakedTransparencyDetected: boolean,
   grid: GridCandidate,
+  strictSourceSheetCleanup = false,
+  strictSourceSheetDenoiseStrength = 45,
 ): Partial<FixOptions["cleanup"]> | undefined {
+  if (strictSourceSheetCleanup) {
+    return {
+      removeOrphans: true,
+      jaggyCleanup: true,
+      removeHalos: true,
+      denoiseStrength: strictSourceSheetDenoiseStrength,
+      ...overrides,
+    };
+  }
+
   const selectedScale = Math.min(grid.scaleX, grid.scaleY);
   const lowScaleBakedSprite = shouldCleanBakedBackground(assetType, bakedTransparencyDetected) && selectedScale < 4;
   if (!lowScaleBakedSprite) {

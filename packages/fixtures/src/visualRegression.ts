@@ -45,9 +45,9 @@ export const visualRegressionCases: VisualRegressionCase[] = [
     expected: {
       width: 104,
       height: 146,
-      checksum: "3ea374fb",
-      visiblePixels: 9216,
-      transparentPixels: 5968,
+      checksum: "e3ee558d",
+      visiblePixels: 9160,
+      transparentPixels: 6024,
       palette: [
         "#018484",
         "#01ebe1",

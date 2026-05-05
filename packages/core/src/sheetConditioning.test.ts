@@ -95,4 +95,30 @@ describe("sheet source conditioning diagnostics", () => {
     expect(diagnostics.recommendFrameFirst).toBe(false);
     expect(diagnostics.issues).toEqual([]);
   });
+
+  test("flags soft alpha and chroma matte noise in source-sized AI atlases", () => {
+    const source = image(160, 120, rgba(0, 0, 0, 0));
+    for (let y = 8; y < 112; y += 1) {
+      for (let x = 8; x < 152; x += 1) {
+        writePixel(source, x, y, rgba(250, 250, 250));
+      }
+    }
+    for (let y = 10; y < 110; y += 1) {
+      for (let x = 4; x < 14; x += 1) {
+        writePixel(source, x, y, rgba(0, 255, 0, 160));
+      }
+    }
+    for (let y = 24; y < 90; y += 1) {
+      for (let x = 140; x < 148; x += 1) {
+        writePixel(source, x, y, rgba(20, 72, 42, 255));
+      }
+    }
+
+    const diagnostics = analyzeSheetConditioning(source);
+
+    expect(diagnostics.recommendFrameFirst).toBe(true);
+    expect(diagnostics.issues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["soft-alpha-noise", "chroma-matte-artifacts"])
+    );
+  });
 });
