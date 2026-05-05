@@ -10,7 +10,7 @@ export function getFixedComparisonSourceRect({
   grid: GridCandidate | undefined;
 }): Rect | undefined {
   if (!fixedImage || !grid || mode !== "single") {
-    return grid?.sourceRect;
+    return undefined;
   }
 
   if (grid.sourceRect) {

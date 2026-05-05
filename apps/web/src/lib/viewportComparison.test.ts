@@ -43,12 +43,15 @@ describe("viewport comparison", () => {
     ).toEqual({ x: 2, y: 4, w: 512, h: 640 });
   });
 
-  test("does not synthesize compare footprints for sheet modes", () => {
+  test("does not use source crop footprints for sheet modes", () => {
     expect(
       getFixedComparisonSourceRect({
         mode: "spriteSheet",
         fixedImage: fixed,
-        grid
+        grid: {
+          ...grid,
+          sourceRect: { x: 0, y: 0, w: 1536, h: 1872 }
+        }
       })
     ).toBeUndefined();
   });
