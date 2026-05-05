@@ -115,6 +115,132 @@ function countGreenMattePixels(image: RGBAImage): number {
   return count;
 }
 
+function countSoftAlphaPixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha > 0 && alpha < 255) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function averageExactBlockPurity(image: RGBAImage, blockSize: number): number {
+  let totalPurity = 0;
+  let blockCount = 0;
+  const counts = new Map<string, number>();
+
+  for (let y = 0; y + blockSize <= image.height; y += blockSize) {
+    for (let x = 0; x + blockSize <= image.width; x += blockSize) {
+      counts.clear();
+      let total = 0;
+      let best = 0;
+      for (let by = 0; by < blockSize; by += 1) {
+        for (let bx = 0; bx < blockSize; bx += 1) {
+          const offset = ((y + by) * image.width + x + bx) * 4;
+          const key = `${image.data[offset]},${image.data[offset + 1]},${image.data[offset + 2]},${image.data[offset + 3]}`;
+          const next = (counts.get(key) ?? 0) + 1;
+          counts.set(key, next);
+          best = Math.max(best, next);
+          total += 1;
+        }
+      }
+      totalPurity += total > 0 ? best / total : 1;
+      blockCount += 1;
+    }
+  }
+
+  return blockCount > 0 ? totalPurity / blockCount : 1;
+}
+
+function createNoisyPseudoScaledAstroFrameSheet(): RGBAImage {
+  const nativeMask = [
+    "000011000000",
+    "001222100000",
+    "012333210000",
+    "123111321000",
+    "123144321000",
+    "123144321000",
+    "012333210000",
+    "001222100000",
+    "000122100000",
+    "000155100000",
+    "000011000000",
+    "000000000000"
+  ];
+  const scale = 3;
+  const image = createImage(nativeMask[0]!.length * scale, nativeMask.length * scale);
+  const colors: Record<string, readonly [number, number, number, number]> = {
+    "1": [7, 12, 24, 255],
+    "2": [246, 248, 252, 255],
+    "3": [0, 138, 235, 255],
+    "4": [0, 218, 255, 255],
+    "5": [92, 102, 112, 255]
+  };
+
+  for (let nativeY = 0; nativeY < nativeMask.length; nativeY += 1) {
+    const row = nativeMask[nativeY]!;
+    for (let nativeX = 0; nativeX < row.length; nativeX += 1) {
+      const code = row[nativeX]!;
+      const color = colors[code];
+      for (let sy = 0; sy < scale; sy += 1) {
+        for (let sx = 0; sx < scale; sx += 1) {
+          const x = nativeX * scale + sx;
+          const y = nativeY * scale + sy;
+          if (!color) {
+            const nearSprite = hasVisibleNeighbor(nativeMask, nativeX, nativeY);
+            if (nearSprite && sx === 1) {
+              writePixel(image, x, y, 0, 190, 0, 96);
+            }
+            continue;
+          }
+
+          let [r, g, b, a] = color;
+          if (code === "2" && (sx + sy) % 4 === 0) {
+            r = 192;
+            g = 198;
+            b = 205;
+          } else if (code === "3" && sx === 0) {
+            r = 0;
+            g = 86;
+            b = 170;
+          } else if (code === "1" && sy === 2) {
+            r = 68;
+            g = 76;
+            b = 84;
+          } else if (code === "4" && sx === 2) {
+            r = 0;
+            g = 164;
+            b = 220;
+          }
+          if ((sx === 2 && sy === 0) || (sx === 0 && sy === 2)) {
+            a = 224;
+          }
+          writePixel(image, x, y, r, g, b, a);
+        }
+      }
+    }
+  }
+
+  return image;
+}
+
+function hasVisibleNeighbor(mask: readonly string[], x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      const row = mask[y + dy];
+      if (row && row[x + dx] && row[x + dx] !== "0") {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 function blockySource(): RGBAImage {
   return imageFromPixels(4, [
     rgba(255, 0, 0),
@@ -2018,6 +2144,52 @@ describe("fix pipeline", () => {
     expect(countGreenMattePixels(result.image)).toBe(0);
     expect(readPixel(result.image, 2, 1)).toEqual([0, 180, 255, 255]);
     expect(readPixel(result.image, 6, 1)).toEqual([0, 180, 255, 255]);
+  });
+
+  test("source-sized sheet cleanup can infer native pseudo-pixel scale before remapping the frame", () => {
+    const source = createNoisyPseudoScaledAstroFrameSheet();
+    const frames: SpriteFrame[] = [
+      {
+        name: "sad_000",
+        rect: { x: 0, y: 0, w: source.width, h: source.height },
+        sourceRect: { x: 0, y: 0, w: source.width, h: source.height },
+        pivot: { x: Math.floor(source.width / 2), y: source.height },
+        durationMs: 120
+      }
+    ];
+
+    const result = fixImage(
+      source,
+      {
+        mode: "spriteSheet",
+        assetType: "animationSheet",
+        targetWidth: source.width,
+        targetHeight: source.height,
+        maxColors: 16,
+        paletteSettings: { mode: "auto", strategy: "medianCut", maxColors: 16, lockScope: "sheet", dithering: "none" },
+        grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+        downscale: "dominant",
+        alpha: "binary",
+        alphaSettings: { threshold: 128, decontaminateRgb: true },
+        cleanup: {
+          inferNativeScale: true,
+          removeOrphans: false,
+          jaggyCleanup: false,
+          preserveSinglePixelDetails: true,
+          removeHalos: true,
+          denoiseStrength: 0
+        },
+        sheetFrames: frames
+      } as FixOptions
+    );
+
+    expect(result.image.width).toBe(source.width);
+    expect(result.image.height).toBe(source.height);
+    expect(result.palette.length).toBeLessThanOrEqual(16);
+    expect(countSoftAlphaPixels(result.image)).toBe(0);
+    expect(countGreenMattePixels(result.image)).toBe(0);
+    expect(averageExactBlockPurity(result.image, 3)).toBeGreaterThan(0.94);
+    expect(visibleColors(result.image)).toContain("#070c18");
   });
 
   test("legacy palette option behaves as fixed palette metadata", () => {

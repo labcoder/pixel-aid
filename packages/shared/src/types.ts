@@ -442,6 +442,7 @@ export type FixOptions = {
     denoiseStrength?: number;
     morphology?: MorphologyCleanupSettings;
     removeHalos?: boolean;
+    inferNativeScale?: boolean;
     outlineMode?: OutlineMode;
     outlineSize?: number;
     outlineColor?: string;

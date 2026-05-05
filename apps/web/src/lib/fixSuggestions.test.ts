@@ -412,6 +412,7 @@ function buildSuggestedFixOptions(image: RGBAImage, cleanupOverride: Partial<Fix
       preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
       removeHalos: suggestion.removeHalos,
       denoiseStrength: suggestion.denoiseStrength,
+      inferNativeScale: suggestion.inferNativeScale,
       ...cleanupOverride
     },
     sheet: {
@@ -828,7 +829,8 @@ describe("fix setting suggestions", () => {
     expect(suggestion.alpha).toBe("binary");
     expect(suggestion.maxColors).toBe(16);
     expect(suggestion.removeHalos).toBe(true);
-    expect(suggestion.denoiseStrength).toBeGreaterThanOrEqual(45);
+    expect(suggestion.denoiseStrength).toBe(20);
+    expect(suggestion.inferNativeScale).toBe(true);
     expect(suggestion.alphaSettings.decontaminateRgb).toBe(true);
     expect(suggestion.sheetLayout).toMatchObject({
       frameWidth: 192,
@@ -847,10 +849,11 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.assetType).toBe("animationSheet");
-    expect(suggestion.maxColors).toBe(8);
+    expect(suggestion.maxColors).toBe(16);
     expect(suggestion.alpha).toBe("binary");
     expect(suggestion.removeHalos).toBe(true);
-    expect(suggestion.denoiseStrength).toBeGreaterThanOrEqual(55);
+    expect(suggestion.denoiseStrength).toBe(20);
+    expect((suggestion as { inferNativeScale?: boolean }).inferNativeScale).toBe(true);
     expect(suggestion.sheetLayout?.diagnostics?.conditioning?.issues.map((issue) => issue.code)).toEqual(
       expect.arrayContaining(["soft-alpha-noise", "chroma-matte-artifacts", "excessive-exact-colors"])
     );

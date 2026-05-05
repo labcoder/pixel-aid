@@ -190,28 +190,12 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     sourceRects.push(sourceRect);
     const frameStartPercent = phasePercent(20, 65, index, frames.length);
     const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
-    const fixedFrame = isSameSizeFrameSource(sourceRect, frame.rect)
-      ? copyImageRect(contrastExpanded.image, sourceRect)
-      : downsampleBlocks(
-          contrastExpanded.image,
-          {
-            outputWidth: frame.rect.w,
-            outputHeight: frame.rect.h,
-            scaleX: sourceRect.w / frame.rect.w,
-            scaleY: sourceRect.h / frame.rect.h,
-            phaseX: sourceRect.x,
-            phaseY: sourceRect.y,
-            method: options.downscale,
-            alpha: options.alpha
-          },
-          {
-            runtime,
-            stage: "downsampling",
-            startPercent: frameStartPercent,
-            endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
-          }
-        );
-    const cleanedFrame = cleanFixedImage(fixedFrame, options);
+    const frameFix = fixSheetFrameSource(contrastExpanded.image, sourceRect, frame.rect, options, {
+      runtime,
+      startPercent: frameStartPercent,
+      endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
+    });
+    const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale));
     alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
     morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
     pasteImage(cleanedFrame.image, packed, frame.rect);
@@ -283,6 +267,142 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   reportProgress(runtime, "complete", 100);
   assertNotCancelled(runtime?.signal);
   return result;
+}
+
+type SheetFrameFix = {
+  image: RGBAImage;
+  inferredNativeScale: boolean;
+};
+
+function fixSheetFrameSource(
+  image: RGBAImage,
+  sourceRect: Rect,
+  outputRect: Rect,
+  options: FixOptions,
+  progress: { runtime: FixRuntimeOptions | undefined; startPercent: number; endPercent: number }
+): SheetFrameFix {
+  if (!isSameSizeFrameSource(sourceRect, outputRect)) {
+    return {
+      image: downsampleBlocks(
+        image,
+        {
+          outputWidth: outputRect.w,
+          outputHeight: outputRect.h,
+          scaleX: sourceRect.w / outputRect.w,
+          scaleY: sourceRect.h / outputRect.h,
+          phaseX: sourceRect.x,
+          phaseY: sourceRect.y,
+          method: options.downscale,
+          alpha: options.alpha
+        },
+        {
+          runtime: progress.runtime,
+          stage: "downsampling",
+          startPercent: progress.startPercent,
+          endPercent: progress.endPercent
+        }
+      ),
+      inferredNativeScale: false
+    };
+  }
+
+  const frameSource = copyImageRect(image, sourceRect);
+  const inferred = options.cleanup.inferNativeScale ? inferNativeScaleFrame(frameSource) : undefined;
+  if (!inferred) {
+    return {
+      image: frameSource,
+      inferredNativeScale: false
+    };
+  }
+
+  const alphaCleaned = applyAlphaMode(frameSource, options.alpha, options.alphaSettings).image;
+  const native = downsampleBlocks(
+    alphaCleaned,
+    {
+      outputWidth: inferred.outputWidth,
+      outputHeight: inferred.outputHeight,
+      scaleX: inferred.scaleX,
+      scaleY: inferred.scaleY,
+      phaseX: inferred.phaseX,
+      phaseY: inferred.phaseY,
+      method: "dominant",
+      alpha: options.alpha
+    },
+    {
+      runtime: progress.runtime,
+      stage: "downsampling",
+      startPercent: progress.startPercent,
+      endPercent: progress.endPercent
+    }
+  );
+
+  return {
+    image: scaleNearest(native, outputRect.w, outputRect.h),
+    inferredNativeScale: true
+  };
+}
+
+function inferNativeScaleFrame(image: RGBAImage): GridCandidate | undefined {
+  const maxScale = Math.max(2, Math.min(12, Math.floor(Math.min(image.width, image.height) / 4)));
+  const candidates = detectGridCandidates(image, { maxScale });
+  const candidate = candidates.find((candidate) => {
+    const scale = Math.min(candidate.scaleX, candidate.scaleY);
+    return (
+      scale >= 2 &&
+      candidate.outputWidth >= 4 &&
+      candidate.outputHeight >= 4 &&
+      candidate.confidence >= 0.25 &&
+      candidate.outputWidth < image.width &&
+      candidate.outputHeight < image.height
+    );
+  });
+  if (!candidate) {
+    return undefined;
+  }
+
+  const phaseX = Math.max(0, Math.min(candidate.scaleX - 1, candidate.phaseX));
+  const phaseY = Math.max(0, Math.min(candidate.scaleY - 1, candidate.phaseY));
+  const cellCandidate = { ...candidate };
+  delete cellCandidate.sourceRect;
+  return {
+    ...cellCandidate,
+    outputWidth: Math.max(1, Math.floor((image.width - phaseX) / candidate.scaleX)),
+    outputHeight: Math.max(1, Math.floor((image.height - phaseY) / candidate.scaleY)),
+    phaseX,
+    phaseY,
+    reason: `${candidate.reason}; full source cell preserved for inferred native-scale cleanup`
+  };
+}
+
+function scaleNearest(image: RGBAImage, width: number, height: number): RGBAImage {
+  const output = createImage(width, height);
+  for (let y = 0; y < height; y += 1) {
+    const sourceY = Math.min(image.height - 1, Math.floor((y * image.height) / height));
+    for (let x = 0; x < width; x += 1) {
+      const sourceX = Math.min(image.width - 1, Math.floor((x * image.width) / width));
+      const sourceOffset = (sourceY * image.width + sourceX) * 4;
+      const targetOffset = (y * output.width + x) * 4;
+      output.data[targetOffset] = image.data[sourceOffset]!;
+      output.data[targetOffset + 1] = image.data[sourceOffset + 1]!;
+      output.data[targetOffset + 2] = image.data[sourceOffset + 2]!;
+      output.data[targetOffset + 3] = image.data[sourceOffset + 3]!;
+    }
+  }
+  return output;
+}
+
+function getSheetFrameCleanupOptions(options: FixOptions, inferredNativeScale: boolean): FixOptions {
+  if (!inferredNativeScale) {
+    return options;
+  }
+
+  return {
+    ...options,
+    cleanup: {
+      ...options.cleanup,
+      denoiseStrength: Math.min(options.cleanup.denoiseStrength ?? 0, 12)
+    }
+  };
 }
 
 function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {

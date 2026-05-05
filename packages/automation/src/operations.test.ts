@@ -103,7 +103,8 @@ describe("automation operations", () => {
       expect(result.value.options.alpha).toBe("binary");
       expect(result.value.options.alphaSettings?.decontaminateRgb).toBe(true);
       expect(result.value.options.cleanup.removeHalos).toBe(true);
-      expect(result.value.options.cleanup.denoiseStrength).toBeGreaterThanOrEqual(45);
+      expect(result.value.options.cleanup.denoiseStrength).toBe(20);
+      expect(result.value.options.cleanup.inferNativeScale).toBe(true);
       expect(result.value.options.grid.scaleX).toBe(1);
       expect(result.value.options.grid.scaleY).toBe(1);
       expect(result.value.options.sheet).toMatchObject({
@@ -129,10 +130,11 @@ describe("automation operations", () => {
       if (!result.ok) return;
       expect(result.value.options.assetType).toBe("animationSheet");
       expect(result.value.options.mode).toBe("spriteSheet");
-      expect(result.value.options.maxColors).toBe(8);
+      expect(result.value.options.maxColors).toBe(16);
       expect(result.value.options.alpha).toBe("binary");
       expect(result.value.options.cleanup.removeHalos).toBe(true);
-      expect(result.value.options.cleanup.denoiseStrength).toBeGreaterThanOrEqual(55);
+      expect(result.value.options.cleanup.denoiseStrength).toBe(20);
+      expect(result.value.options.cleanup.inferNativeScale).toBe(true);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

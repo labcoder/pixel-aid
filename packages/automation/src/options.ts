@@ -338,6 +338,10 @@ function normalizeCleanup(
   if (removeHalos !== undefined) {
     cleanup.removeHalos = removeHalos;
   }
+  const inferNativeScale = input?.inferNativeScale ?? fallback.inferNativeScale;
+  if (inferNativeScale !== undefined) {
+    cleanup.inferNativeScale = inferNativeScale;
+  }
   const outlineColor = input?.outlineColor ?? fallback.outlineColor;
   if (outlineColor !== undefined) {
     cleanup.outlineColor = outlineColor;
