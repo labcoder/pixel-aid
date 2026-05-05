@@ -90,10 +90,18 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
-  const suggestedAlpha = suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
+  const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning);
+  const strictSourceSheetMaxColors = strictSourceSheetCleanup
+    ? suggestStrictSourceSheetMaxColors(preset.maxColors, sheetConditioning)
+    : preset.maxColors;
+  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
+    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength, sheetConditioning)
+    : preset.denoiseStrength;
+  const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
+  const suggestedMaxColors = strictSourceSheetMaxColors;
   let qualityReport = analyzeQualityReport(image, {
     assetType: classification.assetType,
-    maxColors: preset.maxColors,
+    maxColors: suggestedMaxColors,
     alpha: suggestedAlpha,
     gridCandidates: candidates,
     sheetLayout: detectedSheetLayout
@@ -109,7 +117,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       outputHeight = candidate?.outputHeight ?? image.height;
       qualityReport = analyzeQualityReport(image, {
         assetType: classification.assetType,
-        maxColors: preset.maxColors,
+        maxColors: suggestedMaxColors,
         alpha: suggestedAlpha,
         gridCandidates: candidates,
         sheetLayout: detectedSheetLayout
@@ -122,7 +130,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     sheetConditioning.recommendFrameFirst,
     bakedTransparencyDetected,
     classification.assetType,
-    candidate
+    candidate,
+    strictSourceSheetCleanup,
+    strictSourceSheetDenoiseStrength
   );
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
@@ -159,7 +169,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     mode,
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
-    maxColors: preset.maxColors,
+    maxColors: suggestedMaxColors,
     gridCandidates: candidates,
     gridDetect: "auto",
     gridScaleX: candidate?.scaleX ?? image.width / outputWidth,
@@ -173,7 +183,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       (candidate?.confidence ?? 0) >= 0.55,
     downscale,
     alpha: suggestedAlpha,
-    alphaSettings: { ...preset.alphaSettings },
+    alphaSettings: strictSourceSheetCleanup ? { ...preset.alphaSettings, decontaminateRgb: true } : { ...preset.alphaSettings },
     removeOrphans: cleanup.removeOrphans,
     jaggyCleanup: cleanup.jaggyCleanup,
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
@@ -202,6 +212,16 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
   const warnings = getAssetTypeWarnings(assetType);
   const detectedSheetLayout =
     mode === "spriteSheet" ? (suggestion.sheetLayout ?? detectSheetLayout(image)) : undefined;
+  const sheetConditioning =
+    mode === "spriteSheet" ? detectedSheetLayout?.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
+  const strictSourceSheetCleanup =
+    mode === "spriteSheet" && detectedSheetLayout ? shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning) : false;
+  const strictSourceSheetMaxColors = strictSourceSheetCleanup
+    ? suggestStrictSourceSheetMaxColors(preset.maxColors, sheetConditioning)
+    : preset.maxColors;
+  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
+    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength, sheetConditioning)
+    : preset.denoiseStrength;
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
       ? scaleSheetLayoutDetection(detectedSheetLayout, suggestion.gridScaleX, suggestion.gridScaleY)
@@ -214,14 +234,17 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     mode,
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
-    maxColors: preset.maxColors,
-    alpha: assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha,
-    alphaSettings: assetType === "sprite" || assetType === "icon" ? suggestion.alphaSettings : { ...preset.alphaSettings },
+    maxColors: strictSourceSheetMaxColors,
+    alpha: strictSourceSheetCleanup ? "binary" : assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha,
+    alphaSettings:
+      strictSourceSheetCleanup || assetType === "sprite" || assetType === "icon"
+        ? { ...suggestion.alphaSettings, decontaminateRgb: true }
+        : { ...preset.alphaSettings },
     removeOrphans: preset.removeOrphans,
     jaggyCleanup: preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
-    removeHalos: preset.removeHalos,
-    denoiseStrength: preset.denoiseStrength,
+    removeHalos: strictSourceSheetCleanup ? true : preset.removeHalos,
+    denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : preset.denoiseStrength,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
     contrastExpansionEnabled: assetType === "sprite" || assetType === "icon" ? suggestion.contrastExpansionEnabled : false,
     outlineMode: assetType === "sprite" || assetType === "icon" ? suggestion.outlineMode : "none",
@@ -242,6 +265,56 @@ function shouldUseBackgroundCleanedGrid(
   alpha: AlphaMode
 ): boolean {
   return mode === "single" && (assetType === "sprite" || assetType === "icon") && bakedTransparencyDetected && alpha === "backgroundFloodFill";
+}
+
+function shouldUseStrictSourceSheetCleanup(
+  mode: AssetMode,
+  image: RGBAImage,
+  sheetLayout: SheetLayoutDetection,
+  sheetConditioning: SheetConditioningDiagnostics
+): boolean {
+  if (mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
+    return false;
+  }
+
+  return sheetConditioning.issues.some((issue) =>
+    issue.code === "soft-alpha-noise" ||
+    issue.code === "chroma-matte-artifacts" ||
+    issue.code === "excessive-exact-colors" ||
+    issue.code === "dense-coarse-palette"
+  );
+}
+
+function isSourceSizedSheetLayout(image: RGBAImage, sheetLayout: SheetLayoutDetection): boolean {
+  return (
+    sheetLayout.confidence >= 0.7 &&
+    sheetLayout.rows >= 2 &&
+    sheetLayout.columns >= 2 &&
+    sheetLayout.frameWidth >= 32 &&
+    sheetLayout.frameHeight >= 32 &&
+    sheetLayout.margin === 0 &&
+    sheetLayout.spacing === 0 &&
+    sheetLayout.frameWidth * sheetLayout.columns === image.width &&
+    sheetLayout.frameHeight * sheetLayout.rows === image.height &&
+    sheetLayout.frames.length >= sheetLayout.rows * sheetLayout.columns * 0.75
+  );
+}
+
+function suggestStrictSourceSheetMaxColors(maxColors: number, sheetConditioning: SheetConditioningDiagnostics): number {
+  return Math.min(maxColors, hasSevereAiAtlasNoise(sheetConditioning) ? 8 : 16);
+}
+
+function suggestStrictSourceSheetDenoiseStrength(denoiseStrength: number, sheetConditioning: SheetConditioningDiagnostics): number {
+  return Math.max(denoiseStrength, hasSevereAiAtlasNoise(sheetConditioning) ? 55 : 45);
+}
+
+function hasSevereAiAtlasNoise(sheetConditioning: SheetConditioningDiagnostics): boolean {
+  const codes = new Set(sheetConditioning.issues.map((issue) => issue.code));
+  return (
+    codes.has("soft-alpha-noise") &&
+    codes.has("chroma-matte-artifacts") &&
+    (codes.has("excessive-exact-colors") || codes.has("dense-coarse-palette"))
+  );
 }
 
 function suggestDownscaleMethod(input: {
@@ -314,8 +387,20 @@ function suggestCleanupSettings(
   recommendFrameFirst: boolean,
   bakedTransparencyDetected = false,
   assetType?: AssetType,
-  candidate?: GridCandidate
+  candidate?: GridCandidate,
+  strictSourceSheetCleanup = false,
+  strictSourceSheetDenoiseStrength?: number
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "denoiseStrength"> {
+  if (strictSourceSheetCleanup) {
+    return {
+      removeOrphans: true,
+      jaggyCleanup: true,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: true,
+      denoiseStrength: strictSourceSheetDenoiseStrength ?? Math.max(preset.denoiseStrength, 45)
+    };
+  }
+
   if (mode === "spriteSheet" && recommendFrameFirst) {
     return {
       removeOrphans: preset.removeOrphans,
@@ -688,6 +773,7 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
   }
 
   const background = estimateCornerColor(image);
+  const conditioning = analyzeSheetConditioning(image);
   let best: { columns: number; rows: number; frameWidth: number; frameHeight: number; score: number; activeRatio: number } | undefined;
 
   for (let rows = 2; rows <= 12; rows += 1) {
@@ -747,7 +833,8 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
     frameWidth: best.frameWidth,
     frameHeight: best.frameHeight,
     confidence: best.score,
-    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
+    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`,
+    conditioning
   });
 }
 
@@ -757,7 +844,8 @@ function createRegularAtlasLayout({
   frameWidth,
   frameHeight,
   confidence,
-  reason
+  reason,
+  conditioning
 }: {
   columns: number;
   rows: number;
@@ -765,6 +853,7 @@ function createRegularAtlasLayout({
   frameHeight: number;
   confidence: number;
   reason: string;
+  conditioning?: SheetConditioningDiagnostics;
 }): SheetLayoutDetection {
   const frames: SpriteFrame[] = [];
   const rowFrameCounts = Array.from({ length: rows }, () => columns);
@@ -835,7 +924,7 @@ function createRegularAtlasLayout({
         maxCenterDriftPx: 0,
         mergedComponentCount: 0
       },
-      conditioning: emptySheetConditioning(),
+      conditioning: conditioning ?? emptySheetConditioning(),
       notes: [reason]
     }
   };

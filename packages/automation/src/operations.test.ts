@@ -99,6 +99,11 @@ describe("automation operations", () => {
       expect(result.value.options.mode).toBe("spriteSheet");
       expect(result.value.options.targetWidth).toBe(1536);
       expect(result.value.options.targetHeight).toBe(1872);
+      expect(result.value.options.maxColors).toBe(16);
+      expect(result.value.options.alpha).toBe("binary");
+      expect(result.value.options.alphaSettings?.decontaminateRgb).toBe(true);
+      expect(result.value.options.cleanup.removeHalos).toBe(true);
+      expect(result.value.options.cleanup.denoiseStrength).toBeGreaterThanOrEqual(45);
       expect(result.value.options.grid.scaleX).toBe(1);
       expect(result.value.options.grid.scaleY).toBe(1);
       expect(result.value.options.sheet).toMatchObject({
@@ -107,6 +112,27 @@ describe("automation operations", () => {
         rows: 9,
         columns: 8
       });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("tightens cleanup suggestions for noisy soft-alpha pet atlases", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-noisy-pet-atlas-"));
+    const input = path.join(dir, "astro-noisy-atlas.png");
+    try {
+      await encodePngFile(createSevereAutomationPetAtlasImage(), input);
+
+      const result = await suggestFixSettings({ inputPath: input });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.options.assetType).toBe("animationSheet");
+      expect(result.value.options.mode).toBe("spriteSheet");
+      expect(result.value.options.maxColors).toBe(8);
+      expect(result.value.options.alpha).toBe("binary");
+      expect(result.value.options.cleanup.removeHalos).toBe(true);
+      expect(result.value.options.cleanup.denoiseStrength).toBeGreaterThanOrEqual(55);
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -396,6 +422,33 @@ function createAutomationPetAtlasImage(): RGBAImage {
       fillRect(image, cellX + 116, cellY + 120 + bob, 28, 46, [248, 248, 248, 255]);
       fillRect(image, cellX + 74, cellY + 152 + bob, 18, 42, [248, 248, 248, 255]);
       fillRect(image, cellX + 104, cellY + 152 + bob, 18, 42, [248, 248, 248, 255]);
+    }
+  }
+
+  return image;
+}
+
+function createSevereAutomationPetAtlasImage(): RGBAImage {
+  const image = createAutomationPetAtlasImage();
+  const columns = 8;
+  const rows = 9;
+  const frameWidth = 192;
+  const frameHeight = 208;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * frameWidth;
+      const cellY = row * frameHeight;
+      fillRect(image, cellX + 18, cellY + 94, frameWidth - 36, 14, [0, 255, 0, 170]);
+      for (let y = cellY + 44; y < cellY + 154; y += 1) {
+        for (let x = cellX + 52; x < cellX + 140; x += 1) {
+          const offset = (y * image.width + x) * 4;
+          image.data[offset] = (x * 17 + y * 11 + row * 19 + column * 23) % 256;
+          image.data[offset + 1] = (x * 7 + y * 29 + row * 31 + column * 13) % 256;
+          image.data[offset + 2] = (x * 37 + y * 5 + row * 17 + column * 41) % 256;
+          image.data[offset + 3] = 255;
+        }
+      }
     }
   }
 

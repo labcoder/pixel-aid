@@ -28,6 +28,8 @@ export function analyzeSheetConditioning(
   const exactColors = new Set<number>();
   const coarseForegroundBins = new Set<number>();
   let foregroundPixels = 0;
+  let softAlphaPixels = 0;
+  let chromaMattePixels = 0;
 
   for (let offset = 0; offset < image.data.length; offset += 4) {
     const r = image.data[offset] ?? 0;
@@ -35,6 +37,12 @@ export function analyzeSheetConditioning(
     const b = image.data[offset + 2] ?? 0;
     const a = image.data[offset + 3] ?? 0;
     exactColors.add(packRgba(r, g, b, a));
+    if (a > 0 && a < 255) {
+      softAlphaPixels += 1;
+    }
+    if (a > 0 && isChromaMatteColor(r, g, b, background)) {
+      chromaMattePixels += 1;
+    }
 
     if (a > 0 && colorDistance(r, g, b, background.r, background.g, background.b) > foregroundDistanceThreshold) {
       foregroundPixels += 1;
@@ -65,6 +73,22 @@ export function analyzeSheetConditioning(
       code: "dense-coarse-palette",
       severity: "warning",
       message: `Foreground pixels span ${coarseForegroundBins.size.toLocaleString()} coarse color bins; reduce source noise before resizing.`
+    });
+  }
+
+  if (softAlphaPixels >= Math.max(256, pixelCount * 0.01)) {
+    issues.push({
+      code: "soft-alpha-noise",
+      severity: "warning",
+      message: `Source sheet has ${softAlphaPixels.toLocaleString()} semi-transparent pixels; use binary alpha for sprite atlases unless the sheet is an effects sheet.`
+    });
+  }
+
+  if (chromaMattePixels >= Math.max(64, pixelCount * 0.0005)) {
+    issues.push({
+      code: "chroma-matte-artifacts",
+      severity: "warning",
+      message: `Detected ${chromaMattePixels.toLocaleString()} green/teal matte pixels; remove edge halos before palette locking.`
     });
   }
 
@@ -112,7 +136,9 @@ export function analyzeSheetConditioning(
   const recommendFrameFirst =
     presentationLike ||
     exactColors.size > maxExactColors ||
-    coarseForegroundBins.size > maxCoarseBins;
+    coarseForegroundBins.size > maxCoarseBins ||
+    softAlphaPixels >= Math.max(256, pixelCount * 0.01) ||
+    chromaMattePixels >= Math.max(64, pixelCount * 0.0005);
 
   return {
     exactColorCount: exactColors.size,
@@ -331,6 +357,25 @@ function packRgba(r: number, g: number, b: number, a: number): number {
 
 function packRgb555(r: number, g: number, b: number): number {
   return ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3);
+}
+
+function isChromaMatteColor(
+  r: number,
+  g: number,
+  b: number,
+  background: SheetConditioningDiagnostics["background"]
+): boolean {
+  if (isGreenishBackground(background)) {
+    return false;
+  }
+
+  const neonGreen = g >= 150 && r <= 90 && b <= 110 && g - r >= 70 && g - b >= 45;
+  const darkGreen = g >= 64 && r <= 56 && b <= 96 && g >= r + 22 && g >= b - 8;
+  return neonGreen || darkGreen;
+}
+
+function isGreenishBackground(background: SheetConditioningDiagnostics["background"]): boolean {
+  return background.a > 16 && background.g >= 64 && background.g >= background.r + 22 && background.g >= background.b - 8;
 }
 
 function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
