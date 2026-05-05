@@ -66,7 +66,12 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
           replacement
         )
       ) {
-        if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
+        if (isChromaMattePixel(image, offset, background, alphaThreshold)) {
+          output.data[offset] = background.a <= alphaThreshold ? 0 : Math.round(background.r);
+          output.data[offset + 1] = background.a <= alphaThreshold ? 0 : Math.round(background.g);
+          output.data[offset + 2] = background.a <= alphaThreshold ? 0 : Math.round(background.b);
+          output.data[offset + 3] = background.a <= alphaThreshold ? 0 : image.data[offset + 3]!;
+        } else if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
           output.data[offset] = 0;
           output.data[offset + 1] = 0;
           output.data[offset + 2] = 0;
@@ -76,10 +81,11 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
       }
 
       const isKnownHalo = isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq);
+      const isChromaMatte = isChromaMattePixel(image, offset, background, alphaThreshold);
       if (isKnownHalo && isBorderPixel(image, x, y) && colorDistanceToBackgroundSq(image, offset, background) <= backgroundToleranceSq) {
         continue;
       }
-      if (!isKnownHalo && !isContrastingMattePixel(image, offset, replacement)) {
+      if (!isKnownHalo && !isChromaMatte && !isContrastingMattePixel(image, offset, replacement)) {
         if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
           output.data[offset] = 0;
           output.data[offset + 1] = 0;
@@ -132,6 +138,7 @@ function findReplacementFromSubjectNeighbors(
       if (
         isOutsidePixel(image, offset, background, alphaThreshold, backgroundToleranceSq) ||
         isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq) ||
+        isChromaMattePixel(image, offset, background, alphaThreshold) ||
         isPaleNeutralPixel(image, offset)
       ) {
         continue;
@@ -217,6 +224,20 @@ function isContrastingMattePixel(image: RGBAImage, offset: number, replacement: 
   const replacementBrightness = replacement[0]! + replacement[1]! + replacement[2]!;
 
   return max - min <= 32 && brightness >= replacementBrightness + 96 && colorDistanceToReplacementSq(r, g, b, replacement) > squareTolerance(42);
+}
+
+function isChromaMattePixel(image: RGBAImage, offset: number, background: BackgroundSample, alphaThreshold: number): boolean {
+  if (image.data[offset + 3]! <= alphaThreshold || isGreenDominantColor(background.r, background.g, background.b)) {
+    return false;
+  }
+
+  return isGreenDominantColor(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
+}
+
+function isGreenDominantColor(r: number, g: number, b: number): boolean {
+  const neonGreen = g >= 150 && r <= 80 && b <= 100 && g - r >= 72 && g - b >= 56;
+  const darkMatteGreen = g >= 90 && r <= 48 && b <= 72 && g > r * 1.8 && g > b * 1.35;
+  return neonGreen || darkMatteGreen;
 }
 
 function isPaleNeutralPixel(image: RGBAImage, offset: number): boolean {

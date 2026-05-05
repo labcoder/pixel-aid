@@ -689,8 +689,11 @@ export async function exportEngineBundle(
 }
 
 function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsInput | undefined): AutomationResult<FixSuggestion> {
-  const gridCandidates = withFallbackGridCandidates(image);
+  const detectedGridCandidates = withFallbackGridCandidates(image);
   const sheetLayout = detectSheetLayout(image);
+  const gridCandidates = isSourceSizedSheetLayout(image, sheetLayout)
+    ? [createSourceSizedSheetGridCandidate(image, sheetLayout), ...detectedGridCandidates]
+    : detectedGridCandidates;
   const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
   const bakedTransparencyDetected = detectBakedTransparencyForSuggestion(image, gridCandidates, sheetLayout, overrides);
   const assetType = overrides?.assetType
@@ -864,12 +867,44 @@ function mergeSeverity(
   return "none";
 }
 
+function isSourceSizedSheetLayout(image: RGBAImage, layout: SheetLayoutDetection): boolean {
+  return (
+    layout.confidence >= 0.7 &&
+    layout.rows >= 2 &&
+    layout.columns >= 2 &&
+    layout.frameWidth >= 32 &&
+    layout.frameHeight >= 32 &&
+    layout.margin === 0 &&
+    layout.spacing === 0 &&
+    layout.frameWidth * layout.columns === image.width &&
+    layout.frameHeight * layout.rows === image.height &&
+    layout.frames.length >= layout.rows * layout.columns * 0.75
+  );
+}
+
+function createSourceSizedSheetGridCandidate(image: RGBAImage, layout: SheetLayoutDetection): GridCandidate {
+  return {
+    outputWidth: image.width,
+    outputHeight: image.height,
+    scaleX: 1,
+    scaleY: 1,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: layout.confidence,
+    reason: `Regular ${layout.columns}x${layout.rows} atlas grid; keeping source frame size for cleanup-first processing.`
+  };
+}
+
 function classifyAssetType(
   image: RGBAImage,
   sheetLayout: SheetLayoutDetection,
   tilemapDiagnostics: ReturnType<typeof analyzeTilemapDiagnostics>,
   bakedTransparencyDetected = false,
 ): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {
+  if (sheetLayout.confidence >= 0.65) {
+    return parseAutomationAssetType("animationSheet");
+  }
+
   const tilemapCandidate = tilemapDiagnostics.selected;
   if (
     tilemapCandidate &&
@@ -880,10 +915,6 @@ function classifyAssetType(
     tilemapCandidate.columns >= 4
   ) {
     return parseAutomationAssetType("tilemap");
-  }
-
-  if (sheetLayout.confidence >= 0.65) {
-    return parseAutomationAssetType("animationSheet");
   }
 
   const ratio = image.width / image.height;

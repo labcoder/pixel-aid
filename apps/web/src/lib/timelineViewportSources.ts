@@ -34,3 +34,16 @@ export function coerceTimelineViewportSourceMode(
   const options = getTimelineViewportSourceOptions(availability);
   return options.some((option) => option.enabled && option.mode === mode) ? mode : options[0]?.mode ?? "input";
 }
+
+export function getPreferredTimelineViewportSourceMode(availability: {
+  hasInput: boolean;
+  hasOutput: boolean;
+}): TimelineViewportSourceMode {
+  if (availability.hasInput && availability.hasOutput) {
+    return "compare";
+  }
+  if (availability.hasOutput) {
+    return "output";
+  }
+  return "input";
+}

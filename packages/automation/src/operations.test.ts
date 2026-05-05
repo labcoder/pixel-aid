@@ -85,6 +85,33 @@ describe("automation operations", () => {
     }
   });
 
+  it("suggests regular Codex-style pet atlases as animation sheets before tilemap fallbacks", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-pet-atlas-"));
+    const input = path.join(dir, "astro-atlas.png");
+    try {
+      await encodePngFile(createAutomationPetAtlasImage(), input);
+
+      const result = await suggestFixSettings({ inputPath: input });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.options.assetType).toBe("animationSheet");
+      expect(result.value.options.mode).toBe("spriteSheet");
+      expect(result.value.options.targetWidth).toBe(1536);
+      expect(result.value.options.targetHeight).toBe(1872);
+      expect(result.value.options.grid.scaleX).toBe(1);
+      expect(result.value.options.grid.scaleY).toBe(1);
+      expect(result.value.options.sheet).toMatchObject({
+        frameWidth: 192,
+        frameHeight: 208,
+        rows: 9,
+        columns: 8
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("creates a deterministic non-destructive batch quality report", async () => {
     await withFixture(async ({ dir, input }) => {
       const second = path.join(dir, "background.png");
@@ -342,6 +369,39 @@ function createRepeatedTilemapImage(columns: number, rows: number, tileSize: num
   return image;
 }
 
+function createAutomationPetAtlasImage(): RGBAImage {
+  const columns = 8;
+  const rows = 9;
+  const frameWidth = 192;
+  const frameHeight = 208;
+  const image: RGBAImage = {
+    width: columns * frameWidth,
+    height: rows * frameHeight,
+    data: new Uint8ClampedArray(columns * frameWidth * rows * frameHeight * 4)
+  };
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * frameWidth;
+      const cellY = row * frameHeight;
+      const bob = row % 3;
+      fillRect(image, cellX + 72, cellY + 20 + bob, 48, 14, [0, 255, 0, 180]);
+      fillRect(image, cellX + 58, cellY + 42 + bob, 74, 62, [248, 248, 248, 255]);
+      fillRect(image, cellX + 66, cellY + 52 + bob, 58, 38, [8, 12, 24, 255]);
+      fillRect(image, cellX + 78, cellY + 66 + bob, 10, 8, [0, 220, 255, 255]);
+      fillRect(image, cellX + 104, cellY + 66 + bob, 10, 8, [0, 220, 255, 255]);
+      fillRect(image, cellX + 72, cellY + 104 + bob, 48, 48, [250, 250, 250, 255]);
+      fillRect(image, cellX + 84, cellY + 106 + bob, 24, 28, [0, 128, 255, 255]);
+      fillRect(image, cellX + 50, cellY + 120 + bob, 28, 46, [248, 248, 248, 255]);
+      fillRect(image, cellX + 116, cellY + 120 + bob, 28, 46, [248, 248, 248, 255]);
+      fillRect(image, cellX + 74, cellY + 152 + bob, 18, 42, [248, 248, 248, 255]);
+      fillRect(image, cellX + 104, cellY + 152 + bob, 18, 42, [248, 248, 248, 255]);
+    }
+  }
+
+  return image;
+}
+
 function createLowScaleBakedCheckerboardSprite(): RGBAImage {
   const scale = 3;
   const nativeWidth = 91;
@@ -378,6 +438,25 @@ function createLowScaleBakedCheckerboardSprite(): RGBAImage {
   fillScaledRect(image, scale, 39, 42, 13, 3, [22, 20, 31, 255]);
 
   return image;
+}
+
+function fillRect(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rgba: readonly [number, number, number, number],
+): void {
+  for (let py = y; py < y + height; py += 1) {
+    for (let px = x; px < x + width; px += 1) {
+      const offset = (py * image.width + px) * 4;
+      image.data[offset] = rgba[0];
+      image.data[offset + 1] = rgba[1];
+      image.data[offset + 2] = rgba[2];
+      image.data[offset + 3] = rgba[3];
+    }
+  }
 }
 
 function fillScaledRect(

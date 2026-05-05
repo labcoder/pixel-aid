@@ -58,4 +58,17 @@ describe("simple sprite controls", () => {
       })
     ).toBe("custom");
   });
+
+  test("uses keep size for consistent non-square sheet cells that match the input frame", () => {
+    expect(
+      getSimpleSheetCellSizeChoice({
+        rows: [
+          { cellWidth: 192, cellHeight: 208 },
+          { cellWidth: 192, cellHeight: 208 }
+        ],
+        fallbackWidth: 192,
+        fallbackHeight: 208
+      })
+    ).toBe("keep");
+  });
 });
