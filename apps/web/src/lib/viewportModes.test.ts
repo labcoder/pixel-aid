@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, isTimelineEditorViewMode } from "./viewportModes";
+import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, getPostFixViewMode, isTimelineEditorViewMode } from "./viewportModes";
 
 describe("viewport modes", () => {
   test("keeps compare available for single sprites", () => {
@@ -21,6 +21,10 @@ describe("viewport modes", () => {
     expect(getCanvasViewMode("timeline", true)).toBe("after");
     expect(getCanvasViewMode("timeline", false)).toBe("before");
     expect(getCanvasViewMode("split", true)).toBe("split");
+  });
+
+  test("switches to output view after a fix for spritesheets and sprites", () => {
+    expect(getPostFixViewMode()).toBe("after");
   });
 
   test("keeps timeline as a non-canvas editor surface", () => {

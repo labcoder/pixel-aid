@@ -86,6 +86,35 @@ function fillScaledRectForTest(
   }
 }
 
+function drawAstroLikeTinyFrame(image: RGBAImage, startX: number): void {
+  writePixel(image, startX + 1, 0, 245, 248, 252, 255);
+  writePixel(image, startX + 2, 0, 245, 248, 252, 255);
+  writePixel(image, startX + 0, 1, 0, 230, 0, 255);
+  writePixel(image, startX + 1, 1, 8, 16, 28, 255);
+  writePixel(image, startX + 2, 1, 0, 180, 255, 255);
+  writePixel(image, startX + 3, 1, 0, 180, 255, 255);
+  writePixel(image, startX + 0, 2, 0, 230, 0, 255);
+  writePixel(image, startX + 1, 2, 245, 248, 252, 255);
+  writePixel(image, startX + 2, 2, 0, 130, 232, 255);
+  writePixel(image, startX + 3, 2, 245, 248, 252, 255);
+  writePixel(image, startX + 1, 3, 8, 16, 28, 255);
+  writePixel(image, startX + 2, 3, 245, 248, 252, 255);
+}
+
+function countGreenMattePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const a = image.data[offset + 3]!;
+    if (a >= 16 && g >= 120 && g > r * 1.6 && g > b * 1.25) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 function blockySource(): RGBAImage {
   return imageFromPixels(4, [
     rgba(255, 0, 0),
@@ -198,6 +227,35 @@ function sheetLikeSource(): RGBAImage {
       const x = 92 + column * 58;
       drawBlock(image, x, row.y, 50, 44, 66, 68, 68, 255);
       drawBlock(image, x + 15, row.y + 8, 20, 28, 92, 160, 150, 255);
+    }
+  }
+
+  return image;
+}
+
+function codexPetAtlasLikeSource(): RGBAImage {
+  const columns = 8;
+  const rows = 9;
+  const frameWidth = 192;
+  const frameHeight = 208;
+  const image = createImage(columns * frameWidth, rows * frameHeight);
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * frameWidth;
+      const cellY = row * frameHeight;
+      const bob = row % 3;
+      drawBlock(image, cellX + 72, cellY + 20 + bob, 48, 14, 0, 255, 0, 180);
+      drawBlock(image, cellX + 58, cellY + 42 + bob, 74, 62, 248, 248, 248, 255);
+      drawBlock(image, cellX + 66, cellY + 52 + bob, 58, 38, 8, 12, 24, 255);
+      drawBlock(image, cellX + 78, cellY + 66 + bob, 10, 8, 0, 220, 255, 255);
+      drawBlock(image, cellX + 104, cellY + 66 + bob, 10, 8, 0, 220, 255, 255);
+      drawBlock(image, cellX + 72, cellY + 104 + bob, 48, 48, 250, 250, 250, 255);
+      drawBlock(image, cellX + 84, cellY + 106 + bob, 24, 28, 0, 128, 255, 255);
+      drawBlock(image, cellX + 50, cellY + 120 + bob, 28, 46, 248, 248, 248, 255);
+      drawBlock(image, cellX + 116, cellY + 120 + bob, 28, 46, 248, 248, 248, 255);
+      drawBlock(image, cellX + 74, cellY + 152 + bob, 18, 42, 248, 248, 248, 255);
+      drawBlock(image, cellX + 104, cellY + 152 + bob, 18, 42, 248, 248, 248, 255);
     }
   }
 
@@ -1437,6 +1495,25 @@ describe("sheet slicing", () => {
     expect(detection.confidence).toBeGreaterThan(0.75);
   });
 
+  test("detects regular Codex pet atlas grids with non-square source cells", () => {
+    const detection = detectSheetLayout(codexPetAtlasLikeSource());
+
+    expect(detection).toMatchObject({
+      frameWidth: 192,
+      frameHeight: 208,
+      rows: 9,
+      columns: 8,
+      margin: 0,
+      spacing: 0,
+      rowFrameCounts: Array.from({ length: 9 }, () => 8)
+    });
+    expect(detection.frames).toHaveLength(72);
+    expect(detection.frames[0]!.rect).toEqual({ x: 0, y: 0, w: 192, h: 208 });
+    expect(detection.frames[71]!.rect).toEqual({ x: 1344, y: 1664, w: 192, h: 208 });
+    expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual(Array.from({ length: 9 }, () => 8));
+    expect(detection.confidence).toBeGreaterThan(0.9);
+  });
+
   test("detects outlined sprite sheet cells when row borders form one wide segment", () => {
     const detection = detectSheetLayout(outlinedSheetWithLabels());
 
@@ -1895,6 +1972,52 @@ describe("fix pipeline", () => {
       fixedColorCount: 4,
       outputColorCount: 4
     });
+  });
+
+  test("same-size sheet cleanup removes green matte artifacts without downscaling frame detail", () => {
+    const source = createImage(8, 4);
+    drawAstroLikeTinyFrame(source, 0);
+    drawAstroLikeTinyFrame(source, 4);
+    const frames: SpriteFrame[] = [
+      {
+        name: "walk_000",
+        rect: { x: 0, y: 0, w: 4, h: 4 },
+        sourceRect: { x: 0, y: 0, w: 4, h: 4 },
+        pivot: { x: 2, y: 4 },
+        durationMs: 120
+      },
+      {
+        name: "walk_001",
+        rect: { x: 4, y: 0, w: 4, h: 4 },
+        sourceRect: { x: 4, y: 0, w: 4, h: 4 },
+        pivot: { x: 2, y: 4 },
+        durationMs: 120
+      }
+    ];
+
+    const result = fixImage(source, {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 8,
+      targetHeight: 4,
+      maxColors: 6,
+      paletteSettings: { mode: "auto", maxColors: 6, lockScope: "sheet", dithering: "none" },
+      grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: true,
+        denoiseStrength: 0
+      },
+      sheetFrames: frames
+    });
+
+    expect(countGreenMattePixels(result.image)).toBe(0);
+    expect(readPixel(result.image, 2, 1)).toEqual([0, 180, 255, 255]);
+    expect(readPixel(result.image, 6, 1)).toEqual([0, 180, 255, 255]);
   });
 
   test("legacy palette option behaves as fixed palette metadata", () => {

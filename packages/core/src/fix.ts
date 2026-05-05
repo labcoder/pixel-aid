@@ -187,25 +187,27 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
     sourceRects.push(sourceRect);
     const frameStartPercent = phasePercent(20, 65, index, frames.length);
     const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
-    const fixedFrame = downsampleBlocks(
-      contrastExpanded.image,
-      {
-        outputWidth: frame.rect.w,
-        outputHeight: frame.rect.h,
-        scaleX: sourceRect.w / frame.rect.w,
-        scaleY: sourceRect.h / frame.rect.h,
-        phaseX: sourceRect.x,
-        phaseY: sourceRect.y,
-        method: options.downscale,
-        alpha: options.alpha
-      },
-      {
-        runtime,
-        stage: "downsampling",
-        startPercent: frameStartPercent,
-        endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
-      }
-    );
+    const fixedFrame = isSameSizeFrameSource(sourceRect, frame.rect)
+      ? copyImageRect(contrastExpanded.image, sourceRect)
+      : downsampleBlocks(
+          contrastExpanded.image,
+          {
+            outputWidth: frame.rect.w,
+            outputHeight: frame.rect.h,
+            scaleX: sourceRect.w / frame.rect.w,
+            scaleY: sourceRect.h / frame.rect.h,
+            phaseX: sourceRect.x,
+            phaseY: sourceRect.y,
+            method: options.downscale,
+            alpha: options.alpha
+          },
+          {
+            runtime,
+            stage: "downsampling",
+            startPercent: frameStartPercent,
+            endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
+          }
+        );
     const cleanedFrame = cleanFixedImage(fixedFrame, options);
     alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
     morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
@@ -484,6 +486,33 @@ function pasteImage(source: RGBAImage, target: RGBAImage, rect: Rect): void {
     const targetOffset = ((rect.y + y) * target.width + rect.x) * 4;
     target.data.set(source.data.subarray(sourceOffset, sourceOffset + width * 4), targetOffset);
   }
+}
+
+function isSameSizeFrameSource(sourceRect: Rect, outputRect: Rect): boolean {
+  return sourceRect.w === outputRect.w && sourceRect.h === outputRect.h;
+}
+
+function copyImageRect(image: RGBAImage, rect: Rect): RGBAImage {
+  const out = createImage(rect.w, rect.h);
+  for (let y = 0; y < rect.h; y += 1) {
+    const sourceY = rect.y + y;
+    if (sourceY < 0 || sourceY >= image.height) {
+      continue;
+    }
+    for (let x = 0; x < rect.w; x += 1) {
+      const sourceX = rect.x + x;
+      if (sourceX < 0 || sourceX >= image.width) {
+        continue;
+      }
+      const sourceOffset = (sourceY * image.width + sourceX) * 4;
+      const targetOffset = (y * out.width + x) * 4;
+      out.data[targetOffset] = image.data[sourceOffset]!;
+      out.data[targetOffset + 1] = image.data[sourceOffset + 1]!;
+      out.data[targetOffset + 2] = image.data[sourceOffset + 2]!;
+      out.data[targetOffset + 3] = image.data[sourceOffset + 3]!;
+    }
+  }
+  return out;
 }
 
 function unionRects(rects: readonly Rect[]): Rect | undefined {

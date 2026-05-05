@@ -31,3 +31,7 @@ export function getCanvasViewMode(viewMode: EditorViewMode, hasOutput: boolean):
 
   return viewMode;
 }
+
+export function getPostFixViewMode(): EditorViewMode {
+  return "after";
+}

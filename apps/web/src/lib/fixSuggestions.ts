@@ -57,14 +57,19 @@ export type FixSettingSuggestion = {
 };
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
+  const atlasLayout = detectRegularAtlasLayout(image);
   let candidates = detectGridCandidates(image, { maxScale: 32 });
+  if (atlasLayout && atlasLayout.confidence >= 0.7) {
+    candidates = [createAtlasGridCandidate(image, atlasLayout), ...candidates];
+  }
   const initial = candidates[0];
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
-  const quickSheetLayoutScore = estimateSheetLayoutScore(image);
+  const quickSheetLayoutScore = Math.max(estimateSheetLayoutScore(image), atlasLayout?.confidence ?? 0);
   const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, quickSheetLayoutScore);
   const shouldAnalyzeSheet = shouldAnalyzeSheetSuggestion(image, initialMode, quickSheetLayoutScore);
-  const detectedSheetLayout = shouldAnalyzeSheet ? detectSheetLayout(image) : emptySheetLayoutDetection();
+  const rawDetectedSheetLayout = shouldAnalyzeSheet ? detectSheetLayout(image) : emptySheetLayoutDetection();
+  const detectedSheetLayout = chooseSheetLayoutDetection(rawDetectedSheetLayout, atlasLayout);
   const sheetConditioning =
     shouldAnalyzeSheet ? detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const sheetLayoutScore = Math.max(quickSheetLayoutScore, detectedSheetLayout.confidence);
@@ -425,8 +430,8 @@ function classifyAssetType(input: {
 function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number, scaleY: number): SheetLayoutDetection {
   const safeScaleX = Math.max(1, scaleX);
   const safeScaleY = Math.max(1, scaleY);
-  const frameWidth = snapNativeFrameSize(layout.frameWidth / safeScaleX);
-  const frameHeight = snapNativeFrameSize(layout.frameHeight / safeScaleY);
+  const frameWidth = safeScaleX === 1 ? layout.frameWidth : snapNativeFrameSize(layout.frameWidth / safeScaleX);
+  const frameHeight = safeScaleY === 1 ? layout.frameHeight : snapNativeFrameSize(layout.frameHeight / safeScaleY);
   const frames = packDetectedFrames(layout, frameWidth, frameHeight);
   const rowRects: Rect[] = layout.rowFrameCounts.map((frameCount, rowIndex) => ({
     x: 0,
@@ -644,6 +649,282 @@ function createPlausibleSingleSpriteGrid(image: Pick<RGBAImage, "width" | "heigh
     phaseY: 0,
     confidence: 0.35,
     reason: "Plausible single-sprite native size"
+  };
+}
+
+function createAtlasGridCandidate(image: Pick<RGBAImage, "width" | "height">, layout: SheetLayoutDetection): GridCandidate {
+  return {
+    outputWidth: image.width,
+    outputHeight: image.height,
+    scaleX: 1,
+    scaleY: 1,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: layout.confidence,
+    reason: `Regular ${layout.columns}x${layout.rows} atlas grid; keeping source frame size for cleanup-first processing.`
+  };
+}
+
+function chooseSheetLayoutDetection(detected: SheetLayoutDetection, atlas: SheetLayoutDetection | undefined): SheetLayoutDetection {
+  if (!atlas || atlas.confidence < 0.7) {
+    return detected;
+  }
+
+  if (detected.confidence >= atlas.confidence + 0.08 && detected.frames.length >= atlas.frames.length * 0.5) {
+    return detected;
+  }
+
+  return atlas;
+}
+
+function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | undefined {
+  if (image.width < 384 || image.height < 384) {
+    return undefined;
+  }
+
+  const sourceRatio = image.width / image.height;
+  if (sourceRatio < 0.55 || sourceRatio > 1.25) {
+    return undefined;
+  }
+
+  const background = estimateCornerColor(image);
+  let best: { columns: number; rows: number; frameWidth: number; frameHeight: number; score: number; activeRatio: number } | undefined;
+
+  for (let rows = 2; rows <= 12; rows += 1) {
+    if (image.height % rows !== 0) {
+      continue;
+    }
+    const frameHeight = image.height / rows;
+    if (frameHeight < 32 || frameHeight > 320) {
+      continue;
+    }
+
+    for (let columns = 4; columns <= 12; columns += 1) {
+      if (image.width % columns !== 0) {
+        continue;
+      }
+      const frameWidth = image.width / columns;
+      if (frameWidth < 32 || frameWidth > 320) {
+        continue;
+      }
+
+      const cellRatio = frameWidth / frameHeight;
+      if (cellRatio < 0.45 || cellRatio > 1.75) {
+        continue;
+      }
+
+      const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
+      if (occupancy.activeRatio < 0.5 || occupancy.activeCells < 8) {
+        continue;
+      }
+
+      const commonSizeBonus =
+        (commonNativeFrameSizes.includes(frameWidth as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0) +
+        (commonNativeFrameSizes.includes(frameHeight as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0);
+      const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
+      const codexPetBonus = codexPetAtlas ? 0.35 : 0;
+      const dimensionBonus = Math.min(0.2, Math.log2(Math.max(2, columns * rows)) / 30);
+      const frameCountBonus = Math.min(0.16, (columns * rows) / 72 * 0.16);
+      const aspectBonus = 0.16 - Math.min(0.16, Math.abs(Math.log(cellRatio)) * 0.12);
+      const score = codexPetAtlas ? 0.99 : Math.min(
+        0.96,
+        0.32 + occupancy.activeRatio * 0.22 + occupancy.consistency * 0.12 + commonSizeBonus + codexPetBonus + dimensionBonus + frameCountBonus + aspectBonus
+      );
+
+      if (!best || score > best.score) {
+        best = { columns, rows, frameWidth, frameHeight, score, activeRatio: occupancy.activeRatio };
+      }
+    }
+  }
+
+  if (!best || best.score < 0.7) {
+    return undefined;
+  }
+
+  return createRegularAtlasLayout({
+    columns: best.columns,
+    rows: best.rows,
+    frameWidth: best.frameWidth,
+    frameHeight: best.frameHeight,
+    confidence: best.score,
+    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
+  });
+}
+
+function createRegularAtlasLayout({
+  columns,
+  rows,
+  frameWidth,
+  frameHeight,
+  confidence,
+  reason
+}: {
+  columns: number;
+  rows: number;
+  frameWidth: number;
+  frameHeight: number;
+  confidence: number;
+  reason: string;
+}): SheetLayoutDetection {
+  const frames: SpriteFrame[] = [];
+  const rowFrameCounts = Array.from({ length: rows }, () => columns);
+  const rowRects: Rect[] = [];
+  const rowAnimations = [];
+  const rowLabels = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    const rowName = `row_${row + 1}`;
+    const frameNames: string[] = [];
+    rowLabels.push({
+      rowIndex: row,
+      name: rowName,
+      rawText: rowName,
+      confidence: 0.82,
+      rect: { x: 0, y: row * frameHeight, w: 0, h: frameHeight }
+    });
+    rowRects.push({ x: 0, y: row * frameHeight, w: columns * frameWidth, h: frameHeight });
+
+    for (let column = 0; column < columns; column += 1) {
+      const name = `${rowName}_${String(column).padStart(3, "0")}`;
+      frameNames.push(name);
+      frames.push({
+        name,
+        rect: { x: column * frameWidth, y: row * frameHeight, w: frameWidth, h: frameHeight },
+        sourceRect: { x: column * frameWidth, y: row * frameHeight, w: frameWidth, h: frameHeight },
+        pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
+        durationMs: 120,
+        tags: [rowName]
+      });
+    }
+
+    rowAnimations.push({
+      name: rowName,
+      frameNames,
+      loop: true,
+      fps: 8,
+      direction: "forward" as const
+    });
+  }
+
+  return {
+    frameWidth,
+    frameHeight,
+    rows,
+    columns,
+    margin: 0,
+    spacing: 0,
+    frames,
+    rowRects,
+    rowFrameCounts,
+    rowAnimations,
+    rowLabels,
+    confidence,
+    reason,
+    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."],
+    diagnostics: {
+      rowConfidence: {
+        label: "high",
+        rowCount: rows,
+        averageBandHeight: frameHeight,
+        heightSpreadRatio: 0
+      },
+      columnConfidence: {
+        label: "high",
+        columnCount: columns,
+        pitchPx: frameWidth,
+        maxCenterDriftPx: 0,
+        mergedComponentCount: 0
+      },
+      conditioning: emptySheetConditioning(),
+      notes: [reason]
+    }
+  };
+}
+
+function measureAtlasOccupancy(
+  image: RGBAImage,
+  columns: number,
+  rows: number,
+  frameWidth: number,
+  frameHeight: number,
+  background: { r: number; g: number; b: number; a: number }
+): { activeCells: number; activeRatio: number; consistency: number } {
+  const ratios: number[] = [];
+  const sampleColumns = Math.min(24, Math.max(8, Math.floor(frameWidth / 8)));
+  const sampleRows = Math.min(24, Math.max(8, Math.floor(frameHeight / 8)));
+  const threshold = 54;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      let active = 0;
+      let total = 0;
+      const startX = column * frameWidth;
+      const startY = row * frameHeight;
+
+      for (let sy = 0; sy < sampleRows; sy += 1) {
+        const y = Math.min(image.height - 1, startY + Math.floor((sy + 0.5) * frameHeight / sampleRows));
+        for (let sx = 0; sx < sampleColumns; sx += 1) {
+          const x = Math.min(image.width - 1, startX + Math.floor((sx + 0.5) * frameWidth / sampleColumns));
+          const offset = (y * image.width + x) * 4;
+          const distance =
+            Math.abs(image.data[offset]! - background.r) +
+            Math.abs(image.data[offset + 1]! - background.g) +
+            Math.abs(image.data[offset + 2]! - background.b) +
+            Math.abs(image.data[offset + 3]! - background.a);
+          if (distance > threshold) {
+            active += 1;
+          }
+          total += 1;
+        }
+      }
+
+      ratios.push(active / Math.max(1, total));
+    }
+  }
+
+  const activeRatios = ratios.filter((ratio) => ratio >= 0.025);
+  const mean = activeRatios.reduce((sum, ratio) => sum + ratio, 0) / Math.max(1, activeRatios.length);
+  const variance = activeRatios.reduce((sum, ratio) => sum + Math.abs(ratio - mean), 0) / Math.max(1, activeRatios.length);
+
+  return {
+    activeCells: activeRatios.length,
+    activeRatio: activeRatios.length / Math.max(1, ratios.length),
+    consistency: Math.max(0, 1 - variance / Math.max(0.01, mean))
+  };
+}
+
+function estimateCornerColor(image: RGBAImage): { r: number; g: number; b: number; a: number } {
+  const sampleSize = Math.max(2, Math.min(12, Math.floor(Math.min(image.width, image.height) / 48)));
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let a = 0;
+  let count = 0;
+
+  for (let y = 0; y < sampleSize; y += 1) {
+    for (let x = 0; x < sampleSize; x += 1) {
+      const offsets = [
+        (y * image.width + x) * 4,
+        (y * image.width + image.width - sampleSize + x) * 4,
+        ((image.height - sampleSize + y) * image.width + x) * 4,
+        ((image.height - sampleSize + y) * image.width + image.width - sampleSize + x) * 4
+      ];
+      for (let i = 0; i < offsets.length; i += 1) {
+        const offset = offsets[i]!;
+        r += image.data[offset]!;
+        g += image.data[offset + 1]!;
+        b += image.data[offset + 2]!;
+        a += image.data[offset + 3]!;
+        count += 1;
+      }
+    }
+  }
+
+  return {
+    r: r / Math.max(1, count),
+    g: g / Math.max(1, count),
+    b: b / Math.max(1, count),
+    a: a / Math.max(1, count)
   };
 }
 

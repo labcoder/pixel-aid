@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   coerceTimelineViewportSourceMode,
+  getPreferredTimelineViewportSourceMode,
   getTimelineViewportSourceOptions,
   type TimelineViewportSourceMode
 } from "./timelineViewportSources";
@@ -24,6 +25,12 @@ describe("timeline viewport sources", () => {
     expect(coerceTimelineViewportSourceMode("compare", { hasInput: true, hasOutput: false })).toBe("input");
     expect(coerceTimelineViewportSourceMode("output", { hasInput: true, hasOutput: true })).toBe("output");
     expect(coerceTimelineViewportSourceMode("compare", { hasInput: false, hasOutput: false })).toBe("input");
+  });
+
+  test("prefers compare once a fixed timeline output exists", () => {
+    expect(getPreferredTimelineViewportSourceMode({ hasInput: true, hasOutput: true })).toBe("compare");
+    expect(getPreferredTimelineViewportSourceMode({ hasInput: true, hasOutput: false })).toBe("input");
+    expect(getPreferredTimelineViewportSourceMode({ hasInput: false, hasOutput: true })).toBe("output");
   });
 
   test("keeps source mode type narrow", () => {

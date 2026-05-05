@@ -312,6 +312,7 @@ import {
   simpleOutlineChoices,
   simpleResizeChoices,
   simpleSheetCellSizeChoices,
+  simpleSheetKeepSizeChoice,
   type SimpleAlphaChoice,
   type SimpleDenoiseChoice,
   type SimpleOutlineChoice
@@ -320,6 +321,7 @@ import { createOperationErrorReport, createWebDiagnosticReport, type OperationEr
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
 import {
   coerceTimelineViewportSourceMode,
+  getPreferredTimelineViewportSourceMode,
   getTimelineViewportSourceOptions,
   type TimelineViewportSourceMode
 } from "./lib/timelineViewportSources";
@@ -327,7 +329,7 @@ import { createTileRepeatPreviewLayout, getTilePreviewFrame } from "./lib/tileRe
 import { formatSceneDiagnosticsSummary, formatTilesetDiagnosticsSummary } from "./lib/tileDiagnosticsView";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
-import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, type EditorViewMode } from "./lib/viewportModes";
+import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, getPostFixViewMode, type EditorViewMode } from "./lib/viewportModes";
 import { getViewportNativeReadout } from "./lib/viewportReadout";
 
 type AppMenuId = "file" | "view" | "export";
@@ -2990,7 +2992,7 @@ export function App() {
     setSelectedOutlineSourceColors(resolvedOutlineSourceColors);
     setContrastExpansionEnabled(resolvedContrastExpansionEnabled);
     setRecommendationConfidence(suggestion.confidence);
-    setViewMode(resolvedMode === "single" ? "before" : "timeline");
+    setViewMode("before");
     setSuggestionReason(
       formatSuggestionReason(
         suggestion.reason,
@@ -3212,7 +3214,7 @@ export function App() {
       setSelectedOutlineSourceColors(outlineSourceColors);
       setContrastExpansionEnabled(cleanupContrast?.enabled ?? false);
       setRecommendationConfidence(1);
-      setViewMode(settings.mode === "single" ? "before" : "timeline");
+      setViewMode("before");
       setSuggestionReason(`Loaded sample workflow: ${sample.failureMode}`);
     },
     [applyAlphaSettings, initialSettings.outlineAlpha, initialSettings.outlineColor, initialSettings.outlineSize, initialSettings.palettePreset, setPaletteBudget]
@@ -3445,7 +3447,10 @@ export function App() {
         .then((result) => {
           setFixResult(result);
           setLastOperationError(null);
-          setViewMode(sheetMode ? "timeline" : "after");
+          setViewMode(getPostFixViewMode());
+          if (sheetMode) {
+            setTimelineViewportSourceMode(getPreferredTimelineViewportSourceMode({ hasInput: sourceTimelineFrames.length > 0, hasOutput: true }));
+          }
           appendLog(
             `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
           );
@@ -3488,7 +3493,8 @@ export function App() {
     recordOperationError,
     selectedAsset,
     sheetFrames.length,
-    sheetMode
+    sheetMode,
+    sourceTimelineFrames.length
   ]);
 
   const applyTilesetRepairs = useCallback(async () => {
@@ -3871,6 +3877,40 @@ export function App() {
     },
     [appendLog, editableSheetFrames, sheetMargin, sheetRowAnimations, sheetSpacing]
   );
+
+  const applySimpleSheetKeepSize = useCallback(() => {
+    if (sheetRowAnimations.length > 0) {
+      setDetectedSheetFrames((current) => {
+        const baseFrames = current.length > 0 ? current : editableSheetFrames;
+        const framesByName = new Map(baseFrames.map((frame) => [frame.name, frame]));
+        const next = sheetRowAnimations.reduce((frames, animation) => {
+          const rowFrames = animation.frameNames.map((name) => framesByName.get(name)).filter((frame): frame is SpriteFrame => frame !== undefined);
+          const rowWidth = Math.max(1, ...rowFrames.map((frame) => (frame.sourceRect ?? frame.rect).w));
+          const rowHeight = Math.max(1, ...rowFrames.map((frame) => (frame.sourceRect ?? frame.rect).h));
+          return resizeAnimationCells({
+            frames,
+            animations: sheetRowAnimations,
+            animationName: animation.name,
+            cellWidth: rowWidth,
+            cellHeight: rowHeight,
+            margin: sheetMargin,
+            spacing: sheetSpacing
+          });
+        }, baseFrames);
+        detectedSheetFramesRef.current = next;
+        detectedRowAnimationsRef.current = sheetRowAnimations;
+        setDetectedRowAnimations(sheetRowAnimations);
+        return next;
+      });
+    } else {
+      setFrameWidth(clampSheetInteger(frameWidth, 1, 1024));
+      setFrameHeight(clampSheetInteger(frameHeight, 1, 1024));
+    }
+
+    setFixResult(null);
+    setIsPlaying(false);
+    appendLog("Set sheet output cells to keep input frame size");
+  }, [appendLog, editableSheetFrames, frameHeight, frameWidth, sheetMargin, sheetRowAnimations, sheetSpacing]);
 
   const updateManualFrameWidth = useCallback(
     (value: number) => {
@@ -7320,6 +7360,7 @@ export function App() {
                 maxColors={maxColors}
                 alphaChoice={getSimpleAlphaChoice(alpha)}
                 onCellSizeChange={applySimpleSheetCellSize}
+                onKeepSize={applySimpleSheetKeepSize}
                 onCustomCellSize={() => setShowAdvancedControls(true)}
                 onAlphaChange={applySimpleAlphaChoice}
                 onMaxColorsChange={setPaletteBudget}
@@ -8392,6 +8433,7 @@ function SimpleSheetControls({
   maxColors,
   alphaChoice,
   onCellSizeChange,
+  onKeepSize,
   onCustomCellSize,
   onAlphaChange,
   onMaxColorsChange
@@ -8400,6 +8442,7 @@ function SimpleSheetControls({
   maxColors: number;
   alphaChoice: SimpleAlphaChoice;
   onCellSizeChange: (value: number) => void;
+  onKeepSize: () => void;
   onCustomCellSize: () => void;
   onAlphaChange: (value: SimpleAlphaChoice) => void;
   onMaxColorsChange: (value: number) => void;
@@ -8409,11 +8452,16 @@ function SimpleSheetControls({
       <SimpleButtonGroup
         label="Output cell"
         options={[
+          simpleSheetKeepSizeChoice,
           ...simpleSheetCellSizeChoices.map((size) => ({ id: String(size), label: String(size) })),
           { id: "custom", label: "Custom" }
         ]}
         value={cellSizeChoice}
         onChange={(value) => {
+          if (value === simpleSheetKeepSizeChoice.id) {
+            onKeepSize();
+            return;
+          }
           if (value === "custom") {
             onCustomCellSize();
             return;

@@ -68,6 +68,7 @@ type BinaryTemplate = {
 };
 
 const labelConfidenceThreshold = 0.72;
+const regularAtlasNativeSizes = [16, 24, 32, 48, 64, 96, 128, 192, 208, 256] as const;
 
 const rowLabelTemplates: LabelTemplate[] = [
   { name: "idle", rawText: "IDLE", text: "IDLE" },
@@ -126,6 +127,7 @@ export function sliceSheetFrames(options: SheetSliceOptions): SpriteFrame[] {
 export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   const background = sampleCornerBackground(image);
   const sourceConditioning = analyzeSheetConditioning(image);
+  const regularAtlas = detectRegularAtlasLayout(image, background, sourceConditioning);
   const rowCounts = new Uint16Array(image.height);
   const rowThreshold = Math.max(4, Math.floor(image.width * 0.018));
 
@@ -165,7 +167,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     : alignDetectedRowsToSharedColumns(footerFilter.rows);
 
   if (rawRows.length === 0) {
-    return emptyDetection("No repeated sheet rows detected");
+    return regularAtlas ?? emptyDetection("No repeated sheet rows detected");
   }
 
   const frameSizeRows = selectFrameSizeReferenceRows(rawRows);
@@ -275,7 +277,7 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     conditioning
   });
 
-  return {
+  const detectedLayout: SheetLayoutDetection = {
     frameWidth,
     frameHeight,
     rows,
@@ -291,6 +293,283 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     diagnostics,
     reason: `Detected ${rows} sprite-sheet row${rows === 1 ? "" : "s"} with up to ${columns} frame${columns === 1 ? "" : "s"} per row`,
     warnings
+  };
+
+  return preferRegularAtlasLayout(detectedLayout, regularAtlas);
+}
+
+function preferRegularAtlasLayout(detected: SheetLayoutDetection, regularAtlas: SheetLayoutDetection | undefined): SheetLayoutDetection {
+  if (!regularAtlas || regularAtlas.confidence < 0.7) {
+    return detected;
+  }
+
+  if (detected.confidence >= regularAtlas.confidence + 0.08 && detected.frames.length >= regularAtlas.frames.length * 0.5) {
+    return detected;
+  }
+
+  return regularAtlas;
+}
+
+function detectRegularAtlasLayout(
+  image: RGBAImage,
+  background: [number, number, number, number],
+  conditioning: SheetConditioningDiagnostics,
+): SheetLayoutDetection | undefined {
+  if (image.width < 384 || image.height < 384) {
+    return undefined;
+  }
+
+  const sourceRatio = image.width / image.height;
+  if (sourceRatio < 0.55 || sourceRatio > 1.25) {
+    return undefined;
+  }
+
+  let best:
+    | {
+        columns: number;
+        rows: number;
+        frameWidth: number;
+        frameHeight: number;
+        score: number;
+      }
+    | undefined;
+
+  for (let rows = 2; rows <= 12; rows += 1) {
+    if (image.height % rows !== 0) {
+      continue;
+    }
+    const frameHeight = image.height / rows;
+    if (frameHeight < 32 || frameHeight > 320) {
+      continue;
+    }
+
+    for (let columns = 4; columns <= 12; columns += 1) {
+      if (image.width % columns !== 0) {
+        continue;
+      }
+      const frameWidth = image.width / columns;
+      if (frameWidth < 32 || frameWidth > 320) {
+        continue;
+      }
+
+      const cellRatio = frameWidth / frameHeight;
+      if (cellRatio < 0.45 || cellRatio > 1.75) {
+        continue;
+      }
+
+      const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
+      if (occupancy.activeRatio < 0.5 || occupancy.activeCells < 8 || occupancy.signatureRepeatRatio < 0.3) {
+        continue;
+      }
+
+      const commonSizeBonus =
+        (regularAtlasNativeSizes.includes(frameWidth as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0) +
+        (regularAtlasNativeSizes.includes(frameHeight as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0);
+      const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
+      const dimensionBonus = Math.min(0.2, Math.log2(Math.max(2, columns * rows)) / 30);
+      const frameCountBonus = Math.min(0.16, (columns * rows) / 72 * 0.16);
+      const aspectBonus = 0.16 - Math.min(0.16, Math.abs(Math.log(cellRatio)) * 0.12);
+      const score = codexPetAtlas
+        ? 0.99
+        : Math.min(
+            0.96,
+            0.24 +
+              occupancy.activeRatio * 0.18 +
+              occupancy.consistency * 0.1 +
+              occupancy.signatureRepeatRatio * 0.18 +
+              commonSizeBonus +
+              dimensionBonus +
+              frameCountBonus +
+              aspectBonus
+          );
+
+      if (!best || score > best.score) {
+        best = { columns, rows, frameWidth, frameHeight, score };
+      }
+    }
+  }
+
+  if (!best || best.score < 0.7) {
+    return undefined;
+  }
+
+  return createRegularAtlasLayout({
+    columns: best.columns,
+    rows: best.rows,
+    frameWidth: best.frameWidth,
+    frameHeight: best.frameHeight,
+    confidence: best.score,
+    conditioning,
+    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
+  });
+}
+
+function createRegularAtlasLayout({
+  columns,
+  rows,
+  frameWidth,
+  frameHeight,
+  confidence,
+  conditioning,
+  reason
+}: {
+  columns: number;
+  rows: number;
+  frameWidth: number;
+  frameHeight: number;
+  confidence: number;
+  conditioning: SheetConditioningDiagnostics;
+  reason: string;
+}): SheetLayoutDetection {
+  const frames: SpriteFrame[] = [];
+  const rowFrameCounts = Array.from({ length: rows }, () => columns);
+  const rowRects: Rect[] = [];
+  const rowLabels: SheetRowLabel[] = [];
+  const rowAnimations = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    const rowName = `row_${row + 1}`;
+    const frameNames: string[] = [];
+    const rowY = row * frameHeight;
+    rowRects.push({ x: 0, y: rowY, w: columns * frameWidth, h: frameHeight });
+    rowLabels.push({
+      rowIndex: row,
+      name: rowName,
+      rawText: rowName,
+      confidence: 0.82,
+      rect: { x: 0, y: rowY, w: 0, h: frameHeight }
+    });
+
+    for (let column = 0; column < columns; column += 1) {
+      const x = column * frameWidth;
+      const name = `${rowName}_${column.toString().padStart(3, "0")}`;
+      frameNames.push(name);
+      frames.push({
+        name,
+        rect: { x, y: rowY, w: frameWidth, h: frameHeight },
+        sourceRect: { x, y: rowY, w: frameWidth, h: frameHeight },
+        pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
+        durationMs: 120,
+        tags: [rowName]
+      });
+    }
+
+    rowAnimations.push({
+      name: rowName,
+      frameNames,
+      fps: 8,
+      loop: true
+    });
+  }
+
+  const diagnostics = createSheetDiagnostics({
+    rows,
+    columns,
+    frameHeights: Array.from({ length: rows }, () => frameHeight),
+    pitchPx: frameWidth,
+    mergedComponentCount: 0,
+    maxCenterDriftPx: 0,
+    usedComponentMerging: false,
+    usedDriftFitting: false,
+    usedOutlinedCells: false,
+    usedContentCentering: false,
+    labelNames: [],
+    labelRowCount: 0,
+    conditioning
+  });
+  diagnostics.notes.push(reason);
+
+  return {
+    frameWidth,
+    frameHeight,
+    rows,
+    columns,
+    margin: 0,
+    spacing: 0,
+    frames,
+    rowRects,
+    rowFrameCounts,
+    rowAnimations,
+    rowLabels,
+    confidence,
+    diagnostics,
+    reason,
+    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."]
+  };
+}
+
+function measureAtlasOccupancy(
+  image: RGBAImage,
+  columns: number,
+  rows: number,
+  frameWidth: number,
+  frameHeight: number,
+  background: [number, number, number, number],
+): { activeCells: number; activeRatio: number; consistency: number; signatureRepeatRatio: number } {
+  const ratios: number[] = [];
+  const signatures: string[] = [];
+  const sampleColumns = Math.min(24, Math.max(8, Math.floor(frameWidth / 8)));
+  const sampleRows = Math.min(24, Math.max(8, Math.floor(frameHeight / 8)));
+  const threshold = 54;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      let active = 0;
+      let total = 0;
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      const startX = column * frameWidth;
+      const startY = row * frameHeight;
+
+      for (let sy = 0; sy < sampleRows; sy += 1) {
+        const y = Math.min(image.height - 1, startY + Math.floor(((sy + 0.5) * frameHeight) / sampleRows));
+        for (let sx = 0; sx < sampleColumns; sx += 1) {
+          const x = Math.min(image.width - 1, startX + Math.floor(((sx + 0.5) * frameWidth) / sampleColumns));
+          const offset = (y * image.width + x) * 4;
+          const distance =
+            Math.abs(image.data[offset]! - background[0]) +
+            Math.abs(image.data[offset + 1]! - background[1]) +
+            Math.abs(image.data[offset + 2]! - background[2]) +
+            Math.abs(image.data[offset + 3]! - background[3]);
+          if (distance > threshold) {
+            active += 1;
+            r += image.data[offset]!;
+            g += image.data[offset + 1]!;
+            b += image.data[offset + 2]!;
+          }
+          total += 1;
+        }
+      }
+
+      const ratio = active / Math.max(1, total);
+      ratios.push(ratio);
+      if (ratio >= 0.025) {
+        const invActive = 1 / Math.max(1, active);
+        signatures.push([
+          Math.round((r * invActive) / 32),
+          Math.round((g * invActive) / 32),
+          Math.round((b * invActive) / 32),
+          Math.round(ratio * 8)
+        ].join(","));
+      }
+    }
+  }
+
+  const activeRatios = ratios.filter((ratio) => ratio >= 0.025);
+  const mean = activeRatios.reduce((sum, ratio) => sum + ratio, 0) / Math.max(1, activeRatios.length);
+  const variance = activeRatios.reduce((sum, ratio) => sum + Math.abs(ratio - mean), 0) / Math.max(1, activeRatios.length);
+  const signatureCounts = new Map<string, number>();
+  for (const signature of signatures) {
+    signatureCounts.set(signature, (signatureCounts.get(signature) ?? 0) + 1);
+  }
+  const repeatedSignatures = signatures.filter((signature) => (signatureCounts.get(signature) ?? 0) > 1).length;
+
+  return {
+    activeCells: activeRatios.length,
+    activeRatio: activeRatios.length / Math.max(1, ratios.length),
+    consistency: Math.max(0, 1 - variance / Math.max(0.01, mean)),
+    signatureRepeatRatio: repeatedSignatures / Math.max(1, signatures.length)
   };
 }
 

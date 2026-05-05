@@ -203,6 +203,54 @@ function darkLandscapePresentationSheetLikeSource(): RGBAImage {
   return image;
 }
 
+function codexPetAtlasLikeSource(): RGBAImage {
+  const cellWidth = 192;
+  const cellHeight = 208;
+  const columns = 8;
+  const rows = 9;
+  const image = blankImage(cellWidth * columns, cellHeight * rows);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 0;
+    image.data[offset + 1] = 0;
+    image.data[offset + 2] = 0;
+    image.data[offset + 3] = 255;
+  }
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * cellWidth;
+      const cellY = row * cellHeight;
+      if ((row === 0 && column === 7) || (row === 3 && column > 4)) {
+        continue;
+      }
+
+      // Baked AI matte artifacts connect across cells and should not make the
+      // atlas look like one tall background.
+      drawRect(image, cellX + 8, cellY + 112, cellWidth - 16, 8, [0, 235, 0, 255]);
+      drawRect(image, cellX + 48, cellY + 120, 112, 20, [0, 130, 20, 255]);
+
+      const poseDrift = (row + column) % 5;
+      const bodyX = cellX + 56 + poseDrift;
+      const bodyY = cellY + 34 + (row % 3);
+      drawRect(image, bodyX + 22, bodyY, 72, 56, [244, 248, 250, 255]);
+      drawRect(image, bodyX + 30, bodyY + 10, 56, 34, [8, 16, 28, 255]);
+      drawRect(image, bodyX + 44, bodyY + 24, 8, 6, [20, 190, 255, 255]);
+      drawRect(image, bodyX + 66, bodyY + 24, 8, 6, [20, 190, 255, 255]);
+      drawRect(image, bodyX + 36, bodyY + 54, 44, 48, [244, 248, 250, 255]);
+      drawRect(image, bodyX + 44, bodyY + 58, 28, 28, [0, 130, 232, 255]);
+      drawRect(image, bodyX + 22, bodyY + 88, 18, 42, [244, 248, 250, 255]);
+      drawRect(image, bodyX + 78, bodyY + 88, 18, 42, [244, 248, 250, 255]);
+      drawRect(image, bodyX + 12, bodyY + 64, 16, 36, [0, 130, 232, 255]);
+      drawRect(image, bodyX + 90, bodyY + 64, 16, 36, [0, 130, 232, 255]);
+      drawRect(image, bodyX + 18, bodyY - 6, 82, 4, [0, 130, 232, 255]);
+      drawRect(image, bodyX + 96, bodyY - 18, 5, 18, [244, 248, 250, 255]);
+      drawRect(image, bodyX + 92, bodyY - 26, 14, 14, [20, 190, 255, 255]);
+    }
+  }
+
+  return image;
+}
+
 function lowScaleBakedCheckerboardPandaSource(): RGBAImage {
   const scale = 3;
   const nativeWidth = 91;
@@ -743,6 +791,20 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.sheetLayout?.rowFrameCounts).toEqual([6, 6]);
     expect(suggestion.categoryReason).toMatch(/animation|sheet|timeline/i);
+  });
+
+  test("classifies Codex pet atlas spritesheets before portrait or background fallbacks", () => {
+    const suggestion = suggestFixSettings(codexPetAtlasLikeSource());
+
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.sheetLayout).toMatchObject({
+      frameWidth: 192,
+      frameHeight: 208,
+      rows: 9,
+      columns: 8
+    });
+    expect(suggestion.categoryReason).toMatch(/atlas|animation|sheet|timeline/i);
   });
 
   test("keeps detected cells for single-row dither-bridged sheets", () => {
