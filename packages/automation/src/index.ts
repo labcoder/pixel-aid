@@ -9,6 +9,7 @@ export {
 export {
   decodeJpegFile,
   decodePngFile,
+  decodeWebpFile,
   encodePngFile,
   readImageFile,
   readRgbaImageFile,

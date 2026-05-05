@@ -94,6 +94,8 @@ describe("pixelaid CLI", () => {
 
       expect(code).toBe(0);
       expect(body.result.files.map((file: { kind: string }) => file.kind)).toEqual(["image", "manifest"]);
+      expect(body.result.result?.image).toMatchObject({ width: 2, height: 2, dataByteLength: 16 });
+      expect(body.result.result?.image.data).toBeUndefined();
       await expect(stat(output)).resolves.toBeTruthy();
       const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
       expect(manifestJson.meta.assetType).toBe("sprite");
@@ -261,7 +263,7 @@ describe("pixelaid CLI", () => {
     });
   });
 
-  it("batch fixes supported PNG and JPEG sources from a folder", async () => {
+  it("batch fixes supported PNG, JPEG, and WebP sources from a folder", async () => {
     await withFixture(async ({ dir, input }) => {
       const assetsDir = path.join(dir, "assets");
       await mkdir(assetsDir);
@@ -272,6 +274,7 @@ describe("pixelaid CLI", () => {
         height: fixture.height,
         data: Buffer.from(fixture.data),
       }, 100).data);
+      await writeFile(path.join(assetsDir, "pet.webp"), tinyWebpBytes());
 
       const capture = createCapture();
       const outDir = path.join(dir, "batch-out");
@@ -294,10 +297,11 @@ describe("pixelaid CLI", () => {
 
       expect(code).toBe(0);
       expect(body.command).toBe("batch");
-      expect(body.result.summary).toMatchObject({ inputCount: 2, successCount: 2, failureCount: 0 });
-      expect(body.result.items.map((item: { inputPath: string }) => path.basename(item.inputPath))).toEqual(["enemy.jpeg", "hero.png"]);
+      expect(body.result.summary).toMatchObject({ inputCount: 3, successCount: 3, failureCount: 0 });
+      expect(body.result.items.map((item: { inputPath: string }) => path.basename(item.inputPath))).toEqual(["enemy.jpeg", "hero.png", "pet.webp"]);
       await expect(stat(path.join(outDir, "enemy.fixed.png"))).resolves.toBeTruthy();
       await expect(stat(path.join(outDir, "hero.fixed.png"))).resolves.toBeTruthy();
+      await expect(stat(path.join(outDir, "pet.fixed.png"))).resolves.toBeTruthy();
     });
   });
 
@@ -473,6 +477,9 @@ type CliJson = {
     image?: { width: number; height: number };
     options?: { assetType: string; targetWidth?: number; targetHeight?: number };
     files?: Array<{ kind: string; relativePath: string }>;
+    result?: {
+      image: { width: number; height: number; dataByteLength: number; data?: unknown };
+    };
     manifest?: { frames: unknown[] };
     palette?: string[];
     summary?: {
@@ -511,4 +518,8 @@ function createFixtureImage(): RGBAImage {
       0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255,
     ]),
   };
+}
+
+function tinyWebpBytes(): Buffer {
+  return Buffer.from("UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA", "base64");
 }

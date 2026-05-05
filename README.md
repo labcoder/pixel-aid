@@ -47,7 +47,7 @@ apps/desktop          Tauri desktop shell around the web editor
 packages/core         Pure TypeScript image-processing algorithms
 packages/worker       Web Worker protocol and fix pipeline wrapper
 packages/exporters    Generic JSON manifest exporter
-packages/automation   Node-safe automation operations, PNG/JPEG input IO, PNG output, and safe writes
+packages/automation   Node-safe automation operations, PNG/JPEG/WebP input IO, PNG output, and safe writes
 packages/cli          PixelAid CLI commands for local and batch workflows
 packages/mcp          MCP-ready schemas and direct tool handlers
 packages/shared       Shared types, constants, and manifest contracts
@@ -88,8 +88,8 @@ Separate commercial terms may be available from Mighty Games for closed-source e
 
 Automation workflow:
 
-1. Run `pixelaid inspect input.png --json` or `pixelaid inspect generated.jpg --json` to get source format, dimensions, palette counts, alpha stats, grid candidates, sheet detection, and suggested settings.
-2. Run `pixelaid report input.png more.jpg --json` when an agent or script needs ranked quality findings and setting recommendations before changing files.
+1. Run `pixelaid inspect input.png --json`, `pixelaid inspect generated.jpg --json`, or `pixelaid inspect sheet.webp --json` to get source format, dimensions, palette counts, alpha stats, grid candidates, sheet detection, and suggested settings.
+2. Run `pixelaid report input.png more.jpg sheet.webp --json` when an agent or script needs ranked quality findings and setting recommendations before changing files.
 3. Run `pixelaid suggest input.png --asset-type sprite --target 64x64 --json` when an agent or script needs normalized settings without writing files.
 4. Run `pixelaid fix`, `pixelaid fix-sheet`, `pixelaid palette`, or `pixelaid export` to produce PNG, manifest, palette, engine sidecars, and optional ZIP output. For quick local validation, build the CLI and run `node packages/cli/dist/bin.cjs fix generated.jpg --out fixed.png --auto --asset-type sprite --json`.
 5. Use `@pixelaid/mcp` tool definitions, direct handlers, or `npm run mcp:serve` for stdio MCP agent integrations without launching the editor.
@@ -144,8 +144,8 @@ Processing:
 
 Automation:
 
-- `@pixelaid/automation` wraps core/exporter operations for Node: PNG/JPEG input decode with format metadata, PNG encode, inspect, quality reports, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
-- `@pixelaid/cli` provides `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, direct bundled execution, `fix --auto`, explicit frame metadata support, palette strategy/dithering options, cleanup/outline validation flags, engine targets, and optional ZIP bundling.
+- `@pixelaid/automation` wraps core/exporter operations for Node: PNG/JPEG/WebP input decode with format metadata, PNG encode, inspect, quality reports, suggest, fix, fix-sheet, palette extraction, engine bundle export, safe no-overwrite output planning, and stable JSON error envelopes.
+- `@pixelaid/cli` provides `inspect`, `report`, `suggest`, `fix`, `fix-sheet`, `palette`, and `export` commands with `--json`, deterministic exit codes, direct bundled execution, `fix --auto`, explicit frame metadata support, palette strategy/dithering options, cleanup/outline validation flags, engine targets, optional ZIP bundling, and sanitized fix summaries that omit raw RGBA buffers from stdout.
 - `@pixelaid/mcp` provides MCP-ready tool definitions, direct handlers, and a bundled stdio server process for `inspect_image`, `quality_report`, `suggest_fix_settings`, `fix_sprite`, `fix_sprite_sheet`, `detect_sprite_sheet`, `extract_palette`, and `export_engine_bundle`.
 
 ## Known Limitations
@@ -158,7 +158,7 @@ Automation:
 - Tilesets support seam diagnostics, preview-only repair suggestions, and tile-engine metadata sidecars. Tilemaps support inspect-first classification and tile-size candidates, while full map-data import/export, specialized portrait export, specialized UI export, and background-specific export remain future work.
 - Worker cancellation terminates the active worker job rather than cooperative algorithm cancellation inside every loop.
 - `.pixelaid` documents work through browser open/download flows. Desktop save-in-place, recent files, autosave, and overwrite-safe project paths are future desktop-specific layers over the same archive format.
-- CLI and MCP-ready automation currently support PNG input/output plus JPEG input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA. The MCP stdio server is available locally, while a local HTTP API, WebP/additional codecs, and streaming progress are future work.
+- CLI and MCP-ready automation currently support PNG input/output plus JPEG and WebP input for inspect/fix/report/batch workflows. JPEG alpha is normalized to opaque RGBA; WebP alpha is decoded to RGBA when present. The MCP stdio server is available locally, while a local HTTP API, additional codecs, and streaming progress are future work.
 - Desktop auto-update delivery is deferred. Public desktop artifacts should be signed/notarized where supported and published with `SHA256SUMS.txt` until an update feed and updater signing-key workflow are added.
 
 ## Prioritized Roadmap
@@ -169,7 +169,7 @@ Automation:
 4. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
 5. Exporters: deepen tilemap metadata and project-specific map editor workflows when those workflows mature.
 6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, and viewport render instrumentation.
-7. Automation hardening: add a local HTTP API, add WebP/additional codecs, and support progress events for long batch jobs.
+7. Automation hardening: add a local HTTP API, add additional codecs, and support progress events for long batch jobs.
 8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
 
 ## Suggested Next Step

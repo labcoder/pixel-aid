@@ -23,7 +23,7 @@ import {
   type FixSpriteSheetRequest,
   type AutomationFixOptionsInput,
 } from "@pixelaid/automation";
-import type { AnimationTag, OutlineMode, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { AnimationTag, OutlineMode, PixelFixResult, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 
 export type CliIo = {
   stdout: ((text: string) => void) | string[];
@@ -90,7 +90,7 @@ type CliDiagnosticMetadata = {
 
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
 const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "@pixelaid/cli" };
-const supportedBatchImageExtensions = new Set([".png", ".jpg", ".jpeg"]);
+const supportedBatchImageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
@@ -414,10 +414,51 @@ function emitAutomation<T>(
 
   return {
     code: 0,
-    payload: { ok: true, command, result: result.value, warnings: result.warnings },
+    payload: { ok: true, command, result: sanitizeAutomationValue(result.value), warnings: result.warnings },
     human: `${command} complete\n`,
     diagnostics: { ...diagnostics, warnings: result.warnings },
   };
+}
+
+function sanitizeAutomationValue(value: unknown): unknown {
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  const fixResult = value.result;
+  if (isPixelFixResult(fixResult)) {
+    return {
+      ...value,
+      result: summarizePixelFixResult(fixResult),
+    };
+  }
+
+  return value;
+}
+
+function summarizePixelFixResult(result: PixelFixResult): Omit<PixelFixResult, "image"> & {
+  image: { width: number; height: number; dataByteLength: number };
+} {
+  return {
+    ...result,
+    image: {
+      width: result.image.width,
+      height: result.image.height,
+      dataByteLength: result.image.data.byteLength,
+    },
+  };
+}
+
+function isPixelFixResult(value: unknown): value is PixelFixResult {
+  if (!isRecord(value) || !isRecord(value.image)) {
+    return false;
+  }
+  const image = value.image;
+  return typeof image.width === "number" && typeof image.height === "number" && "data" in image;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object");
 }
 
 async function writeCliDiagnostics(
@@ -907,13 +948,13 @@ function usageText(): string {
     "PixelAid automation CLI",
     "",
     "Commands:",
-    "  pixelaid inspect <input.png|input.jpg> --json",
-    "  pixelaid report <input.png|input.jpg> [more.png|more.jpg] --json",
-    "  pixelaid suggest <input.png|input.jpg> --json",
-    "  pixelaid fix <input.png|input.jpg> --out <fixed.png> --manifest <manifest.json> [--auto]",
-    "  pixelaid fix-sheet <input.png|input.jpg> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
-    "  pixelaid palette <input.png|input.jpg> --max-colors <n> --out <palette.hex|palette.json>",
-    "  pixelaid export <input.png|input.jpg> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
+    "  pixelaid inspect <input.png|input.jpg|input.webp> --json",
+    "  pixelaid report <input.png|input.jpg|input.webp> [more.png|more.jpg|more.webp] --json",
+    "  pixelaid suggest <input.png|input.jpg|input.webp> --json",
+    "  pixelaid fix <input.png|input.jpg|input.webp> --out <fixed.png> --manifest <manifest.json> [--auto]",
+    "  pixelaid fix-sheet <input.png|input.jpg|input.webp> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
+    "  pixelaid palette <input.png|input.jpg|input.webp> --max-colors <n> --out <palette.hex|palette.json>",
+    "  pixelaid export <input.png|input.jpg|input.webp> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
     "",
     "Palette options:",
     "  --palette-strategy medianCut|perceptual|frequency",
