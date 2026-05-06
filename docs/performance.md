@@ -29,6 +29,7 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - Heavy fix work runs in `packages/worker`.
 - The web app clones source buffers before transfer so the imported source remains available for preview.
 - The worker transfers the fixed output buffer back to the main thread.
+- Asset browser thumbnails use a separate bounded thumbnail-surface cache instead of forcing full-size viewport preview surfaces. The thumbnail path samples a small nearest-neighbor surface and uses `OffscreenCanvas` where available, with DOM canvas fallback.
 
 ## Import And Analysis Phase Map
 

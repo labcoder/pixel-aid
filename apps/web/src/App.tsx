@@ -334,6 +334,7 @@ import {
 } from "./lib/simpleSpriteControls";
 import { createOperationErrorReport, createWebDiagnosticReport, type OperationErrorReport } from "./lib/diagnosticReport";
 import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import { createThumbnailSurfaceCache } from "./lib/thumbnailSurface";
 import {
   coerceTimelineViewportSourceMode,
   getPreferredTimelineViewportSourceMode,
@@ -1061,6 +1062,7 @@ export function App() {
   const assetCleanSnapshotsRef = useRef<Record<string, AssetDirtySnapshot>>({});
   const pendingCleanSnapshotAssetIdRef = useRef<string | null>(null);
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
+  const thumbnailSurfaceCacheRef = useRef(createThumbnailSurfaceCache({ maxSurfaces: 48 }));
   const mainThreadPhaseWarningKeysRef = useRef(new Set<string>());
   const sourceSheetFramesCacheRef = useRef<{ key: string; frames: SpriteFrame[] }>({ key: "", frames: [] });
   const busyOperationIdRef = useRef(0);
@@ -1470,13 +1472,20 @@ export function App() {
     setSourceAnalysisCache((current) => pruneAnalysisCache(current, assetIds));
     setQualityReportCache((current) => pruneAnalysisCache(current, assetIds));
     previewSurfaceCacheRef.current.retainAssets(assetIds);
+    thumbnailSurfaceCacheRef.current.retainAssets(assetIds);
     for (const assetId of Object.keys(assetSessionsRef.current)) {
       if (!assetIds.has(assetId)) {
         delete assetSessionsRef.current[assetId];
       }
     }
   }, [assets]);
-  useEffect(() => () => previewSurfaceCacheRef.current.clear(), []);
+  useEffect(
+    () => () => {
+      previewSurfaceCacheRef.current.clear();
+      thumbnailSurfaceCacheRef.current.clear();
+    },
+    []
+  );
   const selectedSourceAnalysisKey = selectedAsset ? getSourceAnalysisCacheKey(selectedAsset) : "";
   const selectedSourceAnalysis = selectedSourceAnalysisKey ? sourceAnalysisCache[selectedSourceAnalysisKey] : undefined;
   const selectedSourceSurface = useMemo(
@@ -1491,8 +1500,13 @@ export function App() {
     [fixResult?.image, selectedAsset?.id]
   );
   const previewSurfaceStats = previewSurfaceCacheRef.current.getStats();
+  const thumbnailSurfaceStats = thumbnailSurfaceCacheRef.current.getStats();
   useEffect(() => {
-    for (const timing of previewSurfaceCacheRef.current.drainSurfaceCreationTimings()) {
+    const surfaceTimings = [
+      ...previewSurfaceCacheRef.current.drainSurfaceCreationTimings(),
+      ...thumbnailSurfaceCacheRef.current.drainSurfaceCreationTimings()
+    ];
+    for (const timing of surfaceTimings) {
       recordMainThreadPhaseWarning({
         phase: "thumbnail-generation",
         operationName: `${timing.role} preview surface`,
@@ -1524,8 +1538,9 @@ export function App() {
     monitor.recordImageMemory("source image buffer", selectedAsset?.image);
     monitor.recordImageMemory("fixed output buffer", fixResult?.image);
     monitor.recordMemoryCheckpoint("cached preview surfaces", previewSurfaceStats.estimatedBytes);
+    monitor.recordMemoryCheckpoint("cached thumbnail surfaces", thumbnailSurfaceStats.estimatedBytes);
     publishEditorPerformanceSnapshot();
-  }, [fixResult?.image, previewSurfaceStats.estimatedBytes, publishEditorPerformanceSnapshot, selectedAsset?.image]);
+  }, [fixResult?.image, previewSurfaceStats.estimatedBytes, publishEditorPerformanceSnapshot, selectedAsset?.image, thumbnailSurfaceStats.estimatedBytes]);
 
   const captureCurrentAssetSession = useCallback(
     (asset: ImportedImageAsset): AssetEditorSession => ({
@@ -3257,6 +3272,7 @@ export function App() {
 
       delete assetSessionsRef.current[asset.id];
       previewSurfaceCacheRef.current.disposeAsset(asset.id);
+      thumbnailSurfaceCacheRef.current.disposeAsset(asset.id);
       setAssets((current) => {
         const withoutDuplicate = current.filter((item) => item.id !== asset.id);
         return [asset, ...withoutDuplicate];
@@ -3332,6 +3348,7 @@ export function App() {
             publishEditorPerformanceSnapshot();
             delete assetSessionsRef.current[asset.id];
             previewSurfaceCacheRef.current.disposeAsset(asset.id);
+            thumbnailSurfaceCacheRef.current.disposeAsset(asset.id);
             setAssets((current) => {
               const withoutDuplicate = current.filter((item) => item.id !== asset.id);
               return [asset, ...withoutDuplicate];
@@ -3503,6 +3520,7 @@ export function App() {
         const suggestion = suggestFixSettings(sampleImport.asset.image);
         delete assetSessionsRef.current[sampleImport.asset.id];
         previewSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
+        thumbnailSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
 
         setAssets((current) => {
           const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
@@ -7256,7 +7274,7 @@ export function App() {
           assetMenu={assetMenu}
           isEditorBusy={isEditorBusy}
           samplePickerButtonLabel={samplePickerButtonLabel}
-          getSourceSurface={(asset) => previewSurfaceCacheRef.current.getSurface({ assetId: asset.id, role: "source", image: asset.image })}
+          getThumbnailSurface={(asset) => thumbnailSurfaceCacheRef.current.getSurface({ assetId: asset.id, image: asset.image })}
           onDocs={openDocs}
           onImport={openImportPicker}
           onOpenSamplePicker={openSamplePicker}

@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { drawRgbaImageNearest } from "../lib/previewCanvas";
 import { getContainedDrawRect } from "../lib/previewGeometry";
 
-export function AssetThumbnail({ image, label, surface }: { image: RGBAImage; label: string; surface?: HTMLCanvasElement | null }) {
+export function AssetThumbnail({ image, label, surface }: { image: RGBAImage; label: string; surface?: CanvasImageSource | null }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {

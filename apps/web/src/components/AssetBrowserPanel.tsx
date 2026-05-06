@@ -19,7 +19,7 @@ export type AssetBrowserPanelProps = {
   assetMenu: AssetBrowserMenuState | null;
   isEditorBusy: boolean;
   samplePickerButtonLabel: string;
-  getSourceSurface: (asset: ImportedImageAsset) => HTMLCanvasElement | null;
+  getThumbnailSurface: (asset: ImportedImageAsset) => CanvasImageSource | null;
   onDocs: (sectionId: string) => void;
   onImport: () => void;
   onOpenSamplePicker: () => void;
@@ -36,7 +36,7 @@ export function AssetBrowserPanel({
   assetMenu,
   isEditorBusy,
   samplePickerButtonLabel,
-  getSourceSurface,
+  getThumbnailSurface,
   onDocs,
   onImport,
   onOpenSamplePicker,
@@ -110,7 +110,7 @@ export function AssetBrowserPanel({
                       onOpenAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
                     }}
                   >
-                    <AssetThumbnail image={asset.image} label={asset.name} surface={getSourceSurface(asset)} />
+                    <AssetThumbnail image={asset.image} label={asset.name} surface={getThumbnailSurface(asset)} />
                     <span className="asset-meta">
                       <strong>{asset.name}</strong>
                       <small>
