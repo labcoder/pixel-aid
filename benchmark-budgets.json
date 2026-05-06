@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "defaultMode": "warn-only",
+  "budgets": [
+    {
+      "benchmarkName": "fake-pixel-720p-single: grid detection 0.92MP",
+      "metric": "meanMs",
+      "budgetMs": 200,
+      "blocking": true,
+      "category": "grid-detection",
+      "rationale": "Isolated 720p grid detection is low-noise relative to full cleanup and already has dedicated benchmark coverage."
+    },
+    {
+      "benchmarkName": "fake-pixel-1080p-single: grid detection 2.07MP",
+      "metric": "meanMs",
+      "budgetMs": 400,
+      "blocking": true,
+      "category": "grid-detection",
+      "rationale": "Isolated 1080p grid detection scales predictably and should catch major regressions in the detector hot path."
+    },
+    {
+      "benchmarkName": "fake-pixel-720p-single: full cleanup 0.92MP",
+      "metric": "meanMs",
+      "budgetMs": 300,
+      "blocking": false,
+      "category": "single-sprite-fix",
+      "rationale": "Full cleanup includes more phases and remains advisory until repeated CI data confirms noise levels."
+    },
+    {
+      "benchmarkName": "fake-pixel-large-sheet: frame-aware cleanup 64 frames",
+      "metric": "meanMs",
+      "budgetMs": 650,
+      "blocking": false,
+      "category": "sheet-fix",
+      "rationale": "Large sheet cleanup depends on multiple phases and host performance, so it stays advisory for now."
+    },
+    {
+      "benchmarkName": "palette remap on fixed output",
+      "metric": "meanMs",
+      "budgetMs": 50,
+      "blocking": false,
+      "category": "palette-remap",
+      "rationale": "Budget is documented but benchmark coverage is intentionally missing until isolated palette remap benchmarks are added."
+    },
+    {
+      "benchmarkName": "export bundle creation",
+      "metric": "meanMs",
+      "budgetMs": 250,
+      "blocking": false,
+      "category": "export-bundle",
+      "rationale": "Budget is documented but benchmark coverage is intentionally missing until export bundle benchmarks are added."
+    }
+  ]
+}

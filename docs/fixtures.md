@@ -1,6 +1,6 @@
 # Fixture Suite
 
-PixelAid fixtures are deterministic TypeScript generators. The repo does not commit large PNG goldens; tests create compact signatures and structural assertions from generated `RGBAImage` buffers.
+PixelAid fixtures are deterministic TypeScript generators. The repo avoids large PNG goldens; most tests create compact signatures and structural assertions from generated `RGBAImage` buffers. Small, high-value PNG goldens may live under package-local `src/goldens/` folders when exact pixel output needs to be locked.
 
 Release-facing onboarding/demo samples are documented in `docs/onboarding-samples.md`. The canonical sample registry is `releaseOnboardingSamples` in `packages/fixtures/src/onboardingSamples.ts`; it links demo workflows to existing deterministic fixtures and records first-party provenance.
 
@@ -85,3 +85,13 @@ Run report-only benchmarks:
 ```sh
 npm run benchmark -w @pixelaid/core
 ```
+
+## Golden PNG Updates
+
+Golden PNG fixtures are updated only by explicit intent. For the current core golden, run:
+
+```sh
+PIXELAID_UPDATE_GOLDENS=1 npm run test -w @pixelaid/core -- src/goldenImage.test.ts
+```
+
+Review the resulting PNG diff and commit the changed `packages/core/src/goldens/*.png` file together with the algorithm or fixture change that required it. Normal test runs compare against the committed PNG and report changed pixel count, maximum per-channel delta, and a bounding box for differences.

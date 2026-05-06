@@ -140,6 +140,14 @@ import {
 } from "./lib/editorPreferences";
 import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
 import {
+  createEditorPerformanceMonitor,
+  formatBytes,
+  formatDurationMs,
+  formatLatestOperation,
+  formatOperationMarks,
+  type EditorPerformanceSnapshot
+} from "./lib/editorPerformance";
+import {
   clearBusyOperation,
   createBusyOperation,
   formatBusyOperationLabel,
@@ -996,6 +1004,10 @@ export function App() {
   const [exportBundleName, setExportBundleName] = useState("");
   const [fixOperation, setFixOperation] = useState<BusyOperation | null>(null);
   const [fixProgress, setFixProgress] = useState<WorkerProgress | null>(null);
+  const editorPerformanceMonitorRef = useRef(createEditorPerformanceMonitor());
+  const [editorPerformanceSnapshot, setEditorPerformanceSnapshot] = useState<EditorPerformanceSnapshot>(() =>
+    editorPerformanceMonitorRef.current.getSnapshot()
+  );
   const [assetSwitchTimingReports, setAssetSwitchTimingReports] = useState<AssetSwitchTimingReport[]>([]);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
   const [sourceAnalysisCache, setSourceAnalysisCache] = useState<Record<string, SourceAssetAnalysis>>({});
@@ -1063,6 +1075,12 @@ export function App() {
   const appendLog = useCallback((line: string) => {
     setLogs((current) => [line, ...current].slice(0, 8));
   }, []);
+
+  const publishEditorPerformanceSnapshot = useCallback(() => {
+    setEditorPerformanceSnapshot(editorPerformanceMonitorRef.current.getSnapshot());
+  }, []);
+
+  useEffect(() => () => editorPerformanceMonitorRef.current.dispose(), []);
 
   const finishActiveAssetSwitchTiming = useCallback(() => {
     const current = activeAssetSwitchTimingRef.current;
@@ -1397,6 +1415,29 @@ export function App() {
     [fixResult?.image, selectedAsset?.id]
   );
   const previewSurfaceStats = previewSurfaceCacheRef.current.getStats();
+  const latestEditorOperation = editorPerformanceSnapshot.operations[0];
+  const editorPerformanceMetricRows = useMemo<Array<[string, string]>>(() => {
+    const longTaskStatus = editorPerformanceSnapshot.longTasks.supported
+      ? `${editorPerformanceSnapshot.longTasks.count} / ${formatDurationMs(editorPerformanceSnapshot.longTasks.totalDurationMs)} total / ${formatDurationMs(
+          editorPerformanceSnapshot.longTasks.maxDurationMs
+        )} max`
+      : "unsupported";
+    return [
+      ["Latest", formatLatestOperation(editorPerformanceSnapshot)],
+      ["Marks", formatOperationMarks(latestEditorOperation)],
+      ["Long tasks", longTaskStatus],
+      ["Est. buffers", formatBytes(editorPerformanceSnapshot.memory.activeEstimatedBytes)],
+      ["Memory warn", editorPerformanceSnapshot.memory.warnings[0] ?? "none"]
+    ];
+  }, [editorPerformanceSnapshot, latestEditorOperation]);
+  useEffect(() => {
+    const monitor = editorPerformanceMonitorRef.current;
+    monitor.recordImageMemory("source image buffer", selectedAsset?.image);
+    monitor.recordImageMemory("fixed output buffer", fixResult?.image);
+    monitor.recordMemoryCheckpoint("cached preview surfaces", previewSurfaceStats.estimatedBytes);
+    publishEditorPerformanceSnapshot();
+  }, [fixResult?.image, previewSurfaceStats.estimatedBytes, publishEditorPerformanceSnapshot, selectedAsset?.image]);
+
   const captureCurrentAssetSession = useCallback(
     (asset: ImportedImageAsset): AssetEditorSession => ({
       version: 1,
@@ -1771,6 +1812,10 @@ export function App() {
       const operation = nextBusyOperation("analysis", `Preparing source analysis for ${selectedAsset.name}...`);
       operationId = operation.id;
       setAnalysisOperation(operation);
+      const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("source-analysis", `Source analysis ${selectedAsset.name}`);
+      editorPerformanceMonitorRef.current.mark("source analysis worker start", selectedSourceAnalysisKey, perfOperationId);
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("cloned transferable buffer", selectedAsset.image.data.byteLength, selectedAsset.image.width, selectedAsset.image.height, perfOperationId);
+      publishEditorPerformanceSnapshot();
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
 
       job = startSourceAnalysisJob(selectedAsset.image, {
@@ -1787,6 +1832,7 @@ export function App() {
           }
 
           setSourceAnalysisCache((current) => (current[selectedSourceAnalysisKey] ? current : { ...current, [selectedSourceAnalysisKey]: analysis }));
+          editorPerformanceMonitorRef.current.mark("source analysis worker end", selectedSourceAnalysisKey, perfOperationId);
           markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisFinished");
         })
         .catch((error) => {
@@ -1800,6 +1846,8 @@ export function App() {
           if (activeSourceAnalysisJobRef.current?.requestId === job?.requestId) {
             activeSourceAnalysisJobRef.current = null;
           }
+          editorPerformanceMonitorRef.current.endOperation(perfOperationId);
+          publishEditorPerformanceSnapshot();
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
         });
     }, 0);
@@ -1813,7 +1861,7 @@ export function App() {
         setAnalysisOperation((current) => clearBusyOperation(current, cancelledOperationId));
       }
     };
-  }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
+  }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, publishEditorPerformanceSnapshot, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
@@ -2261,6 +2309,10 @@ export function App() {
       const operation = nextBusyOperation("analysis", `Preparing diagnostics for ${selectedAsset.name}...`);
       operationId = operation.id;
       setAnalysisOperation(operation);
+      const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("quality-analysis", `Quality analysis ${selectedAsset.name}`);
+      editorPerformanceMonitorRef.current.mark("quality analysis start", qualityReportCacheKey, perfOperationId);
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("cloned transferable buffer", selectedAsset.image.data.byteLength, selectedAsset.image.width, selectedAsset.image.height, perfOperationId);
+      publishEditorPerformanceSnapshot();
 
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
       job = startQualityAnalysisJob(selectedAsset.image, {
@@ -2279,6 +2331,7 @@ export function App() {
           }
 
           setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
+          editorPerformanceMonitorRef.current.mark("quality analysis end", qualityReportCacheKey, perfOperationId);
           markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsFinished");
         })
         .catch((error) => {
@@ -2292,6 +2345,8 @@ export function App() {
           if (activeQualityAnalysisJobRef.current?.requestId === job?.requestId) {
             activeQualityAnalysisJobRef.current = null;
           }
+          editorPerformanceMonitorRef.current.endOperation(perfOperationId);
+          publishEditorPerformanceSnapshot();
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
         });
     }, qualityReportDebounceMs);
@@ -2315,6 +2370,7 @@ export function App() {
     markActiveAssetSwitchTimingForAsset,
     maxColors,
     nextBusyOperation,
+    publishEditorPerformanceSnapshot,
     qualityReportCacheKey,
     qualityReportDebounceMs,
     qualityReportSheetLayout,
@@ -2686,6 +2742,7 @@ export function App() {
         lastExportValidation,
         detectedSheetWarnings,
         assetSwitchTimings: assetSwitchTimingReports.slice(0, 5),
+        editorPerformance: editorPerformanceSnapshot,
         previewSurfaceCache: previewSurfaceStats
       },
       warnings: [
@@ -2712,6 +2769,7 @@ export function App() {
     inferNativeScale,
     detectedSheetWarnings,
     downscale,
+    editorPerformanceSnapshot,
     effectiveTargetHeight,
     effectiveTargetWidth,
     fixResult?.metrics,
@@ -3100,6 +3158,9 @@ export function App() {
         return;
       }
 
+      const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("import", `Import ${importableFiles.length} file${importableFiles.length === 1 ? "" : "s"}`);
+      editorPerformanceMonitorRef.current.mark("file selected/drop/paste received", importableFiles.map((file) => file.name).join(", "), perfOperationId);
+      publishEditorPerformanceSnapshot();
       const operation = nextBusyOperation("import", `Preparing ${importableFiles.length} file${importableFiles.length === 1 ? "" : "s"}...`);
       setImportOperation(operation);
       saveCurrentAssetSession();
@@ -3120,7 +3181,12 @@ export function App() {
             setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Decoding ${file.name}...`) : current));
             await waitForNextPaint();
 
+            editorPerformanceMonitorRef.current.mark("decode start", file.name, perfOperationId);
+            publishEditorPerformanceSnapshot();
             const asset = await decodeImageFile(file);
+            editorPerformanceMonitorRef.current.mark("decode end", `${asset.image.width}x${asset.image.height}`, perfOperationId);
+            editorPerformanceMonitorRef.current.recordImageMemory("source image buffer", asset.image, perfOperationId);
+            publishEditorPerformanceSnapshot();
             delete assetSessionsRef.current[asset.id];
             previewSurfaceCacheRef.current.disposeAsset(asset.id);
             setAssets((current) => {
@@ -3135,7 +3201,9 @@ export function App() {
             setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Analyzing ${asset.name}...`) : current));
             await waitForNextPaint();
 
+            editorPerformanceMonitorRef.current.mark("auto suggest start", asset.name, perfOperationId);
             const suggestion = suggestFixSettings(asset.image);
+            editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             cacheFixSuggestionAnalysis(asset, suggestion);
             applyFixSuggestion(suggestion, asset);
@@ -3151,10 +3219,22 @@ export function App() {
           }
         }
       } finally {
+        editorPerformanceMonitorRef.current.endOperation(perfOperationId);
+        publishEditorPerformanceSnapshot();
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, importPixelAidDocumentFile, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
+    [
+      appendLog,
+      applyFixSuggestion,
+      cacheFixSuggestionAnalysis,
+      importPixelAidDocumentFile,
+      isEditorBusy,
+      nextBusyOperation,
+      publishEditorPerformanceSnapshot,
+      recordOperationError,
+      saveCurrentAssetSession
+    ]
   );
 
   const applyOnboardingSampleSettings = useCallback(
@@ -3443,6 +3523,16 @@ export function App() {
     }
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
+    const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("fix", sheetMode ? `Fix ${frameCount} frames` : "Fix image");
+    editorPerformanceMonitorRef.current.mark("fix preparation start", selectedAsset.name, perfOperationId);
+    editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
+      "cloned transferable buffer",
+      selectedAsset.image.data.byteLength,
+      selectedAsset.image.width,
+      selectedAsset.image.height,
+      perfOperationId
+    );
+    publishEditorPerformanceSnapshot();
     lastLoggedFixStageRef.current = undefined;
     setTilesetRepairBackup(null);
     previewSurfaceCacheRef.current.disposeRole(selectedAsset.id, "fixed");
@@ -3455,13 +3545,20 @@ export function App() {
 
     try {
       const options = buildFixOptions();
+      editorPerformanceMonitorRef.current.mark("fix preparation end", `${options.mode} / ${options.maxColors} colors`, perfOperationId);
       setFixOperation((current) =>
         current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...") : current
       );
       await waitForNextPaint();
 
+      let firstWorkerProgress = true;
       const job = startFixJob(selectedAsset.image, options, {
         onProgress: (progress) => {
+          if (firstWorkerProgress) {
+            firstWorkerProgress = false;
+            editorPerformanceMonitorRef.current.mark("first worker progress", progress.stage, perfOperationId);
+            publishEditorPerformanceSnapshot();
+          }
           setFixProgress(progress);
           if (shouldLogProgressStage(lastLoggedFixStageRef.current, progress.stage)) {
             lastLoggedFixStageRef.current = progress.stage;
@@ -3470,11 +3567,23 @@ export function App() {
         }
       });
       activeJobRef.current = job;
+      editorPerformanceMonitorRef.current.mark("worker job postMessage", job.requestId, perfOperationId);
+      publishEditorPerformanceSnapshot();
       appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
 
       void job.promise
         .then((result) => {
+          editorPerformanceMonitorRef.current.mark("worker result received", `${result.image.width}x${result.image.height}`, perfOperationId);
+          editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
+            "worker result buffer",
+            result.image.data.byteLength,
+            result.image.width,
+            result.image.height,
+            perfOperationId
+          );
           setFixResult(result);
+          editorPerformanceMonitorRef.current.mark("result committed to UI state", undefined, perfOperationId);
+          publishEditorPerformanceSnapshot();
           setLastOperationError(null);
           setViewMode(getPostFixViewMode());
           if (sheetMode) {
@@ -3485,6 +3594,8 @@ export function App() {
           );
         })
         .catch((error) => {
+          editorPerformanceMonitorRef.current.endOperation(perfOperationId, "fix failed");
+          publishEditorPerformanceSnapshot();
           recordOperationError("fix", error, "Try Auto Suggest, lower the output size/color count, or disable advanced cleanup before running Fix again.", {
             asset: selectedAsset.name,
             mode,
@@ -3507,6 +3618,8 @@ export function App() {
         mode,
         assetType
       });
+      editorPerformanceMonitorRef.current.endOperation(perfOperationId, "fix setup failed");
+      publishEditorPerformanceSnapshot();
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
     }
@@ -3519,6 +3632,7 @@ export function App() {
     isEditorBusy,
     mode,
     nextBusyOperation,
+    publishEditorPerformanceSnapshot,
     recordOperationError,
     selectedAsset,
     sheetFrames.length,
@@ -3607,12 +3721,16 @@ export function App() {
       return;
     }
 
+    const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("auto-suggest", `Auto suggest ${selectedAsset.name}`);
+    editorPerformanceMonitorRef.current.mark("auto suggest start", selectedAsset.name, perfOperationId);
+    publishEditorPerformanceSnapshot();
     const operation = nextBusyOperation("analysis", `Analyzing ${selectedAsset.name}...`);
     setAnalysisOperation(operation);
     await waitForNextPaint();
 
     try {
       const suggestion = suggestFixSettings(selectedAsset.image);
+      editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       cacheFixSuggestionAnalysis(selectedAsset, suggestion);
       applyFixSuggestion(suggestion, selectedAsset);
@@ -3625,9 +3743,11 @@ export function App() {
         height: selectedAsset.image.height
       });
     } finally {
+      editorPerformanceMonitorRef.current.endOperation(perfOperationId);
+      publishEditorPerformanceSnapshot();
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, selectedAsset]);
+  }, [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, publishEditorPerformanceSnapshot, recordOperationError, selectedAsset]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -5351,7 +5471,15 @@ export function App() {
       return;
     }
     markActiveAssetSwitchTimingForAsset(selectedAsset.id, "viewportPreviewRendered");
-  }, [markActiveAssetSwitchTimingForAsset, selectedAsset?.id]);
+    if (fixResult) {
+      const activeFix = editorPerformanceMonitorRef.current.getSnapshot().operations.find((operation) => operation.name === "fix" && operation.endedAt === undefined);
+      if (activeFix && !activeFix.marks.some((mark) => mark.name === "first output canvas paint after result")) {
+        editorPerformanceMonitorRef.current.mark("first output canvas paint after result", undefined, activeFix.id);
+        editorPerformanceMonitorRef.current.endOperation(activeFix.id);
+        publishEditorPerformanceSnapshot();
+      }
+    }
+  }, [fixResult, markActiveAssetSwitchTimingForAsset, publishEditorPerformanceSnapshot, selectedAsset?.id]);
 
   const markTimelinePreviewRendered = useCallback(() => {
     if (!selectedAsset) {
@@ -5510,6 +5638,11 @@ export function App() {
       return;
     }
 
+    const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("export", `Export ${selectedAsset.name}`);
+    editorPerformanceMonitorRef.current.mark("export start", selectedAsset.name, perfOperationId);
+    editorPerformanceMonitorRef.current.recordImageMemory("fixed output buffer", fixResult.image, perfOperationId);
+    publishEditorPerformanceSnapshot();
+
     const assetNameBaseName = assetBaseName(selectedAsset.name);
     const defaultNameBaseName = defaultExportBundleBaseName(selectedAsset.name);
     const exportName = resolveExportBundleFilename(exportBundleName || defaultExportBundleFilename(selectedAsset.name), defaultNameBaseName);
@@ -5601,6 +5734,7 @@ export function App() {
         extraIssues: engineWarningsToValidationIssues([...engineBundle.warnings, ...tilemapBundle.warnings])
       });
       const fixedPng = await rgbaImageToPngBlob(exportResult.image);
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("export fixed PNG", fixedPng.size, exportResult.image.width, exportResult.image.height, perfOperationId);
       const bundleFiles: AssetBundleFile[] = [
         {
           path: `images/${imageName}`,
@@ -5616,6 +5750,7 @@ export function App() {
         ...framePngFiles
       ];
       const bundle = createAssetBundleZip({ files: bundleFiles });
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("export bundle bytes", bundle.byteLength, undefined, undefined, perfOperationId);
 
       setLastExportValidation({
         ok: validation.ok,
@@ -5629,6 +5764,8 @@ export function App() {
       if (isDesktopRuntime()) {
         const saveResult = await saveDesktopBundleFile({ suggestedName: bundleName, bytes: bundleBytes });
         if (saveResult.status === "cancelled") {
+          editorPerformanceMonitorRef.current.endOperation(perfOperationId, "cancelled");
+          publishEditorPerformanceSnapshot();
           appendLog("Desktop export canceled");
           return;
         }
@@ -5639,11 +5776,16 @@ export function App() {
         downloadBlob(new Blob([bundleBuffer], { type: "application/zip" }), bundleName);
       }
 
+      editorPerformanceMonitorRef.current.mark("export end", exportPath ?? bundleName, perfOperationId);
+      editorPerformanceMonitorRef.current.endOperation(perfOperationId);
+      publishEditorPerformanceSnapshot();
       appendLog(
         `Exported ${exportPath ?? bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
       );
       setLastOperationError(null);
     })().catch((error) => {
+      editorPerformanceMonitorRef.current.endOperation(perfOperationId, "export failed");
+      publishEditorPerformanceSnapshot();
       recordOperationError("export", error, "Run Fix again or export to a different folder/name. The fixed preview remains available in the editor.", {
         asset: selectedAsset.name,
         bundleName,
@@ -5660,6 +5802,7 @@ export function App() {
     playbackDirection,
     playbackFps,
     playbackLoop,
+    publishEditorPerformanceSnapshot,
     recordOperationError,
     selectedAsset,
     sheetColumns,
@@ -8081,6 +8224,7 @@ export function App() {
                       ]}
                     />
                     <MetricGroup title="Asset Switch" metrics={assetSwitchMetricRows} />
+                    <MetricGroup title="Responsiveness" metrics={editorPerformanceMetricRows} />
                   </div>
                 </div>
               </div>

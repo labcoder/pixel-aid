@@ -38,6 +38,16 @@ Core fix functions accept optional runtime hooks for progress and cooperative ca
 
 The browser client asks the worker to cancel gracefully first. If the worker is inside a synchronous phase that cannot process messages immediately, the client terminates the worker as a fallback. Results and progress that arrive after cancellation are ignored or suppressed with request id checks, settled-state guards, and cancellation guards so stale events cannot update the active job UI.
 
+## Editor Responsiveness Diagnostics
+
+The web editor records lightweight, in-session responsiveness diagnostics for major user operations. The diagnostics are visible in the Metrics and Logs bottom panel and are included in exported diagnostics JSON. Timing history is intentionally bounded and is not persisted across sessions.
+
+Recorded phase marks include import receipt, image decode start/end, source-analysis worker start/end, quality-analysis start/end, Auto Suggest start/end, fix preparation start/end, worker job posting, first worker progress, worker result receipt, UI result commit, first output canvas paint after a result, and export start/end. These marks distinguish main-thread preparation from worker execution so slow fixes can be attributed more clearly.
+
+Browsers that support `PerformanceObserver` long-task entries also report main-thread long-task counts plus total and maximum duration for recent active operations. Unsupported browsers report `unsupported` without throwing or requiring a polyfill. Long-task entries are summarized at phase boundaries so the observer does not spam React state updates.
+
+Memory diagnostics are estimates, not exact heap measurements. PixelAid estimates RGBA image-buffer pressure as `width x height x 4` and records known source, clone/transfer, worker result, fixed output, cached preview surface, export PNG, and export bundle checkpoints when those buffers are visible to the editor. These estimates are meant to warn about large-image workflows and should not be treated as browser heap profiles.
+
 ## Current Metrics
 
 The metrics panel shows:
@@ -61,11 +71,67 @@ Grid candidates may also include a source crop rectangle. This is useful when a 
 
 The core package includes fixture-driven benchmarks for single-sprite cleanup and large generated sources. They exercise the generated high-resolution robot-like source, 720p and 1080p fake-pixel sources, a large frame-aware sheet, background-aware grid detection, adaptive downsampling, palette reduction, and cleanup pipeline.
 
-Run them with:
+Run the current core benchmarks with:
 
 ```sh
 npm run benchmark -w @pixelaid/core
 ```
+
+Run all available workspace benchmarks with:
+
+```sh
+npm run benchmark
+```
+
+Capture structured benchmark results for branch-to-branch comparison with:
+
+```sh
+npm run benchmark:record
+```
+
+The capture command runs the current core Vitest benchmarks from the repo root and writes `benchmark-results/latest.json`. The JSON includes Node, OS, CPU, commit SHA, timestamp, benchmark name, mean and median timing when Vitest reports them, and iteration count. Use `npm run benchmark:record -- --out benchmark-results/my-run.json` to save a named artifact intentionally. Extra Vitest arguments can be passed after a second separator, for example `npm run benchmark:record -- --out benchmark-results/quick.json -- --maxWorkers=1`.
+
+Check the latest structured result against `benchmark-budgets.json` in warn-only mode with:
+
+```sh
+npm run benchmark:budget
+```
+
+The default budget command is CI-friendly and exits successfully while reporting `pass`, `warn`, and `missing` rows. To exercise the future release-gate behavior locally, run `node scripts/check-benchmark-budgets.mjs --fail-on-blocking`; only budgets marked `blocking: true` can fail that mode. The 720p and 1080p grid detection budgets are marked blocking-ready because they are isolated detector hot-path benchmarks with direct fixture coverage and lower expected noise than full cleanup or large-sheet workflows. Full cleanup, large-sheet cleanup, palette remap, and export bundle budgets remain advisory until repeated CI/local artifacts show stable timing and complete benchmark coverage.
+
+### Benchmark coverage matrix
+
+This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
+
+| Benchmark name | Fixture/source type | Operation measured | Expected asset mode | Rough image size | Current status | Source |
+| --- | --- | --- | --- | --- | --- | --- |
+| `detects crop-aware grid candidates` | `createSingleSpriteCleanupFixture()` fake-pixel sprite with foreground crop | Background-aware grid candidate detection | `single` / sprite | 706x878 source, 6x grid | Report-only | `packages/core/src/singleSpriteCleanup.bench.ts` |
+| `fixes cropped adaptive single sprite` | `createSingleSpriteCleanupFixture()` fake-pixel sprite with bright background | Full adaptive single-sprite fix: auto grid, crop, alpha/background cleanup, halo cleanup, palette cap | `single` / sprite | 706x878 source, 6x grid | Report-only | `packages/core/src/singleSpriteCleanup.bench.ts` |
+| `fake-pixel-720p-single: grid detection 0.92MP` | Lazy generated 720p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, adaptive downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-1080p-single: grid detection 2.07MP` | Lazy generated 1080p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1920x1080 source -> 240x135 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | Lazy generated large fake-pixel animation sheet | Full sheet fix with manual 8x grid, generated frame rects, dominant downsample, and shared palette remap | `spriteSheet` / animation sheet | 2048x2048 source -> 256x256 native sheet, 64 frames | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| Import/decode preparation | Browser imports, pasted files, and CLI/automation image IO | Decode preparation and source-buffer creation | Any imported asset | Typical source files, including large sprites and sheets | Missing | Needed in web/automation benchmark harness |
+| Auto suggest | Imported image plus first-pass grid/sheet/type diagnostics | Suggest asset type and fix settings | `single`, `spriteSheet`, `tileSheet`, or background review | Representative sprite, sheet, tile, and background fixtures | Missing | Needed around web/automation suggestion orchestration |
+| Source analysis | Imported image inspection, palette summary, grid candidates, and diagnostics | Source analysis pass before fixing | Any imported asset | Representative sprite, sheet, tile, and background fixtures | Missing | Needed around automation inspect/web analysis flow |
+| Quality report | Fixed or source image with frame metadata | Quality diagnostics and warnings | Any exportable asset | Representative fixed outputs and large sheets | Missing | Needed around `analyzeQualityReport` |
+| Palette extraction/remap | Fixed output or generated source buffers | Palette extraction and remapping as an isolated operation | `single` and `spriteSheet` | 160x90, 240x135, and 256x256 native outputs | Missing | Needed around palette functions outside full fix benchmarks |
+| Export bundle creation | Fixed image, manifest metadata, palettes, and engine targets | ZIP/bundle creation and export sidecar generation | `single` and `spriteSheet` exports | Native PNG plus JSON/palette/engine sidecars | Missing | Needed around `packages/exporters` and automation export flow |
+
+## Draft Performance Budgets
+
+These budgets are advisory draft targets for Milestone 1.1. They do not fail CI, do not block local development, and should be treated as early expectations for measuring noise and regression risk. Convert a draft budget into an enforced budget only after the benchmark is stable across repeated runs on representative developer and CI hardware.
+
+| Status | Operation | Fixture | Target time | Measurement command | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Blocking-ready | 720p grid detection | `fake-pixel-720p-single` 1280x720 source | <= 200 ms mean | `npm run benchmark:record` then `npm run benchmark:budget` | Covered by `fake-pixel-720p-single: grid detection 0.92MP`; isolated low-noise detector hot path. |
+| Blocking-ready | 1080p grid detection | `fake-pixel-1080p-single` 1920x1080 source | <= 400 ms mean | `npm run benchmark:record` then `npm run benchmark:budget` | Covered by `fake-pixel-1080p-single: grid detection 2.07MP`; scales predictably enough to gate detector regressions. |
+| Draft | 720p single-sprite full cleanup | `fake-pixel-720p-single` 1280x720 source -> 160x90 native target | <= 300 ms mean | `npm run benchmark:record` | Covered by `fake-pixel-720p-single: full cleanup 0.92MP`. |
+| Draft | Large sheet frame-aware cleanup | `fake-pixel-large-sheet` 2048x2048 source, 64 frames | <= 650 ms mean | `npm run benchmark:record` | Covered by `fake-pixel-large-sheet: frame-aware cleanup 64 frames`. |
+| Draft | Palette remap on fixed output | Fixed 160x90, 240x135, and 256x256 native outputs | <= 50 ms mean | `npm run benchmark:record` after adding isolated palette benchmark coverage | Budget target exists before the isolated benchmark; current full-fix benchmarks include palette work but do not isolate it. |
+| Draft | Export bundle creation | Fixed PNG, JSON manifest, palette file, and engine sidecars | <= 250 ms mean | `npm run benchmark:record` after adding export bundle benchmark coverage | Budget target exists before the export benchmark; no current benchmark isolates bundle creation. |
+
+Budget updates must include before/after benchmark artifacts, the command used to record them, the hardware or CI environment where they were captured, and a short explanation of why the target changed. Raise budgets only when the measured product value justifies the slower path or fixture coverage shows the previous target was unrealistic. Lower budgets when repeated data shows the target has become comfortably achievable.
 
 ## Future Benchmarks
 
@@ -74,12 +140,8 @@ Current large-source benchmark metadata is report-only. Future work can add budg
 - Transparent sprite with halos.
 - Uneven AI-generated sheet with inconsistent gutters.
 - Mobile or low-power hardware profiles.
-
-Run all available benchmarks with:
-
-```sh
-npm run benchmark
-```
+- Isolated palette extraction and remap passes.
+- Import/decode, auto-suggest, source-analysis, quality-report, and export-bundle workflows.
 
 ## Web Bundle Budget
 

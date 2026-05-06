@@ -26,7 +26,9 @@
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint . --max-warnings=0",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "benchmark:record": "node scripts/run-benchmarks.mjs",
+    "benchmark:budget": "node scripts/check-benchmark-budgets.mjs --warn-only"
   },
   "engines": {
     "node": ">=20"
