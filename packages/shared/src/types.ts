@@ -284,6 +284,8 @@ export type PaletteLockScope = "single" | "firstFrame" | "sheet" | "project";
 
 export type PaletteDitheringMode = "none" | "ordered" | "errorDiffusion";
 
+export type PaletteDitheringRisk = "low" | "medium" | "high";
+
 export type PaletteSettings = {
   mode?: PaletteMode;
   strategy?: PaletteStrategy;
@@ -309,6 +311,15 @@ export type PaletteDriftDiagnostics = {
   warnings: string[];
 };
 
+export type PaletteDitheringSafetyDiagnostics = {
+  animationSensitive: boolean;
+  selectedMode: PaletteDitheringMode;
+  recommendedMode: "none";
+  risk: PaletteDitheringRisk;
+  constraint: "allow" | "force-none-by-default" | "review-before-export";
+  warnings: string[];
+};
+
 export type PaletteDiagnostics = {
   mode: PaletteMode;
   strategy: PaletteStrategy;
@@ -320,6 +331,7 @@ export type PaletteDiagnostics = {
   fixedColorCount?: number;
   preset?: string;
   dithering: PaletteDitheringMode;
+  ditheringSafety?: PaletteDitheringSafetyDiagnostics;
   drift?: PaletteDriftDiagnostics;
   warnings: string[];
 };

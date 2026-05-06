@@ -295,7 +295,7 @@ describe("generic manifest export", () => {
           strategy: "medianCut",
           lockScope: "sheet",
           maxColors: 8,
-          dithering: "none"
+          dithering: "ordered"
         }
       },
       diagnostics: {
@@ -307,7 +307,15 @@ describe("generic manifest export", () => {
           inputColorCount: 120,
           outputColorCount: 8,
           palette: ["#000000", "#ffffff"],
-          dithering: "none",
+          dithering: "ordered",
+          ditheringSafety: {
+            animationSensitive: true,
+            selectedMode: "ordered",
+            recommendedMode: "none",
+            risk: "high",
+            constraint: "review-before-export",
+            warnings: ["Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed."]
+          },
           warnings: [driftWarning],
           drift: {
             frameCount: 4,
@@ -335,11 +343,17 @@ describe("generic manifest export", () => {
       strategy: "medianCut",
       lockScope: "sheet",
       maxColors: 8,
-      dithering: "none"
+      dithering: "ordered"
     });
     expect(manifest.meta.operation.diagnostics?.palette).toMatchObject({
       outputColorCount: 8,
       lockScope: "sheet",
+      ditheringSafety: {
+        selectedMode: "ordered",
+        recommendedMode: "none",
+        risk: "high",
+        constraint: "review-before-export"
+      },
       warnings: [driftWarning],
       drift: {
         maxFramePaletteDelta: 3,

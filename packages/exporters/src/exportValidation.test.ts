@@ -225,7 +225,15 @@ describe("export validation report", () => {
                 inputColorCount: 120,
                 outputColorCount: 8,
                 palette: ["#000000", "#ffffff"],
-                dithering: "none",
+                dithering: "ordered",
+                ditheringSafety: {
+                  animationSensitive: true,
+                  selectedMode: "ordered",
+                  recommendedMode: "none",
+                  risk: "high",
+                  constraint: "review-before-export",
+                  warnings: ["Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed."]
+                },
                 warnings: ["Reduced from 120 input colors."],
                 drift: {
                   frameCount: 2,
@@ -256,6 +264,11 @@ describe("export validation report", () => {
       code: "palette-drift",
       severity: "warning",
       message: "Frame 1 introduced 3 colors outside the locked palette."
+    });
+    expect(report.issues).toContainEqual({
+      code: "palette-dithering",
+      severity: "warning",
+      message: "Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed."
     });
   });
 

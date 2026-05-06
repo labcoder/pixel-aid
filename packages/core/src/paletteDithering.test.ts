@@ -74,7 +74,39 @@ describe("palette dithering", () => {
     });
 
     expect(result.diagnostics.dithering).toBe("ordered");
+    expect(result.diagnostics.ditheringSafety).toMatchObject({
+      animationSensitive: true,
+      selectedMode: "ordered",
+      recommendedMode: "none",
+      risk: "high",
+      constraint: "review-before-export"
+    });
     expect(result.diagnostics.warnings).toContain("Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed.");
+  });
+
+  test("keeps animation-sensitive palette workflows on the no-dithering default", () => {
+    const source = solidImage(4, 2, [128, 128, 128, 255]);
+    const frames: SpriteFrame[] = [
+      { name: "frame_000", rect: { x: 0, y: 0, w: 2, h: 2 }, pivot: { x: 1, y: 2 }, durationMs: 120 },
+      { name: "frame_001", rect: { x: 2, y: 0, w: 2, h: 2 }, pivot: { x: 1, y: 2 }, durationMs: 120 }
+    ];
+
+    const result = resolvePalette(source, {
+      requested: { mode: "auto", strategy: "medianCut", maxColors: 2, lockScope: "sheet" },
+      fallbackMaxColors: 2,
+      frames
+    });
+
+    expect(result.diagnostics.dithering).toBe("none");
+    expect(result.diagnostics.ditheringSafety).toMatchObject({
+      animationSensitive: true,
+      selectedMode: "none",
+      recommendedMode: "none",
+      risk: "low",
+      constraint: "force-none-by-default",
+      warnings: []
+    });
+    expect(result.diagnostics.warnings).not.toContain(expect.stringContaining("Dithering can introduce"));
   });
 
   test("scores stable and unstable animation-sheet palettes deterministically", () => {

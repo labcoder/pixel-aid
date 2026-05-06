@@ -89,6 +89,14 @@ export function createExportValidationReport({
         message: warning
       });
     }
+
+    for (const warning of palette.ditheringSafety?.warnings ?? []) {
+      issues.push({
+        code: "palette-dithering",
+        severity: "warning",
+        message: warning
+      });
+    }
   }
 
   if (frameSequenceNames.length > 0) {

@@ -38,6 +38,8 @@ export type {
   OutlineMode,
   PaletteDiagnostics,
   PaletteDitheringMode,
+  PaletteDitheringRisk,
+  PaletteDitheringSafetyDiagnostics,
   PaletteDriftDiagnostics,
   PaletteLockScope,
   PaletteMode,

@@ -1,6 +1,7 @@
 import type {
   PaletteDiagnostics,
   PaletteDitheringMode,
+  PaletteDitheringSafetyDiagnostics,
   PaletteDriftDiagnostics,
   PaletteLockScope,
   PaletteMode,
@@ -124,8 +125,9 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
   if (drift && drift.warnings.length > 0) {
     warnings.push(...drift.warnings);
   }
-  if (settings.dithering !== "none" && options.frames && options.frames.length > 1) {
-    warnings.push("Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed.");
+  const ditheringSafety = analyzeDitheringSafety(settings.dithering, options.frames);
+  if (ditheringSafety && ditheringSafety.warnings.length > 0) {
+    warnings.push(...ditheringSafety.warnings);
   }
 
   return {
@@ -141,6 +143,7 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
       ...(fixedColors.length > 0 ? { fixedColorCount: fixedColors.length } : {}),
       ...(settings.preset ? { preset: settings.preset } : {}),
       dithering: settings.dithering,
+      ...(ditheringSafety ? { ditheringSafety } : {}),
       ...(drift ? { drift } : {}),
       warnings
     }
@@ -525,6 +528,30 @@ function normalizePaletteStrategy(value: PaletteStrategy | undefined): PaletteSt
 
 function normalizeDitheringMode(value: PaletteDitheringMode | undefined): PaletteDitheringMode {
   return value === "ordered" || value === "errorDiffusion" || value === "none" ? value : "none";
+}
+
+function analyzeDitheringSafety(
+  selectedMode: PaletteDitheringMode,
+  frames: readonly SpriteFrame[] | undefined
+): PaletteDitheringSafetyDiagnostics | undefined {
+  const animationSensitive = (frames?.length ?? 0) > 1;
+  if (!animationSensitive && selectedMode === "none") {
+    return undefined;
+  }
+
+  const warnings =
+    animationSensitive && selectedMode !== "none"
+      ? ["Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed."]
+      : [];
+
+  return {
+    animationSensitive,
+    selectedMode,
+    recommendedMode: "none",
+    risk: animationSensitive && selectedMode !== "none" ? "high" : animationSensitive ? "low" : "medium",
+    constraint: animationSensitive && selectedMode !== "none" ? "review-before-export" : animationSensitive ? "force-none-by-default" : "allow",
+    warnings
+  };
 }
 
 function normalizeMaxColors(value: number): number {
