@@ -59,6 +59,7 @@ describe("worker client repeated-job stress", () => {
       const fixOptions = createStressFixOptions(fixture);
       const workerFactory = () => new PipelineWorkerShim() as unknown as Worker;
       const analysisWorkerPool = createWorkerPool({ workerFactory });
+      const fixWorkerPool = createWorkerPool({ workerFactory });
 
       try {
         for (let iteration = 0; iteration < iterations; iteration += 1) {
@@ -79,11 +80,14 @@ describe("worker client repeated-job stress", () => {
           }).promise;
           await startFixJob(image, fixOptions, {
             onDiagnostics: (entry) => diagnostics.push(entry),
-            workerFactory
+            workerPool: fixWorkerPool,
+            staleKey: `stress:${fixture.id}:fix`,
+            stalePolicy: "latestOnly"
           }).promise;
         }
       } finally {
         analysisWorkerPool.dispose();
+        fixWorkerPool.dispose();
       }
 
       const report = createStressReport(diagnostics);

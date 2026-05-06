@@ -35,6 +35,8 @@ export function startEngineFixJob({
   let engineJob: EngineJobRecord;
   const fixJob = startFixJobImpl(image, options, {
     ...jobOptions,
+    staleKey: jobOptions.staleKey ?? `${assetId}:fix`,
+    stalePolicy: jobOptions.stalePolicy ?? "latestOnly",
     onProgress: (progress: WorkerProgress) => {
       engineJob = updateEngineJobProgress(engineJob, progress.percent / 100);
       onJobUpdate?.(engineJob);

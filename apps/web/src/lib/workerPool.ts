@@ -6,6 +6,7 @@ export type WorkerPoolJob = {
   transfer?: Transferable[];
   staleKey?: string;
   stalePolicy?: PersistentWorkerStalePolicy;
+  terminateGraceMs?: number;
   onWorkerCreate?: (durationMs: number) => void;
   onPostMessage?: (durationMs: number) => void;
   onProgress?: (progress: WorkerProgressResponse) => void;
@@ -219,7 +220,7 @@ export class WorkerPool {
       this.rejectJob(job, new WorkerPoolCancelledError(reason));
       this.terminateWorker();
       this.pump();
-    }, this.terminateGraceMs);
+    }, job.terminateGraceMs ?? this.terminateGraceMs);
   }
 
   private dropPendingStaleMatches(nextJob: QueuedWorkerJob): void {
