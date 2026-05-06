@@ -1,4 +1,4 @@
-import type { RGBAImage } from "@pixelaid/shared";
+import type { HaloRemovalDiagnostics, RGBAImage } from "@pixelaid/shared";
 import { cloneImage } from "./image";
 
 export type HaloRemovalOptions = {
@@ -10,6 +10,11 @@ export type HaloRemovalOptions = {
   neighborRadius?: number;
 };
 
+export type HaloRemovalResult = {
+  image: RGBAImage;
+  diagnostics: HaloRemovalDiagnostics;
+};
+
 type BackgroundSample = {
   r: number;
   g: number;
@@ -18,8 +23,16 @@ type BackgroundSample = {
 };
 
 export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions = {}): RGBAImage {
+  return applyHaloRemovalDetailed(image, options).image;
+}
+
+export function applyHaloRemovalDetailed(image: RGBAImage, options: HaloRemovalOptions = {}): HaloRemovalResult {
   if (!options.enabled) {
-    return cloneImage(image);
+    const background = estimateCornerBackground(image);
+    return {
+      image: cloneImage(image),
+      diagnostics: createHaloDiagnostics(false, background)
+    };
   }
 
   const alphaThreshold = options.alphaThreshold ?? 8;
@@ -28,6 +41,7 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
   const haloToleranceSq = squareTolerance(options.haloTolerance ?? 48);
   const radius = Math.max(1, Math.min(5, Math.round(options.neighborRadius ?? 1)));
   const background = estimateCornerBackground(image);
+  const diagnostics = createHaloDiagnostics(true, background);
   const extendedMatteRadius = options.neighborRadius === undefined && background.a <= alphaThreshold ? 4 : radius;
   const output = cloneImage(image);
   const replacement = new Uint16Array(4);
@@ -49,6 +63,7 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
         ? extendedMatteRadius
         : radius;
       if (!hasOutsideNeighbor(image, x, y, searchRadius, background, alphaThreshold, backgroundToleranceSq)) {
+        diagnostics.skippedNoSubjectNeighborPixels += 1;
         continue;
       }
 
@@ -71,11 +86,19 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
           output.data[offset + 1] = background.a <= alphaThreshold ? 0 : Math.round(background.g);
           output.data[offset + 2] = background.a <= alphaThreshold ? 0 : Math.round(background.b);
           output.data[offset + 3] = background.a <= alphaThreshold ? 0 : image.data[offset + 3]!;
+          if (background.a <= alphaThreshold) {
+            diagnostics.clearedPixels += 1;
+          } else {
+            diagnostics.correctedPixels += 1;
+          }
         } else if (background.a <= alphaThreshold && isPaleNeutralPixel(image, offset)) {
           output.data[offset] = 0;
           output.data[offset + 1] = 0;
           output.data[offset + 2] = 0;
           output.data[offset + 3] = 0;
+          diagnostics.clearedPixels += 1;
+        } else {
+          diagnostics.preservedEdgePixels += 1;
         }
         continue;
       }
@@ -83,6 +106,7 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
       const isKnownHalo = isHaloPixel(image, offset, background, alphaThreshold, solidAlphaThreshold, haloToleranceSq);
       const isChromaMatte = isChromaMattePixel(image, offset, background, alphaThreshold);
       if (isKnownHalo && isBorderPixel(image, x, y) && colorDistanceToBackgroundSq(image, offset, background) <= backgroundToleranceSq) {
+        diagnostics.preservedEdgePixels += 1;
         continue;
       }
       if (!isKnownHalo && !isChromaMatte && !isContrastingMattePixel(image, offset, replacement)) {
@@ -91,6 +115,9 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
           output.data[offset + 1] = 0;
           output.data[offset + 2] = 0;
           output.data[offset + 3] = 0;
+          diagnostics.clearedPixels += 1;
+        } else {
+          diagnostics.preservedEdgePixels += 1;
         }
         continue;
       }
@@ -99,10 +126,44 @@ export function applyHaloRemoval(image: RGBAImage, options: HaloRemovalOptions =
       output.data[offset + 1] = replacement[1]!;
       output.data[offset + 2] = replacement[2]!;
       output.data[offset + 3] = Math.max(image.data[offset + 3]!, replacement[3]!);
+      diagnostics.correctedPixels += 1;
     }
   }
 
-  return output;
+  diagnostics.summary = summarizeHaloDiagnostics(diagnostics);
+  return { image: output, diagnostics };
+}
+
+function createHaloDiagnostics(enabled: boolean, background: BackgroundSample): HaloRemovalDiagnostics {
+  return {
+    enabled,
+    background: {
+      r: Math.round(background.r),
+      g: Math.round(background.g),
+      b: Math.round(background.b),
+      a: Math.round(background.a)
+    },
+    correctedPixels: 0,
+    clearedPixels: 0,
+    preservedEdgePixels: 0,
+    skippedNoSubjectNeighborPixels: 0,
+    warnings: [],
+    summary: enabled ? "halo cleanup ready" : "halo cleanup disabled"
+  };
+}
+
+function summarizeHaloDiagnostics(diagnostics: HaloRemovalDiagnostics): string {
+  const changed = diagnostics.correctedPixels + diagnostics.clearedPixels;
+  const preserved = diagnostics.preservedEdgePixels;
+  if (changed === 0 && preserved === 0) {
+    return "halo cleanup found no matte-like edge pixels to change";
+  }
+  if (changed === 0) {
+    return `halo cleanup preserved ${preserved} edge pixel${preserved === 1 ? "" : "s"} as likely intentional glow/detail`;
+  }
+  return `halo cleanup corrected ${diagnostics.correctedPixels} and cleared ${diagnostics.clearedPixels} edge pixel${
+    changed === 1 ? "" : "s"
+  }; preserved ${preserved} likely intentional edge pixel${preserved === 1 ? "" : "s"}`;
 }
 
 function findReplacementFromSubjectNeighbors(

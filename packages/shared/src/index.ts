@@ -31,6 +31,7 @@ export type {
   GridCandidateDiagnostics,
   GridDriftDiagnostics,
   GridSobelTileVotingDiagnostics,
+  HaloRemovalDiagnostics,
   MorphologyCleanupSettings,
   MorphologyDiagnostics,
   OutlineMode,

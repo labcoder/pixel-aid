@@ -18,7 +18,7 @@ import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
-import { applyHaloRemoval } from "./halo";
+import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup } from "./outline";
@@ -88,7 +88,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
-  const haloCleaned = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false }));
+  const haloResult = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemovalDetailed(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false }));
+  const haloCleaned = haloResult.image;
   const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   const morphologyCleaned = morphologyResult.image;
@@ -149,6 +150,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     settings: options,
     diagnostics: {
       alpha: alphaDiagnostics,
+      ...(options.cleanup.removeHalos ? { halo: haloResult.diagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
       palette: paletteDiagnostics,

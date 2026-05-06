@@ -265,6 +265,17 @@ export type AlphaCleanupDiagnostics = {
   warnings: string[];
 };
 
+export type HaloRemovalDiagnostics = {
+  enabled: boolean;
+  background: { r: number; g: number; b: number; a: number };
+  correctedPixels: number;
+  clearedPixels: number;
+  preservedEdgePixels: number;
+  skippedNoSubjectNeighborPixels: number;
+  warnings: string[];
+  summary: string;
+};
+
 export type PaletteMode = "auto" | "fixed" | "preset";
 
 export type PaletteStrategy = "medianCut" | "frequency" | "perceptual";
@@ -308,6 +319,7 @@ export type PaletteDiagnostics = {
 
 export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
+  halo?: HaloRemovalDiagnostics;
   morphology?: MorphologyDiagnostics;
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
