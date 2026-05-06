@@ -35,6 +35,10 @@ PixelAid's `apps/web/src/App.tsx` is still the main editor shell, but the optimi
 9. Keep document serialization and export downloads in web adapters until engine commands can describe the operation without browser objects.
 10. Add guardrails so new orchestration code goes to engine or adapters, not back into `App.tsx`.
 
+## Guardrail
+
+Run `npm run app-shell:check` after app-shell work. The check is warn-only: it reports the current `App.tsx` line count against the advisory budget and warns if new direct worker-starter imports appear. The preferred destination for new orchestration is `packages/engine`, a web adapter in `apps/web/src/lib`, or an extracted panel component.
+
 ## Candidate Follow-Up Slices
 
 - Asset browser shell: own asset list rendering, menu state, deletion prompts, and selection dispatch.

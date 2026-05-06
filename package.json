@@ -28,7 +28,8 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "benchmark:record": "node scripts/run-benchmarks.mjs",
-    "benchmark:budget": "node scripts/check-benchmark-budgets.mjs --warn-only"
+    "benchmark:budget": "node scripts/check-benchmark-budgets.mjs --warn-only",
+    "app-shell:check": "node scripts/check-app-shell-size.mjs"
   },
   "engines": {
     "node": ">=20"
