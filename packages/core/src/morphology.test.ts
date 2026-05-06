@@ -146,6 +146,30 @@ describe("alpha-scoped morphology cleanup", () => {
 
     expect(result.image.data[(1 * result.image.width + 1) * 4 + 3]).toBe(255);
     expect(result.diagnostics?.morphology?.filledHolePixels).toBe(1);
+    expect(result.diagnostics?.morphology?.warnings).toContain("Filled 1 alpha pinhole pixel during morphology cleanup.");
+  });
+
+  test("reports removed components and preserved single-pixel details", () => {
+    const source = alphaImage([".......", ".#.....", "...###.", "...###.", "...###.", ".#.....", "......."]);
+
+    const preserve = applyMorphologyCleanup(source, {
+      enabled: true,
+      removeTinyComponents: true,
+      maxComponentPixels: 1,
+      preserveSinglePixelDetails: true
+    });
+    const remove = applyMorphologyCleanup(source, {
+      enabled: true,
+      removeTinyComponents: true,
+      maxComponentPixels: 1,
+      preserveSinglePixelDetails: false
+    });
+
+    expect(preserve.diagnostics.removedComponentPixels).toBe(0);
+    expect(preserve.diagnostics.tinyComponentPixels).toBe(2);
+    expect(preserve.diagnostics.warnings).toContain("Preserved 2 tiny component pixels because preserveSinglePixelDetails is enabled.");
+    expect(remove.diagnostics.removedComponentPixels).toBe(2);
+    expect(remove.diagnostics.warnings).toContain("Removed 2 tiny component pixels during morphology cleanup.");
   });
 
   test("quality report recommends morphology only when mask diagnostics show artifacts", () => {

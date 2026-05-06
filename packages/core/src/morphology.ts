@@ -207,11 +207,35 @@ export function applyMorphologyCleanup(
   diagnostics.pinholePixels = artifactDiagnostics.pinholePixels;
   diagnostics.tinyComponentPixels = artifactDiagnostics.tinyComponentPixels;
   diagnostics.brokenOutlinePixels = artifactDiagnostics.brokenOutlinePixels;
+  addMorphologyWarnings(diagnostics, settings);
 
   return {
     image: applyMaskToAlphaImage(image, sourceMask, currentMask, alphaThreshold),
     diagnostics
   };
+}
+
+function addMorphologyWarnings(diagnostics: MorphologyDiagnostics, settings: MorphologyCleanupSettings): void {
+  if (diagnostics.filledHolePixels > 0) {
+    diagnostics.warnings.push(
+      `Filled ${diagnostics.filledHolePixels} alpha pinhole pixel${diagnostics.filledHolePixels === 1 ? "" : "s"} during morphology cleanup.`
+    );
+  }
+  if (diagnostics.removedComponentPixels > 0) {
+    diagnostics.warnings.push(
+      `Removed ${diagnostics.removedComponentPixels} tiny component pixel${diagnostics.removedComponentPixels === 1 ? "" : "s"} during morphology cleanup.`
+    );
+  }
+  if (settings.removeTinyComponents && (settings.preserveSinglePixelDetails ?? true) && diagnostics.tinyComponentPixels > 0) {
+    diagnostics.warnings.push(
+      `Preserved ${diagnostics.tinyComponentPixels} tiny component pixel${diagnostics.tinyComponentPixels === 1 ? "" : "s"} because preserveSinglePixelDetails is enabled.`
+    );
+  }
+  if (!settings.close && diagnostics.brokenOutlinePixels > 0) {
+    diagnostics.warnings.push(
+      `Detected ${diagnostics.brokenOutlinePixels} possible broken outline gap pixel${diagnostics.brokenOutlinePixels === 1 ? "" : "s"}; enable close to repair them.`
+    );
+  }
 }
 
 function erodeMask(mask: Uint8Array, width: number, height: number, options: MorphologyMaskOptions): Uint8Array {

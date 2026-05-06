@@ -202,6 +202,8 @@ Mask cleanup options can run before optional outline drawing. They also work whe
 
 This keeps adaptive downsampling's better color choices while preventing outlines from following isolated edge noise or tracing one-pixel holes inside the sprite.
 
+The explicit morphology pass uses separate alpha-mask thresholds. `fillTinyHoles` defaults to one-pixel enclosed holes and samples neighboring subject colors for filled pixels. `removeTinyComponents` defaults to one-pixel disconnected components, but keeps them when `preserveSinglePixelDetails` is enabled. Diagnostics report filled hole pixels, removed component pixels, remaining tiny components, and possible broken outline gap pixels so users can see whether cleanup acted or stayed conservative.
+
 ## Single-Sprite Cleanup Quality
 
 The current single-sprite fixture covers a high-resolution fake-pixel character on a bright background. The strongest path today is:
