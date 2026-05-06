@@ -1,4 +1,4 @@
-import type { OutlineMode, RGBAImage } from "@pixelaid/shared";
+import type { OutlineCleanupDiagnostics, OutlineMode, RGBAImage } from "@pixelaid/shared";
 import { clampByte, parseHexColor, rgbToHex, unpackRgb } from "./color";
 import { cloneImage } from "./image";
 
@@ -12,6 +12,11 @@ export type OutlineCleanupOptions = {
   preserveSinglePixelDetails?: boolean;
   alphaThreshold?: number;
   backgroundTolerance?: number;
+};
+
+export type OutlineCleanupResult = {
+  image: RGBAImage;
+  diagnostics: OutlineCleanupDiagnostics;
 };
 
 export type OutlineColorCandidate = {
@@ -28,8 +33,23 @@ const OUTLINE_BUCKET_DISTANCE = 28;
 const SOURCE_COLOR_MATCH_DISTANCE = 18;
 
 export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options: OutlineCleanupOptions = {}): RGBAImage {
+  return applyOutlineCleanupDetailed(image, mode, options).image;
+}
+
+export function applyOutlineCleanupDetailed(image: RGBAImage, mode: OutlineMode, options: OutlineCleanupOptions = {}): OutlineCleanupResult {
+  const candidateOptions: Pick<OutlineCleanupOptions, "alphaThreshold" | "backgroundTolerance"> = {};
+  if (options.alphaThreshold !== undefined) {
+    candidateOptions.alphaThreshold = options.alphaThreshold;
+  }
+  if (options.backgroundTolerance !== undefined) {
+    candidateOptions.backgroundTolerance = options.backgroundTolerance;
+  }
+  const detectedCandidateCount = mode === "none" ? 0 : detectOutlineColorCandidates(image, candidateOptions).length;
+  const diagnostics = createOutlineDiagnostics(mode, normalizeSourceColors(options.sourceColors).length, detectedCandidateCount);
+
   if (mode === "none" && !options.removeOrphans && !options.closeGaps) {
-    return cloneImage(image);
+    diagnostics.summary = "outline cleanup disabled";
+    return { image: cloneImage(image), diagnostics };
   }
 
   const alphaThreshold = options.alphaThreshold ?? 8;
@@ -51,12 +71,14 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
   }
 
   if (mode === "none") {
-    return output;
+    diagnostics.summary = summarizeOutlineDiagnostics(diagnostics);
+    return { image: output, diagnostics };
   }
 
   const outlineAlpha = clampByte(options.alpha ?? 255);
   const size = normalizeOutlineSize(options.size ?? 1);
   const selectedSourceColors = normalizeSourceColors(options.sourceColors);
+  diagnostics.explicitSourceColorCount = selectedSourceColors.length;
   const detectedOutlineColor = selectedSourceColors[0] ?? detectExistingOutlineColor(image, alphaThreshold, background, backgroundTolerance);
   const outlineColor =
     options.color !== undefined
@@ -68,8 +90,11 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
           0;
 
   if (outlineColor === null) {
-    return output;
+    diagnostics.warnings.push("No outline candidate found for repairExisting; outline cleanup was skipped.");
+    diagnostics.summary = summarizeOutlineDiagnostics(diagnostics);
+    return { image: output, diagnostics };
   }
+  diagnostics.selectedColor = rgbToHex(outlineColor);
 
   const [r, g, b] = unpackRgb(outlineColor, 255);
   const outlineSourceMask =
@@ -89,10 +114,38 @@ export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options
       output.data[offset + 1] = g;
       output.data[offset + 2] = b;
       output.data[offset + 3] = outlineAlpha;
+      diagnostics.appliedPixels += 1;
     }
   }
 
-  return output;
+  if (mode === "repairExisting" && diagnostics.appliedPixels === 0 && selectedSourceColors.length === 0 && options.color === undefined) {
+    diagnostics.warnings.push("No outline candidate found for repairExisting; outline cleanup was skipped.");
+  }
+  diagnostics.summary = summarizeOutlineDiagnostics(diagnostics);
+  return { image: output, diagnostics };
+}
+
+function createOutlineDiagnostics(mode: OutlineMode, explicitSourceColorCount: number, detectedCandidateCount: number): OutlineCleanupDiagnostics {
+  return {
+    mode,
+    explicitSourceColorCount,
+    detectedCandidateCount,
+    appliedPixels: 0,
+    warnings: [],
+    summary: "outline cleanup ready"
+  };
+}
+
+function summarizeOutlineDiagnostics(diagnostics: OutlineCleanupDiagnostics): string {
+  if (diagnostics.mode === "none") {
+    return diagnostics.appliedPixels > 0 ? `outline cleanup adjusted ${diagnostics.appliedPixels} mask pixel${diagnostics.appliedPixels === 1 ? "" : "s"}` : "outline cleanup disabled";
+  }
+  if (diagnostics.appliedPixels === 0) {
+    return diagnostics.selectedColor
+      ? `outline cleanup selected ${diagnostics.selectedColor} but did not need to add pixels`
+      : "outline cleanup skipped because no outline candidate was available";
+  }
+  return `outline cleanup used ${diagnostics.selectedColor ?? "auto"} and wrote ${diagnostics.appliedPixels} pixel${diagnostics.appliedPixels === 1 ? "" : "s"}`;
 }
 
 export function detectOutlineColorCandidates(

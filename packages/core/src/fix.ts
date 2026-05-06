@@ -21,7 +21,7 @@ import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
 import { applyMorphologyCleanup } from "./morphology";
-import { applyOutlineCleanup } from "./outline";
+import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
 import { assertNotCancelled, collectedPhaseTimings, createFixPhaseTimer, measurePhase, phasePercent, reportProgress } from "./runtime";
 import type { FixPhaseTimer, FixRuntimeOptions } from "./runtime";
@@ -93,8 +93,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   const morphologyCleaned = morphologyResult.image;
-  const outlineCleaned = measurePhase(phaseTimer, "outline-cleanup", () =>
-    applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
+  const outlineResult = measurePhase(phaseTimer, "outline-cleanup", () =>
+    applyOutlineCleanupDetailed(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
       sourceColors: options.cleanup.outlineSourceColors,
       alpha: options.cleanup.outlineAlpha,
@@ -104,6 +104,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
     })
   );
+  const outlineCleaned = outlineResult.image;
   reportProgress(runtime, "alpha-cleanup", 65, "Alpha cleanup complete");
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 70, "Resolving palette");
@@ -153,6 +154,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       ...(options.cleanup.removeHalos ? { halo: haloResult.diagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
+      ...((options.cleanup.outlineMode ?? "none") !== "none" ? { outline: outlineResult.diagnostics } : {}),
       palette: paletteDiagnostics,
       ...(phaseTimings ? { phaseTimings } : {})
     }
@@ -901,11 +903,18 @@ function estimateImageCornerColor(image: RGBAImage): [number, number, number, nu
 }
 
 function reservedOutlinePalette(options: FixOptions): string[] {
-  if ((options.cleanup.outlineMode ?? "none") === "none" || !options.cleanup.outlineColor) {
+  if ((options.cleanup.outlineMode ?? "none") === "none") {
     return [];
   }
 
-  return [rgbToHex(parseHexColor(options.cleanup.outlineColor))];
+  const colors: string[] = [];
+  if (options.cleanup.outlineColor) {
+    colors.push(rgbToHex(parseHexColor(options.cleanup.outlineColor)));
+  }
+  if (options.cleanup.outlineSourceColors) {
+    colors.push(...options.cleanup.outlineSourceColors);
+  }
+  return colors;
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {

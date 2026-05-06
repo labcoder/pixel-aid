@@ -321,6 +321,7 @@ export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
   halo?: HaloRemovalDiagnostics;
   morphology?: MorphologyDiagnostics;
+  outline?: OutlineCleanupDiagnostics;
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
   tilesetRepairs?: TilesetSeamRepairDiagnostics;
@@ -367,6 +368,16 @@ export type ContrastExpansionDiagnostics = {
 };
 
 export type OutlineMode = "none" | "repairExisting" | "add";
+
+export type OutlineCleanupDiagnostics = {
+  mode: OutlineMode;
+  selectedColor?: string;
+  explicitSourceColorCount: number;
+  detectedCandidateCount: number;
+  appliedPixels: number;
+  warnings: string[];
+  summary: string;
+};
 
 export type MorphologyCleanupSettings = {
   enabled?: boolean;

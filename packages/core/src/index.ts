@@ -11,6 +11,7 @@ export type {
   HaloRemovalDiagnostics,
   MorphologyCleanupSettings,
   MorphologyDiagnostics,
+  OutlineCleanupDiagnostics,
   OutlineMode,
   PixelFixResult,
   RGBAImage,
@@ -57,8 +58,8 @@ export { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetTyp
 export type { FixSettingSuggestion } from "./fixSuggestions";
 export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./image";
 export type { RgbaTuple } from "./image";
-export { applyOutlineCleanup, detectOutlineColorCandidates } from "./outline";
-export type { OutlineCleanupOptions, OutlineColorCandidate } from "./outline";
+export { applyOutlineCleanup, applyOutlineCleanupDetailed, detectOutlineColorCandidates } from "./outline";
+export type { OutlineCleanupOptions, OutlineCleanupResult, OutlineColorCandidate } from "./outline";
 export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
 export type { AnalyzePaletteDriftOptions, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export { analyzeQualityReport } from "./qualityReport";

@@ -34,6 +34,7 @@ export type {
   HaloRemovalDiagnostics,
   MorphologyCleanupSettings,
   MorphologyDiagnostics,
+  OutlineCleanupDiagnostics,
   OutlineMode,
   PaletteDiagnostics,
   PaletteDitheringMode,
