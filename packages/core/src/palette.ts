@@ -38,6 +38,11 @@ type ColorBox = {
   maxB: number;
 };
 
+type PaletteAnalysis = {
+  exactCounts: Map<number, ColorCount>;
+  exactColorCount: number;
+};
+
 export type PaletteRemapOptions = Partial<LoopProgressOptions> & {
   dithering?: PaletteDitheringMode;
 };
@@ -94,13 +99,15 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
     warnings.push("Fixed palette mode did not include valid colors; auto palette extraction was used.");
   }
 
+  const sourceAnalysis = analyzePaletteColors(image);
   const paletteSource = hasFixedPalette
     ? image
     : selectPaletteSource(image, settings.lockScope, options.frames, options.lockSourceFrame, warnings);
+  const paletteSourceAnalysis = paletteSource === image ? sourceAnalysis : analyzePaletteColors(paletteSource);
   const palette =
     hasFixedPalette
       ? fixedColors
-      : extractAutoPalette(paletteSource, maxColors, settings.strategy, reserved);
+      : extractAutoPaletteFromAnalysis(paletteSourceAnalysis, maxColors, settings.strategy, reserved);
   const outputPalette = mergeReservedPalette(palette, reserved, maxColors);
 
   if (palette.length + reserved.length > outputPalette.length) {
@@ -128,7 +135,7 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
       strategy: settings.strategy,
       lockScope: settings.lockScope,
       maxColors,
-      inputColorCount: countVisibleExactColors(image),
+      inputColorCount: sourceAnalysis.exactColorCount,
       outputColorCount: outputPalette.length,
       palette: outputPalette,
       ...(fixedColors.length > 0 ? { fixedColorCount: fixedColors.length } : {}),
@@ -146,6 +153,15 @@ export function extractAutoPalette(
   strategy: PaletteStrategy = "medianCut",
   reservedColors: readonly string[] = []
 ): string[] {
+  return extractAutoPaletteFromAnalysis(analyzePaletteColors(image), maxColors, strategy, reservedColors);
+}
+
+function extractAutoPaletteFromAnalysis(
+  analysis: PaletteAnalysis,
+  maxColors: number,
+  strategy: PaletteStrategy = "medianCut",
+  reservedColors: readonly string[] = []
+): string[] {
   const normalizedMaxColors = normalizeMaxColors(maxColors);
   const reserved = uniqueHexColors(reservedColors);
   const autoBudget = Math.max(0, normalizedMaxColors - reserved.length);
@@ -155,10 +171,10 @@ export function extractAutoPalette(
 
   const palette =
     strategy === "frequency"
-      ? extractFrequencyPalette(image, autoBudget)
+      ? extractFrequencyPaletteFromCounts(analysis.exactCounts, autoBudget)
       : strategy === "perceptual"
-        ? extractPerceptualPalette(image, autoBudget)
-        : extractMedianCutPalette(image, autoBudget);
+        ? extractPerceptualPaletteFromCounts(analysis.exactCounts, autoBudget)
+        : extractMedianCutPaletteFromCounts(analysis.exactCounts, autoBudget);
   const reservedExact = new Set(reserved);
   const reservedQuantized = new Set(reserved.map(quantizedHexColor));
   const filtered = palette.filter((color) => !reservedExact.has(color) && !reservedQuantized.has(color));
@@ -171,8 +187,10 @@ function extractFrequencyPalette(image: RGBAImage, maxColors: number): string[] 
     throw new Error("maxColors must be a positive integer");
   }
 
-  const exactCounts = collectVisibleColorCounts(image);
+  return extractFrequencyPaletteFromCounts(collectVisibleColorCounts(image), maxColors);
+}
 
+function extractFrequencyPaletteFromCounts(exactCounts: Map<number, ColorCount>, maxColors: number): string[] {
   if (exactCounts.size <= maxColors) {
     const exactPalette = rankCounts(exactCounts).map((entry) => rgbToHex(entry.color));
     return exactPalette.length > 0 ? exactPalette : ["#000000"];
@@ -203,7 +221,10 @@ function extractMedianCutPalette(image: RGBAImage, maxColors: number): string[] 
     throw new Error("maxColors must be a positive integer");
   }
 
-  const counts = collectVisibleColorCounts(image);
+  return extractMedianCutPaletteFromCounts(collectVisibleColorCounts(image), maxColors);
+}
+
+function extractMedianCutPaletteFromCounts(counts: Map<number, ColorCount>, maxColors: number): string[] {
   if (counts.size === 0) {
     return ["#000000"];
   }
@@ -256,7 +277,10 @@ function extractPerceptualPalette(image: RGBAImage, maxColors: number): string[]
     throw new Error("maxColors must be a positive integer");
   }
 
-  const counts = collectVisibleColorCounts(image);
+  return extractPerceptualPaletteFromCounts(collectVisibleColorCounts(image), maxColors);
+}
+
+function extractPerceptualPaletteFromCounts(counts: Map<number, ColorCount>, maxColors: number): string[] {
   if (counts.size === 0) {
     return ["#000000"];
   }
@@ -795,6 +819,14 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
   }
 
   return output;
+}
+
+function analyzePaletteColors(image: RGBAImage): PaletteAnalysis {
+  const exactCounts = collectVisibleColorCounts(image);
+  return {
+    exactCounts,
+    exactColorCount: exactCounts.size
+  };
 }
 
 function createNearestPaletteCache(): Int32Array {

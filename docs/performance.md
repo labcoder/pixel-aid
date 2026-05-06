@@ -271,6 +271,16 @@ Non-dithered palette remap now uses a per-operation nearest-palette cache keyed 
 | `large-landscape-bands` full-fix `palette-remap` phase from 5.1.2 hotspot run | 114.20 ms | Replaced by isolated benchmark | Direct phase baseline retired |
 | `large-landscape-bands: palette remap 1.17MP` | New benchmark | 7.29 ms | Baseline added with 64-color palette |
 
+### Optimization 5.3.2 Result
+
+Palette resolution now builds a `PaletteAnalysis` summary once for the source image and reuses its exact-color count map when the auto palette source is the full image. This removes the duplicate full-image scan previously done by `inputColorCount` diagnostics plus auto palette extraction. First-frame palette lock still analyzes its cropped frame separately, because that is a different source region.
+
+| Benchmark | Before 5.3.2 | After | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 42.07 ms | 43.21 ms | Flat/local noise |
+| `fixes cropped adaptive single sprite` | 64.92 ms | 67.40 ms | Flat/local noise |
+| `large-landscape-bands: palette remap 1.17MP` | 7.29 ms | 7.37 ms | Unchanged, remap-only path |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
