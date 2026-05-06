@@ -80,3 +80,5 @@ export type {
   EngineStateVersion,
   EngineTimelineState
 } from "./state";
+export { createEmptyEngineState, createEngineStore, reduceEngineState } from "./store";
+export type { EngineReducer, EngineStateListener, EngineStore } from "./store";
