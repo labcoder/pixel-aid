@@ -216,14 +216,6 @@ function extractFrequencyPaletteFromCounts(exactCounts: Map<number, ColorCount>,
   return palette.length > 0 ? palette : ["#000000"];
 }
 
-function extractMedianCutPalette(image: RGBAImage, maxColors: number): string[] {
-  if (!Number.isInteger(maxColors) || maxColors <= 0) {
-    throw new Error("maxColors must be a positive integer");
-  }
-
-  return extractMedianCutPaletteFromCounts(collectVisibleColorCounts(image), maxColors);
-}
-
 function extractMedianCutPaletteFromCounts(counts: Map<number, ColorCount>, maxColors: number): string[] {
   if (counts.size === 0) {
     return ["#000000"];
@@ -270,14 +262,6 @@ function extractMedianCutPaletteFromCounts(counts: Map<number, ColorCount>, maxC
   }
 
   return palette.length > 0 ? palette : ["#000000"];
-}
-
-function extractPerceptualPalette(image: RGBAImage, maxColors: number): string[] {
-  if (!Number.isInteger(maxColors) || maxColors <= 0) {
-    throw new Error("maxColors must be a positive integer");
-  }
-
-  return extractPerceptualPaletteFromCounts(collectVisibleColorCounts(image), maxColors);
 }
 
 function extractPerceptualPaletteFromCounts(counts: Map<number, ColorCount>, maxColors: number): string[] {
