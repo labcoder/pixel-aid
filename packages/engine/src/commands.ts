@@ -11,6 +11,7 @@ export const engineCommandTypes = [
   "fix.run",
   "job.cancel",
   "frame.rect.edit",
+  "sheet.rowFrameCount.set",
   "timeline.selection.update",
   "export.bundle",
   "document.savePlaceholder",
@@ -84,6 +85,13 @@ export type EngineEditFrameRectCommand = {
   rect: Rect;
 };
 
+export type EngineSetSheetRowFrameCountCommand = {
+  type: "sheet.rowFrameCount.set";
+  assetId: string;
+  animationName: string;
+  frameCount: number;
+};
+
 export type EngineUpdateTimelineSelectionCommand = {
   type: "timeline.selection.update";
   assetId: string;
@@ -119,6 +127,7 @@ export type EngineCommand =
   | EngineRunFixCommand
   | EngineCancelJobCommand
   | EngineEditFrameRectCommand
+  | EngineSetSheetRowFrameCountCommand
   | EngineUpdateTimelineSelectionCommand
   | EngineExportBundleCommand
   | EngineSaveDocumentPlaceholderCommand

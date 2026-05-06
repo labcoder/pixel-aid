@@ -61,6 +61,7 @@ export type {
   EngineRunSourceAnalysisCommand,
   EngineSaveDocumentPlaceholderCommand,
   EngineSelectAssetCommand,
+  EngineSetSheetRowFrameCountCommand,
   EngineStateChangedEvent,
   EngineUpdateFixSettingsCommand,
   EngineUpdateTimelineSelectionCommand

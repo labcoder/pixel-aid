@@ -10,8 +10,10 @@ import {
   joinSheetRowsIntoClip,
   removeAnimationOrSheetRow,
   removeFrameAtSelection,
-  removeRowAtSelection
+  removeRowAtSelection,
+  setRowFrameCount
 } from "./sheetManualEditing";
+import { createFrameEditHistoryState, pushFrameEditHistoryEntry, redoFrameEditHistory, undoFrameEditHistory } from "./frameEditHistory";
 
 const frames: SpriteFrame[] = [
   frame("row_1_000", "row_1", { x: 0, y: 0, w: 64, h: 64 }, { x: 100, y: 20, w: 128, h: 128 }),
@@ -344,6 +346,85 @@ describe("manual sheet editing", () => {
     expect(result.frames[3]?.sourceRect).toEqual({ x: 228, y: 180, w: 128, h: 128 });
     expect(result.frames[4]?.sourceRect).toEqual({ x: 356, y: 180, w: 128, h: 128 });
     expect(result.frames[4]?.rect).toEqual({ x: 128, y: 64, w: 64, h: 64 });
+  });
+
+  test("sets a sparse row to a higher frame count with deterministic output packing", () => {
+    const result = setRowFrameCount({
+      frames,
+      animations,
+      selectedAnimationName: "row_2",
+      targetFrameCount: 3,
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 640, height: 512 }
+    });
+
+    expect(result.animations[1]?.frameNames).toEqual(["row_2_000", "row_2_001", "row_2_002"]);
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_1_001", "row_2_000", "row_2_001", "row_2_002"]);
+    expect(result.frames[3]).toMatchObject({
+      name: "row_2_001",
+      tags: ["row_2"],
+      rect: { x: 64, y: 64, w: 64, h: 64 },
+      sourceRect: { x: 228, y: 180, w: 128, h: 128 },
+      pivot: { x: 32, y: 64 }
+    });
+    expect(result.frames[4]?.sourceRect).toEqual({ x: 356, y: 180, w: 128, h: 128 });
+    expect(result.selectedFrameIndex).toBe(4);
+    expect(result.selectedAnimationName).toBe("row_2");
+  });
+
+  test("sets a row to a lower frame count and removes dangling animation references", () => {
+    const result = setRowFrameCount({
+      frames,
+      animations: [...animations, { name: "preview", frameNames: ["row_1_001", "row_2_000"], loop: true, fps: 8 }],
+      selectedAnimationName: "row_1",
+      targetFrameCount: 1,
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 512, height: 512 }
+    });
+
+    expect(result.animations.map((animation) => animation.frameNames)).toEqual([["row_1_000"], ["row_2_000"], ["row_2_000"]]);
+    expect(result.frames.map((item) => item.name)).toEqual(["row_1_000", "row_2_000"]);
+    expect(result.frames.map((item) => item.rect)).toEqual([
+      { x: 0, y: 0, w: 64, h: 64 },
+      { x: 0, y: 64, w: 64, h: 64 }
+    ]);
+    expect(result.frames[0]?.sourceRect).toEqual({ x: 100, y: 20, w: 128, h: 128 });
+    expect(result.frames[0]?.pivot).toEqual({ x: 32, y: 64 });
+    expect(result.selectedFrameIndex).toBe(0);
+  });
+
+  test("row frame-count edits fit existing undo and redo history snapshots", () => {
+    const initial = {
+      frames,
+      animations,
+      selectedFrameIndex: 0,
+      selectedAnimationName: "row_1"
+    };
+    const edited = setRowFrameCount({
+      frames,
+      animations,
+      selectedAnimationName: "row_1",
+      targetFrameCount: 1,
+      margin: 0,
+      spacing: 0,
+      scaleX: 2,
+      scaleY: 2,
+      sourceSize: { width: 512, height: 512 }
+    });
+    const history = pushFrameEditHistoryEntry(createFrameEditHistoryState(initial), edited);
+
+    expect(history.present.frames).toHaveLength(2);
+    const undone = undoFrameEditHistory(history);
+    expect(undone.present.frames).toHaveLength(3);
+    const redone = redoFrameEditHistory(undone);
+    expect(redone.present.frames).toHaveLength(2);
+    expect(redone.present.animations[0]?.frameNames).toEqual(["row_1_000"]);
   });
 
   test("fills every sparse row to the widest row count", () => {

@@ -81,6 +81,8 @@ This is still conservative. Row-label matching is a small template matcher for c
 
 Detected frames can be manually nudged or resized in the web viewport. Move and resize operations apply source-space deltas to the frame `sourceRect` and update the corresponding native frame `rect` by the active grid scale. This keeps the source overlay, output slicing metadata, and row animation membership aligned without rerunning detection.
 
+Detected animation rows can also be corrected to an explicit frame count. Increasing a row clones the nearest source footprint forward with the existing source-rect shift rules; decreasing a row removes trailing row cells, removes dangling animation references, preserves surviving frame names/tags/pivots/source rects, and repacks output rects through the same deterministic animation-row layout path. These edits are ordinary frame edit snapshots, so existing undo/redo restores the previous frames, animations, and selection.
+
 Detected row animation tags can also be corrected in the timeline. Renaming a row clip updates matching frame names, frame-duration override keys, frame tags, and exported manifest animation IDs so a detected `row_2` can become `walk` without leaving stale frame references behind.
 
 ## Tileset Seam Diagnostics

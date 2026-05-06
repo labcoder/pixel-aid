@@ -217,6 +217,77 @@ export function fillRowToFrameCount({
   };
 }
 
+export function setRowFrameCount({
+  frames,
+  animations,
+  selectedAnimationName,
+  targetFrameCount,
+  margin,
+  spacing,
+  scaleX,
+  scaleY,
+  sourceSize
+}: SheetEditBaseOptions & {
+  selectedAnimationName: string;
+  targetFrameCount: number;
+}): ManualSheetEditResult {
+  const row = animations[findAnimationIndex(selectedAnimationName, animations)];
+  if (!row || row.frameNames.length === 0) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  const safeTarget = Math.max(1, Math.round(targetFrameCount));
+  if (row.frameNames.length === safeTarget) {
+    return unchangedForRow(frames, animations, selectedAnimationName);
+  }
+
+  if (row.frameNames.length < safeTarget) {
+    return fillRowToFrameCount({
+      frames,
+      animations,
+      selectedAnimationName,
+      targetFrameCount: safeTarget,
+      margin,
+      spacing,
+      scaleX,
+      scaleY,
+      sourceSize
+    });
+  }
+
+  const keptFrameNames = row.frameNames.slice(0, safeTarget);
+  const removedFrameNames = new Set(row.frameNames.slice(safeTarget));
+  const nextAnimations = animations
+    .map((animation) =>
+      animation.name === row.name
+        ? {
+            ...copyAnimation(animation),
+            frameNames: keptFrameNames
+          }
+        : {
+            ...copyAnimation(animation),
+            frameNames: animation.frameNames.filter((name) => !removedFrameNames.has(name))
+          }
+    )
+    .filter((animation) => animation.frameNames.length > 0);
+  const remainingFrames = frames.filter((frame) => !removedFrameNames.has(frame.name));
+  const physicalRowAnimations = nextAnimations.filter((animation) => isSheetRowAnimation(animation, remainingFrames));
+  const repacked = repackAnimationRows({
+    frames: remainingFrames,
+    animations: physicalRowAnimations,
+    margin,
+    spacing
+  });
+  const selectedName = keptFrameNames[keptFrameNames.length - 1];
+
+  return {
+    frames: repacked,
+    animations: nextAnimations,
+    selectedFrameIndex: selectedName ? findFrameIndexByName(repacked, selectedName) : 0,
+    selectedAnimationName
+  };
+}
+
 export function fillSparseRowsToFrameCount({
   frames,
   animations,
