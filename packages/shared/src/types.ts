@@ -660,20 +660,56 @@ export type SheetRowLabel = {
   rect: Rect;
 };
 
+export type SheetConfidenceLabel = "low" | "medium" | "high";
+
+export type SheetConfidenceDetail = {
+  label: SheetConfidenceLabel;
+  score: number;
+  reasons: string[];
+  warnings: string[];
+};
+
+export type SheetRowConfidenceExplanation = {
+  rowIndex: number;
+  frameCount: number;
+  band: {
+    start: number;
+    end: number;
+    height: number;
+  };
+  rowBand: SheetConfidenceDetail;
+  columnPitch: SheetConfidenceDetail;
+  label: SheetConfidenceDetail;
+  gutterNormalization: SheetConfidenceDetail;
+  componentMerge: SheetConfidenceDetail;
+  warnings: string[];
+};
+
+export type SheetLayoutConfidenceModel = {
+  rowBand: SheetConfidenceDetail;
+  columnPitch: SheetConfidenceDetail;
+  label: SheetConfidenceDetail;
+  gutterNormalization: SheetConfidenceDetail;
+  componentMerge: SheetConfidenceDetail;
+  rows: SheetRowConfidenceExplanation[];
+  warnings: string[];
+};
+
 export type SheetLayoutDiagnostics = {
   rowConfidence: {
-    label: "low" | "medium" | "high";
+    label: SheetConfidenceLabel;
     rowCount: number;
     averageBandHeight: number;
     heightSpreadRatio: number;
   };
   columnConfidence: {
-    label: "low" | "medium" | "high";
+    label: SheetConfidenceLabel;
     columnCount: number;
     pitchPx: number;
     maxCenterDriftPx: number;
     mergedComponentCount: number;
   };
+  confidenceModel?: SheetLayoutConfidenceModel;
   conditioning?: SheetConditioningDiagnostics;
   notes: string[];
 };

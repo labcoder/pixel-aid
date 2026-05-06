@@ -36,6 +36,30 @@ describe("sheet layout detection", () => {
     const orbFrames = layout.frames.slice(precedingCount, precedingCount + 4);
     expect(orbFrames.map((frame) => frame.rect.x)).toEqual([...orbFrames.map((frame) => frame.rect.x)].sort((a, b) => a - b));
   });
+
+  test("explains row band, column pitch, label, gutter, and merge confidence", () => {
+    const image = createLabeledOrbPresentationSheet();
+    const layout = detectSheetLayout(image);
+    const model = layout.diagnostics?.confidenceModel;
+
+    expect(model).toBeDefined();
+    expect(model!.rowBand).toMatchObject({ label: expect.any(String), score: expect.any(Number) });
+    expect(model!.columnPitch.reasons.join(" ")).toContain("pitch");
+    expect(model!.label.warnings).toContain("Row labels are low confidence.");
+    expect(model!.gutterNormalization.reasons).toHaveLength(1);
+    expect(model!.componentMerge.reasons).toHaveLength(1);
+    expect(model!.warnings).toEqual(layout.warnings);
+    expect(model!.rows).toHaveLength(layout.rows);
+    expect(model!.rows[0]).toMatchObject({
+      rowIndex: 0,
+      frameCount: expect.any(Number),
+      rowBand: expect.objectContaining({ score: expect.any(Number) }),
+      columnPitch: expect.objectContaining({ score: expect.any(Number) }),
+      label: expect.objectContaining({ score: expect.any(Number) }),
+      gutterNormalization: expect.objectContaining({ score: expect.any(Number) }),
+      componentMerge: expect.objectContaining({ score: expect.any(Number) })
+    });
+  });
 });
 
 function createDitherBridgeOrbSheet(): RGBAImage {

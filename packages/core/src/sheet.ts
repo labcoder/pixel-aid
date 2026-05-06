@@ -1,9 +1,12 @@
 import type {
   Rect,
   RGBAImage,
+  SheetConfidenceDetail,
   SheetConditioningDiagnostics,
   SheetLayoutDetection,
   SheetLayoutDiagnostics,
+  SheetLayoutConfidenceModel,
+  SheetRowConfidenceExplanation,
   SheetRowLabel,
   SheetSliceOptions,
   SpriteFrame
@@ -274,6 +277,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
     usedContentCentering: rawRows.some((row) => row.usedContentCentering),
     labelNames: rowLabels.map((label) => label.name),
     labelRowCount: rowLabels.length,
+    labelConfidences: rawRows.map((row) => row.rowLabel?.confidence ?? 0),
+    rowExplanations: rawRows,
+    warnings,
     conditioning
   });
 
@@ -475,6 +481,8 @@ function createRegularAtlasLayout({
     usedContentCentering: false,
     labelNames: [],
     labelRowCount: 0,
+    labelConfidences: [],
+    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."],
     conditioning
   });
   diagnostics.notes.push(reason);
@@ -1787,6 +1795,9 @@ function createSheetDiagnostics({
   usedContentCentering,
   labelNames,
   labelRowCount,
+  labelConfidences = [],
+  rowExplanations = [],
+  warnings = [],
   conditioning
 }: {
   rows: number;
@@ -1801,6 +1812,9 @@ function createSheetDiagnostics({
   usedContentCentering: boolean;
   labelNames: string[];
   labelRowCount: number;
+  labelConfidences?: number[];
+  rowExplanations?: DetectedRow[];
+  warnings?: string[];
   conditioning?: SheetConditioningDiagnostics;
 }): SheetLayoutDiagnostics {
   const averageBandHeight =
@@ -1808,13 +1822,34 @@ function createSheetDiagnostics({
   const minHeight = frameHeights.length > 0 ? Math.min(...frameHeights) : 0;
   const maxHeight = frameHeights.length > 0 ? Math.max(...frameHeights) : 0;
   const heightSpreadRatio = averageBandHeight > 0 ? (maxHeight - minHeight) / averageBandHeight : 0;
-  const rowLabel = rows >= 3 && heightSpreadRatio <= 0.2 ? "high" : rows >= 2 && heightSpreadRatio <= 0.35 ? "medium" : "low";
-  const columnLabel =
-    columns >= 2 && maxCenterDriftPx <= 1 && !usedComponentMerging
-      ? "high"
-      : columns >= 2 && maxCenterDriftPx <= Math.max(4, pitchPx * 0.12)
-        ? "medium"
-        : "low";
+  const rowBandScore = clampConfidence((rows >= 3 ? 0.9 : rows >= 2 ? 0.68 : 0.34) - Math.min(0.28, heightSpreadRatio * 0.55));
+  const columnPitchScore = createColumnPitchScore({
+    columns,
+    pitchPx,
+    maxCenterDriftPx,
+    usedComponentMerging
+  });
+  const rowLabel = confidenceLabel(rowBandScore);
+  const columnLabel = confidenceLabel(columnPitchScore);
+  const confidenceModel = createSheetConfidenceModel({
+    rows,
+    columns,
+    averageBandHeight,
+    heightSpreadRatio,
+    rowBandScore,
+    columnPitchScore,
+    pitchPx,
+    maxCenterDriftPx,
+    mergedComponentCount,
+    usedComponentMerging,
+    usedDriftFitting,
+    usedContentCentering,
+    labelNames,
+    labelRowCount,
+    labelConfidences,
+    rowExplanations,
+    warnings
+  });
   const notes = [
     `Rows: ${rowLabel} confidence, ${rows} band${rows === 1 ? "" : "s"} detected.`,
     `Columns: ${columnLabel} confidence, ${columns} column${columns === 1 ? "" : "s"} at about ${pitchPx}px pitch.`
@@ -1852,9 +1887,251 @@ function createSheetDiagnostics({
       maxCenterDriftPx,
       mergedComponentCount
     },
+    confidenceModel,
     ...(conditioning ? { conditioning } : {}),
     notes
   };
+}
+
+function createSheetConfidenceModel({
+  rows,
+  columns,
+  averageBandHeight,
+  heightSpreadRatio,
+  rowBandScore,
+  columnPitchScore,
+  pitchPx,
+  maxCenterDriftPx,
+  mergedComponentCount,
+  usedComponentMerging,
+  usedDriftFitting,
+  usedContentCentering,
+  labelNames,
+  labelRowCount,
+  labelConfidences,
+  rowExplanations,
+  warnings
+}: {
+  rows: number;
+  columns: number;
+  averageBandHeight: number;
+  heightSpreadRatio: number;
+  rowBandScore: number;
+  columnPitchScore: number;
+  pitchPx: number;
+  maxCenterDriftPx: number;
+  mergedComponentCount: number;
+  usedComponentMerging: boolean;
+  usedDriftFitting: boolean;
+  usedContentCentering: boolean;
+  labelNames: string[];
+  labelRowCount: number;
+  labelConfidences: number[];
+  rowExplanations: DetectedRow[];
+  warnings: string[];
+}): SheetLayoutConfidenceModel {
+  const detectedLabelConfidences = labelConfidences.filter((confidence) => confidence > 0);
+  const labelCoverage = rows > 0 ? labelRowCount / rows : 0;
+  const labelScore =
+    detectedLabelConfidences.length > 0
+      ? averageNumber(detectedLabelConfidences) * Math.max(0.35, labelCoverage)
+      : rows > 0
+        ? 0.24
+        : 0;
+  const gutterScore = usedContentCentering ? 0.64 : 0.9;
+  const componentScore = usedComponentMerging ? clampConfidence(0.74 - Math.min(0.24, mergedComponentCount / Math.max(1, rows * columns) * 0.45)) : 0.92;
+
+  return {
+    rowBand: createConfidenceDetail({
+      score: rowBandScore,
+      reasons: [
+        `${rows} row band${rows === 1 ? "" : "s"} detected.`,
+        `Average band height is ${averageBandHeight}px with ${formatRatio(heightSpreadRatio)} height spread.`
+      ],
+      warnings: rows < 2 ? ["Only one row band was detected; sheet layout may need manual review."] : []
+    }),
+    columnPitch: createConfidenceDetail({
+      score: columnPitchScore,
+      reasons: [
+        `${columns} column${columns === 1 ? "" : "s"} at about ${pitchPx}px pitch.`,
+        `Max fitted center drift is ${Math.round(maxCenterDriftPx)}px.`
+      ],
+      warnings: [
+        ...(usedDriftFitting ? ["Column pitch needed drift fitting."] : []),
+        ...(columns < 2 ? ["Too few columns for a repeated sheet pattern."] : [])
+      ]
+    }),
+    label: createConfidenceDetail({
+      score: labelScore,
+      reasons:
+        labelNames.length > 0
+          ? [`Detected labels: ${labelNames.join(", ")}.`, `${labelRowCount} of ${rows} rows had confident labels.`]
+          : ["No confident row labels were detected; generated row names are being used."],
+      warnings: labelNames.length > 0 ? [] : ["Row labels are low confidence."]
+    }),
+    gutterNormalization: createConfidenceDetail({
+      score: gutterScore,
+      reasons: [usedContentCentering ? "Uneven gutters were normalized from frame content centers." : "Visible gutters already fit a regular column pitch."],
+      warnings: usedContentCentering ? ["Review normalized gutters before export."] : []
+    }),
+    componentMerge: createConfidenceDetail({
+      score: componentScore,
+      reasons: [
+        usedComponentMerging
+          ? `Merged ${mergedComponentCount} nearby disconnected component${mergedComponentCount === 1 ? "" : "s"} into frame boxes.`
+          : "No disconnected component merging was needed."
+      ],
+      warnings: usedComponentMerging ? ["Merged components can accidentally absorb effects or labels."] : []
+    }),
+    rows: rowExplanations.map((row, rowIndex) =>
+      createRowConfidenceExplanation({
+        row,
+        rowIndex,
+        columns,
+        averageBandHeight,
+        pitchPx
+      })
+    ),
+    warnings: [...warnings]
+  };
+}
+
+function createRowConfidenceExplanation({
+  row,
+  rowIndex,
+  columns,
+  averageBandHeight,
+  pitchPx
+}: {
+  row: DetectedRow;
+  rowIndex: number;
+  columns: number;
+  averageBandHeight: number;
+  pitchPx: number;
+}): SheetRowConfidenceExplanation {
+  const height = row.band.end - row.band.start + 1;
+  const heightDeltaRatio = averageBandHeight > 0 ? Math.abs(height - averageBandHeight) / averageBandHeight : 0;
+  const rowWarnings = [
+    ...(row.segments.length < columns ? [`Row ${rowIndex + 1} has ${row.segments.length} detected frames; sheet max is ${columns}.`] : []),
+    ...(row.usedContentCentering ? [`Row ${rowIndex + 1} needed gutter normalization from content centers.`] : []),
+    ...(row.usedComponentMerging ? [`Row ${rowIndex + 1} merged ${row.mergedComponentCount} disconnected component${row.mergedComponentCount === 1 ? "" : "s"}.`] : []),
+    ...(row.usedDriftFitting ? [`Row ${rowIndex + 1} needed ${Math.round(row.maxCenterDriftPx)}px max center-drift fitting.`] : [])
+  ];
+
+  return {
+    rowIndex,
+    frameCount: row.segments.length,
+    band: {
+      start: row.band.start,
+      end: row.band.end,
+      height
+    },
+    rowBand: createConfidenceDetail({
+      score: clampConfidence(0.94 - Math.min(0.44, heightDeltaRatio * 1.2)),
+      reasons: [`Band spans y=${row.band.start}..${row.band.end}.`, `Height differs from the average by ${formatRatio(heightDeltaRatio)}.`],
+      warnings: heightDeltaRatio > 0.35 ? [`Row ${rowIndex + 1} height differs substantially from the detected average.`] : []
+    }),
+    columnPitch: createConfidenceDetail({
+      score: createColumnPitchScore({
+        columns: row.segments.length,
+        pitchPx,
+        maxCenterDriftPx: row.maxCenterDriftPx,
+        usedComponentMerging: row.usedComponentMerging
+      }),
+      reasons: [`${row.segments.length} frame segment${row.segments.length === 1 ? "" : "s"} in this row.`, `Max center drift is ${Math.round(row.maxCenterDriftPx)}px.`],
+      warnings: row.usedDriftFitting ? [`Row ${rowIndex + 1} needed center-drift fitting.`] : []
+    }),
+    label: createConfidenceDetail({
+      score: row.rowLabel?.confidence ?? 0,
+      reasons: row.rowLabel
+        ? [`Matched label "${row.rowLabel.rawText}" as ${row.rowLabel.name}.`]
+        : ["No confident label matched this row."],
+      warnings: row.rowLabel ? [] : [`Row ${rowIndex + 1} is using a generated row name.`]
+    }),
+    gutterNormalization: createConfidenceDetail({
+      score: row.usedContentCentering ? 0.64 : 0.9,
+      reasons: [row.usedContentCentering ? "Cell starts were rebuilt from content centers." : "Cell starts fit visible gutters."],
+      warnings: row.usedContentCentering ? [`Row ${rowIndex + 1} gutters should be reviewed.`] : []
+    }),
+    componentMerge: createConfidenceDetail({
+      score: row.usedComponentMerging ? clampConfidence(0.74 - Math.min(0.22, row.mergedComponentCount * 0.04)) : 0.92,
+      reasons: [
+        row.usedComponentMerging
+          ? `Merged ${row.mergedComponentCount} nearby component${row.mergedComponentCount === 1 ? "" : "s"}.`
+          : "No component merge was needed for this row."
+      ],
+      warnings: row.usedComponentMerging ? [`Row ${rowIndex + 1} contains merged components.`] : []
+    }),
+    warnings: rowWarnings
+  };
+}
+
+function createColumnPitchScore({
+  columns,
+  pitchPx,
+  maxCenterDriftPx,
+  usedComponentMerging
+}: {
+  columns: number;
+  pitchPx: number;
+  maxCenterDriftPx: number;
+  usedComponentMerging: boolean;
+}): number {
+  if (columns < 2) {
+    return 0.28;
+  }
+
+  const driftPenalty = Math.min(0.32, maxCenterDriftPx / Math.max(1, pitchPx) * 1.7);
+  const mergePenalty = usedComponentMerging ? 0.12 : 0;
+  return clampConfidence(0.92 - driftPenalty - mergePenalty);
+}
+
+function createConfidenceDetail({
+  score,
+  reasons,
+  warnings
+}: {
+  score: number;
+  reasons: string[];
+  warnings: string[];
+}): SheetConfidenceDetail {
+  const normalizedScore = roundConfidenceScore(score);
+  return {
+    label: confidenceLabel(normalizedScore),
+    score: normalizedScore,
+    reasons,
+    warnings
+  };
+}
+
+function confidenceLabel(score: number): SheetConfidenceDetail["label"] {
+  if (score >= 0.75) {
+    return "high";
+  }
+  if (score >= 0.5) {
+    return "medium";
+  }
+  return "low";
+}
+
+function clampConfidence(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function roundConfidenceScore(value: number): number {
+  return Math.round(clampConfidence(value) * 100) / 100;
+}
+
+function averageNumber(values: number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+
+  return values.reduce((total, value) => total + value, 0) / values.length;
+}
+
+function formatRatio(value: number): string {
+  return `${Math.round(value * 100)}%`;
 }
 
 function uniqueAnimationName(baseName: string, usedNames: Set<string>): string {
