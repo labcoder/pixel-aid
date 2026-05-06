@@ -1,5 +1,20 @@
 export const enginePackageName = "@pixelaid/engine";
 
+export { engineAdapterCapabilityNames } from "./adapters";
+export type {
+  EngineAdapterCapabilityName,
+  EngineAdapters,
+  EngineDiagnosticsSinkAdapter,
+  EngineEncodedImage,
+  EngineFileAccessAdapter,
+  EngineFilePayload,
+  EngineImageDecodeAdapter,
+  EngineImageEncodeAdapter,
+  EngineJobExecutionAdapter,
+  EngineJobExecutionResult,
+  EnginePreferencesAdapter,
+  EngineTimingAdapter
+} from "./adapters";
 export { engineCommandTypes, engineEventTypes } from "./commands";
 export type {
   EngineApplySuggestionCommand,
