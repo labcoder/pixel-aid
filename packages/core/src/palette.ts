@@ -650,6 +650,9 @@ export function analyzePaletteDrift(
   let checkedFrameCount = 0;
   let maxFrameColorCount = 0;
   let maxFramePaletteDelta = 0;
+  let totalFramePaletteDelta = 0;
+  let minFramePaletteSize = Number.POSITIVE_INFINITY;
+  let maxFramePaletteSize = 0;
 
   for (const frame of frames) {
     const frameAnalysis = analyzePaletteColorsInRect(image, frame.rect);
@@ -675,9 +678,23 @@ export function analyzePaletteDrift(
         frameDelta += 1;
       }
     }
+    minFramePaletteSize = Math.min(minFramePaletteSize, frameColors.size);
+    maxFramePaletteSize = Math.max(maxFramePaletteSize, frameColors.size);
+    totalFramePaletteDelta += frameDelta;
     maxFramePaletteDelta = Math.max(maxFramePaletteDelta, frameDelta);
   }
 
+  const averageFramePaletteDelta = checkedFrameCount > 0 ? totalFramePaletteDelta / checkedFrameCount : 0;
+  const framePaletteVariance =
+    checkedFrameCount > 1 ? (maxFramePaletteSize - Math.min(minFramePaletteSize, maxFramePaletteSize)) / frameBudget : 0;
+  const remapPressure = Math.max(
+    maxFramePaletteDelta / frameBudget,
+    Math.max(0, maxFrameColorCount - frameBudget) / Math.max(1, maxFrameColorCount)
+  );
+  const stabilityScore = roundDiagnosticRatio(
+    1 - Math.min(1, remapPressure * 0.72 + framePaletteVariance * 0.2 + (averageFramePaletteDelta / frameBudget) * 0.08)
+  );
+  const stabilityLabel = stabilityScore >= 0.82 ? "stable" : stabilityScore >= 0.62 ? "review" : "unstable";
   const warnings: string[] = [];
   if (frames.length > 0 && checkedFrameCount === 0) {
     warnings.push("Palette drift diagnostics did not find any frame rects within the image bounds.");
@@ -687,12 +704,22 @@ export function analyzePaletteDrift(
       `Palette drift detected across ${checkedFrameCount} frames; ${maxFramePaletteDelta} frame colors remap outside the active palette.`
     );
   }
+  if (stabilityScore < 0.75) {
+    warnings.push(
+      `Palette stability score is ${stabilityScore.toFixed(2)} (${stabilityLabel}); consider sheet palette lock, reserved key colors, or a higher maxColors budget before export.`
+    );
+  }
 
   return {
     frameCount: frames.length,
     checkedFrameCount,
     maxFrameColorCount,
+    averageFramePaletteDelta: roundDiagnosticNumber(averageFramePaletteDelta),
     maxFramePaletteDelta,
+    framePaletteVariance: roundDiagnosticRatio(framePaletteVariance),
+    remapPressure: roundDiagnosticRatio(remapPressure),
+    stabilityScore,
+    stabilityLabel,
     warnings
   };
 }
@@ -759,6 +786,14 @@ function analyzePaletteColorsInRect(image: RGBAImage, rect: SpriteFrame["rect"])
 
 function clampInteger(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, Math.round(Number.isFinite(value) ? value : min)));
+}
+
+function roundDiagnosticRatio(value: number): number {
+  return Math.round(Math.max(0, Math.min(1, value)) * 100) / 100;
+}
+
+function roundDiagnosticNumber(value: number): number {
+  return Math.round(Math.max(0, value) * 100) / 100;
 }
 
 function normalizeColorForDrift(color: string): number | null {

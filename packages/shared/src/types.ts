@@ -294,11 +294,18 @@ export type PaletteSettings = {
   dithering?: PaletteDitheringMode;
 };
 
+export type PaletteStabilityLabel = "stable" | "review" | "unstable";
+
 export type PaletteDriftDiagnostics = {
   frameCount: number;
   checkedFrameCount: number;
   maxFrameColorCount: number;
+  averageFramePaletteDelta: number;
   maxFramePaletteDelta: number;
+  framePaletteVariance: number;
+  remapPressure: number;
+  stabilityScore: number;
+  stabilityLabel: PaletteStabilityLabel;
   warnings: string[];
 };
 

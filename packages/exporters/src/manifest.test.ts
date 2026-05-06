@@ -313,7 +313,12 @@ describe("generic manifest export", () => {
             frameCount: 4,
             checkedFrameCount: 4,
             maxFrameColorCount: 12,
+            averageFramePaletteDelta: 1.5,
             maxFramePaletteDelta: 3,
+            framePaletteVariance: 0.25,
+            remapPressure: 0.38,
+            stabilityScore: 0.7,
+            stabilityLabel: "review",
             warnings: [driftWarning]
           }
         }
@@ -338,6 +343,8 @@ describe("generic manifest export", () => {
       warnings: [driftWarning],
       drift: {
         maxFramePaletteDelta: 3,
+        stabilityScore: 0.7,
+        stabilityLabel: "review",
         warnings: [driftWarning]
       }
     });

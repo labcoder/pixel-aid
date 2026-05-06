@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { remapToPalette, resolvePalette } from "./palette";
+import { analyzePaletteDrift, remapToPalette, resolvePalette } from "./palette";
 import type { PaletteDitheringMode, PaletteStrategy, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 describe("palette dithering", () => {
@@ -75,6 +75,35 @@ describe("palette dithering", () => {
 
     expect(result.diagnostics.dithering).toBe("ordered");
     expect(result.diagnostics.warnings).toContain("Dithering can introduce crawling noise across animation frames; keep it disabled for stable sheets unless reviewed.");
+  });
+
+  test("scores stable and unstable animation-sheet palettes deterministically", () => {
+    const stable = analyzePaletteDrift(
+      imageFromHexRows([["#000000", "#ffffff", "#000000", "#ffffff"]]),
+      [
+        { name: "stable_000", rect: { x: 0, y: 0, w: 2, h: 1 }, pivot: { x: 1, y: 1 }, durationMs: 120 },
+        { name: "stable_001", rect: { x: 2, y: 0, w: 2, h: 1 }, pivot: { x: 1, y: 1 }, durationMs: 120 }
+      ],
+      ["#000000", "#ffffff"],
+      2
+    );
+    const unstable = analyzePaletteDrift(
+      imageFromHexRows([["#ff0000", "#00ff00", "#0000ff", "#00ffff", "#ff00ff", "#ffff00"]]),
+      [
+        { name: "unstable_000", rect: { x: 0, y: 0, w: 3, h: 1 }, pivot: { x: 1, y: 1 }, durationMs: 120 },
+        { name: "unstable_001", rect: { x: 3, y: 0, w: 3, h: 1 }, pivot: { x: 1, y: 1 }, durationMs: 120 }
+      ],
+      ["#ff0000", "#00ff00"],
+      2
+    );
+
+    expect(stable.stabilityScore).toBe(1);
+    expect(stable.stabilityLabel).toBe("stable");
+    expect(stable.warnings).toEqual([]);
+    expect(unstable.stabilityScore).toBeLessThan(stable.stabilityScore);
+    expect(unstable.stabilityLabel).toBe("unstable");
+    expect(unstable.remapPressure).toBeGreaterThan(0);
+    expect(unstable.warnings).toContainEqual(expect.stringContaining("Palette stability score is"));
   });
 
   test("keeps extreme accidental colors deterministic under current in-house strategies", () => {

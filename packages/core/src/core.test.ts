@@ -1258,13 +1258,19 @@ describe("palette reduction", () => {
 
     const drift = analyzePaletteDrift(fixture.createImage(), frames, ["#242a30", "#4c8e7e", "#20343c"], 6);
 
-    expect(drift).toEqual({
+    expect(drift).toMatchObject({
       frameCount: 4,
       checkedFrameCount: 4,
       maxFrameColorCount: 3,
       maxFramePaletteDelta: 3,
-      warnings: ["Palette drift detected across 4 frames; 3 frame colors remap outside the active palette."]
+      stabilityLabel: "unstable"
     });
+    expect(drift.averageFramePaletteDelta).toBeGreaterThan(0);
+    expect(drift.stabilityScore).toBeLessThan(0.75);
+    expect(drift.warnings).toEqual([
+      "Palette drift detected across 4 frames; 3 frame colors remap outside the active palette.",
+      expect.stringContaining("Palette stability score is")
+    ]);
   });
 });
 

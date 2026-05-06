@@ -136,7 +136,7 @@ PixelAid supports auto, fixed, and safe in-repo preset palette modes. Auto mode 
 
 Fixed and preset modes treat the active palette as a hard output contract: visible pixels are remapped only to colors in that palette. MIG-8 keeps dithering disabled because automatic ordered or error-diffusion patterns can introduce shimmer across animation frames.
 
-For sheet-like assets, palette locking can use the whole sheet or the first frame. The fix result stores palette settings plus diagnostics, including drift warnings when frame-local palettes differ from the active locked palette.
+For sheet-like assets, palette locking can use the whole sheet or the first frame. The fix result stores palette settings plus diagnostics, including drift warnings when frame-local palettes differ from the active locked palette. Palette drift diagnostics also include a 0-1 stability score, a stable/review/unstable label, frame-local palette variance, average/max frame palette delta, and remap pressure so the metrics panel can explain likely animation shimmer without an extra image pass.
 
 The editor palette library builds on that same contract instead of creating a separate color path. Saved palettes are normalized RGB hex arrays that can be imported from `.hex`, `.gpl`, or JSON text, edited in the Palettes panel, exported back to those sidecar formats, and applied by switching the active palette mode to `fixed`. That means the next Fix run, export manifest, palette sidecars, CLI-equivalent settings, and diagnostics all describe the same explicit palette.
 

@@ -231,7 +231,12 @@ describe("export validation report", () => {
                   frameCount: 2,
                   checkedFrameCount: 2,
                   maxFrameColorCount: 10,
+                  averageFramePaletteDelta: 1.5,
                   maxFramePaletteDelta: 3,
+                  framePaletteVariance: 0.25,
+                  remapPressure: 0.38,
+                  stabilityScore: 0.7,
+                  stabilityLabel: "review",
                   warnings: ["Frame 1 introduced 3 colors outside the locked palette."]
                 }
               }

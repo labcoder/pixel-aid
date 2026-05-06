@@ -42,6 +42,7 @@ export type {
   PaletteLockScope,
   PaletteMode,
   PaletteSettings,
+  PaletteStabilityLabel,
   PaletteStrategy,
   Pivot,
   PixelAssetManifest,
