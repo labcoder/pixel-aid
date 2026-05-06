@@ -51,6 +51,13 @@ export type {
 } from "./commands";
 export { createDefaultFixSettings } from "./defaults";
 export type { EngineDefaultFixSettings, EngineGridDetectMode, EngineOutlineSourceMode, EnginePivotPreset } from "./defaults";
+export {
+  compareAssetDirtySnapshots,
+  createAssetDirtySnapshot,
+  createCleanAssetDirtyState,
+  formatAssetDirtyReason
+} from "./dirtyState";
+export type { AssetDirtyReason, AssetDirtySessionInput, AssetDirtySnapshot, AssetDirtyState } from "./dirtyState";
 export { engineStateVersion } from "./state";
 export type {
   EngineAssetRecord,
