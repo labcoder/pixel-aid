@@ -18,8 +18,9 @@ import type { Point } from "../lib/viewportMath";
 import type { DiagnosticOverlayGrid, DiagnosticOverlayMask, DiagnosticOverlayModel } from "../lib/diagnosticOverlays";
 import { rgbaImageToCanvas } from "../lib/canvasImage";
 import { useDisposableCanvas } from "../lib/useDisposableCanvas";
+import { createViewportRenderModel, type ViewportRenderModel, type ViewportRenderViewMode } from "../lib/viewportRenderModel";
 
-export type ViewMode = "before" | "after" | "split";
+export type ViewMode = ViewportRenderViewMode;
 
 export type ViewportCanvasProps = {
   sourceImage: RGBAImage | null;
@@ -243,32 +244,34 @@ export function ViewportCanvas({
       ctx.clearRect(0, 0, rect.width, rect.height);
       drawChecker(ctx, rect.width, rect.height);
 
-      if (!sourceCanvas) {
-        drawViewportGrid(ctx, rect.width, rect.height);
-        return;
-      }
-
-      drawImageView(
-        ctx,
-        rect.width,
-        rect.height,
-        sourceCanvas,
-        fixedCanvas,
+      const model = createViewportRenderModel({
+        viewport: { width: rect.width, height: rect.height },
+        sourceSurface: sourceCanvas,
+        fixedSurface: fixedCanvas,
         viewMode,
         zoom,
         showGrid,
         fixedSourceRect,
         diagnosticOverlay,
-        sourceOverlayCanvas,
-        fixedOverlayCanvas,
+        overlaySurfaces: {
+          sourceMask: sourceOverlayCanvas,
+          fixedMask: fixedOverlayCanvas
+        },
         sourceFrames,
-        frames,
+        fixedFrames: frames,
         selectedFrameIndex,
         canEditSourceFrames,
         showFrameMetadataOverlays,
-        panRef.current,
-        splitRatioRef.current
-      );
+        pan: panRef.current,
+        splitRatio: splitRatioRef.current
+      });
+
+      if (model.kind === "empty") {
+        drawViewportGrid(ctx, rect.width, rect.height);
+        return;
+      }
+
+      drawImageView(ctx, model);
       onPreviewRender?.();
     };
 
@@ -584,46 +587,30 @@ function drawChecker(ctx: CanvasRenderingContext2D, width: number, height: numbe
   }
 }
 
-function drawImageView(
-  ctx: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-  sourceCanvas: HTMLCanvasElement,
-  fixedCanvas: HTMLCanvasElement | null,
-  viewMode: ViewMode,
-  zoom: number,
-  showGrid: boolean,
-  fixedSourceRect: FrameRect | undefined,
-  diagnosticOverlay: DiagnosticOverlayModel | undefined,
-  sourceOverlayCanvas: HTMLCanvasElement | null,
-  fixedOverlayCanvas: HTMLCanvasElement | null,
-  sourceFrames: SpriteFrame[],
-  frames: SpriteFrame[],
-  selectedFrameIndex: number,
-  canEditSourceFrames: boolean,
-  showFrameMetadataOverlays: boolean,
-  pan: Point,
-  splitRatio: number
-): void {
-  const afterCanvas = fixedCanvas ?? sourceCanvas;
-  const activeCanvas = viewMode === "after" ? afterCanvas : sourceCanvas;
-  const activeSize = { width: activeCanvas.width, height: activeCanvas.height };
-  const rect = getImageDrawRect({ width, height }, activeSize, zoom, pan);
+function drawImageView(ctx: CanvasRenderingContext2D, model: Extract<ViewportRenderModel, { kind: "image" }>): void {
+  const width = model.viewport.width;
+  const height = model.viewport.height;
+  const sourceCanvas = model.sourceSurface;
+  const fixedCanvas = model.fixedSurface;
+  const diagnosticOverlay = model.diagnosticOverlay;
+  const sourceOverlayCanvas = model.overlaySurfaces.sourceMask;
+  const fixedOverlayCanvas = model.overlaySurfaces.fixedMask;
+  const sourceFrames = model.frameOverlay.sourceFrames;
+  const frames = model.frameOverlay.fixedFrames;
+  const selectedFrameIndex = model.frameOverlay.selectedFrameIndex;
+  const canEditSourceFrames = model.frameOverlay.canEditSourceFrames;
+  const showFrameMetadataOverlays = model.frameOverlay.showFrameMetadataOverlays;
 
   ctx.imageSmoothingEnabled = false;
-  if (viewMode === "split" && fixedCanvas) {
-    const layout = getAlignedComparisonRects({
-      viewport: { width, height },
-      before: { width: sourceCanvas.width, height: sourceCanvas.height },
-      after: { width: fixedCanvas.width, height: fixedCanvas.height },
-      afterSourceRect: fixedSourceRect,
-      zoom,
-      pan
-    });
-    const splitX = Math.floor(width * splitRatio);
+  if (model.layout.kind === "split") {
+    const layout = model.layout;
+    if (!fixedCanvas) {
+      return;
+    }
+    const splitX = layout.splitX;
     drawClipped(ctx, sourceCanvas, layout.before, 0, splitX);
     drawClipped(ctx, fixedCanvas, layout.after, splitX, width - splitX);
-    const beforeZoom = layout.before.width / sourceCanvas.width;
+    const beforeZoom = layout.beforeZoom;
     if (sourceOverlayCanvas && diagnosticOverlay?.sourceMask) {
       drawClippedOverlay(ctx, 0, splitX, () => {
         drawOverlayCanvas(ctx, sourceOverlayCanvas, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
@@ -635,7 +622,7 @@ function drawImageView(
         drawSourceGridOverlay(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom, sourceGrid);
       });
     }
-    if (showGrid && beforeZoom >= 4) {
+    if (model.showGrid && beforeZoom >= 4) {
       drawClippedOverlay(ctx, 0, splitX, () => {
         drawPixelGrid(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
       });
@@ -659,13 +646,13 @@ function drawImageView(
     ctx.textBaseline = "middle";
     ctx.fillText("S", splitX, Math.max(17, Math.min(layout.before.y, layout.after.y) - 19));
 
-    const comparisonZoom = layout.after.width / fixedCanvas.width;
+    const comparisonZoom = layout.afterZoom;
     if (fixedOverlayCanvas && diagnosticOverlay?.fixedMask) {
       drawClippedOverlay(ctx, splitX, width - splitX, () => {
         drawOverlayCanvas(ctx, fixedOverlayCanvas, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
       });
     }
-    if (showGrid && comparisonZoom >= 4) {
+    if (model.showGrid && comparisonZoom >= 4) {
       drawClippedOverlay(ctx, splitX, width - splitX, () => {
         drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
       });
@@ -675,29 +662,32 @@ function drawImageView(
     });
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
   } else {
-    ctx.drawImage(activeCanvas, rect.x, rect.y, rect.width, rect.height);
-    if (viewMode === "after" && fixedCanvas) {
+    const layout = model.layout;
+    const rect = layout.rect;
+    const zoom = layout.zoom;
+    ctx.drawImage(layout.activeSurface, rect.x, rect.y, rect.width, rect.height);
+    if (layout.activeRole === "fixed" && fixedCanvas) {
       if (fixedOverlayCanvas && diagnosticOverlay?.fixedMask) {
-        drawOverlayCanvas(ctx, fixedOverlayCanvas, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
+        drawOverlayCanvas(ctx, fixedOverlayCanvas, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom);
       }
     } else {
       if (sourceOverlayCanvas && diagnosticOverlay?.sourceMask) {
-        drawOverlayCanvas(ctx, sourceOverlayCanvas, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
+        drawOverlayCanvas(ctx, sourceOverlayCanvas, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom);
       }
       const sourceGrid = diagnosticOverlay?.sourceGrid;
       if (sourceGrid) {
-        drawSourceGridOverlay(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom, sourceGrid);
+        drawSourceGridOverlay(ctx, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom, sourceGrid);
       }
     }
-    if (showGrid && zoom >= 4) {
-      drawPixelGrid(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
+    if (model.showGrid && zoom >= 4) {
+      drawPixelGrid(ctx, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom);
     }
-    if (viewMode === "after" && fixedCanvas) {
+    if (layout.activeRole === "fixed" && fixedCanvas) {
       drawFrameOverlays(ctx, rect.x, rect.y, frames, zoom, selectedFrameIndex, false, showFrameMetadataOverlays);
     } else {
       drawFrameOverlays(ctx, rect.x, rect.y, sourceFrames, zoom, selectedFrameIndex, canEditSourceFrames, showFrameMetadataOverlays);
     }
-    drawRulers(ctx, rect.x, rect.y, activeSize.width, activeSize.height, zoom);
+    drawRulers(ctx, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom);
   }
 }
 
@@ -795,7 +785,7 @@ function drawFrameOverlays(
   ctx: CanvasRenderingContext2D,
   startX: number,
   startY: number,
-  frames: SpriteFrame[],
+  frames: readonly SpriteFrame[],
   zoom: number,
   selectedFrameIndex: number,
   showResizeHandles: boolean,

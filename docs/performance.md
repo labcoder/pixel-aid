@@ -135,6 +135,8 @@ Milestone 4.4.1 evaluated viewport pre-render ownership without changing the pro
 
 The tested recommendation model is `apps/web/src/lib/viewportOffscreenEvaluation.ts`. It treats worker-side `OffscreenCanvas`/`ImageBitmap` support as a measured capability, not an assumption, and keeps production rendering unchanged for 4.4.1.
 
+Milestone 4.4.2 adds `apps/web/src/lib/viewportRenderModel.ts` as the renderer-facing contract for the current Canvas2D viewport. React still owns user interaction and canvas lifecycle, but the draw effect now builds a model containing viewport dimensions, source/fixed surfaces, split layout, zoom/pan, grid state, diagnostic overlay surfaces, frame overlays, and selected frame metadata before handing it to the renderer. This gives future OffscreenCanvas/WebGL/WebGPU work one model boundary to target instead of re-reading React component props.
+
 ## Current Metrics
 
 The metrics panel shows:
