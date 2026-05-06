@@ -611,18 +611,6 @@ function mergeReservedPalette(palette: readonly string[], reservedColors: readon
   return result.length > 0 ? result : ["#000000"];
 }
 
-function countVisibleExactColors(image: RGBAImage): number {
-  const colors = new Set<number>();
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    if (image.data[offset + 3]! < 16) {
-      continue;
-    }
-
-    colors.add((image.data[offset]! << 16) | (image.data[offset + 1]! << 8) | image.data[offset + 2]!);
-  }
-  return colors.size;
-}
-
 function selectPaletteSource(
   image: RGBAImage,
   lockScope: PaletteLockScope,
@@ -680,15 +668,15 @@ export function analyzePaletteDrift(
   let maxFramePaletteDelta = 0;
 
   for (const frame of frames) {
-    const frameImage = cropImageToRect(image, frame.rect);
-    if (!frameImage) {
+    const frameAnalysis = analyzePaletteColorsInRect(image, frame.rect);
+    if (!frameAnalysis) {
       continue;
     }
 
     checkedFrameCount += 1;
-    maxFrameColorCount = Math.max(maxFrameColorCount, countVisibleExactColors(frameImage));
+    maxFrameColorCount = Math.max(maxFrameColorCount, frameAnalysis.exactColorCount);
 
-    const framePalette = extractAutoPalette(frameImage, frameBudget, strategy, reservedColors);
+    const framePalette = extractAutoPaletteFromAnalysis(frameAnalysis, frameBudget, strategy, reservedColors);
     const frameColors = new Set<number>();
     for (const color of framePalette) {
       const normalized = normalizeColorForDrift(color);
@@ -745,6 +733,44 @@ function cropImageToRect(image: RGBAImage, rect: SpriteFrame["rect"]): RGBAImage
   }
 
   return { width, height, data };
+}
+
+function analyzePaletteColorsInRect(image: RGBAImage, rect: SpriteFrame["rect"]): PaletteAnalysis | null {
+  const x = clampInteger(rect.x, 0, image.width);
+  const y = clampInteger(rect.y, 0, image.height);
+  const right = clampInteger(rect.x + rect.w, 0, image.width);
+  const bottom = clampInteger(rect.y + rect.h, 0, image.height);
+  const width = Math.max(0, right - x);
+  const height = Math.max(0, bottom - y);
+
+  if (width === 0 || height === 0) {
+    return null;
+  }
+
+  const exactCounts = new Map<number, ColorCount>();
+  let order = 0;
+  for (let row = 0; row < height; row += 1) {
+    const rowEnd = ((y + row) * image.width + x + width) * 4;
+    for (let offset = ((y + row) * image.width + x) * 4; offset < rowEnd; offset += 4) {
+      if (image.data[offset + 3]! < 16) {
+        continue;
+      }
+
+      const color = (image.data[offset]! << 16) | (image.data[offset + 1]! << 8) | image.data[offset + 2]!;
+      const existing = exactCounts.get(color);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        exactCounts.set(color, { color, count: 1, firstSeen: order });
+        order += 1;
+      }
+    }
+  }
+
+  return {
+    exactCounts,
+    exactColorCount: exactCounts.size
+  };
 }
 
 function clampInteger(value: number, min: number, max: number): number {

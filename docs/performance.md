@@ -281,6 +281,15 @@ Palette resolution now builds a `PaletteAnalysis` summary once for the source im
 | `fixes cropped adaptive single sprite` | 64.92 ms | 67.40 ms | Flat/local noise |
 | `large-landscape-bands: palette remap 1.17MP` | 7.29 ms | 7.37 ms | Unchanged, remap-only path |
 
+### Optimization 5.3.3 Result
+
+Frame-local palette drift analysis now scans each frame rect directly over the packed sheet image instead of allocating a cropped `RGBAImage` per frame before counting colors and extracting the frame palette. This mainly reduces temporary memory churn; the large-sheet benchmark shows a small timing win.
+
+| Benchmark | Before 5.3.3 | After | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 105.09 ms | 102.09 ms | 2.9% faster |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 43.21 ms | 41.87 ms | Local-noise improvement |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
