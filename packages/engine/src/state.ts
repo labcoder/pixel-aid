@@ -1,4 +1,4 @@
-import type { AssetMode, AssetType, FixOptions, PixelFixResult, RGBAImage } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, RGBAImage } from "@pixelaid/shared";
 
 export const engineStateVersion = 1 as const;
 
@@ -96,7 +96,7 @@ export type EngineJobRecord = {
   startedAt: string | null;
   completedAt: string | null;
   error: string | null;
-  result?: PixelFixResult;
+  result?: unknown;
 };
 
 export type EngineJobState = {
