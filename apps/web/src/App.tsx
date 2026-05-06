@@ -9026,25 +9026,6 @@ function PanelHeader({ icon, title }: { icon: ReactNode; title: string }) {
   );
 }
 
-function SectionTitle({
-  title,
-  docsId,
-  tooltip,
-  onDocs
-}: {
-  title: string;
-  docsId: string;
-  tooltip: string;
-  onDocs: (sectionId: string) => void;
-}) {
-  return (
-    <div className="section-title">
-      <h2>{title}</h2>
-      <HelpButton docsId={docsId} tooltip={tooltip} onDocs={onDocs} />
-    </div>
-  );
-}
-
 function InspectorGroup({
   title,
   docsId,

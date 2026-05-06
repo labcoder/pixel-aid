@@ -5,7 +5,7 @@ import type { EngineJobRecord } from "@pixelaid/engine";
 import type { SourceAssetAnalysisResult } from "@pixelaid/worker";
 
 import { startEngineQualityAnalysisJob, startEngineSourceAnalysisJob } from "./engineAnalysisJobAdapter";
-import type { AnalysisJob, SourceAnalysisJobOptions } from "./analysisWorkerClient";
+import type { AnalysisJob } from "./analysisWorkerClient";
 
 const image: RGBAImage = {
   width: 1,
@@ -27,7 +27,7 @@ describe("engine analysis job adapter", () => {
   test("tracks source analysis completion as engine job records", async () => {
     const updates: EngineJobRecord[] = [];
     const completion = deferred<SourceAssetAnalysisResult>();
-    const startSourceAnalysisJobImpl = (_image: RGBAImage, _options?: SourceAnalysisJobOptions): AnalysisJob<SourceAssetAnalysisResult> => ({
+    const startSourceAnalysisJobImpl = (): AnalysisJob<SourceAssetAnalysisResult> => ({
       requestId: "source_1",
       promise: completion.promise,
       cancel: () => undefined
@@ -56,7 +56,7 @@ describe("engine analysis job adapter", () => {
   test("tracks quality analysis failures as engine job records", async () => {
     const updates: EngineJobRecord[] = [];
     const completion = deferred<never>();
-    const startQualityAnalysisJobImpl = (_image: RGBAImage, _options: QualityReportOptions): AnalysisJob<never> => ({
+    const startQualityAnalysisJobImpl = (): AnalysisJob<never> => ({
       requestId: "quality_1",
       promise: completion.promise,
       cancel: () => undefined
