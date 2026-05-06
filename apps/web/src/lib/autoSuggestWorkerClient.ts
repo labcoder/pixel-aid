@@ -1,6 +1,6 @@
 import type { FixSettingSuggestion } from "@pixelaid/core";
 import type { AssetType, RGBAImage } from "@pixelaid/shared";
-import type { PersistentWorkerStalePolicy, SuggestFixWorkerRequest, WorkerResponse } from "@pixelaid/worker";
+import type { PersistentWorkerStalePolicy, SuggestFixWorkerRequest } from "@pixelaid/worker";
 
 import {
   cloneImageToTransferable,
