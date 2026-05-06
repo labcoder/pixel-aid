@@ -215,8 +215,7 @@ import {
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
 import { suggestFixSettings, suggestFixSettingsForAssetType, type FixSettingSuggestion } from "./lib/fixSuggestions";
-import type { FixJob } from "./lib/fixWorkerClient";
-import { startFixJob } from "./lib/fixWorkerClient";
+import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
@@ -1053,7 +1052,7 @@ export function App() {
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
   const sourceSheetFramesCacheRef = useRef<{ key: string; frames: SpriteFrame[] }>({ key: "", frames: [] });
   const busyOperationIdRef = useRef(0);
-  const activeJobRef = useRef<FixJob | null>(null);
+  const activeJobRef = useRef<EngineFixJob | null>(null);
   const activeSourceAnalysisJobRef = useRef<AnalysisJob<SourceAssetAnalysis> | null>(null);
   const activeQualityAnalysisJobRef = useRef<AnalysisJob<QualityReport> | null>(null);
   const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
@@ -3607,7 +3606,10 @@ export function App() {
       await waitForNextPaint();
 
       let firstWorkerProgress = true;
-      const job = startFixJob(selectedAsset.image, options, {
+      const job = startEngineFixJob({
+        assetId: selectedAsset.id,
+        image: selectedAsset.image,
+        options,
         onProgress: (progress) => {
           if (firstWorkerProgress) {
             firstWorkerProgress = false;
