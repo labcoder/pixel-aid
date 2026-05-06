@@ -57,6 +57,8 @@ Browser API constraints for worker movement:
 - Transferable `ArrayBuffer`s detach the sender-side buffer, so source images must still be cloned before transfer when the UI needs to keep preview and document state alive.
 - React render/commit may build lightweight render models and display cached metadata, but it must not run image scans, grid detection, quality reports, or suggestion analysis directly.
 
+Runtime warnings flag expensive main-thread import/analysis phases without failing the operation. Initial warning thresholds are 32ms for decode preparation, 16ms for thumbnail/preview-surface generation, 32ms for Auto Suggest, and 16ms for quality-report setup. Warnings include the operation name and image dimensions, are deduped per asset/scope, and are written to the editor log plus performance marks so normal small assets do not spam the UI.
+
 ## Progress And Cancellation
 
 The browser client reports `decode-prep` before the worker job starts. Worker and core fix jobs emit coarse progress stages for `grid-detection`, `frame-slicing`, `downsampling`, `alpha-cleanup`, `palette-remap`, `export-prep`, `complete`, and `cancelled`. Progress is intentionally stage-based instead of per-pixel so long image operations do not flood the UI thread or trigger excessive React state updates.

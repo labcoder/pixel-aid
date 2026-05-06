@@ -12,6 +12,15 @@ export type PreviewSurfaceCacheEntry = {
   bytes: number;
 };
 
+export type PreviewSurfaceCreationTiming = {
+  assetId: string;
+  role: PreviewSurfaceRole;
+  imageId: string;
+  width: number;
+  height: number;
+  durationMs: number;
+};
+
 export type PreviewSurfaceRequest = {
   assetId: string;
   role: PreviewSurfaceRole;
@@ -32,6 +41,7 @@ export class PreviewSurfaceCache {
   private readonly now: () => number;
   private readonly imageIds = new WeakMap<RGBAImage, string>();
   private readonly entries = new Map<string, PreviewSurfaceCacheEntry>();
+  private readonly surfaceCreationTimings: PreviewSurfaceCreationTiming[] = [];
   private nextImageId = 0;
 
   constructor(options: PreviewSurfaceCacheOptions = {}) {
@@ -49,7 +59,16 @@ export class PreviewSurfaceCache {
       return existing.canvas;
     }
 
+    const createdAt = this.now();
     const canvas = this.createSurface(request.image);
+    this.surfaceCreationTimings.push({
+      assetId: request.assetId,
+      role: request.role,
+      imageId,
+      width: canvas.width,
+      height: canvas.height,
+      durationMs: Math.max(0, this.now() - createdAt)
+    });
     this.entries.set(key, {
       assetId: request.assetId,
       role: request.role,
@@ -105,6 +124,10 @@ export class PreviewSurfaceCache {
       surfaces: this.entries.size,
       estimatedBytes
     };
+  }
+
+  drainSurfaceCreationTimings(): PreviewSurfaceCreationTiming[] {
+    return this.surfaceCreationTimings.splice(0, this.surfaceCreationTimings.length);
   }
 
   private getImageId(image: RGBAImage): string {

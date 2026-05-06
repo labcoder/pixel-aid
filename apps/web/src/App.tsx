@@ -221,6 +221,11 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import {
+  createMainThreadPhaseWarningKey,
+  getMainThreadPhaseWarning,
+  type MainThreadPhaseWarningInput
+} from "./lib/mainThreadPhaseWarnings";
 import { summarizeWorkerDiagnostics } from "./lib/workerDiagnostics";
 import {
   getVisibleInspectorGroups,
@@ -1056,6 +1061,7 @@ export function App() {
   const assetCleanSnapshotsRef = useRef<Record<string, AssetDirtySnapshot>>({});
   const pendingCleanSnapshotAssetIdRef = useRef<string | null>(null);
   const previewSurfaceCacheRef = useRef(createPreviewSurfaceCache({ maxSurfaces: 24 }));
+  const mainThreadPhaseWarningKeysRef = useRef(new Set<string>());
   const sourceSheetFramesCacheRef = useRef<{ key: string; frames: SpriteFrame[] }>({ key: "", frames: [] });
   const busyOperationIdRef = useRef(0);
   const activeJobRef = useRef<EngineFixJob | null>(null);
@@ -1103,6 +1109,26 @@ export function App() {
   const publishEditorPerformanceSnapshot = useCallback(() => {
     setEditorPerformanceSnapshot(editorPerformanceMonitorRef.current.getSnapshot());
   }, []);
+
+  const recordMainThreadPhaseWarning = useCallback(
+    (input: MainThreadPhaseWarningInput & { scope: string; operationId?: string }) => {
+      const warning = getMainThreadPhaseWarning(input);
+      if (!warning) {
+        return;
+      }
+
+      const key = createMainThreadPhaseWarningKey(warning, input.scope);
+      if (mainThreadPhaseWarningKeysRef.current.has(key)) {
+        return;
+      }
+
+      mainThreadPhaseWarningKeysRef.current.add(key);
+      appendLog(`Performance warning: ${warning.message}`);
+      editorPerformanceMonitorRef.current.mark("main-thread warning", warning.message, input.operationId);
+      publishEditorPerformanceSnapshot();
+    },
+    [appendLog, publishEditorPerformanceSnapshot]
+  );
 
   useEffect(() => () => editorPerformanceMonitorRef.current.dispose(), []);
 
@@ -1465,6 +1491,19 @@ export function App() {
     [fixResult?.image, selectedAsset?.id]
   );
   const previewSurfaceStats = previewSurfaceCacheRef.current.getStats();
+  useEffect(() => {
+    for (const timing of previewSurfaceCacheRef.current.drainSurfaceCreationTimings()) {
+      recordMainThreadPhaseWarning({
+        phase: "thumbnail-generation",
+        operationName: `${timing.role} preview surface`,
+        durationMs: timing.durationMs,
+        width: timing.width,
+        height: timing.height,
+        scope: `${timing.assetId}:${timing.role}:${timing.imageId}`,
+        details: "preview surface cache"
+      });
+    }
+  });
   const latestEditorOperation = editorPerformanceSnapshot.operations[0];
   const editorPerformanceMetricRows = useMemo<Array<[string, string]>>(() => {
     const longTaskStatus = editorPerformanceSnapshot.longTasks.supported
@@ -2373,6 +2412,7 @@ export function App() {
     let job: AnalysisJob<QualityReport> | null = null;
     let operationId: number | null = null;
     const timeoutId = window.setTimeout(() => {
+      const setupStartedAt = performance.now();
       const operation = nextBusyOperation("analysis", `Preparing diagnostics for ${selectedAsset.name}...`);
       operationId = operation.id;
       setAnalysisOperation(operation);
@@ -2405,6 +2445,15 @@ export function App() {
         }
       });
       activeQualityAnalysisJobRef.current = job;
+      recordMainThreadPhaseWarning({
+        phase: "quality-report-setup",
+        operationName: `Quality diagnostics setup ${selectedAsset.name}`,
+        durationMs: performance.now() - setupStartedAt,
+        width: selectedAsset.image.width,
+        height: selectedAsset.image.height,
+        scope: qualityReportCacheKey,
+        operationId: perfOperationId
+      });
 
       void job.promise
         .then((report) => {
@@ -2457,6 +2506,7 @@ export function App() {
     qualityReportCacheKey,
     qualityReportDebounceMs,
     qualityReportSheetLayout,
+    recordMainThreadPhaseWarning,
     selectedAsset
   ]);
   useEffect(() => {
@@ -3266,7 +3316,17 @@ export function App() {
 
             editorPerformanceMonitorRef.current.mark("decode start", file.name, perfOperationId);
             publishEditorPerformanceSnapshot();
+            const decodeStartedAt = performance.now();
             const asset = await decodeImageFile(file);
+            recordMainThreadPhaseWarning({
+              phase: "decode-preparation",
+              operationName: `Decode ${file.name}`,
+              durationMs: performance.now() - decodeStartedAt,
+              width: asset.image.width,
+              height: asset.image.height,
+              scope: asset.id,
+              operationId: perfOperationId
+            });
             editorPerformanceMonitorRef.current.mark("decode end", `${asset.image.width}x${asset.image.height}`, perfOperationId);
             editorPerformanceMonitorRef.current.recordImageMemory("source image buffer", asset.image, perfOperationId);
             publishEditorPerformanceSnapshot();
@@ -3285,7 +3345,18 @@ export function App() {
             await waitForNextPaint();
 
             editorPerformanceMonitorRef.current.mark("auto suggest start", asset.name, perfOperationId);
+            const autoSuggestStartedAt = performance.now();
             const suggestion = suggestFixSettings(asset.image);
+            recordMainThreadPhaseWarning({
+              phase: "auto-suggest",
+              operationName: `Import Auto Suggest ${asset.name}`,
+              durationMs: performance.now() - autoSuggestStartedAt,
+              width: asset.image.width,
+              height: asset.image.height,
+              scope: asset.id,
+              operationId: perfOperationId,
+              details: "import"
+            });
             editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             cacheFixSuggestionAnalysis(asset, suggestion);
@@ -3316,6 +3387,7 @@ export function App() {
       nextBusyOperation,
       publishEditorPerformanceSnapshot,
       recordOperationError,
+      recordMainThreadPhaseWarning,
       saveCurrentAssetSession,
       selectAssetThroughEngine
     ]
@@ -3834,7 +3906,18 @@ export function App() {
     await waitForNextPaint();
 
     try {
+      const autoSuggestStartedAt = performance.now();
       const suggestion = suggestFixSettings(selectedAsset.image);
+      recordMainThreadPhaseWarning({
+        phase: "auto-suggest",
+        operationName: `Auto Suggest ${selectedAsset.name}`,
+        durationMs: performance.now() - autoSuggestStartedAt,
+        width: selectedAsset.image.width,
+        height: selectedAsset.image.height,
+        scope: selectedAsset.id,
+        operationId: perfOperationId,
+        details: "manual"
+      });
       editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       cacheFixSuggestionAnalysis(selectedAsset, suggestion);
@@ -3852,7 +3935,17 @@ export function App() {
       publishEditorPerformanceSnapshot();
       setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
     }
-  }, [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, publishEditorPerformanceSnapshot, recordOperationError, selectedAsset]);
+  }, [
+    appendLog,
+    applyFixSuggestion,
+    cacheFixSuggestionAnalysis,
+    isEditorBusy,
+    nextBusyOperation,
+    publishEditorPerformanceSnapshot,
+    recordMainThreadPhaseWarning,
+    recordOperationError,
+    selectedAsset
+  ]);
 
   const applyPreset = useCallback(
     (preset: EditorPreset) => {
@@ -3972,14 +4065,24 @@ export function App() {
         categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
         categoryConfidence: 1
       };
+      const autoSuggestStartedAt = performance.now();
       const suggestion = suggestFixSettingsForAssetType(selectedAsset.image, nextAssetType);
+      recordMainThreadPhaseWarning({
+        phase: "auto-suggest",
+        operationName: `Asset type suggestion ${definition.label}`,
+        durationMs: performance.now() - autoSuggestStartedAt,
+        width: selectedAsset.image.width,
+        height: selectedAsset.image.height,
+        scope: `${selectedAsset.id}:${nextAssetType}`,
+        details: "asset type change"
+      });
 
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       cacheFixSuggestionAnalysis(manualAsset, suggestion);
       applyFixSuggestion(suggestion, manualAsset);
       appendLog(`Asset type set: ${definition.label}`);
     },
-    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, selectedAsset]
+    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, recordMainThreadPhaseWarning, selectedAsset]
   );
 
   const visibleInspectorGroups = useMemo(

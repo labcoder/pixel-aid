@@ -46,6 +46,32 @@ describe("PreviewSurfaceCache", () => {
     expect(cache.getStats().surfaces).toBe(2);
   });
 
+  test("records surface creation timings for diagnostics", () => {
+    let now = 10;
+    const image = createImage(8, 4);
+    const cache = createPreviewSurfaceCache({
+      now: () => now,
+      createSurface: (source) => {
+        now += 5;
+        return createFakeCanvas(source.width, source.height);
+      }
+    });
+
+    cache.getSurface({ assetId: "asset-a", role: "source", image });
+
+    expect(cache.drainSurfaceCreationTimings()).toEqual([
+      {
+        assetId: "asset-a",
+        role: "source",
+        imageId: "image-0",
+        width: 8,
+        height: 4,
+        durationMs: 5
+      }
+    ]);
+    expect(cache.drainSurfaceCreationTimings()).toEqual([]);
+  });
+
   test("disposes least recently used surfaces over the limit", () => {
     let now = 0;
     const cache = createPreviewSurfaceCache({
