@@ -29,6 +29,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "benchmark:record": "node scripts/run-benchmarks.mjs",
     "benchmark:budget": "node scripts/check-benchmark-budgets.mjs --warn-only",
+    "benchmark:worker-stress": "node scripts/run-worker-stress.mjs",
     "app-shell:check": "node scripts/check-app-shell-size.mjs"
   },
   "engines": {

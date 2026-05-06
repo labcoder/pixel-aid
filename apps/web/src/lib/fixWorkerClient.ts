@@ -16,6 +16,7 @@ export type FixJob = {
 export type StartFixJobOptions = {
   onProgress?: (progress: WorkerProgress) => void;
   onDiagnostics?: WorkerDiagnosticsSink;
+  workerFactory?: () => Worker;
   terminateGraceMs?: number;
 };
 
@@ -30,7 +31,7 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
     ...(jobOptions.onDiagnostics ? { onDiagnostics: jobOptions.onDiagnostics } : {})
   });
   const workerCreateStartedAt = performance.now();
-  const worker = new Worker(new URL("@pixelaid/worker/fix.worker", import.meta.url), { type: "module" });
+  const worker = (jobOptions.workerFactory ?? createFixWorker)();
   diagnostics.markWorkerCreate(performance.now() - workerCreateStartedAt);
   const clone = imageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
@@ -158,4 +159,8 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
 
 function imageToTransferable(image: RGBAImage): ReturnType<typeof cloneImageToTransferable> {
   return cloneImageToTransferable(image);
+}
+
+function createFixWorker(): Worker {
+  return new Worker(new URL("@pixelaid/worker/fix.worker", import.meta.url), { type: "module" });
 }

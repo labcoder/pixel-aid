@@ -26,10 +26,12 @@ export type SourceAnalysisJobOptions = {
   maxUniqueColors?: number;
   outlineMaxCandidates?: number;
   onDiagnostics?: WorkerDiagnosticsSink;
+  workerFactory?: () => Worker;
 };
 
 export type QualityAnalysisJobOptions = {
   onDiagnostics?: WorkerDiagnosticsSink;
+  workerFactory?: () => Worker;
 };
 
 export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysisJobOptions = {}): AnalysisJob<SourceAssetAnalysisResult> {
@@ -42,7 +44,7 @@ export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysis
     sourceByteLength: image.data.byteLength,
     ...(options.onDiagnostics ? { onDiagnostics: options.onDiagnostics } : {})
   });
-  const worker = createAnalysisWorker(diagnostics.markWorkerCreate);
+  const worker = createAnalysisWorker(diagnostics.markWorkerCreate, options.workerFactory);
   const clone = imageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
@@ -73,7 +75,7 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
     sourceByteLength: image.data.byteLength,
     ...(jobOptions.onDiagnostics ? { onDiagnostics: jobOptions.onDiagnostics } : {})
   });
-  const worker = createAnalysisWorker(diagnostics.markWorkerCreate);
+  const worker = createAnalysisWorker(diagnostics.markWorkerCreate, jobOptions.workerFactory);
   const clone = imageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
@@ -174,13 +176,17 @@ function startAnalysisJob<T>(
   };
 }
 
-function createAnalysisWorker(onCreated: (durationMs: number) => void): Worker {
+function createAnalysisWorker(onCreated: (durationMs: number) => void, workerFactory?: () => Worker): Worker {
   const startedAt = performance.now();
-  const worker = new Worker(new URL("@pixelaid/worker/fix.worker", import.meta.url), { type: "module" });
+  const worker = (workerFactory ?? defaultAnalysisWorkerFactory)();
   onCreated(performance.now() - startedAt);
   return worker;
 }
 
 function imageToTransferable(image: RGBAImage): ReturnType<typeof cloneImageToTransferable> {
   return cloneImageToTransferable(image);
+}
+
+function defaultAnalysisWorkerFactory(): Worker {
+  return new Worker(new URL("@pixelaid/worker/fix.worker", import.meta.url), { type: "module" });
 }
