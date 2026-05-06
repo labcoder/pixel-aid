@@ -5,6 +5,27 @@ export type {
   FixImageWorkerRequest,
   SourceAssetAnalysisResult,
   SourcePaletteAnalysis,
+  PersistentWorkerAcceptedResponse,
+  PersistentWorkerCancelRequest,
+  PersistentWorkerCancelledResponse,
+  PersistentWorkerErrorResponse,
+  PersistentWorkerFixJob,
+  PersistentWorkerHealthRequest,
+  PersistentWorkerJob,
+  PersistentWorkerJobKind,
+  PersistentWorkerJobRequest,
+  PersistentWorkerProgressResponse,
+  PersistentWorkerQualityAnalysisJob,
+  PersistentWorkerQueuePolicy,
+  PersistentWorkerReadyResponse,
+  PersistentWorkerRequest,
+  PersistentWorkerResponse,
+  PersistentWorkerResult,
+  PersistentWorkerResultResponse,
+  PersistentWorkerSourceAnalysisJob,
+  PersistentWorkerStalePolicy,
+  PersistentWorkerStaleResponse,
+  PersistentWorkerSuggestFixJob,
   WorkerCancelledResponse,
   WorkerErrorResponse,
   WorkerProgressResponse,
@@ -14,5 +35,6 @@ export type {
   WorkerResultResponse,
   WorkerSourceAnalysisResponse
 } from "./protocol";
+export { legacyWorkerRequestToPersistent, persistentWorkerJobToLegacyRequest, persistentWorkerProtocolVersion } from "./protocol";
 export { createWorkerCancellationController, runWorkerRequest } from "./pipeline";
 export type { WorkerEventSink } from "./pipeline";
