@@ -308,6 +308,12 @@ Grid detection now has an explicit sampled mode for large-source analysis paths.
 | `fake-pixel-720p-single: grid detection 0.92MP` | 61.74 ms | 30.82 ms | 50.1% faster |
 | `fake-pixel-1080p-single: grid detection 2.07MP` | 148.91 ms | 55.01 ms | 63.1% faster |
 
+### Optimization 5.5.1 Result
+
+The sheet frame loop now reuses the temporary same-size frame-source buffer and updates the sheet source bounds incrementally instead of retaining a frame source-rect list. This removes repeated source-frame crop allocation for source-sized sheet cleanup paths while keeping cleaned frame outputs as fresh buffers before pasting into the packed sheet.
+
+The current large-sheet benchmark primarily exercises 8x downsampled frames, not same-size frame crops, so timing is expected to stay flat. The measured frame-aware cleanup run remained within local noise: 100.72 ms before 5.5.1 and 102.23 ms after.
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.

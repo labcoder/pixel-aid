@@ -195,7 +195,8 @@ function fixSheetFrames(
   const frames = options.sheetFrames ?? [];
   const outputSize = getSheetOutputSize(options, frames);
   const packed = createImage(outputSize.width, outputSize.height);
-  const sourceRects: Rect[] = [];
+  const scratch: SheetFrameScratch = {};
+  let sourceBounds: Rect | undefined;
   const gridScaleX = options.grid.scaleX ?? options.grid.scale ?? 1;
   const gridScaleY = options.grid.scaleY ?? options.grid.scale ?? gridScaleX;
   const phaseX = options.grid.phaseX ?? 0;
@@ -211,14 +212,15 @@ function fixSheetFrames(
       assertNotCancelled(runtime?.signal);
       const frame = frames[index]!;
       const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
-      sourceRects.push(sourceRect);
+      sourceBounds = expandUnionRect(sourceBounds, sourceRect);
       const frameStartPercent = phasePercent(20, 65, index, frames.length);
       const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
       const frameFix = fixSheetFrameSource(contrastExpanded.image, sourceRect, frame.rect, options, {
         runtime,
         phaseTimer,
         startPercent: frameStartPercent,
-        endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
+        endPercent: Math.min(frameEndPercent, frameStartPercent + 3),
+        scratch
       });
       const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale), phaseTimer);
       alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
@@ -258,7 +260,6 @@ function fixSheetFrames(
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
   assertNotCancelled(runtime?.signal);
-  const sourceRect = unionRects(sourceRects);
   const grid: GridCandidate = {
     outputWidth: remapped.width,
     outputHeight: remapped.height,
@@ -269,8 +270,8 @@ function fixSheetFrames(
     confidence: 1,
     reason: `Frame-aware sheet fix from ${frames.length} source cell${frames.length === 1 ? "" : "s"}`
   };
-  if (sourceRect) {
-    grid.sourceRect = sourceRect;
+  if (sourceBounds) {
+    grid.sourceRect = sourceBounds;
   }
   const phaseTimings = collectedPhaseTimings(phaseTimer);
 
@@ -306,12 +307,22 @@ type SheetFrameFix = {
   inferredNativeScale: boolean;
 };
 
+type SheetFrameScratch = {
+  frameSource?: RGBAImage;
+};
+
 function fixSheetFrameSource(
   image: RGBAImage,
   sourceRect: Rect,
   outputRect: Rect,
   options: FixOptions,
-  progress: { runtime: FixRuntimeOptions | undefined; phaseTimer: FixPhaseTimer | undefined; startPercent: number; endPercent: number }
+  progress: {
+    runtime: FixRuntimeOptions | undefined;
+    phaseTimer: FixPhaseTimer | undefined;
+    startPercent: number;
+    endPercent: number;
+    scratch?: SheetFrameScratch;
+  }
 ): SheetFrameFix {
   if (!isSameSizeFrameSource(sourceRect, outputRect)) {
     return {
@@ -340,7 +351,7 @@ function fixSheetFrameSource(
     };
   }
 
-  const frameSource = copyImageRect(image, sourceRect);
+  const frameSource = copyImageRect(image, sourceRect, progress.scratch);
   const inferred = options.cleanup.inferNativeScale ? inferNativeScaleFrame(frameSource) : undefined;
   if (!inferred) {
     return {
@@ -729,8 +740,11 @@ function isSameSizeFrameSource(sourceRect: Rect, outputRect: Rect): boolean {
   return sourceRect.w === outputRect.w && sourceRect.h === outputRect.h;
 }
 
-function copyImageRect(image: RGBAImage, rect: Rect): RGBAImage {
-  const out = createImage(rect.w, rect.h);
+function copyImageRect(image: RGBAImage, rect: Rect, scratch?: SheetFrameScratch): RGBAImage {
+  const out = getScratchImage(scratch, rect.w, rect.h);
+  if (rect.x < 0 || rect.y < 0 || rect.x + rect.w > image.width || rect.y + rect.h > image.height) {
+    out.data.fill(0);
+  }
   for (let y = 0; y < rect.h; y += 1) {
     const sourceY = rect.y + y;
     if (sourceY < 0 || sourceY >= image.height) {
@@ -752,28 +766,34 @@ function copyImageRect(image: RGBAImage, rect: Rect): RGBAImage {
   return out;
 }
 
-function unionRects(rects: readonly Rect[]): Rect | undefined {
-  if (rects.length === 0) {
-    return undefined;
+function getScratchImage(scratch: SheetFrameScratch | undefined, width: number, height: number): RGBAImage {
+  if (!scratch) {
+    return createImage(width, height);
   }
 
-  let minX = Number.POSITIVE_INFINITY;
-  let minY = Number.POSITIVE_INFINITY;
-  let maxX = 0;
-  let maxY = 0;
-  for (const rect of rects) {
-    minX = Math.min(minX, rect.x);
-    minY = Math.min(minY, rect.y);
-    maxX = Math.max(maxX, rect.x + rect.w);
-    maxY = Math.max(maxY, rect.y + rect.h);
+  const current = scratch.frameSource;
+  if (current && current.width === width && current.height === height) {
+    return current;
   }
 
-  return {
-    x: minX,
-    y: minY,
-    w: maxX - minX,
-    h: maxY - minY
-  };
+  scratch.frameSource = createImage(width, height);
+  return scratch.frameSource;
+}
+
+function expandUnionRect(current: Rect | undefined, rect: Rect): Rect {
+  if (!current) {
+    return { ...rect };
+  }
+
+  const minX = Math.min(current.x, rect.x);
+  const minY = Math.min(current.y, rect.y);
+  const maxX = Math.max(current.x + current.w, rect.x + rect.w);
+  const maxY = Math.max(current.y + current.h, rect.y + rect.h);
+  current.x = minX;
+  current.y = minY;
+  current.w = maxX - minX;
+  current.h = maxY - minY;
+  return current;
 }
 
 function clampInteger(value: number, min: number, max: number): number {
