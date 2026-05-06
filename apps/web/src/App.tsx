@@ -221,6 +221,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import { summarizeWorkerDiagnostics } from "./lib/workerDiagnostics";
 import {
   getVisibleInspectorGroups,
   isInspectorGroupDefaultOpen,
@@ -1870,6 +1871,10 @@ export function App() {
           paletteMaxColors: 8,
           maxUniqueColors: 10000,
           outlineMaxCandidates: 64
+        },
+        onDiagnostics: (diagnostics) => {
+          editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
+          publishEditorPerformanceSnapshot();
         }
       });
       activeSourceAnalysisJobRef.current = job;
@@ -2373,6 +2378,10 @@ export function App() {
           alpha,
           ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
           ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
+        },
+        onDiagnostics: (diagnostics) => {
+          editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
+          publishEditorPerformanceSnapshot();
         }
       });
       activeQualityAnalysisJobRef.current = job;
@@ -3619,6 +3628,10 @@ export function App() {
         assetId: selectedAsset.id,
         image: selectedAsset.image,
         options,
+        onDiagnostics: (diagnostics) => {
+          editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
+          publishEditorPerformanceSnapshot();
+        },
         onProgress: (progress) => {
           if (firstWorkerProgress) {
             firstWorkerProgress = false;

@@ -14,8 +14,10 @@ import {
   startQualityAnalysisJob,
   startSourceAnalysisJob,
   type AnalysisJob,
+  type QualityAnalysisJobOptions,
   type SourceAnalysisJobOptions
 } from "./analysisWorkerClient";
+import type { WorkerDiagnosticsSink } from "./workerDiagnostics";
 
 export type EngineAnalysisJob<T> = AnalysisJob<T> & {
   engineJobId: string;
@@ -26,6 +28,7 @@ export type StartEngineSourceAnalysisJobOptions = {
   assetId: string;
   image: RGBAImage;
   options?: SourceAnalysisJobOptions;
+  onDiagnostics?: WorkerDiagnosticsSink;
   onJobUpdate?: (job: EngineJobRecord) => void;
   startSourceAnalysisJobImpl?: (image: RGBAImage, options?: SourceAnalysisJobOptions) => AnalysisJob<SourceAssetAnalysisResult>;
 };
@@ -34,18 +37,23 @@ export type StartEngineQualityAnalysisJobOptions = {
   assetId: string;
   image: RGBAImage;
   options: QualityReportOptions;
+  onDiagnostics?: WorkerDiagnosticsSink;
   onJobUpdate?: (job: EngineJobRecord) => void;
-  startQualityAnalysisJobImpl?: (image: RGBAImage, options: QualityReportOptions) => AnalysisJob<QualityReport>;
+  startQualityAnalysisJobImpl?: (image: RGBAImage, options: QualityReportOptions, jobOptions?: QualityAnalysisJobOptions) => AnalysisJob<QualityReport>;
 };
 
 export function startEngineSourceAnalysisJob({
   assetId,
   image,
   options,
+  onDiagnostics,
   onJobUpdate,
   startSourceAnalysisJobImpl = startSourceAnalysisJob
 }: StartEngineSourceAnalysisJobOptions): EngineAnalysisJob<SourceAssetAnalysisResult> {
-  const analysisJob = startSourceAnalysisJobImpl(image, options);
+  const analysisJob = startSourceAnalysisJobImpl(image, {
+    ...options,
+    ...(onDiagnostics ? { onDiagnostics } : {})
+  });
   return trackAnalysisJob(analysisJob, "sourceAnalysis", assetId, onJobUpdate);
 }
 
@@ -53,10 +61,11 @@ export function startEngineQualityAnalysisJob({
   assetId,
   image,
   options,
+  onDiagnostics,
   onJobUpdate,
   startQualityAnalysisJobImpl = startQualityAnalysisJob
 }: StartEngineQualityAnalysisJobOptions): EngineAnalysisJob<QualityReport> {
-  const analysisJob = startQualityAnalysisJobImpl(image, options);
+  const analysisJob = startQualityAnalysisJobImpl(image, options, onDiagnostics ? { onDiagnostics } : undefined);
   return trackAnalysisJob(analysisJob, "qualityAnalysis", assetId, onJobUpdate);
 }
 
