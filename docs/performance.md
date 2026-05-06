@@ -38,6 +38,24 @@ Core fix functions accept optional runtime hooks for progress and cooperative ca
 
 The browser client asks the worker to cancel gracefully first. If the worker is inside a synchronous phase that cannot process messages immediately, the client terminates the worker as a fallback. Results and progress that arrive after cancellation are ignored or suppressed with request id checks, settled-state guards, and cancellation guards so stale events cannot update the active job UI.
 
+## Persistent Worker Pool Policy
+
+Milestone 3 replaces per-job worker creation with a small persistent pool. The first implementation keeps the policy deliberately narrow:
+
+- One persistent fix worker.
+- One persistent analysis worker shared by source analysis and quality analysis.
+- No unbounded worker creation, no algorithm-level parallelism, and no browser-visible worker count setting yet.
+
+The fix worker is single-flight. A user-triggered fix job may run only one active job for the current asset/session. Starting a new fix for the same asset cancels the older fix before queueing the new one. Deleting the asset or leaving the active session cancels the active fix. The fix queue depth is capped at one pending job so repeated clicks cannot create a backlog of large transferable buffers.
+
+The analysis worker is latest-only per stale key. Source analysis and quality diagnostics use stable keys such as `assetId:sourceAnalysis` and `assetId:qualityAnalysis:settingsHash`. When a newer job with the same stale key is queued, older pending jobs are dropped and older completed results are ignored. Analysis jobs may be cancelled when asset selection changes, but stale-result checks remain required because a synchronous worker phase may finish before it can observe cancellation.
+
+All persistent requests use `requestId` for the individual operation and `jobId` for the asset/session job identity. Responses must include both identifiers. The worker may emit `worker-accepted`, `worker-progress`, `worker-result`, `worker-cancelled`, `worker-error`, `worker-stale`, and `worker-ready` responses. The UI only commits a result when the active request id and stale key still match the current asset/session state.
+
+Worker lifetime starts lazy: workers are created on first use and reused across subsequent jobs. They remain alive while the editor page is active. A future idle timeout can terminate workers after several minutes of no jobs, but the first pool implementation should prefer predictable reuse over churn. Page unload, explicit app disposal, and fatal worker errors terminate workers immediately.
+
+Memory pressure policy stays conservative. The app still clones source buffers before transferring them when the source must remain previewable. Pending queues store only the latest transferable job for a stale key. Large generated artifacts and worker-stress reports stay outside source control unless intentionally captured. Buffer ownership and reuse are tracked separately in Milestone 3.4 before the app removes duplicate clones.
+
 ## Editor Responsiveness Diagnostics
 
 The web editor records lightweight, in-session responsiveness diagnostics for major user operations. The diagnostics are visible in the Metrics and Logs bottom panel and are included in exported diagnostics JSON. Timing history is intentionally bounded and is not persisted across sessions.
