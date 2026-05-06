@@ -73,6 +73,8 @@ The current ownership states are:
 
 Ownership labels should appear in diagnostics and helper names where practical. A function that clones for transfer should make that intent explicit; a function that keeps source preview data must not silently transfer it. Future buffer pooling may reuse only temporary or released buffers, never `source-immutable` buffers.
 
+Temporary RGBA buffer reuse is bounded by size bucket. A pool may retain a small number of released same-byte-length buffers for scratch work, clears them on release by default, and drops buffers instead of exceeding its configured byte cap. Reused buffers must be labelled as temporary ownership such as `export-temp`; they must not be committed as immutable source buffers or long-lived worker results without creating a new ownership record.
+
 ## Editor Responsiveness Diagnostics
 
 The web editor records lightweight, in-session responsiveness diagnostics for major user operations. The diagnostics are visible in the Metrics and Logs bottom panel and are included in exported diagnostics JSON. Timing history is intentionally bounded and is not persisted across sessions.
