@@ -15,6 +15,13 @@ export type {
   EnginePreferencesAdapter,
   EngineTimingAdapter
 } from "./adapters";
+export {
+  clearEngineAssetSelection,
+  removeEngineAssetAndSelectNext,
+  selectEngineAsset,
+  selectNextEngineAssetAfterRemoval
+} from "./assetSelection";
+export type { EngineAssetLike, EngineAssetRemovalResult } from "./assetSelection";
 export { engineCommandTypes, engineEventTypes } from "./commands";
 export type {
   EngineApplySuggestionCommand,
