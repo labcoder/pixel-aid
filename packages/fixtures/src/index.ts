@@ -10,8 +10,8 @@ export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProve
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
 export { presentationSpriteSheetFixtures } from "./presentationSpriteSheets";
 export { qualityFailureFixtureCatalog } from "./qualityFailureCorpus";
-export { singleSpriteQualityGoldenCases } from "./qualityGoldens";
-export type { SingleSpriteQualityGoldenCase, SingleSpriteQualityGoldenPath } from "./qualityGoldens";
+export { sheetQualityGoldenCases, singleSpriteQualityGoldenCases } from "./qualityGoldens";
+export type { SheetQualityGoldenCase, SheetQualityGoldenPath, SingleSpriteQualityGoldenCase, SingleSpriteQualityGoldenPath } from "./qualityGoldens";
 export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 export { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
