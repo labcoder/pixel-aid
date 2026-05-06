@@ -122,6 +122,19 @@ Browsers that support `PerformanceObserver` long-task entries also report main-t
 
 Memory diagnostics are estimates, not exact heap measurements. PixelAid estimates RGBA image-buffer pressure as `width x height x 4` and records known source, clone/transfer, worker result, fixed output, cached preview surface, export PNG, and export bundle checkpoints when those buffers are visible to the editor. These estimates are meant to warn about large-image workflows and should not be treated as browser heap profiles.
 
+## OffscreenCanvas Viewport Evaluation
+
+Milestone 4.4.1 evaluated viewport pre-render ownership without changing the production viewport path. The recommendation is to keep native source/fixed preview surfaces on the current cached Canvas2D path until the viewport render model is extracted and browser-worker support can be measured in the actual Vite/browser runtime.
+
+| Surface | Current data point | Recommendation | Reason |
+| --- | --- | --- | --- |
+| Native source/fixed preview surfaces | `PreviewSurfaceCache` creates one native-size cached canvas per asset/role and records creation timing. A 1080p RGBA source is about 7.9 MB before any additional canvas backing store. | Defer worker movement. | A worker path still needs full RGBA clone/transfer setup unless decode/preparation already owns the worker buffer. Moving now risks extra memory pressure without measured paint benefit. |
+| Asset browser thumbnails | `ThumbnailSurfaceCache` bounds each thumbnail to 96x72 or smaller, records timings, and already selects `OffscreenCanvas` where available with DOM canvas fallback. | Use current bounded OffscreenCanvas-capable path. | The surface is small, cached, and independent from pointer/camera state. |
+| Diagnostic overlays | Grid/crop/frame/pivot overlays are lightweight today but depend on selected viewport mode, zoom, and frame state. | Defer until render model extraction. | Moving overlay preparation before the render model exists would duplicate state plumbing and make correctness harder to test. |
+| Final viewport composite | The main viewport canvas owns camera transforms, split view, checkerboard, and immediate pointer feedback. | Keep main-thread Canvas2D for now. | The final paint is interaction-sensitive; only preparation surfaces should move unless browser measurements show a real gain. |
+
+The tested recommendation model is `apps/web/src/lib/viewportOffscreenEvaluation.ts`. It treats worker-side `OffscreenCanvas`/`ImageBitmap` support as a measured capability, not an assumption, and keeps production rendering unchanged for 4.4.1.
+
 ## Current Metrics
 
 The metrics panel shows:
