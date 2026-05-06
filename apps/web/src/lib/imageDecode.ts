@@ -1,5 +1,6 @@
 import type { AssetProvenance, RGBAImage } from "@pixelaid/shared";
 import { createDefaultAssetTypeMetadata, type AssetTypeMetadata } from "./assets";
+import { prepareImageBlob, type ImagePreparationDiagnostics, type ImagePreparationOriginalMetadata } from "./imagePreparation";
 
 export type ImportedImageAsset = AssetTypeMetadata & {
   id: string;
@@ -7,6 +8,8 @@ export type ImportedImageAsset = AssetTypeMetadata & {
   image: RGBAImage;
   importedAt: string;
   provenance?: AssetProvenance;
+  original?: ImagePreparationOriginalMetadata;
+  preparation?: ImagePreparationDiagnostics;
 };
 
 export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
@@ -17,7 +20,10 @@ export async function decodeImageFile(file: File): Promise<ImportedImageAsset> {
   return decodeImageBlob(file, {
     id: `${file.name}-${file.lastModified}-${file.size}`,
     name: file.name,
-    importedAt: new Date().toISOString()
+    importedAt: new Date().toISOString(),
+    mimeType: file.type,
+    byteLength: file.size,
+    lastModified: file.lastModified
   });
 }
 
@@ -27,35 +33,20 @@ export async function decodeImageBlob(
     id: string;
     name: string;
     importedAt: string;
+    mimeType?: string;
+    byteLength?: number;
+    lastModified?: number;
   }
 ): Promise<ImportedImageAsset> {
-  const bitmap = await createImageBitmap(blob);
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
+  const prepared = await prepareImageBlob(blob, metadata);
 
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    if (!context) {
-      throw new Error("Unable to create image decode canvas");
-    }
-
-    context.imageSmoothingEnabled = false;
-    context.drawImage(bitmap, 0, 0);
-    const imageData = context.getImageData(0, 0, bitmap.width, bitmap.height);
-
-    return {
-      id: metadata.id,
-      name: metadata.name,
-      image: {
-        width: bitmap.width,
-        height: bitmap.height,
-        data: new Uint8ClampedArray(imageData.data)
-      },
-      importedAt: metadata.importedAt,
-      ...createDefaultAssetTypeMetadata()
-    };
-  } finally {
-    bitmap.close();
-  }
+  return {
+    id: metadata.id,
+    name: metadata.name,
+    image: prepared.image,
+    importedAt: metadata.importedAt,
+    original: prepared.original,
+    preparation: prepared.diagnostics,
+    ...createDefaultAssetTypeMetadata()
+  };
 }
