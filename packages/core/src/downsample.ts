@@ -40,6 +40,15 @@ type ColorCluster = {
   b: number;
 };
 
+type DominantScratch = {
+  counts: Uint32Array;
+  sumR: Uint32Array;
+  sumG: Uint32Array;
+  sumB: Uint32Array;
+  touched: Uint16Array;
+  touchedCount: number;
+};
+
 type DetailCluster = ColorCluster & {
   minX: number;
   maxX: number;
@@ -58,6 +67,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
   assertNotCancelled(progress?.runtime?.signal);
   const output = createImage(options.outputWidth, options.outputHeight);
   const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
+  const dominantScratch = options.method === "dominant" || options.method === "adaptive" ? createDominantScratch() : undefined;
 
   for (let y = 0; y < options.outputHeight; y += 1) {
     if (progress && shouldReportRow(y, options.outputHeight)) {
@@ -72,7 +82,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
         options.method === "median"
           ? medianBlock(image, block)
           : options.method === "adaptive"
-            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6)
+            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6, dominantScratch!)
             : options.method === "averageThenPalette"
               ? averageBlock(image, block)
               : options.method === "detailPreserving"
@@ -81,7 +91,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
                   ? contrastBlock(image, block)
                   : options.method === "kCentroid"
                     ? kCentroidBlock(image, block)
-                    : dominantBlock(image, block).pixel;
+                    : dominantBlock(image, block, dominantScratch!).pixel;
 
       const offset = (y * output.width + x) * 4;
       output.data[offset] = pixel[0];
@@ -140,12 +150,16 @@ function setBlockBounds(block: BlockBounds, image: RGBAImage, x: number, y: numb
   block.endY = Math.max(startY + 1, Math.min(image.height, rawEndY));
 }
 
-function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, number, number, number]; dominant: DominantResult } {
-  const clusters = new Map<number, ColorCluster>();
+function dominantBlock(
+  image: RGBAImage,
+  block: BlockBounds,
+  scratch: DominantScratch
+): { pixel: [number, number, number, number]; dominant: DominantResult } {
   let total = 0;
   let alphaTotal = 0;
-  let bestColor = 0;
-  let bestCluster: ColorCluster | null = null;
+  let bestBucket = 0;
+  let bestCount = 0;
+  resetDominantScratch(scratch);
 
   for (let y = block.startY; y < block.endY; y += 1) {
     for (let x = block.startX; x < block.endX; x += 1) {
@@ -157,29 +171,25 @@ function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, 
         continue;
       }
 
-      const color = packQuantizedRgb(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!);
-      const existing = clusters.get(color);
-      const cluster = existing ?? { count: 0, r: 0, g: 0, b: 0 };
-      cluster.count += 1;
-      cluster.r += image.data[offset]!;
-      cluster.g += image.data[offset + 1]!;
-      cluster.b += image.data[offset + 2]!;
-      if (!existing) {
-        clusters.set(color, cluster);
-      }
-      if (!bestCluster || cluster.count > bestCluster.count) {
-        bestColor = color;
-        bestCluster = cluster;
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const bucket = quantizedRgbBucket(r, g, b);
+      const count = addDominantSample(scratch, bucket, r, g, b);
+      if (count > bestCount) {
+        bestBucket = bucket;
+        bestCount = count;
       }
     }
   }
 
   const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
-  const pixel = bestCluster
+  const bestColor = dominantBucketToRgb(bestBucket);
+  const pixel = bestCount > 0
     ? ([
-        clampByte(bestCluster.r / bestCluster.count),
-        clampByte(bestCluster.g / bestCluster.count),
-        clampByte(bestCluster.b / bestCluster.count),
+        clampByte(scratch.sumR[bestBucket]! / bestCount),
+        clampByte(scratch.sumG[bestBucket]! / bestCount),
+        clampByte(scratch.sumB[bestBucket]! / bestCount),
         alpha
       ] as [number, number, number, number])
     : unpackRgb(bestColor, alpha);
@@ -187,10 +197,59 @@ function dominantBlock(image: RGBAImage, block: BlockBounds): { pixel: [number, 
     pixel,
     dominant: {
       color: bestColor,
-      coverage: total > 0 && bestCluster ? bestCluster.count / total : 0,
+      coverage: total > 0 && bestCount > 0 ? bestCount / total : 0,
       alpha
     }
   };
+}
+
+function createDominantScratch(): DominantScratch {
+  const bucketCount = 32 * 32 * 32;
+  return {
+    counts: new Uint32Array(bucketCount),
+    sumR: new Uint32Array(bucketCount),
+    sumG: new Uint32Array(bucketCount),
+    sumB: new Uint32Array(bucketCount),
+    touched: new Uint16Array(bucketCount),
+    touchedCount: 0
+  };
+}
+
+function resetDominantScratch(scratch: DominantScratch): void {
+  for (let i = 0; i < scratch.touchedCount; i += 1) {
+    const bucket = scratch.touched[i]!;
+    scratch.counts[bucket] = 0;
+    scratch.sumR[bucket] = 0;
+    scratch.sumG[bucket] = 0;
+    scratch.sumB[bucket] = 0;
+  }
+  scratch.touchedCount = 0;
+}
+
+function addDominantSample(scratch: DominantScratch, bucket: number, r: number, g: number, b: number): number {
+  const currentCount = scratch.counts[bucket]!;
+  if (currentCount === 0) {
+    scratch.touched[scratch.touchedCount] = bucket;
+    scratch.touchedCount += 1;
+  }
+
+  const count = currentCount + 1;
+  scratch.counts[bucket] = count;
+  scratch.sumR[bucket] = scratch.sumR[bucket]! + r;
+  scratch.sumG[bucket] = scratch.sumG[bucket]! + g;
+  scratch.sumB[bucket] = scratch.sumB[bucket]! + b;
+  return count;
+}
+
+function quantizedRgbBucket(r: number, g: number, b: number): number {
+  return ((r & 0xf8) << 7) | ((g & 0xf8) << 2) | (b >> 3);
+}
+
+function dominantBucketToRgb(bucket: number): number {
+  const r = (bucket >> 10) & 0x1f;
+  const g = (bucket >> 5) & 0x1f;
+  const b = bucket & 0x1f;
+  return (r << 19) | (g << 11) | (b << 3);
 }
 
 function medianBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
@@ -212,8 +271,8 @@ function medianBlock(image: RGBAImage, block: BlockBounds): [number, number, num
   return [median(r), median(g), median(b), median(a)];
 }
 
-function adaptiveBlock(image: RGBAImage, block: BlockBounds, coverage: number): [number, number, number, number] {
-  const dominant = dominantBlock(image, block);
+function adaptiveBlock(image: RGBAImage, block: BlockBounds, coverage: number, scratch: DominantScratch): [number, number, number, number] {
+  const dominant = dominantBlock(image, block, scratch);
   if (dominant.dominant.coverage >= coverage) {
     return dominant.pixel;
   }

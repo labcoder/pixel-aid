@@ -231,6 +231,16 @@ Secondary targets:
 - Palette extraction and color counting are not the top local cost on these fixtures, but diagnostics and extraction still repeat related passes in `packages/core/src/palette.ts:83` and `packages/core/src/palette.ts:307`.
 - Sheet palette drift analysis should be optimized before larger animation fixtures arrive because `packages/core/src/palette.ts:636` still allocates cropped frame images.
 
+### Optimization 5.2.1 Result
+
+Dominant/adaptive downsampling now uses a reusable fixed RGB histogram for each `downsampleBlocks` operation instead of allocating a `Map` for every output block. The comparison below uses the 2026-05-06 pre-change hotspot run as the baseline and the same core benchmark command after the change:
+
+| Benchmark | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 79.93 ms | 73.59 ms | 7.9% faster |
+| `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 184.02 ms | 120.29 ms | 34.6% faster |
+| `fixes cropped adaptive single sprite` | 106.47 ms | 103.16 ms | 3.1% faster |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.

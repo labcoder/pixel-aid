@@ -4,6 +4,44 @@ import type { DownscaleMethod } from "@pixelaid/shared";
 import { downsampleBlocks, createImage, fixImage, readPixel, writePixel } from "./index";
 
 describe("advanced downsample modes", () => {
+  test("dominant and adaptive reset reusable color histograms between blocks", () => {
+    const source = createImage(4, 2, [0, 0, 0, 0]);
+    writePixel(source, 0, 0, 250, 0, 0, 255);
+    writePixel(source, 1, 0, 252, 2, 0, 255);
+    writePixel(source, 0, 1, 248, 1, 1, 255);
+    writePixel(source, 1, 1, 12, 12, 12, 0);
+    writePixel(source, 2, 0, 0, 0, 252, 255);
+    writePixel(source, 3, 0, 0, 2, 250, 255);
+    writePixel(source, 2, 1, 2, 0, 248, 255);
+    writePixel(source, 3, 1, 0, 0, 255, 255);
+
+    const dominant = downsampleBlocks(source, {
+      outputWidth: 2,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "dominant",
+      alpha: "preserve"
+    });
+    const adaptive = downsampleBlocks(source, {
+      outputWidth: 2,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "adaptive",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(dominant, 0, 0)).toEqual([250, 1, 0, 191]);
+    expect(readPixel(dominant, 1, 0)).toEqual([1, 1, 251, 255]);
+    expect(readPixel(adaptive, 0, 0)).toEqual(readPixel(dominant, 0, 0));
+    expect(readPixel(adaptive, 1, 0)).toEqual(readPixel(dominant, 1, 0));
+  });
+
   test("contrast preserves sparse dark linework missed by existing block modes", () => {
     const source = createImage(6, 6, [220, 214, 190, 255]);
     writePixel(source, 2, 1, 22, 24, 30, 255);
