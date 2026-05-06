@@ -4,6 +4,7 @@ import {
   cleanupFixtureCatalog,
   cleanupFixtureCategories,
   qualityFixtureFailureCategories,
+  qualityFailureFixtureCatalog,
   qualityFixtureReviewStatuses,
   validateQualityFixtureMetadata,
   visualRegressionCases
@@ -112,6 +113,7 @@ describe("cleanup fixture catalog", () => {
       expect.arrayContaining([
         "single-robot-6x",
         "single-knight-8x-noisy",
+        "ambiguous-grid-soft-block-sprite",
         "halo-transparent-edge",
         "matte-opaque-white-edge",
         "outline-repair-dual-tone",
@@ -126,6 +128,41 @@ describe("cleanup fixture catalog", () => {
         "large-non-sprite-background"
       ])
     );
+  });
+
+  test("classifies the initial M6.1 quality failure fixture set", () => {
+    const fixtureIds = new Set(cleanupFixtureCatalog.map((fixture) => fixture.id));
+    const requiredFailureCategories = [
+      "bright-matte-halo",
+      "noisy-pseudo-pixel-grid",
+      "weak-ambiguous-grid",
+      "uneven-row-sheet",
+      "presentation-label-gutters",
+      "palette-drift-animation",
+      "outline-repair-failure"
+    ];
+
+    for (const entry of qualityFailureFixtureCatalog) {
+      expect(fixtureIds.has(entry.fixtureId)).toBe(true);
+      expect(validateQualityFixtureMetadata(entry.metadata)).toEqual([]);
+      expect(entry.metadata.sourceFilename).toMatch(/^synthetic:\/\//);
+    }
+
+    expect(qualityFailureFixtureCatalog.map((entry) => entry.fixtureId)).toEqual(
+      expect.arrayContaining([
+        "matte-opaque-white-edge",
+        "single-knight-8x-noisy",
+        "ambiguous-grid-soft-block-sprite",
+        "uneven-gutter-labeled-sheet",
+        "presentation-mockup-2x6-sheet",
+        "palette-drift-walk-4f",
+        "outline-repair-dual-tone"
+      ])
+    );
+    expect([...new Set(qualityFailureFixtureCatalog.flatMap((entry) => entry.metadata.failureCategories))]).toEqual(
+      expect.arrayContaining(requiredFailureCategories)
+    );
+    expect(qualityFailureFixtureCatalog.some((entry) => entry.metadata.reviewStatus === "report-only")).toBe(true);
   });
 
   test("includes both seamless and broken tileset seam fixtures", () => {

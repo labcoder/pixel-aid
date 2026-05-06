@@ -1,5 +1,5 @@
 import type { CleanupFixture } from "./types";
-import { addDeterministicWobble, blitNativeToFakePixel, createImage, fillEllipse, fillImage, fillRect } from "./imagePrimitives";
+import { addDeterministicWobble, blitNativeToFakePixel, clampByte, createImage, fillEllipse, fillImage, fillRect } from "./imagePrimitives";
 import { createSingleSpriteCleanupFixture } from "./singleSprite";
 
 const WHITE = [254, 254, 252, 255] as const;
@@ -61,6 +61,36 @@ export const highResolutionPseudoPixelSprites: CleanupFixture[] = [
         requiredColors: ["#1f222a"]
       }
     }
+  },
+  {
+    id: "ambiguous-grid-soft-block-sprite",
+    title: "Ambiguous soft-block pseudo-pixel sprite",
+    category: "highResolutionPseudoPixelSprite",
+    assetType: "sprite",
+    description: "Low-contrast soft-block sprite with competing interior bands that should remain report-only until grid confidence tuning is reviewed.",
+    catches: ["weak grid confidence", "ambiguous pseudo-pixel scale", "manual grid override review"],
+    createImage: createAmbiguousGridFixtureImage,
+    expected: {
+      mode: "single",
+      grid: {
+        scaleX: 6,
+        scaleY: 6,
+        phaseX: 0,
+        phaseY: 0,
+        minConfidence: 0.35,
+        outputWidth: 48,
+        outputHeight: 48
+      },
+      palette: {
+        maxColors: 16,
+        requiredColors: ["#48546a"]
+      },
+      benchmark: {
+        sourcePixels: 288 * 288,
+        nativePixels: 48 * 48,
+        reportOnly: true
+      }
+    }
   }
 ];
 
@@ -105,6 +135,51 @@ function createKnightFixtureImage() {
     phaseY,
     amplitude: 3,
     skipNearWhite: true
+  });
+  return target;
+}
+
+function createAmbiguousGridFixtureImage() {
+  const nativeWidth = 48;
+  const nativeHeight = 48;
+  const scale = 6;
+  const width = nativeWidth * scale;
+  const height = nativeHeight * scale;
+  const target = createImage(width, height, [226, 229, 232, 255]);
+  const native = new Uint8ClampedArray(nativeWidth * nativeHeight * 4);
+  fillImage(native, [226, 229, 232, 255]);
+
+  fillEllipse(native, nativeWidth, nativeHeight, 24, 26, 13, 16, [72, 84, 106, 255]);
+  fillEllipse(native, nativeWidth, nativeHeight, 24, 26, 9, 12, [104, 124, 148, 255]);
+  fillRect(native, nativeWidth, nativeHeight, 18, 11, 12, 8, [58, 66, 84, 255]);
+  fillRect(native, nativeWidth, nativeHeight, 21, 14, 6, 3, [156, 174, 190, 255]);
+  fillRect(native, nativeWidth, nativeHeight, 14, 29, 7, 13, [54, 62, 78, 255]);
+  fillRect(native, nativeWidth, nativeHeight, 27, 29, 7, 13, [54, 62, 78, 255]);
+
+  blitNativeToFakePixel({ native, nativeWidth, nativeHeight, target: target.data, targetWidth: width, scale, phaseX: 0, phaseY: 0 });
+
+  for (let y = 0; y < height; y += 3) {
+    const shade = y % 12 === 0 ? -4 : 3;
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      target.data[offset] = clampByte(target.data[offset]! + shade);
+      target.data[offset + 1] = clampByte(target.data[offset + 1]! + shade);
+      target.data[offset + 2] = clampByte(target.data[offset + 2]! + shade);
+    }
+  }
+
+  addDeterministicWobble({
+    data: target.data,
+    width,
+    x: 0,
+    y: 0,
+    w: width,
+    h: height,
+    scale,
+    phaseX: 0,
+    phaseY: 0,
+    amplitude: 5,
+    skipNearWhite: false
   });
   return target;
 }

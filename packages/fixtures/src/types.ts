@@ -112,6 +112,12 @@ export type QualityFixtureMetadata = {
   notes?: string[];
 };
 
+export type QualityFailureFixtureCatalogEntry = {
+  fixtureId: string;
+  metadata: QualityFixtureMetadata;
+  reportOnly: boolean;
+};
+
 export function validateQualityFixtureMetadata(metadata: QualityFixtureMetadata): string[] {
   const errors: string[] = [];
   const validFailureCategories = new Set<string>(qualityFixtureFailureCategories);

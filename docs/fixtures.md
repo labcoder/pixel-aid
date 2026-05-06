@@ -30,6 +30,8 @@ Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixela
 
 Do not commit private user assets, prompts, generated metadata bundles, or screenshots as fixtures. If a private source is useful during debugging, keep it outside the repo in an ignored/internal folder, then add a synthetic deterministic fixture that reproduces the failure. Safe-to-commit fixture metadata cannot use `private-do-not-commit` license provenance.
 
+`qualityFailureFixtureCatalog` is the initial M6 quality corpus index. It maps representative deterministic fixtures to their intake metadata and currently covers bright mattes/halos, noisy pseudo-pixel grids, weak or ambiguous grid detection, uneven row sheets, presentation-style sheets with labels/gutters, palette drift animations, and outline repair failures. Report-only entries are allowed when the fixture documents a known weak spot before the expected output is ready.
+
 ## Visual Regression Goldens
 
 `packages/fixtures/src/visualRegression.ts` defines the compact golden-signature suite used by `packages/core/src/visualRegression.test.ts`. Each case runs a real `fixImage` path and compares:
@@ -64,6 +66,7 @@ When a signature changes, the test writes JSON artifacts under `packages/core/.v
 | --- | --- | --- | --- |
 | `single-robot-6x` | Sprite | 706x878 fake-pixel source, 6x grid | Grid phase, foreground crop, palette cap, outline padding. |
 | `single-knight-8x-noisy` | Sprite | 520x648 fake-pixel source, 8x grid | Alternate phase, noisy block statistics, palette limit. |
+| `ambiguous-grid-soft-block-sprite` | Sprite | 288x288 low-contrast fake-pixel source, 6x grid | Weak grid confidence, ambiguous interior bands, manual override review. |
 | `halo-transparent-edge` | Sprite | 64x64 transparent sprite | Binary alpha and semi-transparent halo removal. |
 | `matte-opaque-white-edge` | Sprite | 64x64 opaque white matte | Background flood-fill and near-white fringe removal. |
 | `outline-repair-dual-tone` | Sprite | 16x16 transparent sprite | Selected outline colors and repairExisting behavior without outline thickening. |

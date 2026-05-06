@@ -9,6 +9,7 @@ export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
 export { presentationSpriteSheetFixtures } from "./presentationSpriteSheets";
+export { qualityFailureFixtureCatalog } from "./qualityFailureCorpus";
 export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 export { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
@@ -23,6 +24,7 @@ export type {
   FixtureGoldenSignatureDiff,
   QualityFixtureDesiredCleanupSettings,
   QualityFixtureFailureCategory,
+  QualityFailureFixtureCatalogEntry,
   QualityFixtureLicenseProvenance,
   QualityFixtureMetadata,
   QualityFixturePrivacyClassification,
