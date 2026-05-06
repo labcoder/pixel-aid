@@ -188,6 +188,49 @@ npm run benchmark:budget
 
 The default budget command is CI-friendly and exits successfully while reporting `pass`, `warn`, and `missing` rows. To exercise the future release-gate behavior locally, run `node scripts/check-benchmark-budgets.mjs --fail-on-blocking`; only budgets marked `blocking: true` can fail that mode. The 720p and 1080p grid detection budgets are marked blocking-ready because they are isolated detector hot-path benchmarks with direct fixture coverage and lower expected noise than full cleanup or large-sheet workflows. Full cleanup, large-sheet cleanup, palette remap, and export bundle budgets remain advisory until repeated CI/local artifacts show stable timing and complete benchmark coverage.
 
+## Core Hotspot Ranking - 2026-05-06
+
+This snapshot was captured for optimization-5.1.2 using the opt-in core phase timing hooks from optimization-5.1.1. The timing harness called `fixImage(..., { collectPhaseTimings: true })` and used standalone wall-clock timing around `detectGridCandidates` for grid-only operations. The one-off harness was removed after collection; the permanent verification command was:
+
+```sh
+npm run benchmark -w @pixelaid/core
+```
+
+Existing benchmark means from that run:
+
+| Benchmark | Mean |
+| --- | ---: |
+| `fake-pixel-720p-single: grid detection 0.92MP` | 61.70 ms |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 79.93 ms |
+| `fake-pixel-1080p-single: grid detection 2.07MP` | 148.98 ms |
+| `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 184.02 ms |
+| `detects crop-aware grid candidates` | 39.97 ms |
+| `fixes cropped adaptive single sprite` | 106.47 ms |
+
+Phase timing snapshot:
+
+| Fixture | Operation | Total | Top timed phases |
+| --- | --- | ---: | --- |
+| `fake-pixel-720p-single` | grid detection | 77.43 ms | grid detection 77.43 ms |
+| `fake-pixel-720p-single` | fix | 108.86 ms | downsampling 55.27 ms; background pre-alpha 25.79 ms; denoise 8.86 ms |
+| `fake-pixel-1080p-single` | grid detection | 135.39 ms | grid detection 135.39 ms |
+| `fake-pixel-1080p-single` | fix | 213.46 ms | downsampling 122.17 ms; background pre-alpha 70.36 ms; outline cleanup 6.13 ms |
+| `fake-pixel-large-sheet` | fix | 145.53 ms | sheet frame loop 120.55 ms; palette remap 17.40 ms; palette extraction 4.19 ms |
+| `large-landscape-bands` | palette-heavy fix | 307.07 ms | downsampling 170.33 ms; palette remap 114.20 ms; palette extraction 16.30 ms |
+| `checkerboard-baked-alpha-matte` | alpha/halo fix | 3.08 ms | background pre-alpha 1.30 ms; halo removal 0.63 ms; alpha cleanup 0.47 ms |
+
+Ranked optimization targets:
+
+1. Downsampling and sheet frame downsampling. `downsampling` was 122.17 ms on the 1080p fix, 170.33 ms on the palette-heavy large background, and most of the 120.55 ms sheet frame loop. Primary paths: `packages/core/src/downsample.ts:57`, `packages/core/src/downsample.ts:143`, `packages/core/src/downsample.ts:196`, and `packages/core/src/downsample.ts:215`.
+2. Grid detection on large sources. Standalone grid detection was 77.43 ms on 720p and 135.39 ms on 1080p in the timing harness; the benchmark mean was 148.98 ms for 1080p. Primary path: `packages/core/src/grid.ts:8`.
+3. Palette remapping on large palette-heavy images. `palette-remap` was 114.20 ms on `large-landscape-bands`, much larger than palette extraction at 16.30 ms for that fixture. It was also visible on the large sheet at 17.40 ms. Primary path: `packages/core/src/palette.ts:744`.
+
+Secondary targets:
+
+- Background/pre-alpha cleanup is meaningful on large single-sprite sources: 25.79 ms at 720p and 70.36 ms at 1080p.
+- Palette extraction and color counting are not the top local cost on these fixtures, but diagnostics and extraction still repeat related passes in `packages/core/src/palette.ts:83` and `packages/core/src/palette.ts:307`.
+- Sheet palette drift analysis should be optimized before larger animation fixtures arrive because `packages/core/src/palette.ts:636` still allocates cropped frame images.
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
