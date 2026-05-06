@@ -78,6 +78,39 @@ describe("advanced downsample modes", () => {
     expect(readPixel(even, 0, 0)).toEqual([55, 110, 115, 150]);
   });
 
+  test("common integer-scale fast paths match generic block bounds", () => {
+    const methods: DownscaleMethod[] = ["dominant", "median", "adaptive", "averageThenPalette"];
+
+    for (const scale of [2, 4, 6, 8]) {
+      const source = patternedSource(scale * 4 + 2, scale * 3 + 2);
+      for (const method of methods) {
+        const fast = downsampleBlocks(source, {
+          outputWidth: 4,
+          outputHeight: 3,
+          scaleX: scale,
+          scaleY: scale,
+          phaseX: 1,
+          phaseY: 1,
+          method,
+          alpha: "preserve"
+        });
+        const generic = downsampleBlocks(source, {
+          outputWidth: 4,
+          outputHeight: 3,
+          scaleX: scale,
+          scaleY: scale,
+          phaseX: 1,
+          phaseY: 1,
+          method,
+          alpha: "preserve",
+          disableFastPath: true
+        });
+
+        expect(Array.from(fast.data), `${method} ${scale}x`).toEqual(Array.from(generic.data));
+      }
+    }
+  });
+
   test("contrast preserves sparse dark linework missed by existing block modes", () => {
     const source = createImage(6, 6, [220, 214, 190, 255]);
     writePixel(source, 2, 1, 22, 24, 30, 255);
@@ -166,6 +199,16 @@ function downsample(source: ReturnType<typeof createImage>, method: Parameters<t
     method,
     alpha: "preserve"
   });
+}
+
+function patternedSource(width: number, height: number) {
+  const source = createImage(width, height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      writePixel(source, x, y, (x * 17 + y * 11) % 256, (x * 7 + y * 19) % 256, (x * 23 + y * 5) % 256, (x + y) % 5 === 0 ? 96 : 255);
+    }
+  }
+  return source;
 }
 
 function luma(pixel: readonly [number, number, number, number]): number {

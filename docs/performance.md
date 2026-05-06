@@ -251,6 +251,17 @@ Median downsampling now uses reusable 256-bin channel histograms instead of allo
 | `fixes cropped adaptive single sprite` | 103.16 ms | 70.07 ms | 32.1% faster |
 | `fake-pixel-720p-single: median cleanup 0.92MP` | New benchmark | 52.81 ms | Baseline added |
 
+### Optimization 5.2.3 Result
+
+Regular 2x/4x/6x/8x integer grids with integer phase now use a narrow block-bounds fast path when no drift or explicit boundary arrays are present. The path can be disabled with `disableFastPath` for byte-for-byte comparison tests and fallback diagnostics.
+
+| Benchmark | Before 5.2.3 | After | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 47.13 ms | 44.18 ms | 6.3% faster |
+| `fake-pixel-720p-single: median cleanup 0.92MP` | 52.81 ms | 53.46 ms | 1.2% slower, within local noise |
+| `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 122.34 ms | 122.59 ms | Flat |
+| `fixes cropped adaptive single sprite` | 70.07 ms | 70.11 ms | Flat |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.

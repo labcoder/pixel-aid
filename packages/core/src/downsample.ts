@@ -18,6 +18,7 @@ export type DownsampleOptions = {
   method: DownscaleMethod;
   alpha: AlphaMode;
   adaptiveCoverage?: number;
+  disableFastPath?: boolean;
 };
 
 export type LoopProgressOptions = {
@@ -76,6 +77,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
   const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
   const dominantScratch = options.method === "dominant" || options.method === "adaptive" ? createDominantScratch() : undefined;
   const medianScratch = options.method === "median" || options.method === "adaptive" ? createMedianScratch() : undefined;
+  const regularIntegerBlocks = createRegularIntegerBlockSampler(image, options);
 
   for (let y = 0; y < options.outputHeight; y += 1) {
     if (progress && shouldReportRow(y, options.outputHeight)) {
@@ -85,7 +87,11 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
     }
 
     for (let x = 0; x < options.outputWidth; x += 1) {
-      setBlockBounds(block, image, x, y, options);
+      if (regularIntegerBlocks) {
+        setRegularIntegerBlockBounds(block, x, y, regularIntegerBlocks);
+      } else {
+        setBlockBounds(block, image, x, y, options);
+      }
       const pixel =
         options.method === "median"
           ? medianBlock(image, block, medianScratch!)
@@ -124,6 +130,55 @@ type BlockBounds = {
   startY: number;
   endY: number;
 };
+
+type RegularIntegerBlockSampler = {
+  scaleX: number;
+  scaleY: number;
+  phaseX: number;
+  phaseY: number;
+};
+
+const COMMON_INTEGER_SCALES = new Set([2, 4, 6, 8]);
+
+function createRegularIntegerBlockSampler(image: RGBAImage, options: DownsampleOptions): RegularIntegerBlockSampler | undefined {
+  if (
+    options.disableFastPath ||
+    options.xBoundaries ||
+    options.yBoundaries ||
+    options.xBoundaryRows ||
+    options.yBoundaryColumns
+  ) {
+    return undefined;
+  }
+
+  const scaleX = Math.round(options.scaleX);
+  const scaleY = Math.round(options.scaleY);
+  const phaseX = Math.round(options.phaseX);
+  const phaseY = Math.round(options.phaseY);
+  if (
+    scaleX !== options.scaleX ||
+    scaleY !== options.scaleY ||
+    phaseX !== options.phaseX ||
+    phaseY !== options.phaseY ||
+    !COMMON_INTEGER_SCALES.has(scaleX) ||
+    !COMMON_INTEGER_SCALES.has(scaleY) ||
+    phaseX < 0 ||
+    phaseY < 0 ||
+    phaseX + options.outputWidth * scaleX > image.width ||
+    phaseY + options.outputHeight * scaleY > image.height
+  ) {
+    return undefined;
+  }
+
+  return { scaleX, scaleY, phaseX, phaseY };
+}
+
+function setRegularIntegerBlockBounds(block: BlockBounds, x: number, y: number, sampler: RegularIntegerBlockSampler): void {
+  block.startX = sampler.phaseX + x * sampler.scaleX;
+  block.endX = block.startX + sampler.scaleX;
+  block.startY = sampler.phaseY + y * sampler.scaleY;
+  block.endY = block.startY + sampler.scaleY;
+}
 
 function setBlockBounds(block: BlockBounds, image: RGBAImage, x: number, y: number, options: DownsampleOptions): void {
   const rowStride = options.outputWidth + 1;
