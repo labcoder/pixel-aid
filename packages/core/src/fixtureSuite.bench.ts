@@ -1,14 +1,18 @@
 import { bench, describe } from "vitest";
-import { benchmarkFixtureCatalog } from "@pixelaid/fixtures";
-import type { BenchmarkFixture } from "@pixelaid/fixtures";
-import { detectGridCandidates, fixImage, sliceSheetFrames } from "./index";
+import { benchmarkFixtureCatalog, cleanupFixtureCatalog } from "@pixelaid/fixtures";
+import type { BenchmarkFixture, CleanupFixture } from "@pixelaid/fixtures";
+import { detectGridCandidates, fixImage, remapToPalette, sliceSheetFrames } from "./index";
 
 const fixtureById = new Map(benchmarkFixtureCatalog.map((fixture) => [fixture.id, fixture]));
+const cleanupFixtureById = new Map(cleanupFixtureCatalog.map((fixture) => [fixture.id, fixture]));
+const remapPalette = createBenchmarkPalette(64);
 
 describe("large cleanup fixtures", () => {
   const fake720p = requiredBenchmark("fake-pixel-720p-single");
   const fake1080p = requiredBenchmark("fake-pixel-1080p-single");
   const largeSheet = requiredBenchmark("fake-pixel-large-sheet");
+  const paletteHeavy = requiredCleanupFixture("large-landscape-bands");
+  const paletteHeavyImage = paletteHeavy.createImage();
 
   bench(`${fake720p.id}: grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
     detectGridCandidates(fake720p.createImage(), { maxScale: 16 });
@@ -78,6 +82,10 @@ describe("large cleanup fixtures", () => {
       sheetFrames: sliceSheetFrames(sheet)
     });
   });
+
+  bench(`${paletteHeavy.id}: palette remap ${formatPixels(paletteHeavyImage.width * paletteHeavyImage.height)}`, () => {
+    remapToPalette(paletteHeavyImage, remapPalette);
+  });
 });
 
 function requiredBenchmark(id: string): BenchmarkFixture {
@@ -88,6 +96,23 @@ function requiredBenchmark(id: string): BenchmarkFixture {
   return fixture;
 }
 
+function requiredCleanupFixture(id: string): CleanupFixture {
+  const fixture = cleanupFixtureById.get(id);
+  if (!fixture) {
+    throw new Error(`Missing cleanup fixture ${id}`);
+  }
+  return fixture;
+}
+
 function formatPixels(pixels: number): string {
   return `${(pixels / 1_000_000).toFixed(2)}MP`;
+}
+
+function createBenchmarkPalette(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => {
+    const r = (index * 47 + 23) & 0xff;
+    const g = (index * 83 + 71) & 0xff;
+    const b = (index * 131 + 113) & 0xff;
+    return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+  });
 }

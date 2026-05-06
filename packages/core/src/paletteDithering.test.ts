@@ -36,6 +36,24 @@ describe("palette dithering", () => {
     expect(readHex(remapped, 3, 3)).toBe("#ffffff");
   });
 
+  test("non-dithered remap caches repeated quantized colors without changing alpha", () => {
+    const source = imageFromPixels(4, [
+      [120, 121, 122, 255],
+      [123, 122, 121, 96],
+      [200, 30, 40, 255],
+      [10, 10, 10, 0]
+    ]);
+    const remapped = remapToPalette(source, ["#000000", "#808080", "#ff0000"], { dithering: "none" });
+
+    expect(readHex(remapped, 0, 0)).toBe("#808080");
+    expect(readHex(remapped, 1, 0)).toBe("#808080");
+    expect(remapped.data[3]).toBe(255);
+    expect(remapped.data[7]).toBe(96);
+    expect(readHex(remapped, 2, 0)).toBe("#ff0000");
+    expect(readHex(remapped, 3, 0)).toBe("#0a0a0a");
+    expect(remapped.data[15]).toBe(0);
+  });
+
   test("warns when dithering is requested for multi-frame palette diagnostics", () => {
     const source = solidImage(4, 2, [128, 128, 128, 255]);
     const frames: SpriteFrame[] = [
@@ -124,6 +142,19 @@ function imageFromHexRows(rows: readonly (readonly string[])[]): RGBAImage {
     }
   }
   return { width, height, data };
+}
+
+function imageFromPixels(width: number, pixels: readonly (readonly [number, number, number, number])[]): RGBAImage {
+  const data = new Uint8ClampedArray(pixels.length * 4);
+  for (let i = 0; i < pixels.length; i += 1) {
+    const pixel = pixels[i]!;
+    const offset = i * 4;
+    data[offset] = pixel[0];
+    data[offset + 1] = pixel[1];
+    data[offset + 2] = pixel[2];
+    data[offset + 3] = pixel[3];
+  }
+  return { width, height: pixels.length / width, data };
 }
 
 function visibleColors(image: RGBAImage): Set<string> {

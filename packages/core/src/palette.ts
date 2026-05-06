@@ -761,6 +761,7 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
     return output;
   }
 
+  const nearestCache = createNearestPaletteCache();
   for (let y = 0; y < output.height; y += 1) {
     if (hasProgress(progress) && shouldReportRow(y, output.height)) {
       assertNotCancelled(progress.runtime?.signal);
@@ -774,8 +775,12 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
         continue;
       }
 
-      const source = packQuantizedRgb(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!);
-      const best = nearestPaletteColor(source, colors);
+      const bucket = quantizedRgbCacheBucket(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!);
+      let best = nearestCache[bucket]!;
+      if (best < 0) {
+        best = nearestPaletteColor(cacheBucketToQuantizedRgb(bucket), colors);
+        nearestCache[bucket] = best;
+      }
 
       output.data[offset] = (best >> 16) & 0xff;
       output.data[offset + 1] = (best >> 8) & 0xff;
@@ -790,6 +795,23 @@ export function remapToPalette(image: RGBAImage, palette: readonly string[], pro
   }
 
   return output;
+}
+
+function createNearestPaletteCache(): Int32Array {
+  const cache = new Int32Array(32 * 32 * 32);
+  cache.fill(-1);
+  return cache;
+}
+
+function quantizedRgbCacheBucket(r: number, g: number, b: number): number {
+  return ((r & 0xf8) << 7) | ((g & 0xf8) << 2) | (b >> 3);
+}
+
+function cacheBucketToQuantizedRgb(bucket: number): number {
+  const r = (bucket >> 10) & 0x1f;
+  const g = (bucket >> 5) & 0x1f;
+  const b = bucket & 0x1f;
+  return (r << 19) | (g << 11) | (b << 3);
 }
 
 function remapOrderedDither(output: RGBAImage, colors: readonly number[], progress?: PaletteRemapOptions): void {

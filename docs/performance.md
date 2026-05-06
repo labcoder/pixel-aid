@@ -262,6 +262,15 @@ Regular 2x/4x/6x/8x integer grids with integer phase now use a narrow block-boun
 | `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 122.34 ms | 122.59 ms | Flat |
 | `fixes cropped adaptive single sprite` | 70.07 ms | 70.11 ms | Flat |
 
+### Optimization 5.3.1 Result
+
+Non-dithered palette remap now uses a per-operation nearest-palette cache keyed by 5-bit quantized RGB. The cache is bounded to 32,768 entries and is rebuilt each remap call, so palette changes cannot reuse stale nearest-color choices. Alpha values are preserved and transparent pixels still skip remapping.
+
+| Benchmark | Before | After | Change |
+| --- | ---: | ---: | ---: |
+| `large-landscape-bands` full-fix `palette-remap` phase from 5.1.2 hotspot run | 114.20 ms | Replaced by isolated benchmark | Direct phase baseline retired |
+| `large-landscape-bands: palette remap 1.17MP` | New benchmark | 7.29 ms | Baseline added with 64-color palette |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
@@ -275,6 +284,7 @@ This matrix inventories the benchmark coverage that exists today. `Report-only` 
 | `fake-pixel-720p-single: median cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, median downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-1080p-single: grid detection 2.07MP` | Lazy generated 1080p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1920x1080 source -> 240x135 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | Lazy generated large fake-pixel animation sheet | Full sheet fix with manual 8x grid, generated frame rects, dominant downsample, and shared palette remap | `spriteSheet` / animation sheet | 2048x2048 source -> 256x256 native sheet, 64 frames | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `large-landscape-bands: palette remap 1.17MP` | Large generated landscape/background fixture | Isolated non-dithered nearest-palette remap with a 64-color benchmark palette | `single` / background | 1440x810 source | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | Import/decode preparation | Browser imports, pasted files, and CLI/automation image IO | Decode preparation and source-buffer creation | Any imported asset | Typical source files, including large sprites and sheets | Missing | Needed in web/automation benchmark harness |
 | Auto suggest | Imported image plus first-pass grid/sheet/type diagnostics | Suggest asset type and fix settings | `single`, `spriteSheet`, `tileSheet`, or background review | Representative sprite, sheet, tile, and background fixtures | Missing | Needed around web/automation suggestion orchestration |
 | Source analysis | Imported image inspection, palette summary, grid candidates, and diagnostics | Source analysis pass before fixing | Any imported asset | Representative sprite, sheet, tile, and background fixtures | Missing | Needed around automation inspect/web analysis flow |
