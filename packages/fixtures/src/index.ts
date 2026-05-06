@@ -13,7 +13,7 @@ export { tilesetSeamFixtures } from "./tilesetSeams";
 export { transparentMatteHaloSprites } from "./transparentMatteHaloSprites";
 export { unevenSpriteSheetFixtures } from "./unevenSpriteSheets";
 export { visualRegressionCases } from "./visualRegression";
-export { cleanupFixtureCategories } from "./types";
+export { cleanupFixtureCategories, qualityFixtureFailureCategories, qualityFixtureReviewStatuses, validateQualityFixtureMetadata } from "./types";
 export type {
   BenchmarkFixture,
   CleanupFixture,
@@ -21,6 +21,14 @@ export type {
   CleanupFixtureExpected,
   FixtureGoldenSignature,
   FixtureGoldenSignatureDiff,
+  QualityFixtureDesiredCleanupSettings,
+  QualityFixtureFailureCategory,
+  QualityFixtureLicenseProvenance,
+  QualityFixtureMetadata,
+  QualityFixturePrivacyClassification,
+  QualityFixtureReviewStatus,
+  QualityFixtureSheetLayoutExpectation,
+  QualityFixtureTargetSizeExpectation,
   VisualRegressionCase
 } from "./types";
 

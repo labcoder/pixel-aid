@@ -17,6 +17,19 @@ When beta feedback exposes a repeatable failure, classify the source before addi
 
 New bugs should become fixtures when they affect grid detection, alpha/background cleanup, palette stability, sheet/tile structure, export metadata, or a release workflow that otherwise needs manual QA. Keep large sources lazy and prefer compact golden signatures over checked-in PNG outputs.
 
+Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixelaid/fixtures`. Each failure fixture or internal sample reference must record:
+
+- `sourceFilename`: a committed synthetic source URI such as `synthetic://...`, a redistributable asset path, or an internal-only reference path.
+- `assetType` and `expectedMode`: the taxonomy type plus the core mode expected to process it.
+- `expectedTargetSize` for single-image fixtures, or `expectedSheetLayout` for sprite/tile sheets.
+- `failureCategories`: one or more known failure labels such as `bright-matte-halo`, `weak-ambiguous-grid`, `presentation-label-gutters`, or `palette-drift-animation`.
+- `desiredCleanupSettings`: the intentional alpha, grid, palette, downscale, or cleanup settings when they are known.
+- `expectedWarnings`: warnings the engine or report-only harness should surface.
+- `reviewStatus`: `report-only`, `needs-review`, `golden-approved`, or `internal-only`.
+- `privacy` and `license`: whether the sample is safe to commit, internal only, or must become a synthetic replacement before entering source control.
+
+Do not commit private user assets, prompts, generated metadata bundles, or screenshots as fixtures. If a private source is useful during debugging, keep it outside the repo in an ignored/internal folder, then add a synthetic deterministic fixture that reproduces the failure. Safe-to-commit fixture metadata cannot use `private-do-not-commit` license provenance.
+
 ## Visual Regression Goldens
 
 `packages/fixtures/src/visualRegression.ts` defines the compact golden-signature suite used by `packages/core/src/visualRegression.test.ts`. Each case runs a real `fixImage` path and compares:
