@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@pixelaid/core": "0.1.0",
+    "@pixelaid/engine": "0.1.0",
     "@pixelaid/exporters": "0.1.0",
     "@pixelaid/fixtures": "0.1.0",
     "@pixelaid/shared": "0.1.0",

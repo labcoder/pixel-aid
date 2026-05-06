@@ -42,6 +42,8 @@ export type {
   EngineUpdateFixSettingsCommand,
   EngineUpdateTimelineSelectionCommand
 } from "./commands";
+export { createDefaultFixSettings } from "./defaults";
+export type { EngineDefaultFixSettings, EngineGridDetectMode, EngineOutlineSourceMode, EnginePivotPreset } from "./defaults";
 export { engineStateVersion } from "./state";
 export type {
   EngineAssetRecord,
