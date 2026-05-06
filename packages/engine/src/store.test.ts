@@ -58,4 +58,23 @@ describe("engine store", () => {
 
     expect(store.getState().diagnostics.logLines).toEqual(["custom reducer"]);
   });
+
+  it("registers import placeholders so selection commands can target assets", () => {
+    const store = createEngineStore(createEmptyEngineState());
+
+    store.dispatch({
+      type: "asset.importPlaceholder",
+      assetId: "imported",
+      name: "imported.png",
+      dimensions: { width: 16, height: 24 },
+      mode: "single",
+      assetType: "sprite",
+      byteLength: 1536
+    });
+    store.dispatch({ type: "asset.select", assetId: "imported" });
+
+    expect(store.getState().assetOrder).toEqual(["imported"]);
+    expect(store.getState().selection.selectedAssetId).toBe("imported");
+    expect(store.getState().assets.imported?.source.byteLength).toBe(1536);
+  });
 });

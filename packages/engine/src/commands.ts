@@ -1,4 +1,4 @@
-import type { FixOptions, PixelFixResult, Rect, WorkerProgress } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, PixelFixResult, Rect, WorkerProgress } from "@pixelaid/shared";
 
 export const engineCommandTypes = [
   "asset.importPlaceholder",
@@ -23,6 +23,15 @@ export type EngineImportAssetPlaceholderCommand = {
   type: "asset.importPlaceholder";
   assetId: string;
   name: string;
+  dimensions: {
+    width: number;
+    height: number;
+  };
+  mode: AssetMode;
+  assetType: AssetType;
+  byteLength: number;
+  bufferId?: string;
+  orderIndex?: number;
 };
 
 export type EngineSelectAssetCommand = {

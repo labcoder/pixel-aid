@@ -76,6 +76,33 @@ export function createEngineStore(initialState: EngineState = createEmptyEngineS
 
 export function reduceEngineState(state: EngineState, command: EngineCommand): EngineState {
   switch (command.type) {
+    case "asset.importPlaceholder": {
+      const asset = {
+        id: command.assetId,
+        name: command.name,
+        importedAt: new Date(0).toISOString(),
+        dimensions: command.dimensions,
+        mode: command.mode,
+        assetType: command.assetType,
+        source: {
+          bufferId: command.bufferId ?? `source:${command.assetId}`,
+          width: command.dimensions.width,
+          height: command.dimensions.height,
+          byteLength: command.byteLength,
+          ownership: "external" as const
+        }
+      };
+      const nextAssets = { ...state.assets, [command.assetId]: asset };
+      const nextOrder = state.assetOrder.filter((assetId) => assetId !== command.assetId);
+      const orderIndex = command.orderIndex ?? nextOrder.length;
+      nextOrder.splice(Math.max(0, Math.min(nextOrder.length, Math.round(orderIndex))), 0, command.assetId);
+
+      return {
+        ...state,
+        assetOrder: nextOrder,
+        assets: nextAssets
+      };
+    }
     case "asset.select": {
       const selectedAssetId = selectEngineAsset(Object.values(state.assets), command.assetId);
       const selectedFrameIndex = selectedAssetId ? 0 : -1;

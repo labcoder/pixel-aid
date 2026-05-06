@@ -62,6 +62,7 @@ import {
 } from "@pixelaid/core";
 import type { QualityFinding, QualityRecommendation, QualityReport } from "@pixelaid/core";
 import type { SourceAssetAnalysisResult } from "@pixelaid/worker";
+import { createEngineStore, type EngineStore } from "@pixelaid/engine";
 import {
   analyzeFrameStability,
   createEngineExportBundle,
@@ -522,6 +523,23 @@ function createDocumentAssetMetadata(asset: ImportedImageAsset): PixelAidDocumen
     categoryConfidence: asset.categoryConfidence,
     ...(asset.provenance ? { provenance: asset.provenance } : {})
   };
+}
+
+function registerImportedAssetWithEngine(store: EngineStore, asset: ImportedImageAsset, orderIndex: number): void {
+  store.dispatch({
+    type: "asset.importPlaceholder",
+    assetId: asset.id,
+    name: asset.name,
+    dimensions: {
+      width: asset.image.width,
+      height: asset.image.height
+    },
+    mode: assetTypeToMode(asset.assetType),
+    assetType: asset.assetType,
+    byteLength: asset.image.data.byteLength,
+    bufferId: `source:${asset.id}`,
+    orderIndex
+  });
 }
 
 function serializeAssetSessionForDocument(session: AssetEditorSession): AssetEditorDocumentSession {
@@ -1028,6 +1046,7 @@ export function App() {
   const [selectedPaletteLibraryId, setSelectedPaletteLibraryId] = useState(initialPreferences.savedPaletteLibrary[0]?.id ?? "");
   const [newPaletteColor, setNewPaletteColor] = useState("#ffffff");
   const [frameEditHistory, setFrameEditHistory] = useState(() => createFrameEditHistoryState(createEmptyFrameEditSnapshot()));
+  const engineStoreRef = useRef(createEngineStore());
   const assetSessionsRef = useRef<Record<string, AssetEditorSession>>({});
   const assetCleanSnapshotsRef = useRef<Record<string, AssetDirtySnapshot>>({});
   const pendingCleanSnapshotAssetIdRef = useRef<string | null>(null);
@@ -1318,6 +1337,32 @@ export function App() {
   ]);
 
   const selectedAsset = assets.find((asset) => asset.id === selectedAssetId) ?? assets[0] ?? null;
+  const syncAssetsToEngineStore = useCallback((nextAssets: readonly ImportedImageAsset[]) => {
+    nextAssets.forEach((asset, index) => registerImportedAssetWithEngine(engineStoreRef.current, asset, index));
+  }, []);
+  const selectAssetThroughEngine = useCallback(
+    (asset: ImportedImageAsset): string | null => {
+      registerImportedAssetWithEngine(engineStoreRef.current, asset, assets.findIndex((item) => item.id === asset.id));
+      engineStoreRef.current.dispatch({ type: "asset.select", assetId: asset.id });
+      const selectedEngineAssetId = engineStoreRef.current.getState().selection.selectedAssetId;
+      setSelectedAssetId(selectedEngineAssetId);
+      return selectedEngineAssetId;
+    },
+    [assets]
+  );
+  const removeAssetThroughEngine = useCallback(
+    (assetId: string, nextAssets: readonly ImportedImageAsset[]): string | null => {
+      syncAssetsToEngineStore(assets);
+      engineStoreRef.current.dispatch({ type: "asset.select", assetId: selectedAsset?.id ?? null });
+      engineStoreRef.current.dispatch({ type: "asset.delete", assetId });
+      const selectedEngineAssetId = engineStoreRef.current.getState().selection.selectedAssetId;
+      const selectedAssetStillVisible = nextAssets.some((asset) => asset.id === selectedEngineAssetId);
+      const nextSelectedAssetId = selectedAssetStillVisible ? selectedEngineAssetId : null;
+      setSelectedAssetId(nextSelectedAssetId);
+      return nextSelectedAssetId;
+    },
+    [assets, selectedAsset?.id, syncAssetsToEngineStore]
+  );
   const assetType = selectedAsset?.assetType ?? "sprite";
   const assetTypeSource = selectedAsset?.assetTypeSource ?? "auto";
   const assetTypeWarnings = selectedAsset?.assetTypeWarnings ?? [];
@@ -3138,12 +3183,12 @@ export function App() {
         setQualityReportCache((current) => ({ ...current, ...(archive.qualityReports as Record<string, QualityReport>) }));
       }
       restoreAssetSession(session);
-      setSelectedAssetId(asset.id);
+      selectAssetThroughEngine(asset);
       setShowAdvancedControls(session.settings.showAdvancedControls);
       setLastOperationError(null);
       appendLog(`Opened PixelAid document ${file.name}`);
     },
-    [appendLog, markAssetSessionClean, restoreAssetSession]
+    [appendLog, markAssetSessionClean, restoreAssetSession, selectAssetThroughEngine]
   );
 
   const importFiles = useCallback(
@@ -3193,7 +3238,7 @@ export function App() {
               const withoutDuplicate = current.filter((item) => item.id !== asset.id);
               return [asset, ...withoutDuplicate];
             });
-            setSelectedAssetId(asset.id);
+            selectAssetThroughEngine(asset);
             setFixResult(null);
             setViewMode(getImportViewMode());
             setShowAdvancedControls(false);
@@ -3233,7 +3278,8 @@ export function App() {
       nextBusyOperation,
       publishEditorPerformanceSnapshot,
       recordOperationError,
-      saveCurrentAssetSession
+      saveCurrentAssetSession,
+      selectAssetThroughEngine
     ]
   );
 
@@ -3352,7 +3398,7 @@ export function App() {
           const withoutDuplicate = current.filter((item) => item.id !== sampleImport.asset.id);
           return [sampleImport.asset, ...withoutDuplicate];
         });
-        setSelectedAssetId(sampleImport.asset.id);
+        selectAssetThroughEngine(sampleImport.asset);
         setFixResult(null);
         setLastExportValidation(null);
         setShowAdvancedControls(false);
@@ -3370,7 +3416,16 @@ export function App() {
         setImportOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, applyOnboardingSampleSettings, cacheFixSuggestionAnalysis, isEditorBusy, nextBusyOperation, recordOperationError, saveCurrentAssetSession]
+    [
+      appendLog,
+      applyOnboardingSampleSettings,
+      cacheFixSuggestionAnalysis,
+      isEditorBusy,
+      nextBusyOperation,
+      recordOperationError,
+      saveCurrentAssetSession,
+      selectAssetThroughEngine
+    ]
   );
 
   const openSamplePicker = useCallback(() => {
@@ -5369,7 +5424,7 @@ export function App() {
         }
         qualityReportSwitchFallbackRef.current = { assetId };
         markActiveAssetSwitchTimingForAsset(assetId, "stateResetFinished");
-        setSelectedAssetId(assetId);
+        selectAssetThroughEngine(nextAsset);
         appendLog(nextSession ? `Selected ${nextAsset.name} (restored session)` : `Selected ${nextAsset.name}`);
         await waitForPaints(2);
       } finally {
@@ -5391,6 +5446,7 @@ export function App() {
       qualityReportCache,
       restoreAssetSession,
       saveCurrentAssetSession,
+      selectAssetThroughEngine,
       selectedAsset?.id,
       selectedAsset?.name,
       sourceAnalysisCache,
@@ -5538,7 +5594,7 @@ export function App() {
             clearDetectedSheetLayout();
           }
         }
-        setSelectedAssetId(result.selectedAssetId);
+        removeAssetThroughEngine(assetId, result.assets);
         setGridCandidateCache((current) => {
           const next = { ...current };
           delete next[assetId];
@@ -5556,7 +5612,17 @@ export function App() {
         setAssetActivationOperation((current) => clearBusyOperation(current, operation.id));
       }
     },
-    [appendLog, assets, clearDetectedSheetLayout, isEditorBusy, nextBusyOperation, restoreAssetSession, saveCurrentAssetSession, selectedAsset?.id]
+    [
+      appendLog,
+      assets,
+      clearDetectedSheetLayout,
+      isEditorBusy,
+      nextBusyOperation,
+      removeAssetThroughEngine,
+      restoreAssetSession,
+      saveCurrentAssetSession,
+      selectedAsset?.id
+    ]
   );
 
   const requestAssetDeletion = useCallback((assetId: string) => {
