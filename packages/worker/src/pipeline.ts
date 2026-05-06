@@ -128,14 +128,11 @@ function runFixImageRequest(
   const result = fixImage(
     image,
     request.options,
-    signal
-      ? {
-          signal,
-          onProgress
-        }
-      : {
-          onProgress
-        }
+    {
+      ...(signal ? { signal } : {}),
+      onProgress,
+      ...(request.gridCandidates !== undefined ? { gridCandidates: request.gridCandidates } : {})
+    }
   );
   const durationMs = clock() - startedAt;
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { FixOptions, TransferableImage } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, TransferableImage } from "@pixelaid/shared";
 import type { PersistentWorkerResponse, WorkerRequest } from "./protocol";
 import {
   legacyWorkerRequestToPersistent,
@@ -29,6 +29,19 @@ const options: FixOptions = {
   }
 };
 
+const gridCandidates: GridCandidate[] = [
+  {
+    outputWidth: 1,
+    outputHeight: 1,
+    scaleX: 2,
+    scaleY: 2,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: 0.91,
+    reason: "cached protocol grid"
+  }
+];
+
 describe("persistent worker protocol", () => {
   test("represents legacy fix requests as persistent worker jobs", () => {
     const request: WorkerRequest = {
@@ -49,6 +62,27 @@ describe("persistent worker protocol", () => {
         kind: "fix",
         image,
         options
+      }
+    });
+    expect(persistent.type === "worker-job" ? persistentWorkerJobToLegacyRequest(persistent) : null).toEqual(request);
+  });
+
+  test("preserves cached grid candidates across persistent fix job conversion", () => {
+    const request: WorkerRequest = {
+      type: "fix-image",
+      requestId: "fix_cached_grid",
+      image,
+      options,
+      gridCandidates
+    };
+
+    const persistent = legacyWorkerRequestToPersistent(request, "asset_1:fix");
+
+    expect(persistent).toMatchObject({
+      type: "worker-job",
+      job: {
+        kind: "fix",
+        gridCandidates
       }
     });
     expect(persistent.type === "worker-job" ? persistentWorkerJobToLegacyRequest(persistent) : null).toEqual(request);

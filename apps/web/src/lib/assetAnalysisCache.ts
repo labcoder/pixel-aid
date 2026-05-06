@@ -1,4 +1,5 @@
 export {
+  buildGridCandidateCacheKey,
   buildQualityAnalysisCacheKey,
   buildSourceAnalysisCacheKey,
   cacheAnalysisResult,
@@ -7,4 +8,9 @@ export {
   resolveAnalysisCacheForAsset,
   resolveQualityAnalysisSchedule
 } from "@pixelaid/engine";
-export type { AnalysisCacheResolution, QualityAnalysisFallbackState, QualityAnalysisScheduleDecision } from "@pixelaid/engine";
+export type {
+  AnalysisCacheResolution,
+  GridCandidateCachePreprocessing,
+  QualityAnalysisFallbackState,
+  QualityAnalysisScheduleDecision
+} from "@pixelaid/engine";

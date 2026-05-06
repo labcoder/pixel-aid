@@ -16,6 +16,7 @@ export type {
   EngineTimingAdapter
 } from "./adapters";
 export {
+  buildGridCandidateCacheKey,
   buildQualityAnalysisCacheKey,
   buildSourceAnalysisCacheKey,
   cacheAnalysisResult,
@@ -24,7 +25,12 @@ export {
   resolveAnalysisCacheForAsset,
   resolveQualityAnalysisSchedule
 } from "./analysisCache";
-export type { AnalysisCacheResolution, QualityAnalysisFallbackState, QualityAnalysisScheduleDecision } from "./analysisCache";
+export type {
+  AnalysisCacheResolution,
+  GridCandidateCachePreprocessing,
+  QualityAnalysisFallbackState,
+  QualityAnalysisScheduleDecision
+} from "./analysisCache";
 export {
   clearEngineAssetSelection,
   removeEngineAssetAndSelectNext,

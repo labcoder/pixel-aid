@@ -40,7 +40,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const processingSource = sourceAlphaResult?.image ?? image;
   reportProgress(runtime, "grid-detection", 5, "Resolving pixel grid");
   assertNotCancelled(runtime?.signal);
-  const grid = measurePhase(phaseTimer, "grid-detection", () => resolveGrid(processingSource, options));
+  const grid = measurePhase(phaseTimer, "grid-detection", () => resolveGrid(processingSource, options, runtime));
   const localDrift =
     options.mode === "single" && options.grid.localCorrection
       ? measurePhase(phaseTimer, "local-drift-planning", () => planLocalGridDrift(processingSource, grid))
@@ -875,9 +875,9 @@ function reservedOutlinePalette(options: FixOptions): string[] {
   return [rgbToHex(parseHexColor(options.cleanup.outlineColor))];
 }
 
-function resolveGrid(image: RGBAImage, options: FixOptions): GridCandidate {
+function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {
   if (options.grid.detect === "auto") {
-    const candidates = detectGridCandidates(image);
+    const candidates = runtime?.gridCandidates && runtime.gridCandidates.length > 0 ? runtime.gridCandidates : detectGridCandidates(image);
     const [candidate] = candidates;
     if (options.targetWidth && options.targetHeight) {
       const closest = candidates.reduce(

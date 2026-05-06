@@ -25,7 +25,7 @@ import {
   writePixel
 } from "./index";
 import type { FixPhaseTiming, FixProgressEvent } from "./index";
-import type { FixOptions, PaletteLockScope, RGBAImage, SpriteFrame } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, PaletteLockScope, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 const rgba = (r: number, g: number, b: number, a = 255) => [r, g, b, a] as const;
 
@@ -2516,6 +2516,35 @@ describe("fix pipeline", () => {
     expect(result.image.width).toBe(4);
     expect(result.image.height).toBe(4);
     expect(result.grid.reason).toContain("Target-guided");
+  });
+
+  test("reuses runtime grid candidates when auto grid analysis is already cached", () => {
+    const cachedCandidate: GridCandidate = {
+      outputWidth: 2,
+      outputHeight: 2,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      confidence: 0.97,
+      reason: "cached auto grid candidate"
+    };
+    const result = fixImage(
+      blockySource(),
+      {
+        ...defaultOptions,
+        targetWidth: undefined,
+        targetHeight: undefined,
+        grid: {
+          detect: "auto"
+        }
+      },
+      { gridCandidates: [cachedCandidate] }
+    );
+
+    expect(result.image.width).toBe(2);
+    expect(result.image.height).toBe(2);
+    expect(result.grid).toMatchObject(cachedCandidate);
   });
 
   test("auto-fixes the single-sprite fixture from its background-aware source crop", () => {

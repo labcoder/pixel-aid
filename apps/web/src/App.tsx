@@ -123,13 +123,15 @@ import {
   type AssetDirtyState
 } from "./lib/assetSessionDirty";
 import {
+  buildGridCandidateCacheKey,
   buildQualityAnalysisCacheKey,
   buildSourceAnalysisCacheKey,
   cacheAnalysisResult,
   findCachedAnalysisForAsset,
   pruneAnalysisCache,
   resolveAnalysisCacheForAsset,
-  resolveQualityAnalysisSchedule
+  resolveQualityAnalysisSchedule,
+  type GridCandidateCachePreprocessing
 } from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
@@ -528,6 +530,41 @@ function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
     height: asset.image.height,
     byteLength: asset.image.data.byteLength
   });
+}
+
+function getGridCandidateCacheKey(asset: ImportedImageAsset, preprocessing: GridCandidateCachePreprocessing = "source"): string {
+  return buildGridCandidateCacheKey({
+    assetId: asset.id,
+    width: asset.image.width,
+    height: asset.image.height,
+    byteLength: asset.image.data.byteLength,
+    maxScale: 32,
+    preprocessing
+  });
+}
+
+function cacheGridCandidatesForAsset(
+  cache: Record<string, GridCandidate[]>,
+  asset: ImportedImageAsset,
+  candidates: GridCandidate[],
+  preprocessing: GridCandidateCachePreprocessing = "source"
+): Record<string, GridCandidate[]> {
+  return {
+    ...cache,
+    [getGridCandidateCacheKey(asset, preprocessing)]: candidates
+  };
+}
+
+function gridCandidatePreprocessingForAlpha(alpha: AlphaMode): GridCandidateCachePreprocessing {
+  return alpha === "backgroundFloodFill" ? "backgroundFloodFill" : "source";
+}
+
+function reusableGridCandidatesForFix(options: FixOptions, candidates: GridCandidate[]): GridCandidate[] | undefined {
+  if (options.grid.detect !== "auto" || options.alpha === "backgroundFloodFill" || candidates.length === 0) {
+    return undefined;
+  }
+
+  return candidates;
 }
 
 function createDocumentAssetMetadata(asset: ImportedImageAsset): PixelAidDocumentAssetMetadata {
@@ -1479,6 +1516,7 @@ export function App() {
   }, [engineExportTargets, fixResult]);
   useEffect(() => {
     const assetIds = new Set(assets.map((asset) => asset.id));
+    setGridCandidateCache((current) => pruneAnalysisCache(current, assetIds));
     setSourceAnalysisCache((current) => pruneAnalysisCache(current, assetIds));
     setQualityReportCache((current) => pruneAnalysisCache(current, assetIds));
     previewSurfaceCacheRef.current.retainAssets(assetIds);
@@ -1993,7 +2031,8 @@ export function App() {
       }
     };
   }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, publishEditorPerformanceSnapshot, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
-  const gridCandidates = selectedAsset ? gridCandidateCache[selectedAsset.id] ?? [] : [];
+  const selectedGridCandidateCacheKey = selectedAsset ? getGridCandidateCacheKey(selectedAsset, gridCandidatePreprocessingForAlpha(alpha)) : "";
+  const gridCandidates = selectedGridCandidateCacheKey ? gridCandidateCache[selectedGridCandidateCacheKey] ?? [] : [];
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
   const activePaletteLockScope: PaletteLockScope = sheetMode ? (paletteLockScope === "single" ? "sheet" : paletteLockScope) : "single";
@@ -3292,7 +3331,7 @@ export function App() {
       });
       assetSessionsRef.current[asset.id] = session;
       markAssetSessionClean(session);
-      setGridCandidateCache((current) => ({ ...current, [asset.id]: archive.gridCandidates ?? [] }));
+      setGridCandidateCache((current) => cacheGridCandidatesForAsset(current, asset, archive.gridCandidates ?? []));
       if (archive.sourceAnalysis) {
         setSourceAnalysisCache((current) => ({ ...current, [getSourceAnalysisCacheKey(asset)]: archive.sourceAnalysis as SourceAssetAnalysis }));
       }
@@ -3399,7 +3438,9 @@ export function App() {
             editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
             const suggestion = await autoSuggestJob.promise;
             editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
-            setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
+            setGridCandidateCache((current) =>
+              cacheGridCandidatesForAsset(current, asset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
+            );
             cacheFixSuggestionAnalysis(asset, suggestion);
             applyFixSuggestion(suggestion, asset);
             pendingCleanSnapshotAssetIdRef.current = asset.id;
@@ -3574,7 +3615,9 @@ export function App() {
         setFixResult(null);
         setLastExportValidation(null);
         setShowAdvancedControls(false);
-        setGridCandidateCache((current) => ({ ...current, [sampleImport.asset.id]: suggestion.gridCandidates }));
+        setGridCandidateCache((current) =>
+          cacheGridCandidatesForAsset(current, sampleImport.asset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
+        );
         cacheFixSuggestionAnalysis(sampleImport.asset, suggestion);
         applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
         pendingCleanSnapshotAssetIdRef.current = sampleImport.asset.id;
@@ -3772,6 +3815,7 @@ export function App() {
 
     try {
       const options = buildFixOptions();
+      const cachedGridCandidates = reusableGridCandidatesForFix(options, gridCandidates);
       editorPerformanceMonitorRef.current.mark("fix preparation end", `${options.mode} / ${options.maxColors} colors`, perfOperationId);
       setFixOperation((current) =>
         current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...") : current
@@ -3783,6 +3827,7 @@ export function App() {
         assetId: selectedAsset.id,
         image: selectedAsset.image,
         options,
+        ...(cachedGridCandidates ? { gridCandidates: cachedGridCandidates } : {}),
         onDiagnostics: (diagnostics) => {
           editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
           publishEditorPerformanceSnapshot();
@@ -3803,7 +3848,7 @@ export function App() {
       activeJobRef.current = job;
       editorPerformanceMonitorRef.current.mark("worker job postMessage", job.requestId, perfOperationId);
       publishEditorPerformanceSnapshot();
-      appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors)`);
+      appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors${cachedGridCandidates ? ", cached grid" : ""})`);
 
       void job.promise
         .then((result) => {
@@ -3868,6 +3913,7 @@ export function App() {
     buildFixOptions,
     effectiveTargetHeight,
     effectiveTargetWidth,
+    gridCandidates,
     isEditorBusy,
     mode,
     nextBusyOperation,
@@ -3992,7 +4038,9 @@ export function App() {
       editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
       const suggestion = await autoSuggestJob.promise;
       editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
-      setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+      setGridCandidateCache((current) =>
+        cacheGridCandidatesForAsset(current, selectedAsset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
+      );
       cacheFixSuggestionAnalysis(selectedAsset, suggestion);
       applyFixSuggestion(suggestion, selectedAsset);
       setLastOperationError(null);
@@ -4167,7 +4215,9 @@ export function App() {
         });
 
         const suggestion = await autoSuggestJob.promise;
-        setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+        setGridCandidateCache((current) =>
+          cacheGridCandidatesForAsset(current, selectedAsset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
+        );
         cacheFixSuggestionAnalysis(manualAsset, suggestion);
         applyFixSuggestion(suggestion, manualAsset);
         appendLog(`Asset type set: ${definition.label}`);
@@ -5649,7 +5699,9 @@ export function App() {
           hadActiveFixResult: fixResult !== null,
           sourceAnalysisCached: sourceAnalysisCache[sourceAnalysisKey] !== undefined,
           qualityReportCached: findCachedAnalysisForAsset(qualityReportCache, nextAsset.id) !== undefined,
-          gridCandidatesCached: (gridCandidateCache[nextAsset.id]?.length ?? 0) > 0
+          gridCandidatesCached:
+            (gridCandidateCache[getGridCandidateCacheKey(nextAsset, "source")]?.length ?? 0) > 0 ||
+            (gridCandidateCache[getGridCandidateCacheKey(nextAsset, "backgroundFloodFill")]?.length ?? 0) > 0
         }
       });
       activeAssetSwitchTimingRef.current = timingReport;
@@ -5856,11 +5908,7 @@ export function App() {
           }
         }
         removeAssetThroughEngine(assetId, result.assets);
-        setGridCandidateCache((current) => {
-          const next = { ...current };
-          delete next[assetId];
-          return next;
-        });
+        setGridCandidateCache((current) => pruneAnalysisCache(current, new Set(result.assets.map((asset) => asset.id))));
         setAssetDirtyStates((current) => {
           const next = { ...current };
           delete next[assetId];
@@ -5928,7 +5976,7 @@ export function App() {
         sourcePngBytes: new Uint8Array(await sourcePng.arrayBuffer()),
         ...(fixedPng ? { fixedPngBytes: new Uint8Array(await fixedPng.arrayBuffer()) } : {}),
         session: serializeAssetSessionForDocument(session),
-        gridCandidates: gridCandidateCache[selectedAsset.id] ?? [],
+        gridCandidates,
         ...(sourceAnalysisCache[sourceAnalysisKey] ? { sourceAnalysis: sourceAnalysisCache[sourceAnalysisKey] } : {}),
         ...(Object.keys(qualityReports).length > 0 ? { qualityReports } : {})
       });
@@ -5949,7 +5997,7 @@ export function App() {
   }, [
     appendLog,
     captureCurrentAssetSession,
-    gridCandidateCache,
+    gridCandidates,
     isEditorBusy,
     markAssetSessionClean,
     nextBusyOperation,

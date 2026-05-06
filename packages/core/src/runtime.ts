@@ -1,4 +1,4 @@
-import type { FixPhaseTiming, FixPhaseTimingName, WorkerProgressStage } from "@pixelaid/shared";
+import type { FixPhaseTiming, FixPhaseTimingName, GridCandidate, WorkerProgressStage } from "@pixelaid/shared";
 
 export type FixProgressEvent = {
   stage: WorkerProgressStage;
@@ -14,6 +14,7 @@ export type FixCancellationSignal = {
 export type FixRuntimeOptions = {
   signal?: FixCancellationSignal;
   onProgress?: (event: FixProgressEvent) => void;
+  gridCandidates?: readonly GridCandidate[];
   collectPhaseTimings?: boolean;
   onPhaseTiming?: (event: FixPhaseTiming) => void;
   now?: () => number;

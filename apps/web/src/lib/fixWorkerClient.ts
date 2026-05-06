@@ -1,4 +1,4 @@
-import type { FixOptions, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
 import type { PersistentWorkerStalePolicy, WorkerRequest } from "@pixelaid/worker";
 
 import {
@@ -17,6 +17,7 @@ export type FixJob = {
 export type StartFixJobOptions = {
   onProgress?: (progress: WorkerProgress) => void;
   onDiagnostics?: WorkerDiagnosticsSink;
+  gridCandidates?: GridCandidate[];
   workerFactory?: () => Worker;
   workerPool?: WorkerPool;
   staleKey?: string;
@@ -43,7 +44,8 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
     type: "fix-image",
     requestId,
     image: transferable,
-    options
+    options,
+    ...(jobOptions.gridCandidates !== undefined ? { gridCandidates: jobOptions.gridCandidates } : {})
   };
 
   let settled = false;

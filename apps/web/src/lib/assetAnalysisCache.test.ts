@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { GridCandidate } from "@pixelaid/shared";
-import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./assetAnalysisCache";
+import {
+  buildGridCandidateCacheKey,
+  buildQualityAnalysisCacheKey,
+  buildSourceAnalysisCacheKey,
+  findCachedAnalysisForAsset,
+  pruneAnalysisCache
+} from "./assetAnalysisCache";
 
 const candidate: GridCandidate = {
   outputWidth: 64,
@@ -27,6 +33,19 @@ const candidate: GridCandidate = {
 describe("asset analysis cache keys", () => {
   it("keeps source analysis keyed to the imported asset and decoded image size", () => {
     expect(buildSourceAnalysisCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000 })).toBe("a|100x80|32000");
+  });
+
+  it("keys grid candidate caches by source dimensions and preprocessing path", () => {
+    expect(buildGridCandidateCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000 })).toBe("a|grid|100x80|32000|32|source");
+    expect(
+      buildGridCandidateCacheKey({
+        assetId: "a",
+        width: 100,
+        height: 80,
+        byteLength: 32000,
+        preprocessing: "backgroundFloodFill"
+      })
+    ).toBe("a|grid|100x80|32000|32|backgroundFloodFill");
   });
 
   it("invalidates quality analysis when relevant settings change", () => {

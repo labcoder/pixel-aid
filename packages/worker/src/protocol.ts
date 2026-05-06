@@ -1,4 +1,4 @@
-import type { AssetType, FixOptions, PixelFixResult, TransferableImage, WorkerProgress } from "@pixelaid/shared";
+import type { AssetType, FixOptions, GridCandidate, PixelFixResult, TransferableImage, WorkerProgress } from "@pixelaid/shared";
 import type { FixSettingSuggestion, OutlineColorCandidate, QualityReport, QualityReportOptions } from "@pixelaid/core";
 
 export type FixImageWorkerRequest = {
@@ -6,6 +6,7 @@ export type FixImageWorkerRequest = {
   requestId: string;
   image: TransferableImage;
   options: FixOptions;
+  gridCandidates?: GridCandidate[];
 };
 
 export type CancelWorkerRequest = {
@@ -119,6 +120,7 @@ export type PersistentWorkerFixJob = {
   kind: "fix";
   image: TransferableImage;
   options: FixOptions;
+  gridCandidates?: GridCandidate[];
 };
 
 export type PersistentWorkerSourceAnalysisJob = {
@@ -270,7 +272,8 @@ export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobR
       type: "fix-image",
       requestId: request.requestId,
       image: job.image,
-      options: job.options
+      options: job.options,
+      ...(job.gridCandidates !== undefined ? { gridCandidates: job.gridCandidates } : {})
     };
   }
 
@@ -309,7 +312,8 @@ function legacyJobToPersistentJob(
     return {
       kind: "fix",
       image: request.image,
-      options: request.options
+      options: request.options,
+      ...(request.gridCandidates !== undefined ? { gridCandidates: request.gridCandidates } : {})
     };
   }
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { FixOptions, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
 import type { EngineJobRecord } from "@pixelaid/engine";
 
 import { startEngineFixJob } from "./engineFixJobAdapter";
@@ -52,6 +52,19 @@ const result: PixelFixResult = {
   settings: options
 };
 
+const gridCandidates: GridCandidate[] = [
+  {
+    outputWidth: 1,
+    outputHeight: 1,
+    scaleX: 1,
+    scaleY: 1,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: 1,
+    reason: "cached adapter grid"
+  }
+];
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   let reject!: (reason?: unknown) => void;
@@ -67,8 +80,10 @@ describe("engine fix job adapter", () => {
     const updates: EngineJobRecord[] = [];
     const completion = deferred<PixelFixResult>();
     let progressHandler: ((progress: WorkerProgress) => void) | undefined;
+    let receivedGridCandidates: GridCandidate[] | undefined;
     const startFixJobImpl = (_image: RGBAImage, _options: FixOptions, jobOptions: StartFixJobOptions): FixJob => {
       progressHandler = jobOptions.onProgress;
+      receivedGridCandidates = jobOptions.gridCandidates;
       return {
         requestId: "fix_1",
         promise: completion.promise,
@@ -80,6 +95,7 @@ describe("engine fix job adapter", () => {
       assetId: "asset_1",
       image,
       options,
+      gridCandidates,
       onJobUpdate: (engineJob) => updates.push(engineJob),
       startFixJobImpl
     });
@@ -89,6 +105,7 @@ describe("engine fix job adapter", () => {
     await job.promise;
 
     expect(job.requestId).toBe("fix_1");
+    expect(receivedGridCandidates).toBe(gridCandidates);
     expect(updates.map((update) => update.status)).toEqual(["running", "running", "completed"]);
     expect(updates[1]?.progress).toBe(0.5);
     expect(updates[2]?.result).toBe(result);

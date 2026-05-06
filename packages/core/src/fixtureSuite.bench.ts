@@ -13,6 +13,7 @@ describe("large cleanup fixtures", () => {
   const largeSheet = requiredBenchmark("fake-pixel-large-sheet");
   const paletteHeavy = requiredCleanupFixture("large-landscape-bands");
   const paletteHeavyImage = paletteHeavy.createImage();
+  let cachedFake720pGridCandidates: ReturnType<typeof detectGridCandidates> | undefined;
 
   bench(`${fake720p.id}: grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
     detectGridCandidates(fake720p.createImage(), { maxScale: 16 });
@@ -55,6 +56,17 @@ describe("large cleanup fixtures", () => {
         removeHalos: true,
         denoiseStrength: 20
       }
+    });
+  });
+
+  bench(`${fake720p.id}: auto grid cleanup uncached ${formatPixels(fake720p.sourcePixels)}`, () => {
+    fixImage(fake720p.createImage(), autoGridCleanupOptions());
+  });
+
+  bench(`${fake720p.id}: auto grid cleanup cached ${formatPixels(fake720p.sourcePixels)}`, () => {
+    cachedFake720pGridCandidates ??= detectGridCandidates(fake720p.createImage());
+    fixImage(fake720p.createImage(), autoGridCleanupOptions(), {
+      gridCandidates: cachedFake720pGridCandidates
     });
   });
 
@@ -115,4 +127,24 @@ function createBenchmarkPalette(count: number): string[] {
     const b = (index * 131 + 113) & 0xff;
     return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
   });
+}
+
+function autoGridCleanupOptions() {
+  return {
+    mode: "single",
+    assetType: "sprite",
+    targetWidth: 160,
+    targetHeight: 90,
+    maxColors: 24,
+    grid: { detect: "auto" },
+    downscale: "adaptive",
+    alpha: "preserve",
+    cleanup: {
+      removeOrphans: false,
+      jaggyCleanup: false,
+      preserveSinglePixelDetails: true,
+      removeHalos: false,
+      denoiseStrength: 0
+    }
+  } as const;
 }

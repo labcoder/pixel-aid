@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { createWorkerCancellationController, runWorkerRequest } from "./index";
-import type { FixOptions, TransferableImage } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, TransferableImage } from "@pixelaid/shared";
 import type { WorkerRequest, WorkerResponse } from "./index";
 
 const options: FixOptions = {
@@ -20,6 +20,17 @@ const options: FixOptions = {
     jaggyCleanup: false,
     preserveSinglePixelDetails: true
   }
+};
+
+const cachedGridCandidate: GridCandidate = {
+  outputWidth: 1,
+  outputHeight: 1,
+  scaleX: 2,
+  scaleY: 2,
+  phaseX: 0,
+  phaseY: 0,
+  confidence: 0.91,
+  reason: "cached worker grid"
 };
 
 function image(): TransferableImage {
@@ -55,6 +66,29 @@ describe("worker fix pipeline", () => {
     expect(response.result.image.height).toBe(1);
     expect(response.result.palette).toEqual(["#fb0100"]);
     expect(response.result.metrics.durationMs).toBe(14);
+  });
+
+  test("passes cached grid candidates through to auto-grid fixes", () => {
+    const request: WorkerRequest = {
+      type: "fix-image",
+      requestId: "cached-grid-job",
+      image: image(),
+      options: {
+        ...options,
+        targetWidth: undefined,
+        targetHeight: undefined,
+        grid: { detect: "auto" }
+      },
+      gridCandidates: [cachedGridCandidate]
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("result");
+    if (response.type !== "result") {
+      throw new Error("Expected result response");
+    }
+    expect(response.result.grid).toMatchObject(cachedGridCandidate);
   });
 
   test("reports worker errors as structured responses", () => {

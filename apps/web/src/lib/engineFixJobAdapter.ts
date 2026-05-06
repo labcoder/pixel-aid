@@ -1,4 +1,4 @@
-import type { FixOptions, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
 import {
   completeEngineJob,
   createEngineJobRecord,
@@ -19,6 +19,7 @@ export type StartEngineFixJobOptions = StartFixJobOptions & {
   assetId: string;
   image: RGBAImage;
   options: FixOptions;
+  gridCandidates?: GridCandidate[];
   onJobUpdate?: (job: EngineJobRecord) => void;
   startFixJobImpl?: (image: RGBAImage, options: FixOptions, jobOptions: StartFixJobOptions) => FixJob;
 };

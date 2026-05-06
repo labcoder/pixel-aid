@@ -1,5 +1,7 @@
 import type { AlphaMode, AssetType, GridCandidate } from "@pixelaid/shared";
 
+export type GridCandidateCachePreprocessing = "source" | "backgroundFloodFill";
+
 export type QualityAnalysisFallbackState = {
   assetId: string;
   cacheKey?: string;
@@ -19,6 +21,24 @@ export type QualityAnalysisScheduleDecision = {
 
 export function buildSourceAnalysisCacheKey(input: { assetId: string; width: number; height: number; byteLength: number }): string {
   return `${input.assetId}|${input.width}x${input.height}|${input.byteLength}`;
+}
+
+export function buildGridCandidateCacheKey(input: {
+  assetId: string;
+  width: number;
+  height: number;
+  byteLength: number;
+  maxScale?: number;
+  preprocessing?: GridCandidateCachePreprocessing;
+}): string {
+  return [
+    input.assetId,
+    "grid",
+    `${input.width}x${input.height}`,
+    input.byteLength,
+    input.maxScale ?? 32,
+    input.preprocessing ?? "source"
+  ].join("|");
 }
 
 export function buildQualityAnalysisCacheKey(input: {
