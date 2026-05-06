@@ -164,5 +164,35 @@ export const qualityFailureFixtureCatalog: QualityFailureFixtureCatalogEntry[] =
       privacy: safeSyntheticPrivacy,
       license: firstPartySyntheticLicense
     }
+  },
+  {
+    fixtureId: "morphology-pinhole-orphan-sprite",
+    reportOnly: false,
+    metadata: {
+      id: "m6-morphology-pinhole-orphan",
+      sourceFilename: "synthetic://transparent-matte-halo/morphology-pinhole-orphan",
+      assetType: "sprite",
+      expectedMode: "single",
+      expectedTargetSize: { width: 12, height: 12 },
+      failureCategories: ["morphology-artifact"],
+      desiredCleanupSettings: {
+        alpha: "preserve",
+        cleanup: {
+          morphology: {
+            enabled: true,
+            fillTinyHoles: true,
+            removeTinyComponents: true,
+            maxHolePixels: 1,
+            maxComponentPixels: 1,
+            preserveSinglePixelDetails: false
+          }
+        },
+        maxColors: 6
+      },
+      expectedWarnings: ["morphology diagnostics should report filled holes and removed components"],
+      reviewStatus: "golden-approved",
+      privacy: safeSyntheticPrivacy,
+      license: firstPartySyntheticLicense
+    }
   }
 ];

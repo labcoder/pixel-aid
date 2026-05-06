@@ -30,7 +30,7 @@ Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixela
 
 Do not commit private user assets, prompts, generated metadata bundles, or screenshots as fixtures. If a private source is useful during debugging, keep it outside the repo in an ignored/internal folder, then add a synthetic deterministic fixture that reproduces the failure. Safe-to-commit fixture metadata cannot use `private-do-not-commit` license provenance.
 
-`qualityFailureFixtureCatalog` is the initial M6 quality corpus index. It maps representative deterministic fixtures to their intake metadata and currently covers bright mattes/halos, noisy pseudo-pixel grids, weak or ambiguous grid detection, uneven row sheets, presentation-style sheets with labels/gutters, palette drift animations, and outline repair failures. Report-only entries are allowed when the fixture documents a known weak spot before the expected output is ready.
+`qualityFailureFixtureCatalog` is the initial M6 quality corpus index. It maps representative deterministic fixtures to their intake metadata and currently covers bright mattes/halos, noisy pseudo-pixel grids, weak or ambiguous grid detection, morphology artifacts, uneven row sheets, presentation-style sheets with labels/gutters, palette drift animations, and outline repair failures. Report-only entries are allowed when the fixture documents a known weak spot before the expected output is ready.
 
 ## Visual Regression Goldens
 
@@ -69,6 +69,7 @@ When a signature changes, the test writes JSON artifacts under `packages/core/.v
 | `ambiguous-grid-soft-block-sprite` | Sprite | 288x288 low-contrast fake-pixel source, 6x grid | Weak grid confidence, ambiguous interior bands, manual override review. |
 | `halo-transparent-edge` | Sprite | 64x64 transparent sprite | Binary alpha and semi-transparent halo removal. |
 | `matte-opaque-white-edge` | Sprite | 64x64 opaque white matte | Background flood-fill and near-white fringe removal. |
+| `morphology-pinhole-orphan-sprite` | Sprite | 12x12 transparent sprite | Pinhole fill, isolated component removal, and morphology diagnostics. |
 | `outline-repair-dual-tone` | Sprite | 16x16 transparent sprite | Selected outline colors and repairExisting behavior without outline thickening. |
 | `palette-drift-walk-4f` | Animation sheet | 4 frames at 24x32 | Shared palette behavior, frame names, pivots, animation metadata. |
 | `uneven-gutter-labeled-sheet` | Animation sheet | 640x360 row sheet | Row counts, labels, source rectangles, uneven gutter warnings. |

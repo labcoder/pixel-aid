@@ -131,6 +131,24 @@ export const transparentMatteHaloSprites: CleanupFixture[] = [
         transparentRgb: [0, 0, 0]
       }
     }
+  },
+  {
+    id: "morphology-pinhole-orphan-sprite",
+    title: "Morphology pinhole and orphan sprite",
+    category: "transparentMatteHaloSprite",
+    assetType: "sprite",
+    description: "Transparent 12x12 sprite with one alpha pinhole and one isolated orphan component for conservative morphology cleanup.",
+    catches: ["pinhole filling", "tiny component cleanup", "single-pixel detail preservation"],
+    createImage: createMorphologyArtifactImage,
+    expected: {
+      mode: "single",
+      palette: { maxColors: 6, requiredColors: ["#dc3c28"] },
+      alpha: {
+        transparentPixelsAtLeast: 100,
+        sampleTransparentPixels: ["0,0", "11,11"],
+        transparentRgb: [0, 0, 0]
+      }
+    }
   }
 ];
 
@@ -260,5 +278,14 @@ function createDualToneOutlineImage() {
   fillRect(image.data, image.width, image.height, 7, 8, 3, 2, [44, 120, 112, 255]);
   image.data[(3 * image.width + 8) * 4 + 3] = 0;
   image.data[(11 * image.width + 7) * 4 + 3] = 0;
+  return image;
+}
+
+function createMorphologyArtifactImage() {
+  const image = createImage(12, 12, [0, 0, 0, 0]);
+  fillRect(image.data, image.width, image.height, 4, 3, 5, 6, [220, 60, 40, 255]);
+  fillRect(image.data, image.width, image.height, 5, 4, 3, 4, [246, 124, 84, 255]);
+  fillRect(image.data, image.width, image.height, 6, 6, 1, 1, [0, 0, 0, 0]);
+  fillRect(image.data, image.width, image.height, 1, 10, 1, 1, [220, 60, 40, 255]);
   return image;
 }

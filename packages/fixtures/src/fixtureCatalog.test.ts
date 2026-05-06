@@ -116,6 +116,7 @@ describe("cleanup fixture catalog", () => {
         "ambiguous-grid-soft-block-sprite",
         "halo-transparent-edge",
         "matte-opaque-white-edge",
+        "morphology-pinhole-orphan-sprite",
         "outline-repair-dual-tone",
         "palette-drift-walk-4f",
         "uneven-gutter-labeled-sheet",
