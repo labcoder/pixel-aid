@@ -122,7 +122,15 @@ import {
   type AssetDirtySnapshot,
   type AssetDirtyState
 } from "./lib/assetSessionDirty";
-import { buildQualityAnalysisCacheKey, buildSourceAnalysisCacheKey, findCachedAnalysisForAsset, pruneAnalysisCache } from "./lib/assetAnalysisCache";
+import {
+  buildQualityAnalysisCacheKey,
+  buildSourceAnalysisCacheKey,
+  cacheAnalysisResult,
+  findCachedAnalysisForAsset,
+  pruneAnalysisCache,
+  resolveAnalysisCacheForAsset,
+  resolveQualityAnalysisSchedule
+} from "./lib/assetAnalysisCache";
 import { getAssetDeletionConfirmation } from "./lib/assetDeletion";
 import { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./lib/assetTypePresets";
 import { getBottomPanelSections, type BottomPanelSection } from "./lib/bottomPanelLayout";
@@ -1162,7 +1170,7 @@ export function App() {
       sheetLayoutSignature: createSheetLayoutAnalysisSignature(suggestion.sheetLayout)
     });
 
-    setQualityReportCache((current) => (current[qualityKey] ? current : { ...current, [qualityKey]: suggestion.qualityReport }));
+    setQualityReportCache((current) => cacheAnalysisResult(current, qualityKey, suggestion.qualityReport));
   }, []);
 
   const applyPreferenceSettings = useCallback(
@@ -2405,24 +2413,27 @@ export function App() {
         sheetLayoutSignature: qualityReportSheetLayoutSignature
       })
     : "";
-  const exactQualityReport = qualityReportCacheKey ? qualityReportCache[qualityReportCacheKey] : undefined;
-  const fallbackQualityReport = selectedAsset ? findCachedAnalysisForAsset(qualityReportCache, selectedAsset.id) : undefined;
-  const qualityReport = exactQualityReport ?? fallbackQualityReport ?? null;
+  const qualityReportCacheResolution = resolveAnalysisCacheForAsset({
+    cache: qualityReportCache,
+    assetId: selectedAsset?.id ?? null,
+    cacheKey: qualityReportCacheKey
+  });
+  const exactQualityReport = qualityReportCacheResolution.exact;
+  const fallbackQualityReport = qualityReportCacheResolution.fallback;
+  const qualityReport = qualityReportCacheResolution.report;
   const qualityReportDebounceMs = sourceFrameEditActive ? 500 : sheetMode ? 220 : 60;
   useEffect(() => {
-    if (!selectedAsset || !qualityReportCacheKey || exactQualityReport) {
-      return undefined;
-    }
+    const scheduleDecision = resolveQualityAnalysisSchedule({
+      assetId: selectedAsset?.id ?? null,
+      cacheKey: qualityReportCacheKey,
+      exactReport: exactQualityReport,
+      fallbackReport: fallbackQualityReport,
+      fallbackState: qualityReportSwitchFallbackRef.current
+    });
+    qualityReportSwitchFallbackRef.current = scheduleDecision.fallbackState;
 
-    const switchFallback = qualityReportSwitchFallbackRef.current;
-    if (fallbackQualityReport && switchFallback?.assetId === selectedAsset.id) {
-      if (!switchFallback.cacheKey) {
-        switchFallback.cacheKey = qualityReportCacheKey;
-      }
-      if (switchFallback.cacheKey === qualityReportCacheKey) {
-        return undefined;
-      }
-      qualityReportSwitchFallbackRef.current = null;
+    if (!selectedAsset || !qualityReportCacheKey || !scheduleDecision.shouldSchedule) {
+      return undefined;
     }
 
     let cancelled = false;
@@ -2478,7 +2489,7 @@ export function App() {
             return;
           }
 
-          setQualityReportCache((current) => (current[qualityReportCacheKey] ? current : { ...current, [qualityReportCacheKey]: report }));
+          setQualityReportCache((current) => cacheAnalysisResult(current, qualityReportCacheKey, report));
           editorPerformanceMonitorRef.current.mark("quality analysis end", qualityReportCacheKey, perfOperationId);
           markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsFinished");
         })

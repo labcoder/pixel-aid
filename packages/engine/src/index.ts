@@ -16,6 +16,16 @@ export type {
   EngineTimingAdapter
 } from "./adapters";
 export {
+  buildQualityAnalysisCacheKey,
+  buildSourceAnalysisCacheKey,
+  cacheAnalysisResult,
+  findCachedAnalysisForAsset,
+  pruneAnalysisCache,
+  resolveAnalysisCacheForAsset,
+  resolveQualityAnalysisSchedule
+} from "./analysisCache";
+export type { AnalysisCacheResolution, QualityAnalysisFallbackState, QualityAnalysisScheduleDecision } from "./analysisCache";
+export {
   clearEngineAssetSelection,
   removeEngineAssetAndSelectNext,
   selectEngineAsset,
