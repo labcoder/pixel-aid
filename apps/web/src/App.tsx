@@ -86,7 +86,8 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
-import { startQualityAnalysisJob, startSourceAnalysisJob, type AnalysisJob } from "./lib/analysisWorkerClient";
+import type { AnalysisJob } from "./lib/analysisWorkerClient";
+import { startEngineQualityAnalysisJob, startEngineSourceAnalysisJob } from "./lib/engineAnalysisJobAdapter";
 import {
   applyFrameDurationOverrides,
   createAnimationTagFromRange,
@@ -1862,10 +1863,14 @@ export function App() {
       publishEditorPerformanceSnapshot();
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
 
-      job = startSourceAnalysisJob(selectedAsset.image, {
-        paletteMaxColors: 8,
-        maxUniqueColors: 10000,
-        outlineMaxCandidates: 64
+      job = startEngineSourceAnalysisJob({
+        assetId: selectedAsset.id,
+        image: selectedAsset.image,
+        options: {
+          paletteMaxColors: 8,
+          maxUniqueColors: 10000,
+          outlineMaxCandidates: 64
+        }
       });
       activeSourceAnalysisJobRef.current = job;
 
@@ -2359,12 +2364,16 @@ export function App() {
       publishEditorPerformanceSnapshot();
 
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
-      job = startQualityAnalysisJob(selectedAsset.image, {
-        assetType,
-        maxColors,
-        alpha,
-        ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
-        ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
+      job = startEngineQualityAnalysisJob({
+        assetId: selectedAsset.id,
+        image: selectedAsset.image,
+        options: {
+          assetType,
+          maxColors,
+          alpha,
+          ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
+          ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
+        }
       });
       activeQualityAnalysisJobRef.current = job;
 
