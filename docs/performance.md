@@ -30,6 +30,33 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - The web app clones source buffers before transfer so the imported source remains available for preview.
 - The worker transfers the fixed output buffer back to the main thread.
 
+## Import And Analysis Phase Map
+
+Milestone 4 tracks each import-to-first-preview phase so expensive work can move off the main thread without changing output semantics. Current ownership reflects the web app after Milestone 3; target ownership is the intended direction for this milestone.
+
+| Phase | Current owner | Target owner | Expensive main-thread risk | Constraints and notes | Follow-up |
+| --- | --- | --- | --- | --- | --- |
+| File selection, drop, and paste event handling | Main thread / React event handlers | Main thread | Low | Browser file and clipboard events are main-thread entry points. Handlers should enqueue work and yield quickly. | 4.1.2 |
+| Blob/image validation | Main thread | Main thread adapter | Low | File MIME/type checks are cheap and should stay near the event boundary. | 4.2.1 |
+| Browser decode to bitmap | Browser decode implementation via `createImageBitmap` called from main-thread adapter | Worker-safe decode adapter when supported, fallback to main thread | Medium to high for large images | `createImageBitmap` availability varies by worker/browser. The adapter must preserve current `decodeImageBlob` dimensions and pixel data semantics. | 4.2.1 |
+| RGBA extraction from bitmap | Main thread canvas draw plus `getImageData` | Worker or offscreen preparation where supported | High for large sources | DOM canvas is main-thread only; worker movement depends on `OffscreenCanvas` and worker-side bitmap support. Source image must remain immutable after creation. | 4.2.1 |
+| Imported asset object creation | Main thread | Main thread / engine registration | Low | The asset metadata write is cheap, but it should receive already-prepared image data. | 4.2.1 |
+| Source preview surface creation | Main thread Canvas2D via preview surface cache | Offscreen-capable preview preparation if measured useful | Medium for large images and repeated asset switches | Canvas fallback must remain pixel-perfect with `imageSmoothingEnabled = false`. Cached surfaces are disposable derived data. | 4.4.1 |
+| Asset browser thumbnail/render preparation | Main thread Canvas2D today through cached preview surfaces and component canvases | Worker/offscreen thumbnail prep where supported | Medium | Thumbnail dimensions/style should remain equivalent. Avoid extra full-size copies. | 4.2.2 |
+| Source analysis palette/outline pass | Persistent analysis worker | Persistent analysis worker | Low on main thread after M3 | Source buffer clone/transfer still starts on main thread, but the expensive scan runs in the worker. Latest-only stale keys prevent old results from committing. | Done in M3, refine in 4.3.3 |
+| Quality report execution | Persistent analysis worker | Engine-owned persistent analysis job | Low on main thread after M3 execution move; scheduling/cache logic still lives mostly in app state | Work already runs in a worker. M4 should move cache-key ownership and scheduling out of React effects. | 4.3.3 |
+| Auto Suggest from import or button | Main thread call to `suggestFixSettings` / `suggestFixSettingsForAssetType` | Engine job with worker execution and cache | High for large images | This can invoke grid/sheet analysis. It must not run during React render and should be cancellable/stale-safe. | 4.3.1, 4.3.2 |
+| Grid candidate thumbnail drawing | Main thread component canvas | Main thread fallback, possible offscreen prep later | Low to medium depending candidate count | Small canvases are acceptable, but the UI must use cached candidate data rather than rerunning detectors. | 4.3.1 |
+| First viewport render after import/fix | Main thread Canvas2D renderer | Structured render model, optional offscreen preparation prototype | Medium | Pointer interaction and UI controls stay in React/main thread. Only preparation should move unless measurements justify more. | 4.4.1, 4.4.2 |
+
+Browser API constraints for worker movement:
+
+- `File`, `Blob`, and `ImageBitmap` are transferable/usable in many worker contexts, but support differs enough that the decode adapter must feature-detect instead of assuming.
+- `document.createElement("canvas")` and DOM canvas contexts are main-thread only.
+- `OffscreenCanvas` can support worker-side draw/readback where available, but Safari and embedded webviews may lag; fallback paths remain required.
+- Transferable `ArrayBuffer`s detach the sender-side buffer, so source images must still be cloned before transfer when the UI needs to keep preview and document state alive.
+- React render/commit may build lightweight render models and display cached metadata, but it must not run image scans, grid detection, quality reports, or suggestion analysis directly.
+
 ## Progress And Cancellation
 
 The browser client reports `decode-prep` before the worker job starts. Worker and core fix jobs emit coarse progress stages for `grid-detection`, `frame-slicing`, `downsampling`, `alpha-cleanup`, `palette-remap`, `export-prep`, `complete`, and `cancelled`. Progress is intentionally stage-based instead of per-pixel so long image operations do not flood the UI thread or trigger excessive React state updates.
