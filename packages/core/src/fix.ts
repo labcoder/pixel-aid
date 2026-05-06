@@ -23,22 +23,28 @@ import { createImage } from "./image";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
-import { assertNotCancelled, phasePercent, reportProgress } from "./runtime";
-import type { FixRuntimeOptions } from "./runtime";
+import { assertNotCancelled, collectedPhaseTimings, createFixPhaseTimer, measurePhase, phasePercent, reportProgress } from "./runtime";
+import type { FixPhaseTimer, FixRuntimeOptions } from "./runtime";
 
 export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
   assertNotCancelled(runtime?.signal);
+  const phaseTimer = createFixPhaseTimer(runtime);
   if (isSheetFrameFix(options)) {
-    return fixSheetFrames(image, options, runtime);
+    return fixSheetFrames(image, options, runtime, phaseTimer);
   }
 
   const sourceAlphaResult =
-    options.alpha === "backgroundFloodFill" ? applyAlphaMode(image, options.alpha, options.alphaSettings) : undefined;
+    options.alpha === "backgroundFloodFill"
+      ? measurePhase(phaseTimer, "background-pre-alpha", () => applyAlphaMode(image, options.alpha, options.alphaSettings))
+      : undefined;
   const processingSource = sourceAlphaResult?.image ?? image;
   reportProgress(runtime, "grid-detection", 5, "Resolving pixel grid");
   assertNotCancelled(runtime?.signal);
-  const grid = resolveGrid(processingSource, options);
-  const localDrift = options.mode === "single" && options.grid.localCorrection ? planLocalGridDrift(processingSource, grid) : undefined;
+  const grid = measurePhase(phaseTimer, "grid-detection", () => resolveGrid(processingSource, options));
+  const localDrift =
+    options.mode === "single" && options.grid.localCorrection
+      ? measurePhase(phaseTimer, "local-drift-planning", () => planLocalGridDrift(processingSource, grid))
+      : undefined;
   const gridWithDrift = localDrift ? attachDriftDiagnostics(grid, localDrift.diagnostics) : grid;
   assertNotCancelled(runtime?.signal);
   const localDriftBoundaries = localDrift?.used && localDrift.xBoundaryRows && localDrift.yBoundaryColumns
@@ -47,74 +53,85 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         yBoundaryColumns: localDrift.yBoundaryColumns
       }
     : {};
-  const contrastExpanded = applyContrastExpansion(processingSource, options.cleanup.contrastExpansion);
+  const contrastExpanded = measurePhase(phaseTimer, "contrast-expansion", () =>
+    applyContrastExpansion(processingSource, options.cleanup.contrastExpansion)
+  );
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);
-  const downsampled = downsampleBlocks(
-    contrastExpanded.image,
-    {
-      outputWidth: gridWithDrift.outputWidth,
-      outputHeight: gridWithDrift.outputHeight,
-      scaleX: gridWithDrift.scaleX,
-      scaleY: gridWithDrift.scaleY,
-      phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
-      phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
-      ...localDriftBoundaries,
-      method: options.downscale,
-      alpha: options.alpha
-    },
-    {
-      runtime,
-      stage: "downsampling",
-      startPercent: 20,
-      endPercent: 45
-    }
+  const downsampled = measurePhase(phaseTimer, "downsampling", () =>
+    downsampleBlocks(
+      contrastExpanded.image,
+      {
+        outputWidth: gridWithDrift.outputWidth,
+        outputHeight: gridWithDrift.outputHeight,
+        scaleX: gridWithDrift.scaleX,
+        scaleY: gridWithDrift.scaleY,
+        phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
+        phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
+        ...localDriftBoundaries,
+        method: options.downscale,
+        alpha: options.alpha
+      },
+      {
+        runtime,
+        stage: "downsampling",
+        startPercent: 20,
+        endPercent: 45
+      }
+    )
   );
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   assertNotCancelled(runtime?.signal);
-  const alphaResult = applyAlphaMode(downsampled, options.alpha, options.alphaSettings);
+  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () => applyAlphaMode(downsampled, options.alpha, options.alphaSettings));
   const alphaDiagnostics = sourceAlphaResult ? mergeAlphaDiagnostics(sourceAlphaResult.diagnostics, alphaResult.diagnostics) : alphaResult.diagnostics;
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
   const paddedForOutline = outlinePadding > 0 ? padImageForOutline(alphaCleaned, outlinePadding, options.alpha) : alphaCleaned;
-  const haloCleaned = applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false });
-  const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
-  const morphologyResult = applyMorphologyCleanup(denoised, options.cleanup.morphology);
+  const haloCleaned = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemoval(paddedForOutline, { enabled: options.cleanup.removeHalos ?? false }));
+  const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
+  const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   const morphologyCleaned = morphologyResult.image;
-  const outlineCleaned = applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
-    color: options.cleanup.outlineColor,
-    sourceColors: options.cleanup.outlineSourceColors,
-    alpha: options.cleanup.outlineAlpha,
-    size: options.cleanup.outlineSize,
-    removeOrphans: options.cleanup.removeOrphans,
-    closeGaps: options.cleanup.jaggyCleanup,
-    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
-  });
+  const outlineCleaned = measurePhase(phaseTimer, "outline-cleanup", () =>
+    applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
+      color: options.cleanup.outlineColor,
+      sourceColors: options.cleanup.outlineSourceColors,
+      alpha: options.cleanup.outlineAlpha,
+      size: options.cleanup.outlineSize,
+      removeOrphans: options.cleanup.removeOrphans,
+      closeGaps: options.cleanup.jaggyCleanup,
+      preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
+    })
+  );
   reportProgress(runtime, "alpha-cleanup", 65, "Alpha cleanup complete");
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 70, "Resolving palette");
   assertNotCancelled(runtime?.signal);
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
-  const paletteResult = resolvePalette(outlineCleaned, {
-    ...(paletteSettings ? { requested: paletteSettings } : {}),
-    fallbackMaxColors: options.maxColors,
-    reservedColors: reservedPalette
-  });
+  const paletteResult = measurePhase(phaseTimer, "palette-extraction", () =>
+    resolvePalette(outlineCleaned, {
+      ...(paletteSettings ? { requested: paletteSettings } : {}),
+      fallbackMaxColors: options.maxColors,
+      reservedColors: reservedPalette
+    })
+  );
   const effectivePalette = refinePaletteForCleanup(paletteResult.palette, options);
   const paletteDiagnostics = refreshPaletteDiagnostics(paletteResult.diagnostics, effectivePalette);
-  const remapped = remapToPalette(outlineCleaned, effectivePalette, {
-    runtime,
-    stage: "palette-remap",
-    startPercent: 78,
-    endPercent: 90,
-    dithering: paletteDiagnostics.dithering
-  });
+  const remapped = measurePhase(phaseTimer, "palette-remap", () =>
+    remapToPalette(outlineCleaned, effectivePalette, {
+      runtime,
+      stage: "palette-remap",
+      startPercent: 78,
+      endPercent: 90,
+      dithering: paletteDiagnostics.dithering
+    })
+  );
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
   assertNotCancelled(runtime?.signal);
   const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
+  const phaseTimings = collectedPhaseTimings(phaseTimer);
 
   const result = {
     image: remapped,
@@ -134,7 +151,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       alpha: alphaDiagnostics,
       contrastExpansion: contrastExpanded.diagnostics,
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
-      palette: paletteDiagnostics
+      palette: paletteDiagnostics,
+      ...(phaseTimings ? { phaseTimings } : {})
     }
   };
   reportProgress(runtime, "complete", 100);
@@ -166,7 +184,12 @@ function isSheetFrameFix(options: FixOptions): boolean {
   return options.mode !== "single" && options.sheetFrames !== undefined && options.sheetFrames.length > 0;
 }
 
-function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
+function fixSheetFrames(
+  image: RGBAImage,
+  options: FixOptions,
+  runtime: FixRuntimeOptions | undefined,
+  phaseTimer: FixPhaseTimer | undefined
+): PixelFixResult {
   reportProgress(runtime, "frame-slicing", 5, "Preparing sheet frames");
   assertNotCancelled(runtime?.signal);
   const frames = options.sheetFrames ?? [];
@@ -179,29 +202,32 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   const phaseY = options.grid.phaseY ?? 0;
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
   let morphologyDiagnostics: MorphologyDiagnostics | undefined;
-  const contrastExpanded = applyContrastExpansion(image, options.cleanup.contrastExpansion);
+  const contrastExpanded = measurePhase(phaseTimer, "contrast-expansion", () => applyContrastExpansion(image, options.cleanup.contrastExpansion));
 
   reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
   assertNotCancelled(runtime?.signal);
-  for (let index = 0; index < frames.length; index += 1) {
-    assertNotCancelled(runtime?.signal);
-    const frame = frames[index]!;
-    const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
-    sourceRects.push(sourceRect);
-    const frameStartPercent = phasePercent(20, 65, index, frames.length);
-    const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
-    const frameFix = fixSheetFrameSource(contrastExpanded.image, sourceRect, frame.rect, options, {
-      runtime,
-      startPercent: frameStartPercent,
-      endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
-    });
-    const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale));
-    alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
-    morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
-    pasteImage(cleanedFrame.image, packed, frame.rect);
-    reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
-    assertNotCancelled(runtime?.signal);
-  }
+  measurePhase(phaseTimer, "sheet-frame-loop", () => {
+    for (let index = 0; index < frames.length; index += 1) {
+      assertNotCancelled(runtime?.signal);
+      const frame = frames[index]!;
+      const sourceRect = getFrameSourceRect(frame, gridScaleX, gridScaleY, phaseX, phaseY, image);
+      sourceRects.push(sourceRect);
+      const frameStartPercent = phasePercent(20, 65, index, frames.length);
+      const frameEndPercent = phasePercent(20, 65, index + 1, frames.length);
+      const frameFix = fixSheetFrameSource(contrastExpanded.image, sourceRect, frame.rect, options, {
+        runtime,
+        phaseTimer,
+        startPercent: frameStartPercent,
+        endPercent: Math.min(frameEndPercent, frameStartPercent + 3)
+      });
+      const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale), phaseTimer);
+      alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
+      morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
+      pasteImage(cleanedFrame.image, packed, frame.rect);
+      reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
+      assertNotCancelled(runtime?.signal);
+    }
+  });
 
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 70, "Alpha cleanup complete");
@@ -210,21 +236,25 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   assertNotCancelled(runtime?.signal);
   const reservedPalette = reservedOutlinePalette(options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
-  const paletteResult = resolvePalette(packed, {
-    ...(paletteSettings ? { requested: paletteSettings } : {}),
-    fallbackMaxColors: options.maxColors,
-    reservedColors: reservedPalette,
-    frames
-  });
+  const paletteResult = measurePhase(phaseTimer, "palette-extraction", () =>
+    resolvePalette(packed, {
+      ...(paletteSettings ? { requested: paletteSettings } : {}),
+      fallbackMaxColors: options.maxColors,
+      reservedColors: reservedPalette,
+      frames
+    })
+  );
   const effectivePalette = refinePaletteForCleanup(paletteResult.palette, options);
   const paletteDiagnostics = refreshPaletteDiagnostics(paletteResult.diagnostics, effectivePalette);
-  const remapped = remapToPalette(packed, effectivePalette, {
-    runtime,
-    stage: "palette-remap",
-    startPercent: 82,
-    endPercent: 92,
-    dithering: paletteDiagnostics.dithering
-  });
+  const remapped = measurePhase(phaseTimer, "palette-remap", () =>
+    remapToPalette(packed, effectivePalette, {
+      runtime,
+      stage: "palette-remap",
+      startPercent: 82,
+      endPercent: 92,
+      dithering: paletteDiagnostics.dithering
+    })
+  );
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
   assertNotCancelled(runtime?.signal);
@@ -242,6 +272,7 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
   if (sourceRect) {
     grid.sourceRect = sourceRect;
   }
+  const phaseTimings = collectedPhaseTimings(phaseTimer);
 
   const result = {
     image: remapped,
@@ -261,7 +292,8 @@ function fixSheetFrames(image: RGBAImage, options: FixOptions, runtime?: FixRunt
       ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
       ...(morphologyDiagnostics ? { morphology: morphologyDiagnostics } : {}),
-      palette: paletteDiagnostics
+      palette: paletteDiagnostics,
+      ...(phaseTimings ? { phaseTimings } : {})
     }
   };
   reportProgress(runtime, "complete", 100);
@@ -279,28 +311,30 @@ function fixSheetFrameSource(
   sourceRect: Rect,
   outputRect: Rect,
   options: FixOptions,
-  progress: { runtime: FixRuntimeOptions | undefined; startPercent: number; endPercent: number }
+  progress: { runtime: FixRuntimeOptions | undefined; phaseTimer: FixPhaseTimer | undefined; startPercent: number; endPercent: number }
 ): SheetFrameFix {
   if (!isSameSizeFrameSource(sourceRect, outputRect)) {
     return {
-      image: downsampleBlocks(
-        image,
-        {
-          outputWidth: outputRect.w,
-          outputHeight: outputRect.h,
-          scaleX: sourceRect.w / outputRect.w,
-          scaleY: sourceRect.h / outputRect.h,
-          phaseX: sourceRect.x,
-          phaseY: sourceRect.y,
-          method: options.downscale,
-          alpha: options.alpha
-        },
-        {
-          runtime: progress.runtime,
-          stage: "downsampling",
-          startPercent: progress.startPercent,
-          endPercent: progress.endPercent
-        }
+      image: measurePhase(progress.phaseTimer, "downsampling", () =>
+        downsampleBlocks(
+          image,
+          {
+            outputWidth: outputRect.w,
+            outputHeight: outputRect.h,
+            scaleX: sourceRect.w / outputRect.w,
+            scaleY: sourceRect.h / outputRect.h,
+            phaseX: sourceRect.x,
+            phaseY: sourceRect.y,
+            method: options.downscale,
+            alpha: options.alpha
+          },
+          {
+            runtime: progress.runtime,
+            stage: "downsampling",
+            startPercent: progress.startPercent,
+            endPercent: progress.endPercent
+          }
+        )
       ),
       inferredNativeScale: false
     };
@@ -315,25 +349,29 @@ function fixSheetFrameSource(
     };
   }
 
-  const alphaCleaned = applyAlphaMode(frameSource, options.alpha, options.alphaSettings).image;
-  const native = downsampleBlocks(
-    alphaCleaned,
-    {
-      outputWidth: inferred.outputWidth,
-      outputHeight: inferred.outputHeight,
-      scaleX: inferred.scaleX,
-      scaleY: inferred.scaleY,
-      phaseX: inferred.phaseX,
-      phaseY: inferred.phaseY,
-      method: "dominant",
-      alpha: options.alpha
-    },
-    {
-      runtime: progress.runtime,
-      stage: "downsampling",
-      startPercent: progress.startPercent,
-      endPercent: progress.endPercent
-    }
+  const alphaCleaned = measurePhase(progress.phaseTimer, "alpha-cleanup", () =>
+    applyAlphaMode(frameSource, options.alpha, options.alphaSettings).image
+  );
+  const native = measurePhase(progress.phaseTimer, "downsampling", () =>
+    downsampleBlocks(
+      alphaCleaned,
+      {
+        outputWidth: inferred.outputWidth,
+        outputHeight: inferred.outputHeight,
+        scaleX: inferred.scaleX,
+        scaleY: inferred.scaleY,
+        phaseX: inferred.phaseX,
+        phaseY: inferred.phaseY,
+        method: "dominant",
+        alpha: options.alpha
+      },
+      {
+        runtime: progress.runtime,
+        stage: "downsampling",
+        startPercent: progress.startPercent,
+        endPercent: progress.endPercent
+      }
+    )
   );
 
   return {
@@ -535,20 +573,22 @@ type CleanFixedImageResult = {
   morphology?: MorphologyDiagnostics;
 };
 
-function cleanFixedImage(image: RGBAImage, options: FixOptions): CleanFixedImageResult {
-  const alphaResult = applyAlphaMode(image, options.alpha, options.alphaSettings);
-  const haloCleaned = applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false });
-  const denoised = applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 });
-  const morphologyResult = applyMorphologyCleanup(denoised, options.cleanup.morphology);
-  const outlined = applyOutlineCleanup(morphologyResult.image, options.cleanup.outlineMode ?? "none", {
-    color: options.cleanup.outlineColor,
-    sourceColors: options.cleanup.outlineSourceColors,
-    alpha: options.cleanup.outlineAlpha,
-    size: options.cleanup.outlineSize,
-    removeOrphans: options.cleanup.removeOrphans,
-    closeGaps: options.cleanup.jaggyCleanup,
-    preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
-  });
+function cleanFixedImage(image: RGBAImage, options: FixOptions, phaseTimer?: FixPhaseTimer): CleanFixedImageResult {
+  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () => applyAlphaMode(image, options.alpha, options.alphaSettings));
+  const haloCleaned = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false }));
+  const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
+  const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
+  const outlined = measurePhase(phaseTimer, "outline-cleanup", () =>
+    applyOutlineCleanup(morphologyResult.image, options.cleanup.outlineMode ?? "none", {
+      color: options.cleanup.outlineColor,
+      sourceColors: options.cleanup.outlineSourceColors,
+      alpha: options.cleanup.outlineAlpha,
+      size: options.cleanup.outlineSize,
+      removeOrphans: options.cleanup.removeOrphans,
+      closeGaps: options.cleanup.jaggyCleanup,
+      preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
+    })
+  );
   return {
     image: outlined,
     alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined),

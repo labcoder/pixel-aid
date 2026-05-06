@@ -24,7 +24,7 @@ import {
   sliceSheetFrames,
   writePixel
 } from "./index";
-import type { FixProgressEvent } from "./index";
+import type { FixPhaseTiming, FixProgressEvent } from "./index";
 import type { FixOptions, PaletteLockScope, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 
 const rgba = (r: number, g: number, b: number, a = 255) => [r, g, b, a] as const;
@@ -767,6 +767,52 @@ describe("fix runtime hooks", () => {
       { stage: "complete", percent: 99 },
       { stage: "complete", percent: 100 }
     ]);
+  });
+
+  test("collects opt-in phase timings on fix diagnostics", () => {
+    const result = fixImage(blockySource(), defaultOptions, {
+      collectPhaseTimings: true,
+      now: (() => {
+        let tick = 0;
+        return () => {
+          tick += 2.5;
+          return tick;
+        };
+      })()
+    });
+
+    expect(result.diagnostics?.phaseTimings?.map((entry) => entry.phase)).toEqual([
+      "grid-detection",
+      "contrast-expansion",
+      "downsampling",
+      "alpha-cleanup",
+      "halo-removal",
+      "denoise",
+      "morphology",
+      "outline-cleanup",
+      "palette-extraction",
+      "palette-remap"
+    ]);
+    expect(result.diagnostics?.phaseTimings?.every((entry) => entry.durationMs === 2.5)).toBe(true);
+  });
+
+  test("streams phase timings without retaining diagnostics when collection is disabled", () => {
+    const events: FixPhaseTiming[] = [];
+
+    const result = fixImage(blockySource(), defaultOptions, {
+      onPhaseTiming: (event) => events.push(event),
+      now: (() => {
+        let tick = 10;
+        return () => {
+          tick += 1;
+          return tick;
+        };
+      })()
+    });
+
+    expect(events.length).toBeGreaterThan(0);
+    expect(events[0]).toEqual({ phase: "grid-detection", durationMs: 1 });
+    expect(result.diagnostics?.phaseTimings).toBeUndefined();
   });
 });
 

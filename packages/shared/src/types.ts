@@ -312,6 +312,27 @@ export type PixelFixDiagnostics = {
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
   tilesetRepairs?: TilesetSeamRepairDiagnostics;
+  phaseTimings?: FixPhaseTiming[];
+};
+
+export type FixPhaseTimingName =
+  | "background-pre-alpha"
+  | "grid-detection"
+  | "local-drift-planning"
+  | "contrast-expansion"
+  | "downsampling"
+  | "alpha-cleanup"
+  | "halo-removal"
+  | "denoise"
+  | "morphology"
+  | "outline-cleanup"
+  | "palette-extraction"
+  | "palette-remap"
+  | "sheet-frame-loop";
+
+export type FixPhaseTiming = {
+  phase: FixPhaseTimingName;
+  durationMs: number;
 };
 
 export type ContrastExpansionSettings = {

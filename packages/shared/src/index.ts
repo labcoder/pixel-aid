@@ -20,6 +20,8 @@ export type {
   DownscaleMethod,
   FixMetrics,
   FixOptions,
+  FixPhaseTiming,
+  FixPhaseTimingName,
   FrameStabilityDiagnostics,
   FrameStabilityIssue,
   FrameStabilityIssueCode,

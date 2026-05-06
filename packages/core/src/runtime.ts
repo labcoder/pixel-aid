@@ -1,4 +1,4 @@
-import type { WorkerProgressStage } from "@pixelaid/shared";
+import type { FixPhaseTiming, FixPhaseTimingName, WorkerProgressStage } from "@pixelaid/shared";
 
 export type FixProgressEvent = {
   stage: WorkerProgressStage;
@@ -14,6 +14,15 @@ export type FixCancellationSignal = {
 export type FixRuntimeOptions = {
   signal?: FixCancellationSignal;
   onProgress?: (event: FixProgressEvent) => void;
+  collectPhaseTimings?: boolean;
+  onPhaseTiming?: (event: FixPhaseTiming) => void;
+  now?: () => number;
+};
+
+export type FixPhaseTimer = {
+  entries?: FixPhaseTiming[];
+  now: () => number;
+  onPhaseTiming?: (event: FixPhaseTiming) => void;
 };
 
 export class FixCancelledError extends Error {
@@ -65,4 +74,52 @@ export function phasePercent(start: number, end: number, completed: number, tota
 
   const progress = Math.min(1, Math.max(0, completed / total));
   return start + (end - start) * progress;
+}
+
+export function createFixPhaseTimer(runtime: FixRuntimeOptions | undefined): FixPhaseTimer | undefined {
+  if (!runtime?.collectPhaseTimings && !runtime?.onPhaseTiming) {
+    return undefined;
+  }
+
+  const timer: FixPhaseTimer = {
+    now: runtime.now ?? defaultNow
+  };
+  if (runtime.collectPhaseTimings) {
+    timer.entries = [];
+  }
+  if (runtime.onPhaseTiming) {
+    timer.onPhaseTiming = runtime.onPhaseTiming;
+  }
+
+  return timer;
+}
+
+export function measurePhase<T>(timer: FixPhaseTimer | undefined, phase: FixPhaseTimingName, fn: () => T): T {
+  if (!timer) {
+    return fn();
+  }
+
+  const startedAt = timer.now();
+  try {
+    return fn();
+  } finally {
+    const entry: FixPhaseTiming = {
+      phase,
+      durationMs: roundDurationMs(timer.now() - startedAt)
+    };
+    timer.entries?.push(entry);
+    timer.onPhaseTiming?.(entry);
+  }
+}
+
+export function collectedPhaseTimings(timer: FixPhaseTimer | undefined): FixPhaseTiming[] | undefined {
+  return timer?.entries && timer.entries.length > 0 ? [...timer.entries] : undefined;
+}
+
+function defaultNow(): number {
+  return performance.now();
+}
+
+function roundDurationMs(value: number): number {
+  return Math.max(0, Math.round(value * 100) / 100);
 }

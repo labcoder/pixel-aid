@@ -4,6 +4,8 @@ export type {
   AlphaCleanupSettings,
   AssetTypeWarning,
   DownscaleMethod,
+  FixPhaseTiming,
+  FixPhaseTimingName,
   FixOptions,
   GridCandidate,
   MorphologyCleanupSettings,
@@ -60,8 +62,8 @@ export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette
 export type { AnalyzePaletteDriftOptions, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export { analyzeQualityReport } from "./qualityReport";
 export type { QualityFinding, QualityFindingCategory, QualityFindingSeverity, QualityRecommendation, QualityRecommendationSettings, QualityReport, QualityReportOptions } from "./qualityReport";
-export { assertNotCancelled, FixCancelledError, phasePercent, reportProgress, shouldReportRow } from "./runtime";
-export type { FixCancellationSignal, FixProgressEvent, FixRuntimeOptions } from "./runtime";
+export { assertNotCancelled, collectedPhaseTimings, createFixPhaseTimer, FixCancelledError, measurePhase, phasePercent, reportProgress, shouldReportRow } from "./runtime";
+export type { FixCancellationSignal, FixPhaseTimer, FixProgressEvent, FixRuntimeOptions } from "./runtime";
 export { analyzeSceneAssetDiagnostics } from "./sceneDiagnostics";
 export type { SceneAssetDiagnosticsOptions } from "./sceneDiagnostics";
 export { analyzeSheetConditioning } from "./sheetConditioning";
