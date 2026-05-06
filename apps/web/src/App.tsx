@@ -215,11 +215,8 @@ import {
 } from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
-import {
-  describeAutoSuggestTrigger,
-  runScheduledAutoSuggest,
-  runScheduledAutoSuggestForAssetType
-} from "./lib/autoSuggestScheduling";
+import { assertAutoSuggestScheduled, describeAutoSuggestTrigger } from "./lib/autoSuggestScheduling";
+import { startEngineAutoSuggestJob } from "./lib/engineAutoSuggestJobAdapter";
 import type { FixSettingSuggestion } from "./lib/fixSuggestions";
 import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
@@ -3369,7 +3366,15 @@ export function App() {
             editorPerformanceMonitorRef.current.mark("auto suggest start", asset.name, perfOperationId);
             const autoSuggestStartedAt = performance.now();
             const autoSuggestTrigger = "import";
-            const suggestion = runScheduledAutoSuggest({ image: asset.image, trigger: autoSuggestTrigger });
+            assertAutoSuggestScheduled(autoSuggestTrigger);
+            const autoSuggestJob = startEngineAutoSuggestJob({
+              assetId: asset.id,
+              image: asset.image,
+              onDiagnostics: (diagnostics) => {
+                editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
+                publishEditorPerformanceSnapshot();
+              }
+            });
             recordMainThreadPhaseWarning({
               phase: "auto-suggest",
               operationName: `Import Auto Suggest ${asset.name}`,
@@ -3378,8 +3383,10 @@ export function App() {
               height: asset.image.height,
               scope: asset.id,
               operationId: perfOperationId,
-              details: describeAutoSuggestTrigger(autoSuggestTrigger)
+              details: `${describeAutoSuggestTrigger(autoSuggestTrigger)} schedule`
             });
+            editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
+            const suggestion = await autoSuggestJob.promise;
             editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
             cacheFixSuggestionAnalysis(asset, suggestion);
@@ -3524,7 +3531,26 @@ export function App() {
       try {
         const sampleImport = createOnboardingSampleImport(sampleId);
         const autoSuggestTrigger = "sample";
-        const suggestion = runScheduledAutoSuggest({ image: sampleImport.asset.image, trigger: autoSuggestTrigger });
+        assertAutoSuggestScheduled(autoSuggestTrigger);
+        const autoSuggestStartedAt = performance.now();
+        const autoSuggestJob = startEngineAutoSuggestJob({
+          assetId: sampleImport.asset.id,
+          image: sampleImport.asset.image,
+          onDiagnostics: (diagnostics) => {
+            editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics));
+            publishEditorPerformanceSnapshot();
+          }
+        });
+        recordMainThreadPhaseWarning({
+          phase: "auto-suggest",
+          operationName: `Sample Auto Suggest ${sampleImport.asset.name}`,
+          durationMs: performance.now() - autoSuggestStartedAt,
+          width: sampleImport.asset.image.width,
+          height: sampleImport.asset.image.height,
+          scope: sampleImport.asset.id,
+          details: `${describeAutoSuggestTrigger(autoSuggestTrigger)} schedule`
+        });
+        const suggestion = await autoSuggestJob.promise;
         delete assetSessionsRef.current[sampleImport.asset.id];
         previewSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
         thumbnailSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
@@ -3933,7 +3959,15 @@ export function App() {
     try {
       const autoSuggestStartedAt = performance.now();
       const autoSuggestTrigger = "manual";
-      const suggestion = runScheduledAutoSuggest({ image: selectedAsset.image, trigger: autoSuggestTrigger });
+      assertAutoSuggestScheduled(autoSuggestTrigger);
+      const autoSuggestJob = startEngineAutoSuggestJob({
+        assetId: selectedAsset.id,
+        image: selectedAsset.image,
+        onDiagnostics: (diagnostics) => {
+          editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
+          publishEditorPerformanceSnapshot();
+        }
+      });
       recordMainThreadPhaseWarning({
         phase: "auto-suggest",
         operationName: `Auto Suggest ${selectedAsset.name}`,
@@ -3942,8 +3976,10 @@ export function App() {
         height: selectedAsset.image.height,
         scope: selectedAsset.id,
         operationId: perfOperationId,
-        details: describeAutoSuggestTrigger(autoSuggestTrigger)
+        details: `${describeAutoSuggestTrigger(autoSuggestTrigger)} schedule`
       });
+      editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
+      const suggestion = await autoSuggestJob.promise;
       editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
       cacheFixSuggestionAnalysis(selectedAsset, suggestion);
@@ -4077,8 +4113,8 @@ export function App() {
   const allEditorPresets = useMemo(() => [...editorPresets, ...savedEditorPresets], [savedEditorPresets]);
 
   const changeAssetType = useCallback(
-    (nextAssetType: AssetType) => {
-      if (!selectedAsset) {
+    async (nextAssetType: AssetType) => {
+      if (!selectedAsset || isEditorBusy) {
         return;
       }
 
@@ -4091,29 +4127,59 @@ export function App() {
         categoryReason: `Manual asset type: ${definition.label}. ${definition.description}`,
         categoryConfidence: 1
       };
+      const operation = nextBusyOperation("analysis", `Analyzing ${definition.label} settings...`);
+      setAnalysisOperation(operation);
+      await waitForNextPaint();
+
       const autoSuggestStartedAt = performance.now();
       const autoSuggestTrigger = "assetTypeChange";
-      const suggestion = runScheduledAutoSuggestForAssetType({
-        image: selectedAsset.image,
-        assetType: nextAssetType,
-        trigger: autoSuggestTrigger
-      });
-      recordMainThreadPhaseWarning({
-        phase: "auto-suggest",
-        operationName: `Asset type suggestion ${definition.label}`,
-        durationMs: performance.now() - autoSuggestStartedAt,
-        width: selectedAsset.image.width,
-        height: selectedAsset.image.height,
-        scope: `${selectedAsset.id}:${nextAssetType}`,
-        details: describeAutoSuggestTrigger(autoSuggestTrigger)
-      });
+      assertAutoSuggestScheduled(autoSuggestTrigger);
 
-      setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
-      cacheFixSuggestionAnalysis(manualAsset, suggestion);
-      applyFixSuggestion(suggestion, manualAsset);
-      appendLog(`Asset type set: ${definition.label}`);
+      try {
+        const autoSuggestJob = startEngineAutoSuggestJob({
+          assetId: selectedAsset.id,
+          image: selectedAsset.image,
+          assetType: nextAssetType,
+          onDiagnostics: (diagnostics) => {
+            editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics));
+            publishEditorPerformanceSnapshot();
+          }
+        });
+        recordMainThreadPhaseWarning({
+          phase: "auto-suggest",
+          operationName: `Asset type suggestion ${definition.label}`,
+          durationMs: performance.now() - autoSuggestStartedAt,
+          width: selectedAsset.image.width,
+          height: selectedAsset.image.height,
+          scope: `${selectedAsset.id}:${nextAssetType}`,
+          details: `${describeAutoSuggestTrigger(autoSuggestTrigger)} schedule`
+        });
+
+        const suggestion = await autoSuggestJob.promise;
+        setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
+        cacheFixSuggestionAnalysis(manualAsset, suggestion);
+        applyFixSuggestion(suggestion, manualAsset);
+        appendLog(`Asset type set: ${definition.label}`);
+      } catch (error) {
+        recordOperationError("analysis", error, "Select the asset again or re-import it, then retry the asset type change.", {
+          asset: selectedAsset.name,
+          assetType: nextAssetType,
+          width: selectedAsset.image.width,
+          height: selectedAsset.image.height
+        });
+      } finally {
+        setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
+      }
     },
-    [appendLog, applyFixSuggestion, cacheFixSuggestionAnalysis, recordMainThreadPhaseWarning, selectedAsset]
+    [
+      appendLog,
+      applyFixSuggestion,
+      cacheFixSuggestionAnalysis,
+      isEditorBusy,
+      recordMainThreadPhaseWarning,
+      recordOperationError,
+      selectedAsset
+    ]
   );
 
   const visibleInspectorGroups = useMemo(

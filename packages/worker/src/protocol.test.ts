@@ -76,7 +76,7 @@ describe("persistent worker protocol", () => {
     expect(response.staleKey).toBe("asset_1:source");
   });
 
-  test("does not map future suggest jobs to the legacy executable protocol", () => {
+  test("maps suggest jobs to the executable worker protocol", () => {
     const persistent = {
       type: "worker-job",
       protocolVersion: persistentWorkerProtocolVersion,
@@ -90,6 +90,11 @@ describe("persistent worker protocol", () => {
       }
     } as const;
 
-    expect(persistentWorkerJobToLegacyRequest(persistent)).toBeNull();
+    expect(persistentWorkerJobToLegacyRequest(persistent)).toEqual({
+      type: "suggest-fix",
+      requestId: "suggest_1",
+      image,
+      assetType: "sprite"
+    });
   });
 });

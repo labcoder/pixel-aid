@@ -1,5 +1,5 @@
 import type { AssetType, FixOptions, PixelFixResult, TransferableImage, WorkerProgress } from "@pixelaid/shared";
-import type { OutlineColorCandidate, QualityReport, QualityReportOptions } from "@pixelaid/core";
+import type { FixSettingSuggestion, OutlineColorCandidate, QualityReport, QualityReportOptions } from "@pixelaid/core";
 
 export type FixImageWorkerRequest = {
   type: "fix-image";
@@ -40,7 +40,19 @@ export type AnalyzeQualityWorkerRequest = {
   options: QualityReportOptions;
 };
 
-export type WorkerRequest = FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | CancelWorkerRequest;
+export type SuggestFixWorkerRequest = {
+  type: "suggest-fix";
+  requestId: string;
+  image: TransferableImage;
+  assetType?: AssetType;
+};
+
+export type WorkerRequest =
+  | FixImageWorkerRequest
+  | AnalyzeSourceWorkerRequest
+  | AnalyzeQualityWorkerRequest
+  | SuggestFixWorkerRequest
+  | CancelWorkerRequest;
 
 export type WorkerResultResponse = {
   type: "result";
@@ -58,6 +70,12 @@ export type WorkerQualityAnalysisResponse = {
   type: "quality-analysis-result";
   requestId: string;
   result: QualityReport;
+};
+
+export type WorkerSuggestFixResponse = {
+  type: "suggest-fix-result";
+  requestId: string;
+  result: FixSettingSuggestion;
 };
 
 export type WorkerErrorResponse = {
@@ -80,6 +98,7 @@ export type WorkerResponse =
   | WorkerResultResponse
   | WorkerSourceAnalysisResponse
   | WorkerQualityAnalysisResponse
+  | WorkerSuggestFixResponse
   | WorkerErrorResponse
   | WorkerCancelledResponse
   | WorkerProgressResponse;
@@ -174,7 +193,7 @@ export type PersistentWorkerResult =
   | { kind: "fix"; result: PixelFixResult }
   | { kind: "sourceAnalysis"; result: SourceAssetAnalysisResult }
   | { kind: "qualityAnalysis"; result: QualityReport }
-  | { kind: "suggestFix"; suggestions: FixOptions[] };
+  | { kind: "suggestFix"; result: FixSettingSuggestion };
 
 export type PersistentWorkerResultResponse = {
   type: "worker-result";
@@ -244,12 +263,8 @@ export function legacyWorkerRequestToPersistent(request: WorkerRequest, jobId = 
   };
 }
 
-export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobRequest): WorkerRequest | null {
+export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobRequest): WorkerRequest {
   const { job } = request;
-  if (job.kind === "suggestFix") {
-    return null;
-  }
-
   if (job.kind === "fix") {
     return {
       type: "fix-image",
@@ -270,15 +285,26 @@ export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobR
     };
   }
 
+  if (job.kind === "qualityAnalysis") {
+    return {
+      type: "analyze-quality",
+      requestId: request.requestId,
+      image: job.image,
+      options: job.options
+    };
+  }
+
   return {
-    type: "analyze-quality",
+    type: "suggest-fix",
     requestId: request.requestId,
     image: job.image,
-    options: job.options
+    ...(job.assetType !== undefined ? { assetType: job.assetType } : {})
   };
 }
 
-function legacyJobToPersistentJob(request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest): PersistentWorkerJob {
+function legacyJobToPersistentJob(
+  request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | SuggestFixWorkerRequest
+): PersistentWorkerJob {
   if (request.type === "fix-image") {
     return {
       kind: "fix",
@@ -297,9 +323,17 @@ function legacyJobToPersistentJob(request: FixImageWorkerRequest | AnalyzeSource
     };
   }
 
+  if (request.type === "analyze-quality") {
+    return {
+      kind: "qualityAnalysis",
+      image: request.image,
+      options: request.options
+    };
+  }
+
   return {
-    kind: "qualityAnalysis",
+    kind: "suggestFix",
     image: request.image,
-    options: request.options
+    ...(request.assetType !== undefined ? { assetType: request.assetType } : {})
   };
 }

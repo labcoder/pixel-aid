@@ -1,7 +1,15 @@
-import { FixCancelledError, analyzeQualityReport, detectOutlineColorCandidates, fixImage } from "@pixelaid/core";
+import { FixCancelledError, analyzeQualityReport, detectOutlineColorCandidates, fixImage, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
 import type { FixCancellationSignal, FixProgressEvent } from "@pixelaid/core";
 import type { RGBAImage } from "@pixelaid/shared";
-import type { AnalyzeQualityWorkerRequest, AnalyzeSourceWorkerRequest, FixImageWorkerRequest, SourcePaletteAnalysis, WorkerRequest, WorkerResponse } from "./protocol";
+import type {
+  AnalyzeQualityWorkerRequest,
+  AnalyzeSourceWorkerRequest,
+  FixImageWorkerRequest,
+  SourcePaletteAnalysis,
+  SuggestFixWorkerRequest,
+  WorkerRequest,
+  WorkerResponse
+} from "./protocol";
 
 export type WorkerEventSink = (event: WorkerResponse) => void;
 
@@ -40,6 +48,10 @@ export function runWorkerRequest(
 
     if (request.type === "analyze-quality") {
       return runAnalyzeQualityRequest(request);
+    }
+
+    if (request.type === "suggest-fix") {
+      return runSuggestFixRequest(request);
     }
 
     return runFixImageRequest(request, clock ?? (() => performance.now()), emit, signal);
@@ -89,6 +101,15 @@ function runAnalyzeQualityRequest(request: AnalyzeQualityWorkerRequest): WorkerR
   };
 }
 
+function runSuggestFixRequest(request: SuggestFixWorkerRequest): WorkerResponse {
+  const image = transferableToImage(request);
+  return {
+    type: "suggest-fix-result",
+    requestId: request.requestId,
+    result: request.assetType ? suggestFixSettingsForAssetType(image, request.assetType) : suggestFixSettings(image)
+  };
+}
+
 function runFixImageRequest(
   request: FixImageWorkerRequest,
   clock: () => number,
@@ -131,7 +152,7 @@ function runFixImageRequest(
   };
 }
 
-function transferableToImage(request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest): RGBAImage {
+function transferableToImage(request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | SuggestFixWorkerRequest): RGBAImage {
   const expectedLength = request.image.width * request.image.height * 4;
   if (request.image.data.byteLength !== expectedLength) {
     throw new Error("Image data length does not match dimensions");

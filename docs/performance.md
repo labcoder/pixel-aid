@@ -23,8 +23,8 @@ PixelAid treats responsiveness as part of the product, not polish to add later.
 - Sheet layout detection uses row and column count buffers to find bands and frame segments without rendering frame candidates as React elements.
 - Tileset seam diagnostics compare adjacent native tile edges with index math and do not allocate per-pixel color objects.
 - Scene diagnostics use bounded deterministic sampling so large backgrounds and tilemaps do not require full-image scans for color-bin/detail-density warnings.
-- Import and Auto Suggest currently run browser decode and first-pass suggestion analysis on the main thread, but the UI yields between phases and shows decode/analyze status so large sheets do not look stalled.
-- Auto Suggest returns the grid candidates it already computed. The editor caches those candidates per asset instead of rerunning grid detection during React render.
+- Import decode preparation still starts from browser event handlers, but the decode adapter and UI yield between phases so large sheets do not look stalled.
+- Auto Suggest runs as an engine-tracked worker job. The app only schedules the job on the main thread, then caches the returned grid candidates and quality report instead of rerunning grid detection during React render.
 - Fix start-up yields before building the worker job and shows a preparing/fixing status overlay, so a large sheet does not look idle while frame metadata is packaged.
 - Heavy fix work runs in `packages/worker`.
 - The web app clones source buffers before transfer so the imported source remains available for preview.
@@ -46,7 +46,7 @@ Milestone 4 tracks each import-to-first-preview phase so expensive work can move
 | Asset browser thumbnail/render preparation | Main thread Canvas2D today through cached preview surfaces and component canvases | Worker/offscreen thumbnail prep where supported | Medium | Thumbnail dimensions/style should remain equivalent. Avoid extra full-size copies. | 4.2.2 |
 | Source analysis palette/outline pass | Persistent analysis worker | Persistent analysis worker | Low on main thread after M3 | Source buffer clone/transfer still starts on main thread, but the expensive scan runs in the worker. Latest-only stale keys prevent old results from committing. | Done in M3, refine in 4.3.3 |
 | Quality report execution | Persistent analysis worker | Engine-owned persistent analysis job | Low on main thread after M3 execution move; scheduling/cache logic still lives mostly in app state | Work already runs in a worker. M4 should move cache-key ownership and scheduling out of React effects. | 4.3.3 |
-| Auto Suggest from import or button | Main thread call to `suggestFixSettings` / `suggestFixSettingsForAssetType` | Engine job with worker execution and cache | High for large images | This can invoke grid/sheet analysis. It must not run during React render and should be cancellable/stale-safe. | 4.3.1, 4.3.2 |
+| Auto Suggest from import or button | Engine `autoSuggest` job backed by the persistent worker client | Engine job with worker execution and cache | Low on main thread after M4.3.2 | Main-thread work is limited to clone/transfer setup and result commit. The worker invokes reusable core suggestion logic, and React render may only consume cached results. | 4.3.3 cache ownership refinement |
 | Grid candidate thumbnail drawing | Main thread component canvas | Main thread fallback, possible offscreen prep later | Low to medium depending candidate count | Small canvases are acceptable, but the UI must use cached candidate data rather than rerunning detectors. | 4.3.1 |
 | First viewport render after import/fix | Main thread Canvas2D renderer | Structured render model, optional offscreen preparation prototype | Medium | Pointer interaction and UI controls stay in React/main thread. Only preparation should move unless measurements justify more. | 4.4.1, 4.4.2 |
 
@@ -78,7 +78,7 @@ Milestone 3 replaces per-job worker creation with a small persistent pool. The f
 
 The fix worker is single-flight. A user-triggered fix job may run only one active job for the current asset/session. Starting a new fix for the same asset cancels the older fix before queueing the new one. Deleting the asset or leaving the active session cancels the active fix. The fix queue depth is capped at one pending job so repeated clicks cannot create a backlog of large transferable buffers.
 
-The analysis worker is latest-only per stale key. Source analysis and quality diagnostics use stable keys such as `assetId:sourceAnalysis` and `assetId:qualityAnalysis:settingsHash`. When a newer job with the same stale key is queued, older pending jobs are dropped and older completed results are ignored. Analysis jobs may be cancelled when asset selection changes, but stale-result checks remain required because a synchronous worker phase may finish before it can observe cancellation.
+The analysis worker is latest-only per stale key. Source analysis and quality diagnostics use stable keys such as `assetId:sourceAnalysis` and `assetId:qualityAnalysis:settingsHash`. Auto Suggest uses `assetId:auto-suggest` with an optional asset-type suffix for manual category overrides. When a newer job with the same stale key is queued, older pending jobs are dropped and older completed results are ignored. Analysis jobs may be cancelled when asset selection changes, but stale-result checks remain required because a synchronous worker phase may finish before it can observe cancellation.
 
 All persistent requests use `requestId` for the individual operation and `jobId` for the asset/session job identity. Responses must include both identifiers. The worker may emit `worker-accepted`, `worker-progress`, `worker-result`, `worker-cancelled`, `worker-error`, `worker-stale`, and `worker-ready` responses. The UI only commits a result when the active request id and stale key still match the current asset/session state.
 
@@ -107,7 +107,7 @@ Temporary RGBA buffer reuse is bounded by size bucket. A pool may retain a small
 
 The current worker-transfer clone audit is:
 
-- Source, quality, and fix clients clone the immutable source buffer once before transfer.
+- Source, quality, Auto Suggest, and fix clients clone the immutable source buffer once before transfer.
 - The transferred buffer becomes worker-owned; the web-side clone is considered detached after `postMessage`.
 - The worker creates typed-array views over received buffers and does not make a second full source clone.
 - Editor memory diagnostics clear transfer-clone checkpoints when jobs settle so active memory estimates do not keep counting detached sender-side buffers.

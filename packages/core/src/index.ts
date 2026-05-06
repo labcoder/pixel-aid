@@ -50,6 +50,8 @@ export type {
 export { downsampleBlocks } from "./downsample";
 export type { DownsampleOptions } from "./downsample";
 export { fixImage } from "./fix";
+export { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetType } from "./fixSuggestions";
+export type { FixSettingSuggestion } from "./fixSuggestions";
 export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./image";
 export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup, detectOutlineColorCandidates } from "./outline";

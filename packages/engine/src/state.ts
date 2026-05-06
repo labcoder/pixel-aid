@@ -85,7 +85,7 @@ export type EngineDiagnosticsState = {
 
 export type EngineJobStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
 
-export type EngineJobKind = "sourceAnalysis" | "qualityAnalysis" | "fix" | "export" | "document";
+export type EngineJobKind = "sourceAnalysis" | "qualityAnalysis" | "autoSuggest" | "fix" | "export" | "document";
 
 export type EngineJobRecord = {
   id: string;

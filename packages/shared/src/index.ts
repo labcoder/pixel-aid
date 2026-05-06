@@ -84,3 +84,5 @@ export type {
 
 export { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from "./assetTypes";
 export type { AssetTypeDefinition } from "./assetTypes";
+export { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./assetTypePresets";
+export type { AssetTypeCleanupPreset } from "./assetTypePresets";

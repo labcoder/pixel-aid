@@ -121,6 +121,25 @@ describe("worker fix pipeline", () => {
     expect(response.result.metrics.palette.exactColorCount).toBeGreaterThan(0);
   });
 
+  test("runs Auto Suggest in the worker protocol", () => {
+    const request: WorkerRequest = {
+      type: "suggest-fix",
+      requestId: "suggest-job",
+      image: image(),
+      assetType: "sprite"
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("suggest-fix-result");
+    if (response.type !== "suggest-fix-result") {
+      throw new Error("Expected Auto Suggest response");
+    }
+    expect(response.result.assetType).toBe("sprite");
+    expect(response.result.targetWidth).toBeGreaterThan(0);
+    expect(response.result.qualityReport.metrics.palette.exactColorCount).toBeGreaterThan(0);
+  });
+
   test("emits progress events before returning a result", () => {
     const request: WorkerRequest = {
       type: "fix-image",

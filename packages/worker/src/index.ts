@@ -26,6 +26,7 @@ export type {
   PersistentWorkerStalePolicy,
   PersistentWorkerStaleResponse,
   PersistentWorkerSuggestFixJob,
+  SuggestFixWorkerRequest,
   WorkerCancelledResponse,
   WorkerErrorResponse,
   WorkerProgressResponse,
@@ -33,6 +34,7 @@ export type {
   WorkerRequest,
   WorkerResponse,
   WorkerResultResponse,
+  WorkerSuggestFixResponse,
   WorkerSourceAnalysisResponse
 } from "./protocol";
 export { legacyWorkerRequestToPersistent, persistentWorkerJobToLegacyRequest, persistentWorkerProtocolVersion } from "./protocol";
