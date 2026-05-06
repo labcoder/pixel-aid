@@ -19,6 +19,8 @@ describe("workerPool", () => {
   test("reuses one worker for sequential queued jobs", async () => {
     const worker = new ManualWorker();
     let factoryCalls = 0;
+    const workerCreateDurations: number[] = [];
+    const postMessageDurations: number[] = [];
     const pool = createWorkerPool({
       workerFactory: () => {
         factoryCalls += 1;
@@ -26,8 +28,8 @@ describe("workerPool", () => {
       }
     });
 
-    const first = pool.runJob({ request: sourceRequest("source_1") });
-    const second = pool.runJob({ request: sourceRequest("source_2") });
+    const first = pool.runJob({ request: sourceRequest("source_1"), onWorkerCreate: (durationMs) => workerCreateDurations.push(durationMs), onPostMessage: (durationMs) => postMessageDurations.push(durationMs) });
+    const second = pool.runJob({ request: sourceRequest("source_2"), onWorkerCreate: (durationMs) => workerCreateDurations.push(durationMs), onPostMessage: (durationMs) => postMessageDurations.push(durationMs) });
 
     expect(factoryCalls).toBe(1);
     expect(worker.posted.map((request) => request.requestId)).toEqual(["source_1"]);
@@ -38,6 +40,8 @@ describe("workerPool", () => {
     worker.respond(sourceResponse("source_2"));
     await expect(second.promise).resolves.toMatchObject({ requestId: "source_2" });
     expect(pool.getStats()).toEqual({ workerCreated: true, activeRequestId: null, pendingCount: 0 });
+    expect(workerCreateDurations).toHaveLength(1);
+    expect(postMessageDurations).toHaveLength(2);
   });
 
   test("drops older pending jobs with the same latest-only stale key", async () => {

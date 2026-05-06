@@ -1870,7 +1870,9 @@ export function App() {
         options: {
           paletteMaxColors: 8,
           maxUniqueColors: 10000,
-          outlineMaxCandidates: 64
+          outlineMaxCandidates: 64,
+          staleKey: selectedSourceAnalysisKey,
+          stalePolicy: "latestOnly"
         },
         onDiagnostics: (diagnostics) => {
           editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
@@ -2379,6 +2381,7 @@ export function App() {
           ...(gridCandidates.length > 0 ? { gridCandidates } : {}),
           ...(qualityReportSheetLayout ? { sheetLayout: qualityReportSheetLayout } : {})
         },
+        staleKey: qualityReportCacheKey,
         onDiagnostics: (diagnostics) => {
           editorPerformanceMonitorRef.current.mark("worker overhead", summarizeWorkerDiagnostics(diagnostics), perfOperationId);
           publishEditorPerformanceSnapshot();

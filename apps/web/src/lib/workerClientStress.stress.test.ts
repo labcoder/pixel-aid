@@ -15,6 +15,7 @@ import {
 import { startQualityAnalysisJob, startSourceAnalysisJob } from "./analysisWorkerClient";
 import { startFixJob } from "./fixWorkerClient";
 import type { WorkerJobDiagnostics, WorkerJobKind } from "./workerDiagnostics";
+import { createWorkerPool } from "./workerPool";
 
 type WorkerStressReport = {
   schemaVersion: 1;
@@ -57,23 +58,32 @@ describe("worker client repeated-job stress", () => {
       };
       const fixOptions = createStressFixOptions(fixture);
       const workerFactory = () => new PipelineWorkerShim() as unknown as Worker;
+      const analysisWorkerPool = createWorkerPool({ workerFactory });
 
-      for (let iteration = 0; iteration < iterations; iteration += 1) {
-        await startSourceAnalysisJob(image, {
-          paletteMaxColors: 8,
-          maxUniqueColors: 10000,
-          outlineMaxCandidates: 64,
-          onDiagnostics: (entry) => diagnostics.push(entry),
-          workerFactory
-        }).promise;
-        await startQualityAnalysisJob(image, qualityOptions, {
-          onDiagnostics: (entry) => diagnostics.push(entry),
-          workerFactory
-        }).promise;
-        await startFixJob(image, fixOptions, {
-          onDiagnostics: (entry) => diagnostics.push(entry),
-          workerFactory
-        }).promise;
+      try {
+        for (let iteration = 0; iteration < iterations; iteration += 1) {
+          await startSourceAnalysisJob(image, {
+            paletteMaxColors: 8,
+            maxUniqueColors: 10000,
+            outlineMaxCandidates: 64,
+            onDiagnostics: (entry) => diagnostics.push(entry),
+            workerPool: analysisWorkerPool,
+            staleKey: `stress:${fixture.id}:source`,
+            stalePolicy: "latestOnly"
+          }).promise;
+          await startQualityAnalysisJob(image, qualityOptions, {
+            onDiagnostics: (entry) => diagnostics.push(entry),
+            workerPool: analysisWorkerPool,
+            staleKey: `stress:${fixture.id}:quality`,
+            stalePolicy: "latestOnly"
+          }).promise;
+          await startFixJob(image, fixOptions, {
+            onDiagnostics: (entry) => diagnostics.push(entry),
+            workerFactory
+          }).promise;
+        }
+      } finally {
+        analysisWorkerPool.dispose();
       }
 
       const report = createStressReport(diagnostics);

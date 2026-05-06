@@ -6,6 +6,8 @@ export type WorkerPoolJob = {
   transfer?: Transferable[];
   staleKey?: string;
   stalePolicy?: PersistentWorkerStalePolicy;
+  onWorkerCreate?: (durationMs: number) => void;
+  onPostMessage?: (durationMs: number) => void;
   onProgress?: (progress: WorkerProgressResponse) => void;
 };
 
@@ -134,7 +136,9 @@ export class WorkerPool {
 
     this.activeJob = nextJob;
     const worker = this.ensureWorker();
+    const postStartedAt = performance.now();
     worker.postMessage(nextJob.request, nextJob.transfer ?? []);
+    nextJob.onPostMessage?.(performance.now() - postStartedAt);
   }
 
   private ensureWorker(): Worker {
@@ -142,7 +146,9 @@ export class WorkerPool {
       return this.worker;
     }
 
+    const workerCreateStartedAt = performance.now();
     const worker = this.workerFactory();
+    this.activeJob?.onWorkerCreate?.(performance.now() - workerCreateStartedAt);
     worker.onmessage = (event: MessageEvent<WorkerResponse>) => this.handleMessage(event.data);
     worker.onerror = (event) => this.handleWorkerError(event.message || "Worker failed");
     this.worker = worker;

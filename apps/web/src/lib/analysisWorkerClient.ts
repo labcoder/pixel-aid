@@ -3,6 +3,7 @@ import type { RGBAImage } from "@pixelaid/shared";
 import type {
   AnalyzeQualityWorkerRequest,
   AnalyzeSourceWorkerRequest,
+  PersistentWorkerStalePolicy,
   SourceAssetAnalysisResult,
   WorkerResponse
 } from "@pixelaid/worker";
@@ -12,6 +13,7 @@ import {
   createWorkerDiagnosticsRecorder,
   type WorkerDiagnosticsSink
 } from "./workerDiagnostics";
+import { createWorkerPool, WorkerPoolCancelledError, WorkerPoolStaleJobError, type WorkerPool } from "./workerPool";
 
 type AnalysisWorkerRequest = AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest;
 
@@ -27,12 +29,28 @@ export type SourceAnalysisJobOptions = {
   outlineMaxCandidates?: number;
   onDiagnostics?: WorkerDiagnosticsSink;
   workerFactory?: () => Worker;
+  workerPool?: WorkerPool;
+  staleKey?: string;
+  stalePolicy?: PersistentWorkerStalePolicy;
 };
 
 export type QualityAnalysisJobOptions = {
   onDiagnostics?: WorkerDiagnosticsSink;
   workerFactory?: () => Worker;
+  workerPool?: WorkerPool;
+  staleKey?: string;
+  stalePolicy?: PersistentWorkerStalePolicy;
 };
+
+type AnalysisWorkerPoolOptions = {
+  onDiagnostics?: WorkerDiagnosticsSink;
+  workerFactory?: () => Worker;
+  workerPool?: WorkerPool;
+  staleKey?: string;
+  stalePolicy?: PersistentWorkerStalePolicy;
+};
+
+let defaultAnalysisWorkerPool: WorkerPool | null = null;
 
 export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysisJobOptions = {}): AnalysisJob<SourceAssetAnalysisResult> {
   const requestId = crypto.randomUUID();
@@ -44,7 +62,6 @@ export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysis
     sourceByteLength: image.data.byteLength,
     ...(options.onDiagnostics ? { onDiagnostics: options.onDiagnostics } : {})
   });
-  const worker = createAnalysisWorker(diagnostics.markWorkerCreate, options.workerFactory);
   const clone = imageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
@@ -57,7 +74,7 @@ export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysis
     ...(options.outlineMaxCandidates !== undefined ? { outlineMaxCandidates: options.outlineMaxCandidates } : {})
   };
 
-  return startAnalysisJob(worker, request, diagnostics, (response) => {
+  return startAnalysisJob(request, diagnostics, options, (response) => {
     if (response.type !== "source-analysis-result") {
       throw new Error("Unexpected source analysis response");
     }
@@ -75,7 +92,6 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
     sourceByteLength: image.data.byteLength,
     ...(jobOptions.onDiagnostics ? { onDiagnostics: jobOptions.onDiagnostics } : {})
   });
-  const worker = createAnalysisWorker(diagnostics.markWorkerCreate, jobOptions.workerFactory);
   const clone = imageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
@@ -86,7 +102,7 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
     options
   };
 
-  return startAnalysisJob(worker, request, diagnostics, (response) => {
+  return startAnalysisJob(request, diagnostics, jobOptions, (response) => {
     if (response.type !== "quality-analysis-result") {
       throw new Error("Unexpected quality analysis response");
     }
@@ -95,96 +111,93 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
 }
 
 function startAnalysisJob<T>(
-  worker: Worker,
   request: AnalysisWorkerRequest,
   diagnostics: ReturnType<typeof createWorkerDiagnosticsRecorder>,
+  jobOptions: AnalysisWorkerPoolOptions,
   resolveResult: (response: WorkerResponse) => T
 ): AnalysisJob<T> {
-  let settled = false;
-  let rejectJob: (reason?: unknown) => void = () => undefined;
-
-  const promise = new Promise<T>((resolve, reject) => {
-    rejectJob = reject;
-    const settle = () => {
-      settled = true;
-      const terminateStartedAt = performance.now();
-      worker.terminate();
-      diagnostics.markTerminate(performance.now() - terminateStartedAt);
-    };
-
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      if (event.data.requestId !== request.requestId || settled) {
-        return;
-      }
-
+  let finished = false;
+  const finishDiagnostics = (outcome: "completed" | "cancelled" | "failed", errorMessage?: string) => {
+    if (finished) {
+      return;
+    }
+    finished = true;
+    diagnostics.finish(outcome, errorMessage ? { errorMessage } : undefined);
+  };
+  const pool = resolveAnalysisWorkerPool(jobOptions);
+  const pooledJob = pool.runJob({
+    request,
+    transfer: [request.image.data],
+    ...(jobOptions.staleKey ? { staleKey: jobOptions.staleKey } : {}),
+    ...(jobOptions.stalePolicy ? { stalePolicy: jobOptions.stalePolicy } : {}),
+    onWorkerCreate: diagnostics.markWorkerCreate,
+    onPostMessage: diagnostics.markPostMessage,
+    onProgress: () => {
       diagnostics.markMessage();
-      if (event.data.type === "error" || event.data.type === "cancelled") {
-        settle();
-        diagnostics.finish(event.data.type === "cancelled" ? "cancelled" : "failed", { errorMessage: event.data.message });
-        reject(new Error(event.data.message));
-        return;
+      diagnostics.markProgress();
+    }
+  });
+
+  const promise = pooledJob.promise
+    .then((response) => {
+      diagnostics.markMessage();
+      if (response.type === "error" || response.type === "cancelled") {
+        finishDiagnostics(response.type === "cancelled" ? "cancelled" : "failed", response.message);
+        throw new Error(response.message);
       }
 
-      if (event.data.type === "progress") {
-        diagnostics.markProgress();
-        return;
+      if (response.type === "progress") {
+        throw new Error("Unexpected analysis progress response");
       }
 
       try {
         diagnostics.markResultMessage();
         const hydrationStartedAt = performance.now();
-        const result = resolveResult(event.data);
+        const result = resolveResult(response);
         diagnostics.markResultHydration(performance.now() - hydrationStartedAt);
-        settle();
-        diagnostics.finish("completed");
-        resolve(result);
+        finishDiagnostics("completed");
+        return result;
       } catch (error) {
-        settle();
-        diagnostics.finish("failed", { errorMessage: error instanceof Error ? error.message : "Analysis job failed" });
-        reject(error);
+        finishDiagnostics("failed", error instanceof Error ? error.message : "Analysis job failed");
+        throw error;
       }
-    };
-
-    worker.onerror = (event) => {
-      if (settled) {
-        return;
+    })
+    .catch((error: unknown) => {
+      const isCancelled = error instanceof WorkerPoolCancelledError || error instanceof WorkerPoolStaleJobError;
+      finishDiagnostics(isCancelled ? "cancelled" : "failed", error instanceof Error ? error.message : "Analysis job failed");
+      if (isCancelled) {
+        throw new Error("Analysis cancelled");
       }
-      settle();
-      diagnostics.finish("failed", { errorMessage: event.message || "Worker failed" });
-      reject(new Error(event.message || "Worker failed"));
-    };
-  });
-
-  const postStartedAt = performance.now();
-  worker.postMessage(request, [request.image.data]);
-  diagnostics.markPostMessage(performance.now() - postStartedAt);
+      throw error;
+    });
 
   return {
     requestId: request.requestId,
     promise,
-    cancel: () => {
-      if (settled) {
-        return;
-      }
-      settled = true;
-      const terminateStartedAt = performance.now();
-      worker.terminate();
-      diagnostics.markTerminate(performance.now() - terminateStartedAt);
-      diagnostics.finish("cancelled", { errorMessage: "Analysis cancelled" });
-      rejectJob(new Error("Analysis cancelled"));
-    }
+    cancel: () => pooledJob.cancel("Analysis cancelled")
   };
-}
-
-function createAnalysisWorker(onCreated: (durationMs: number) => void, workerFactory?: () => Worker): Worker {
-  const startedAt = performance.now();
-  const worker = (workerFactory ?? defaultAnalysisWorkerFactory)();
-  onCreated(performance.now() - startedAt);
-  return worker;
 }
 
 function imageToTransferable(image: RGBAImage): ReturnType<typeof cloneImageToTransferable> {
   return cloneImageToTransferable(image);
+}
+
+export function disposeAnalysisWorkerPool(): void {
+  defaultAnalysisWorkerPool?.dispose();
+  defaultAnalysisWorkerPool = null;
+}
+
+function resolveAnalysisWorkerPool(options: AnalysisWorkerPoolOptions): WorkerPool {
+  if (options.workerPool) {
+    return options.workerPool;
+  }
+
+  if (options.workerFactory) {
+    return createWorkerPool({ workerFactory: options.workerFactory });
+  }
+
+  defaultAnalysisWorkerPool ??= createWorkerPool({ workerFactory: defaultAnalysisWorkerFactory });
+  return defaultAnalysisWorkerPool;
 }
 
 function defaultAnalysisWorkerFactory(): Worker {

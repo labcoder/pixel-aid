@@ -38,6 +38,7 @@ export type StartEngineQualityAnalysisJobOptions = {
   image: RGBAImage;
   options: QualityReportOptions;
   onDiagnostics?: WorkerDiagnosticsSink;
+  staleKey?: string;
   onJobUpdate?: (job: EngineJobRecord) => void;
   startQualityAnalysisJobImpl?: (image: RGBAImage, options: QualityReportOptions, jobOptions?: QualityAnalysisJobOptions) => AnalysisJob<QualityReport>;
 };
@@ -62,10 +63,14 @@ export function startEngineQualityAnalysisJob({
   image,
   options,
   onDiagnostics,
+  staleKey,
   onJobUpdate,
   startQualityAnalysisJobImpl = startQualityAnalysisJob
 }: StartEngineQualityAnalysisJobOptions): EngineAnalysisJob<QualityReport> {
-  const analysisJob = startQualityAnalysisJobImpl(image, options, onDiagnostics ? { onDiagnostics } : undefined);
+  const analysisJob = startQualityAnalysisJobImpl(image, options, {
+    ...(onDiagnostics ? { onDiagnostics } : {}),
+    ...(staleKey ? { staleKey, stalePolicy: "latestOnly" } : {})
+  });
   return trackAnalysisJob(analysisJob, "qualityAnalysis", assetId, onJobUpdate);
 }
 
