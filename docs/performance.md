@@ -56,6 +56,23 @@ Worker lifetime starts lazy: workers are created on first use and reused across 
 
 Memory pressure policy stays conservative. The app still clones source buffers before transferring them when the source must remain previewable. Pending queues store only the latest transferable job for a stale key. Large generated artifacts and worker-stress reports stay outside source control unless intentionally captured. Buffer ownership and reuse are tracked separately in Milestone 3.4 before the app removes duplicate clones.
 
+## Image Buffer Ownership
+
+PixelAid treats imported source buffers as immutable source truth. The UI may draw them, analyze them, or clone them, but it must not transfer or detach the only source copy while the asset remains previewable.
+
+The current ownership states are:
+
+- `source-immutable`: web-owned source image data retained for preview, undo/replay, and future fixes.
+- `transfer-clone`: web-owned copy prepared for `postMessage` transfer to a worker.
+- `transferred-to-worker`: sender-side clone after transfer; treated as detached and unreadable.
+- `worker-owned`: buffer currently owned by worker/core processing.
+- `worker-result`: completed output buffer transferred back to the web app and committed as result state.
+- `preview-cache`: derived canvas/image cache data that can be disposed and rebuilt.
+- `export-temp`: generated export or ZIP staging data.
+- `released`: buffer metadata retained only for diagnostics; code must not read or write the data.
+
+Ownership labels should appear in diagnostics and helper names where practical. A function that clones for transfer should make that intent explicit; a function that keeps source preview data must not silently transfer it. Future buffer pooling may reuse only temporary or released buffers, never `source-immutable` buffers.
+
 ## Editor Responsiveness Diagnostics
 
 The web editor records lightweight, in-session responsiveness diagnostics for major user operations. The diagnostics are visible in the Metrics and Logs bottom panel and are included in exported diagnostics JSON. Timing history is intentionally bounded and is not persisted across sessions.
