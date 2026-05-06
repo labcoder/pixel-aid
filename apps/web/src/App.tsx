@@ -74,7 +74,7 @@ import {
   createPixelAssetManifest,
   type EngineExportTarget
 } from "@pixelaid/exporters";
-import { AssetThumbnail } from "./components/AssetThumbnail";
+import { AssetBrowserPanel } from "./components/AssetBrowserPanel";
 import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
 import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
@@ -7106,83 +7106,22 @@ export function App() {
       </header>
 
       <aside className="left-panel panel" aria-label="Project assets">
-        <PanelHeader icon={<Layers size={16} />} title="Project" />
-        <section className="panel-section">
-          <SectionTitle title="Assets" docsId="assets" tooltip="Imported source files, dimensions, thumbnails, and removal controls." onDocs={openDocs} />
-          {assetPanelStatus ? (
-            <div className="import-status" role="status" aria-live="polite">
-              <span className="activity-dot" />
-              <span>{assetPanelStatus}</span>
-            </div>
-          ) : null}
-          <div className="asset-panel-actions">
-            <button type="button" onClick={openImportPicker} disabled={isEditorBusy}>
-              <Upload size={14} />
-              Import
-            </button>
-            <button type="button" onClick={openSamplePicker} disabled={isEditorBusy}>
-              <Sparkles size={14} />
-              {samplePickerButtonLabel}
-            </button>
-          </div>
-          <ul className="asset-list">
-            {assets.length === 0 ? (
-              <li className="muted-row">
-                <FileImage size={15} />
-                <span>No asset selected</span>
-              </li>
-            ) : (
-              assets.map((asset) => {
-                const dirtyState = assetDirtyStates[asset.id];
-                const isDirty = dirtyState?.isDirty ?? false;
-
-                return (
-                  <li key={asset.id} className="asset-list-entry">
-                  <button
-                    type="button"
-                    className={`asset-row${asset.id === selectedAsset?.id ? " active-asset" : ""}${isDirty ? " dirty-asset" : ""}`}
-                    aria-label={`Select ${asset.name}${isDirty ? ", unsaved edits in memory" : ""}`}
-                    disabled={isEditorBusy}
-                    onClick={() => void selectAsset(asset.id)}
-                    onContextMenu={(event) => {
-                      event.preventDefault();
-                      setAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
-                    }}
-                  >
-                    <AssetThumbnail
-                      image={asset.image}
-                      label={asset.name}
-                      surface={previewSurfaceCacheRef.current.getSurface({ assetId: asset.id, role: "source", image: asset.image })}
-                    />
-                    <span className="asset-meta">
-                      <strong>{asset.name}</strong>
-                      <small>
-                        {getAssetTypeDefinition(asset.assetType).shortLabel} · Source {asset.image.width}x{asset.image.height}
-                      </small>
-                      {isDirty ? <small className="asset-dirty-label">Unsaved in memory</small> : null}
-                    </span>
-                  </button>
-                  <button type="button" className="icon-button danger" aria-label={`Remove ${asset.name}`} disabled={isEditorBusy} onClick={() => requestAssetDeletion(asset.id)}>
-                    <Trash2 size={14} />
-                  </button>
-                  </li>
-                );
-              })
-            )}
-          </ul>
-          {assetMenu ? (
-            <div
-              className="context-menu"
-              style={{ left: assetMenu.x, top: assetMenu.y }}
-              onClick={(event) => event.stopPropagation()}
-            >
-              <button type="button" disabled={isEditorBusy} onClick={() => requestAssetDeletion(assetMenu.assetId)}>
-                <Trash2 size={14} />
-                Delete asset
-              </button>
-            </div>
-          ) : null}
-        </section>
+        <AssetBrowserPanel
+          assets={assets}
+          selectedAssetId={selectedAsset?.id ?? null}
+          assetDirtyStates={assetDirtyStates}
+          assetPanelStatus={assetPanelStatus}
+          assetMenu={assetMenu}
+          isEditorBusy={isEditorBusy}
+          samplePickerButtonLabel={samplePickerButtonLabel}
+          getSourceSurface={(asset) => previewSurfaceCacheRef.current.getSurface({ assetId: asset.id, role: "source", image: asset.image })}
+          onDocs={openDocs}
+          onImport={openImportPicker}
+          onOpenSamplePicker={openSamplePicker}
+          onSelectAsset={(assetId) => void selectAsset(assetId)}
+          onOpenAssetMenu={setAssetMenu}
+          onRequestAssetDeletion={requestAssetDeletion}
+        />
         <section className="panel-section collapsible-panel-section">
           <button
             type="button"
