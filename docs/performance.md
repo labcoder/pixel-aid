@@ -314,6 +314,10 @@ The sheet frame loop now reuses the temporary same-size frame-source buffer and 
 
 The current large-sheet benchmark primarily exercises 8x downsampled frames, not same-size frame crops, so timing is expected to stay flat. The measured frame-aware cleanup run remained within local noise: 100.72 ms before 5.5.1 and 102.23 ms after.
 
+### Optimization 5.5.2 Result
+
+Sheet frame cleanup now checks cancellation between alpha cleanup, halo removal, denoise, morphology, outline cleanup, and paste. This makes source-sized frame cleanup responsive to cooperative cancellation even when an individual cleanup phase does not emit row progress.
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.

@@ -1977,6 +1977,64 @@ describe("fix pipeline", () => {
     ).toThrow(FixCancelledError);
   });
 
+  test("cancels a sheet fix between per-frame cleanup phases", () => {
+    const source = createImage(4, 2, [0, 0, 0, 255]);
+    drawBlock(source, 0, 0, 2, 2, 255, 0, 0, 255);
+    drawBlock(source, 2, 0, 2, 2, 0, 0, 255, 255);
+    const frames: SpriteFrame[] = [
+      {
+        name: "frame_000",
+        rect: { x: 0, y: 0, w: 2, h: 2 },
+        sourceRect: { x: 0, y: 0, w: 2, h: 2 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 120
+      },
+      {
+        name: "frame_001",
+        rect: { x: 2, y: 0, w: 2, h: 2 },
+        sourceRect: { x: 2, y: 0, w: 2, h: 2 },
+        pivot: { x: 1, y: 2 },
+        durationMs: 120
+      }
+    ];
+    const signal = { aborted: false, reason: "Stopped after frame alpha cleanup" };
+    const phases: FixPhaseTiming[] = [];
+
+    expect(() =>
+      fixImage(
+        source,
+        {
+          mode: "spriteSheet",
+          assetType: "animationSheet",
+          targetWidth: 4,
+          targetHeight: 2,
+          maxColors: 4,
+          grid: { detect: "manual", scale: 1, phaseX: 0, phaseY: 0 },
+          downscale: "dominant",
+          alpha: "preserve",
+          cleanup: {
+            removeOrphans: false,
+            jaggyCleanup: false,
+            preserveSinglePixelDetails: true
+          },
+          sheetFrames: frames
+        },
+        {
+          signal,
+          onPhaseTiming: (event) => {
+            phases.push(event);
+            if (event.phase === "alpha-cleanup") {
+              signal.aborted = true;
+            }
+          }
+        }
+      )
+    ).toThrow(FixCancelledError);
+
+    expect(phases.map((event) => event.phase)).toContain("alpha-cleanup");
+    expect(phases.map((event) => event.phase)).not.toContain("halo-removal");
+  });
+
   test("cancels a single image fix during export prep without reporting complete", () => {
     const signal = { aborted: false, reason: "Stopped during export prep" };
     const events: FixProgressEvent[] = [];

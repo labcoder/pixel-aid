@@ -222,7 +222,7 @@ function fixSheetFrames(
         endPercent: Math.min(frameEndPercent, frameStartPercent + 3),
         scratch
       });
-      const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale), phaseTimer);
+      const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale), phaseTimer, runtime);
       alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
       morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
       pasteImage(cleanedFrame.image, packed, frame.rect);
@@ -584,11 +584,21 @@ type CleanFixedImageResult = {
   morphology?: MorphologyDiagnostics;
 };
 
-function cleanFixedImage(image: RGBAImage, options: FixOptions, phaseTimer?: FixPhaseTimer): CleanFixedImageResult {
+function cleanFixedImage(
+  image: RGBAImage,
+  options: FixOptions,
+  phaseTimer?: FixPhaseTimer,
+  runtime?: FixRuntimeOptions
+): CleanFixedImageResult {
+  assertNotCancelled(runtime?.signal);
   const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () => applyAlphaMode(image, options.alpha, options.alphaSettings));
+  assertNotCancelled(runtime?.signal);
   const haloCleaned = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false }));
+  assertNotCancelled(runtime?.signal);
   const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
+  assertNotCancelled(runtime?.signal);
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
+  assertNotCancelled(runtime?.signal);
   const outlined = measurePhase(phaseTimer, "outline-cleanup", () =>
     applyOutlineCleanup(morphologyResult.image, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
@@ -600,6 +610,7 @@ function cleanFixedImage(image: RGBAImage, options: FixOptions, phaseTimer?: Fix
       preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
     })
   );
+  assertNotCancelled(runtime?.signal);
   return {
     image: outlined,
     alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined),
