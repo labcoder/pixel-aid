@@ -205,6 +205,7 @@ describe("generic manifest export", () => {
         {
           name: "row_1_000",
           rect: { x: 0, y: 0, w: 16, h: 16 },
+          sourceRect: { x: 40, y: 24, w: 64, h: 64 },
           pivot: { x: 8, y: 14 },
           durationMs: 120,
           tags: ["row_1"],
@@ -222,15 +223,18 @@ describe("generic manifest export", () => {
       ]
     });
 
-    expect(manifest.frames[0]?.sheetLayout).toEqual({
-      scope: "row",
-      rowName: "row_1",
-      cellWidth: 48,
-      cellHeight: 64,
-      spacing: 2,
-      extrude: 1,
-      offsetX: 0,
-      offsetY: 4
+    expect(manifest.frames[0]).toMatchObject({
+      sourceRect: { x: 40, y: 24, w: 64, h: 64 },
+      sheetLayout: {
+        scope: "row",
+        rowName: "row_1",
+        cellWidth: 48,
+        cellHeight: 64,
+        spacing: 2,
+        extrude: 1,
+        offsetX: 0,
+        offsetY: 4
+      }
     });
     expect(validateManifest(manifest)).toEqual([]);
   });

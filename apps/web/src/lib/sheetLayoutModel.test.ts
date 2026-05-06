@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { AnimationTag, SpriteFrame } from "@pixelaid/shared";
-import { applyScopedSheetLayoutPatch, deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./sheetLayoutModel";
+import { adjustFrameCellOrigin, applyScopedSheetLayoutPatch, deriveSheetOutputLayout, repackAnimationRows, resizeAnimationCells } from "./sheetLayoutModel";
 
 const frames: SpriteFrame[] = [
   ...makeRow("idle", 3, 64, 64),
@@ -260,6 +260,25 @@ describe("sheet layout model", () => {
     expect(runFrames[2]?.rect).toEqual({ x: 168, y: 69, w: 64, h: 64 });
     expect(runFrames[0]?.sheetLayout).toMatchObject({ scope: "row", rowName: "run", spacing: 3, extrude: 2, offsetX: 1, offsetY: 2 });
     expect(runFrames[1]?.sheetLayout).toMatchObject({ scope: "frame", rowName: "run", cellWidth: 96, spacing: 3, extrude: 2, offsetX: -2, offsetY: 2 });
+  });
+
+  test("adjusts a single output cell origin without changing source rects or animation membership", () => {
+    const adjusted = adjustFrameCellOrigin({
+      frames,
+      animations,
+      frameName: "idle_001",
+      deltaX: 2,
+      deltaY: 3,
+      margin: 0,
+      spacing: 0
+    });
+    const idleFrame = adjusted.find((frame) => frame.name === "idle_001");
+
+    expect(idleFrame?.rect).toEqual({ x: 66, y: 3, w: 64, h: 64 });
+    expect(idleFrame?.sourceRect).toEqual(frames[1]?.sourceRect);
+    expect(idleFrame?.tags).toEqual(["idle"]);
+    expect(idleFrame?.sheetLayout).toMatchObject({ scope: "frame", rowName: "idle", offsetX: 2, offsetY: 3 });
+    expect(adjusted.filter((frame) => frame.tags?.includes("run")).map((frame) => frame.name)).toEqual(animations[1]?.frameNames);
   });
 });
 

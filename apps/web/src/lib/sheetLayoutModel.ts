@@ -209,6 +209,42 @@ export function applyScopedSheetLayoutPatch({
   });
 }
 
+export function adjustFrameCellOrigin({
+  frames,
+  animations,
+  frameName,
+  deltaX,
+  deltaY,
+  margin,
+  spacing
+}: {
+  frames: readonly SpriteFrame[];
+  animations: readonly AnimationTag[];
+  frameName: string;
+  deltaX: number;
+  deltaY: number;
+  margin: number;
+  spacing: number;
+}): SpriteFrame[] {
+  const frame = frames.find((item) => item.name === frameName);
+  if (!frame) {
+    return frames.map((item) => copyFrameForCell(item, item.rect));
+  }
+
+  return applyScopedSheetLayoutPatch({
+    frames,
+    animations,
+    scope: "frame",
+    frameName,
+    patch: {
+      offsetX: Math.round(frame.sheetLayout?.offsetX ?? 0) + Math.round(deltaX),
+      offsetY: Math.round(frame.sheetLayout?.offsetY ?? 0) + Math.round(deltaY)
+    },
+    margin,
+    spacing
+  });
+}
+
 export function repackAnimationRows({
   frames,
   animations,

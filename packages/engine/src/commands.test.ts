@@ -20,7 +20,11 @@ describe("engine command and event contracts", () => {
     expect(engineCommandTypes).toContain("asset.importPlaceholder");
     expect(engineCommandTypes).toContain("asset.select");
     expect(engineCommandTypes).toContain("job.cancel");
+    expect(engineCommandTypes).toContain("frame.sourceRect.move");
+    expect(engineCommandTypes).toContain("frame.cellOrigin.adjust");
+    expect(engineCommandTypes).toContain("frame.pivot.update");
     expect(engineCommandTypes).toContain("sheet.rowFrameCount.set");
+    expect(engineCommandTypes).toContain("sheet.rowCellSize.update");
     expect(engineCommandTypes).toContain("document.openPlaceholder");
   });
 

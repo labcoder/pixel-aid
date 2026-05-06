@@ -54,6 +54,26 @@ export function moveFrameBySourceDelta({
   return moved;
 }
 
+export function moveFrameSourceRectOnly({
+  frame,
+  deltaX,
+  deltaY,
+  sourceSize
+}: {
+  frame: SpriteFrame;
+  deltaX: number;
+  deltaY: number;
+  sourceSize: Size;
+}): SpriteFrame {
+  const sourceRect = frame.sourceRect ?? frame.rect;
+  return copyFrameWithGeometry({
+    frame,
+    rect: frame.rect,
+    sourceRect: moveRect(sourceRect, Math.round(deltaX), Math.round(deltaY), sourceSize),
+    pivot: frame.pivot
+  });
+}
+
 export function resizeFrameBySourceDelta({
   frame,
   handle,
@@ -109,6 +129,48 @@ export function resizeFrameBySourceDelta({
   return resized;
 }
 
+export function resizeFrameSourceRectOnly({
+  frame,
+  handle,
+  deltaX,
+  deltaY,
+  sourceSize,
+  minSourceSize = { width: 1, height: 1 }
+}: {
+  frame: SpriteFrame;
+  handle: FrameResizeHandle;
+  deltaX: number;
+  deltaY: number;
+  sourceSize: Size;
+  minSourceSize?: Size;
+}): SpriteFrame {
+  const sourceRect = frame.sourceRect ?? frame.rect;
+  return copyFrameWithGeometry({
+    frame,
+    rect: frame.rect,
+    sourceRect: resizeRect(sourceRect, handle, Math.round(deltaX), Math.round(deltaY), sourceSize, minSourceSize),
+    pivot: frame.pivot
+  });
+}
+
+export function updateFramePivot({
+  frame,
+  pivot
+}: {
+  frame: SpriteFrame;
+  pivot: Point;
+}): SpriteFrame {
+  return copyFrameWithGeometry({
+    frame,
+    rect: frame.rect,
+    sourceRect: frame.sourceRect,
+    pivot: {
+      x: clampInteger(pivot.x, 0, frame.rect.w),
+      y: clampInteger(pivot.y, 0, frame.rect.h)
+    }
+  });
+}
+
 export function findFrameAtSourcePoint(frames: readonly SpriteFrame[], point: Point): number {
   for (let index = frames.length - 1; index >= 0; index -= 1) {
     const rect = frames[index]?.sourceRect ?? frames[index]?.rect;
@@ -142,6 +204,29 @@ export function findFrameResizeHandleAtSourcePoint(
   }
 
   return null;
+}
+
+function copyFrameWithGeometry({
+  frame,
+  rect,
+  sourceRect,
+  pivot
+}: {
+  frame: SpriteFrame;
+  rect: Rect;
+  sourceRect: Rect | undefined;
+  pivot: Point;
+}): SpriteFrame {
+  return {
+    ...frame,
+    rect: { ...rect },
+    ...(sourceRect ? { sourceRect: { ...sourceRect } } : {}),
+    pivot: { x: Math.round(pivot.x), y: Math.round(pivot.y) },
+    ...(frame.tags ? { tags: [...frame.tags] } : {}),
+    ...(frame.anchors ? { anchors: frame.anchors.map((anchor) => ({ ...anchor, point: { ...anchor.point } })) } : {}),
+    ...(frame.boxes ? { boxes: frame.boxes.map((box) => ({ ...box, rect: { ...box.rect } })) } : {}),
+    ...(frame.sheetLayout ? { sheetLayout: { ...frame.sheetLayout } } : {})
+  };
 }
 
 function moveRect(rect: Rect, deltaX: number, deltaY: number, bounds: Size): Rect {

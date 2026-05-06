@@ -1,4 +1,4 @@
-import type { AssetMode, AssetType, FixOptions, PixelFixResult, Rect, WorkerProgress } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, Pivot, PixelFixResult, Rect, WorkerProgress } from "@pixelaid/shared";
 
 export const engineCommandTypes = [
   "asset.importPlaceholder",
@@ -11,7 +11,12 @@ export const engineCommandTypes = [
   "fix.run",
   "job.cancel",
   "frame.rect.edit",
+  "frame.sourceRect.move",
+  "frame.sourceRect.resize",
+  "frame.cellOrigin.adjust",
+  "frame.pivot.update",
   "sheet.rowFrameCount.set",
+  "sheet.rowCellSize.update",
   "timeline.selection.update",
   "export.bundle",
   "document.savePlaceholder",
@@ -85,11 +90,50 @@ export type EngineEditFrameRectCommand = {
   rect: Rect;
 };
 
+export type EngineFrameResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+
+export type EngineMoveFrameSourceRectCommand = {
+  type: "frame.sourceRect.move";
+  assetId: string;
+  frameName: string;
+  delta: Pivot;
+};
+
+export type EngineResizeFrameSourceRectCommand = {
+  type: "frame.sourceRect.resize";
+  assetId: string;
+  frameName: string;
+  handle: EngineFrameResizeHandle;
+  delta: Pivot;
+};
+
+export type EngineAdjustFrameCellOriginCommand = {
+  type: "frame.cellOrigin.adjust";
+  assetId: string;
+  frameName: string;
+  delta: Pivot;
+};
+
+export type EngineUpdateFramePivotCommand = {
+  type: "frame.pivot.update";
+  assetId: string;
+  frameName: string;
+  pivot: Pivot;
+};
+
 export type EngineSetSheetRowFrameCountCommand = {
   type: "sheet.rowFrameCount.set";
   assetId: string;
   animationName: string;
   frameCount: number;
+};
+
+export type EngineUpdateSheetRowCellSizeCommand = {
+  type: "sheet.rowCellSize.update";
+  assetId: string;
+  animationName: string;
+  cellWidth: number;
+  cellHeight: number;
 };
 
 export type EngineUpdateTimelineSelectionCommand = {
@@ -127,7 +171,12 @@ export type EngineCommand =
   | EngineRunFixCommand
   | EngineCancelJobCommand
   | EngineEditFrameRectCommand
+  | EngineMoveFrameSourceRectCommand
+  | EngineResizeFrameSourceRectCommand
+  | EngineAdjustFrameCellOriginCommand
+  | EngineUpdateFramePivotCommand
   | EngineSetSheetRowFrameCountCommand
+  | EngineUpdateSheetRowCellSizeCommand
   | EngineUpdateTimelineSelectionCommand
   | EngineExportBundleCommand
   | EngineSaveDocumentPlaceholderCommand
