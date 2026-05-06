@@ -34,6 +34,26 @@ describe("large cleanup fixtures", () => {
     });
   });
 
+  bench(`${fake720p.id}: median cleanup ${formatPixels(fake720p.sourcePixels)}`, () => {
+    fixImage(fake720p.createImage(), {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 160,
+      targetHeight: 90,
+      maxColors: 24,
+      grid: { detect: "manual", scale: 8 },
+      downscale: "median",
+      alpha: "backgroundFloodFill",
+      cleanup: {
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        removeHalos: true,
+        denoiseStrength: 20
+      }
+    });
+  });
+
   bench(`${fake1080p.id}: grid detection ${formatPixels(fake1080p.sourcePixels)}`, () => {
     detectGridCandidates(fake1080p.createImage(), { maxScale: 16 });
   });

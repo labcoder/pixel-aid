@@ -49,6 +49,13 @@ type DominantScratch = {
   touchedCount: number;
 };
 
+type MedianScratch = {
+  r: Uint32Array;
+  g: Uint32Array;
+  b: Uint32Array;
+  a: Uint32Array;
+};
+
 type DetailCluster = ColorCluster & {
   minX: number;
   maxX: number;
@@ -68,6 +75,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
   const output = createImage(options.outputWidth, options.outputHeight);
   const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
   const dominantScratch = options.method === "dominant" || options.method === "adaptive" ? createDominantScratch() : undefined;
+  const medianScratch = options.method === "median" || options.method === "adaptive" ? createMedianScratch() : undefined;
 
   for (let y = 0; y < options.outputHeight; y += 1) {
     if (progress && shouldReportRow(y, options.outputHeight)) {
@@ -80,9 +88,9 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
       setBlockBounds(block, image, x, y, options);
       const pixel =
         options.method === "median"
-          ? medianBlock(image, block)
+          ? medianBlock(image, block, medianScratch!)
           : options.method === "adaptive"
-            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6, dominantScratch!)
+            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6, dominantScratch!, medianScratch!)
             : options.method === "averageThenPalette"
               ? averageBlock(image, block)
               : options.method === "detailPreserving"
@@ -252,32 +260,73 @@ function dominantBucketToRgb(bucket: number): number {
   return (r << 19) | (g << 11) | (b << 3);
 }
 
-function medianBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
-  const r: number[] = [];
-  const g: number[] = [];
-  const b: number[] = [];
-  const a: number[] = [];
+function medianBlock(image: RGBAImage, block: BlockBounds, scratch: MedianScratch): [number, number, number, number] {
+  scratch.r.fill(0);
+  scratch.g.fill(0);
+  scratch.b.fill(0);
+  scratch.a.fill(0);
+  let total = 0;
 
   for (let y = block.startY; y < block.endY; y += 1) {
     for (let x = block.startX; x < block.endX; x += 1) {
       const offset = (y * image.width + x) * 4;
-      r.push(image.data[offset]!);
-      g.push(image.data[offset + 1]!);
-      b.push(image.data[offset + 2]!);
-      a.push(image.data[offset + 3]!);
+      scratch.r[image.data[offset]!] = scratch.r[image.data[offset]!]! + 1;
+      scratch.g[image.data[offset + 1]!] = scratch.g[image.data[offset + 1]!]! + 1;
+      scratch.b[image.data[offset + 2]!] = scratch.b[image.data[offset + 2]!]! + 1;
+      scratch.a[image.data[offset + 3]!] = scratch.a[image.data[offset + 3]!]! + 1;
+      total += 1;
     }
   }
 
-  return [median(r), median(g), median(b), median(a)];
+  return [medianFromHistogram(scratch.r, total), medianFromHistogram(scratch.g, total), medianFromHistogram(scratch.b, total), medianFromHistogram(scratch.a, total)];
 }
 
-function adaptiveBlock(image: RGBAImage, block: BlockBounds, coverage: number, scratch: DominantScratch): [number, number, number, number] {
-  const dominant = dominantBlock(image, block, scratch);
+function createMedianScratch(): MedianScratch {
+  return {
+    r: new Uint32Array(256),
+    g: new Uint32Array(256),
+    b: new Uint32Array(256),
+    a: new Uint32Array(256)
+  };
+}
+
+function medianFromHistogram(histogram: Uint32Array, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+
+  const middle = Math.floor(total / 2);
+  if (total % 2 === 1) {
+    return selectHistogramValue(histogram, middle);
+  }
+
+  return clampByte((selectHistogramValue(histogram, middle - 1) + selectHistogramValue(histogram, middle)) / 2);
+}
+
+function selectHistogramValue(histogram: Uint32Array, targetIndex: number): number {
+  let seen = 0;
+  for (let value = 0; value < histogram.length; value += 1) {
+    seen += histogram[value]!;
+    if (seen > targetIndex) {
+      return value;
+    }
+  }
+  return 255;
+}
+
+function adaptiveBlock(
+  image: RGBAImage,
+  block: BlockBounds,
+  coverage: number,
+  dominantScratch: DominantScratch,
+  medianScratch: MedianScratch
+): [number, number, number, number] {
+  const dominant = dominantBlock(image, block, dominantScratch);
   if (dominant.dominant.coverage >= coverage) {
     return dominant.pixel;
   }
 
-  return medianBlock(image, block);
+  return medianBlock(image, block, medianScratch);
 }
 
 function detailPreservingBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
@@ -788,14 +837,4 @@ function colorDelta(r1: number, g1: number, b1: number, r2: number, g2: number, 
 
 function packLooseRgb(r: number, g: number, b: number): number {
   return ((clampByte(r) >> 6) << 4) | ((clampByte(g) >> 6) << 2) | (clampByte(b) >> 6);
-}
-
-function median(values: number[]): number {
-  values.sort((a, b) => a - b);
-  const middle = Math.floor(values.length / 2);
-  if (values.length % 2 === 1) {
-    return values[middle]!;
-  }
-
-  return clampByte((values[middle - 1]! + values[middle]!) / 2);
 }

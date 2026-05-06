@@ -42,6 +42,42 @@ describe("advanced downsample modes", () => {
     expect(readPixel(adaptive, 1, 0)).toEqual(readPixel(dominant, 1, 0));
   });
 
+  test("median downsampling preserves odd even and alpha median semantics", () => {
+    const oddSource = createImage(3, 1);
+    writePixel(oddSource, 0, 0, 10, 30, 90, 0);
+    writePixel(oddSource, 1, 0, 100, 80, 60, 128);
+    writePixel(oddSource, 2, 0, 250, 210, 40, 255);
+    const odd = downsampleBlocks(oddSource, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 3,
+      scaleY: 1,
+      phaseX: 0,
+      phaseY: 0,
+      method: "median",
+      alpha: "preserve"
+    });
+
+    const evenSource = createImage(2, 2);
+    writePixel(evenSource, 0, 0, 0, 10, 100, 0);
+    writePixel(evenSource, 1, 0, 10, 20, 110, 100);
+    writePixel(evenSource, 0, 1, 100, 200, 120, 200);
+    writePixel(evenSource, 1, 1, 255, 250, 130, 255);
+    const even = downsampleBlocks(evenSource, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "median",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(odd, 0, 0)).toEqual([100, 80, 60, 128]);
+    expect(readPixel(even, 0, 0)).toEqual([55, 110, 115, 150]);
+  });
+
   test("contrast preserves sparse dark linework missed by existing block modes", () => {
     const source = createImage(6, 6, [220, 214, 190, 255]);
     writePixel(source, 2, 1, 22, 24, 30, 255);

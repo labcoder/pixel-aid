@@ -241,6 +241,16 @@ Dominant/adaptive downsampling now uses a reusable fixed RGB histogram for each 
 | `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | 184.02 ms | 120.29 ms | 34.6% faster |
 | `fixes cropped adaptive single sprite` | 106.47 ms | 103.16 ms | 3.1% faster |
 
+### Optimization 5.2.2 Result
+
+Median downsampling now uses reusable 256-bin channel histograms instead of allocating and sorting four arrays for every output block. The direct median benchmark was added in this change, so its first committed measurement is listed as the current baseline. Adaptive cleanup also benefits because it falls back to median when dominant coverage is low.
+
+| Benchmark | Before 5.2.2 | After | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-720p-single: full cleanup 0.92MP` | 73.59 ms | 47.13 ms | 36.0% faster |
+| `fixes cropped adaptive single sprite` | 103.16 ms | 70.07 ms | 32.1% faster |
+| `fake-pixel-720p-single: median cleanup 0.92MP` | New benchmark | 52.81 ms | Baseline added |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
@@ -251,6 +261,7 @@ This matrix inventories the benchmark coverage that exists today. `Report-only` 
 | `fixes cropped adaptive single sprite` | `createSingleSpriteCleanupFixture()` fake-pixel sprite with bright background | Full adaptive single-sprite fix: auto grid, crop, alpha/background cleanup, halo cleanup, palette cap | `single` / sprite | 706x878 source, 6x grid | Report-only | `packages/core/src/singleSpriteCleanup.bench.ts` |
 | `fake-pixel-720p-single: grid detection 0.92MP` | Lazy generated 720p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-720p-single: full cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, adaptive downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-720p-single: median cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, median downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-1080p-single: grid detection 2.07MP` | Lazy generated 1080p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1920x1080 source -> 240x135 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | Lazy generated large fake-pixel animation sheet | Full sheet fix with manual 8x grid, generated frame rects, dominant downsample, and shared palette remap | `spriteSheet` / animation sheet | 2048x2048 source -> 256x256 native sheet, 64 frames | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | Import/decode preparation | Browser imports, pasted files, and CLI/automation image IO | Decode preparation and source-buffer creation | Any imported asset | Typical source files, including large sprites and sheets | Missing | Needed in web/automation benchmark harness |
