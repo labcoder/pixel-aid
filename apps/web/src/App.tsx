@@ -215,7 +215,12 @@ import {
 } from "./lib/frameEditHistory";
 import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
-import { suggestFixSettings, suggestFixSettingsForAssetType, type FixSettingSuggestion } from "./lib/fixSuggestions";
+import {
+  describeAutoSuggestTrigger,
+  runScheduledAutoSuggest,
+  runScheduledAutoSuggestForAssetType
+} from "./lib/autoSuggestScheduling";
+import type { FixSettingSuggestion } from "./lib/fixSuggestions";
 import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
@@ -3363,7 +3368,8 @@ export function App() {
 
             editorPerformanceMonitorRef.current.mark("auto suggest start", asset.name, perfOperationId);
             const autoSuggestStartedAt = performance.now();
-            const suggestion = suggestFixSettings(asset.image);
+            const autoSuggestTrigger = "import";
+            const suggestion = runScheduledAutoSuggest({ image: asset.image, trigger: autoSuggestTrigger });
             recordMainThreadPhaseWarning({
               phase: "auto-suggest",
               operationName: `Import Auto Suggest ${asset.name}`,
@@ -3372,7 +3378,7 @@ export function App() {
               height: asset.image.height,
               scope: asset.id,
               operationId: perfOperationId,
-              details: "import"
+              details: describeAutoSuggestTrigger(autoSuggestTrigger)
             });
             editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
             setGridCandidateCache((current) => ({ ...current, [asset.id]: suggestion.gridCandidates }));
@@ -3517,7 +3523,8 @@ export function App() {
 
       try {
         const sampleImport = createOnboardingSampleImport(sampleId);
-        const suggestion = suggestFixSettings(sampleImport.asset.image);
+        const autoSuggestTrigger = "sample";
+        const suggestion = runScheduledAutoSuggest({ image: sampleImport.asset.image, trigger: autoSuggestTrigger });
         delete assetSessionsRef.current[sampleImport.asset.id];
         previewSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
         thumbnailSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
@@ -3925,7 +3932,8 @@ export function App() {
 
     try {
       const autoSuggestStartedAt = performance.now();
-      const suggestion = suggestFixSettings(selectedAsset.image);
+      const autoSuggestTrigger = "manual";
+      const suggestion = runScheduledAutoSuggest({ image: selectedAsset.image, trigger: autoSuggestTrigger });
       recordMainThreadPhaseWarning({
         phase: "auto-suggest",
         operationName: `Auto Suggest ${selectedAsset.name}`,
@@ -3934,7 +3942,7 @@ export function App() {
         height: selectedAsset.image.height,
         scope: selectedAsset.id,
         operationId: perfOperationId,
-        details: "manual"
+        details: describeAutoSuggestTrigger(autoSuggestTrigger)
       });
       editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
@@ -4084,7 +4092,12 @@ export function App() {
         categoryConfidence: 1
       };
       const autoSuggestStartedAt = performance.now();
-      const suggestion = suggestFixSettingsForAssetType(selectedAsset.image, nextAssetType);
+      const autoSuggestTrigger = "assetTypeChange";
+      const suggestion = runScheduledAutoSuggestForAssetType({
+        image: selectedAsset.image,
+        assetType: nextAssetType,
+        trigger: autoSuggestTrigger
+      });
       recordMainThreadPhaseWarning({
         phase: "auto-suggest",
         operationName: `Asset type suggestion ${definition.label}`,
@@ -4092,7 +4105,7 @@ export function App() {
         width: selectedAsset.image.width,
         height: selectedAsset.image.height,
         scope: `${selectedAsset.id}:${nextAssetType}`,
-        details: "asset type change"
+        details: describeAutoSuggestTrigger(autoSuggestTrigger)
       });
 
       setGridCandidateCache((current) => ({ ...current, [selectedAsset.id]: suggestion.gridCandidates }));
