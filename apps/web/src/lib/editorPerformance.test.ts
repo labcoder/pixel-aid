@@ -30,6 +30,9 @@ describe("editorPerformance", () => {
     expect(snapshot.memory.activeEstimatedBytes).toBe(24);
     expect(snapshot.memory.warnings).toHaveLength(1);
     expect(snapshot.longTasks.supported).toBe(false);
+
+    monitor.clearMemoryCheckpoint("source image buffer");
+    expect(monitor.getSnapshot().memory.activeEstimatedBytes).toBe(0);
   });
 
   test("formats long durations as seconds", () => {

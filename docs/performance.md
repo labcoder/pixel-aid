@@ -75,6 +75,13 @@ Ownership labels should appear in diagnostics and helper names where practical. 
 
 Temporary RGBA buffer reuse is bounded by size bucket. A pool may retain a small number of released same-byte-length buffers for scratch work, clears them on release by default, and drops buffers instead of exceeding its configured byte cap. Reused buffers must be labelled as temporary ownership such as `export-temp`; they must not be committed as immutable source buffers or long-lived worker results without creating a new ownership record.
 
+The current worker-transfer clone audit is:
+
+- Source, quality, and fix clients clone the immutable source buffer once before transfer.
+- The transferred buffer becomes worker-owned; the web-side clone is considered detached after `postMessage`.
+- The worker creates typed-array views over received buffers and does not make a second full source clone.
+- Editor memory diagnostics clear transfer-clone checkpoints when jobs settle so active memory estimates do not keep counting detached sender-side buffers.
+
 ## Editor Responsiveness Diagnostics
 
 The web editor records lightweight, in-session responsiveness diagnostics for major user operations. The diagnostics are visible in the Metrics and Logs bottom panel and are included in exported diagnostics JSON. Timing history is intentionally bounded and is not persisted across sessions.

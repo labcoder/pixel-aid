@@ -173,6 +173,10 @@ export class EditorPerformanceMonitor {
     });
   }
 
+  clearMemoryCheckpoint(name: string): void {
+    this.memoryCheckpoints.delete(name);
+  }
+
   getSnapshot(): EditorPerformanceSnapshot {
     const checkpoints = [...this.memoryCheckpoints.values()].sort((left, right) => left.name.localeCompare(right.name));
     const activeEstimatedBytes = checkpoints.reduce((sum, checkpoint) => sum + checkpoint.bytes, 0);

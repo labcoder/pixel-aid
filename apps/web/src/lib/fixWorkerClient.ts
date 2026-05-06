@@ -1,5 +1,5 @@
 import type { FixOptions, PixelFixResult, RGBAImage, WorkerProgress } from "@pixelaid/shared";
-import type { PersistentWorkerStalePolicy, WorkerRequest, WorkerResponse } from "@pixelaid/worker";
+import type { PersistentWorkerStalePolicy, WorkerRequest } from "@pixelaid/worker";
 
 import {
   cloneImageToTransferable,
@@ -36,7 +36,7 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
     sourceByteLength: image.data.byteLength,
     ...(jobOptions.onDiagnostics ? { onDiagnostics: jobOptions.onDiagnostics } : {})
   });
-  const clone = imageToTransferable(image);
+  const clone = cloneImageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
   const request: WorkerRequest = {
@@ -128,10 +128,6 @@ export function startFixJob(image: RGBAImage, options: FixOptions, jobOptions: S
       pooledJob.cancel("Fix cancelled");
     }
   };
-}
-
-function imageToTransferable(image: RGBAImage): ReturnType<typeof cloneImageToTransferable> {
-  return cloneImageToTransferable(image);
 }
 
 export function disposeFixWorkerPool(): void {

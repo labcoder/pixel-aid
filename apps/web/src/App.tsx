@@ -363,6 +363,10 @@ type WindowWithEyeDropper = Window & {
 };
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
+const sourceAnalysisTransferMemoryKey = "source analysis transfer clone";
+const qualityAnalysisTransferMemoryKey = "quality analysis transfer clone";
+const fixTransferMemoryKey = "fix transfer clone";
+const workerResultMemoryKey = "worker result buffer";
 const onboardingSampleCards = getOnboardingSampleCards();
 const DocsPage = lazy(() => import("./components/DocsPage").then((module) => ({ default: module.DocsPage })));
 const palettePresetOptions = [
@@ -1860,7 +1864,13 @@ export function App() {
       setAnalysisOperation(operation);
       const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("source-analysis", `Source analysis ${selectedAsset.name}`);
       editorPerformanceMonitorRef.current.mark("source analysis worker start", selectedSourceAnalysisKey, perfOperationId);
-      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("cloned transferable buffer", selectedAsset.image.data.byteLength, selectedAsset.image.width, selectedAsset.image.height, perfOperationId);
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
+        sourceAnalysisTransferMemoryKey,
+        selectedAsset.image.data.byteLength,
+        selectedAsset.image.width,
+        selectedAsset.image.height,
+        perfOperationId
+      );
       publishEditorPerformanceSnapshot();
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "sourceAnalysisStarted", selectedSourceAnalysisKey);
 
@@ -1902,6 +1912,7 @@ export function App() {
           if (activeSourceAnalysisJobRef.current?.requestId === job?.requestId) {
             activeSourceAnalysisJobRef.current = null;
           }
+          editorPerformanceMonitorRef.current.clearMemoryCheckpoint(sourceAnalysisTransferMemoryKey);
           editorPerformanceMonitorRef.current.endOperation(perfOperationId);
           publishEditorPerformanceSnapshot();
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
@@ -2367,7 +2378,13 @@ export function App() {
       setAnalysisOperation(operation);
       const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("quality-analysis", `Quality analysis ${selectedAsset.name}`);
       editorPerformanceMonitorRef.current.mark("quality analysis start", qualityReportCacheKey, perfOperationId);
-      editorPerformanceMonitorRef.current.recordMemoryCheckpoint("cloned transferable buffer", selectedAsset.image.data.byteLength, selectedAsset.image.width, selectedAsset.image.height, perfOperationId);
+      editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
+        qualityAnalysisTransferMemoryKey,
+        selectedAsset.image.data.byteLength,
+        selectedAsset.image.width,
+        selectedAsset.image.height,
+        perfOperationId
+      );
       publishEditorPerformanceSnapshot();
 
       markActiveAssetSwitchTimingForAsset(selectedAsset.id, "qualityDiagnosticsStarted", qualityReportCacheKey);
@@ -2410,6 +2427,7 @@ export function App() {
           if (activeQualityAnalysisJobRef.current?.requestId === job?.requestId) {
             activeQualityAnalysisJobRef.current = null;
           }
+          editorPerformanceMonitorRef.current.clearMemoryCheckpoint(qualityAnalysisTransferMemoryKey);
           editorPerformanceMonitorRef.current.endOperation(perfOperationId);
           publishEditorPerformanceSnapshot();
           setAnalysisOperation((current) => clearBusyOperation(current, operation.id));
@@ -3601,7 +3619,7 @@ export function App() {
     const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("fix", sheetMode ? `Fix ${frameCount} frames` : "Fix image");
     editorPerformanceMonitorRef.current.mark("fix preparation start", selectedAsset.name, perfOperationId);
     editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
-      "cloned transferable buffer",
+      fixTransferMemoryKey,
       selectedAsset.image.data.byteLength,
       selectedAsset.image.width,
       selectedAsset.image.height,
@@ -3657,7 +3675,7 @@ export function App() {
         .then((result) => {
           editorPerformanceMonitorRef.current.mark("worker result received", `${result.image.width}x${result.image.height}`, perfOperationId);
           editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
-            "worker result buffer",
+            workerResultMemoryKey,
             result.image.data.byteLength,
             result.image.width,
             result.image.height,
@@ -3691,6 +3709,9 @@ export function App() {
           if (activeJobRef.current?.requestId === job.requestId) {
             activeJobRef.current = null;
           }
+          editorPerformanceMonitorRef.current.clearMemoryCheckpoint(fixTransferMemoryKey);
+          editorPerformanceMonitorRef.current.clearMemoryCheckpoint(workerResultMemoryKey);
+          publishEditorPerformanceSnapshot();
           setFixOperation((current) => clearBusyOperation(current, operation.id));
           setFixProgress(null);
         });
@@ -3701,6 +3722,8 @@ export function App() {
         assetType
       });
       editorPerformanceMonitorRef.current.endOperation(perfOperationId, "fix setup failed");
+      editorPerformanceMonitorRef.current.clearMemoryCheckpoint(fixTransferMemoryKey);
+      editorPerformanceMonitorRef.current.clearMemoryCheckpoint(workerResultMemoryKey);
       publishEditorPerformanceSnapshot();
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);

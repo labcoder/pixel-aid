@@ -62,7 +62,7 @@ export function startSourceAnalysisJob(image: RGBAImage, options: SourceAnalysis
     sourceByteLength: image.data.byteLength,
     ...(options.onDiagnostics ? { onDiagnostics: options.onDiagnostics } : {})
   });
-  const clone = imageToTransferable(image);
+  const clone = cloneImageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
   const request: AnalyzeSourceWorkerRequest = {
@@ -92,7 +92,7 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
     sourceByteLength: image.data.byteLength,
     ...(jobOptions.onDiagnostics ? { onDiagnostics: jobOptions.onDiagnostics } : {})
   });
-  const clone = imageToTransferable(image);
+  const clone = cloneImageToTransferable(image);
   diagnostics.markImageClone(clone.cloneMs);
   const transferable = clone.transferable;
   const request: AnalyzeQualityWorkerRequest = {
@@ -176,10 +176,6 @@ function startAnalysisJob<T>(
     promise,
     cancel: () => pooledJob.cancel("Analysis cancelled")
   };
-}
-
-function imageToTransferable(image: RGBAImage): ReturnType<typeof cloneImageToTransferable> {
-  return cloneImageToTransferable(image);
 }
 
 export function disposeAnalysisWorkerPool(): void {
