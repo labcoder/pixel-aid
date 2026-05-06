@@ -1041,7 +1041,7 @@ async function cleanupWrittenFiles(filePaths: readonly string[]): Promise<void> 
 }
 
 function withFallbackGridCandidates(image: RGBAImage): ReturnType<typeof detectGridCandidates> {
-  const candidates = detectGridCandidates(image, { maxScale: Math.min(32, image.width, image.height) });
+  const candidates = detectGridCandidates(image, { maxScale: Math.min(32, image.width, image.height), sampling: "sampled" });
   if (candidates.length > 0) {
     return candidates;
   }

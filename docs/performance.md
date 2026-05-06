@@ -299,6 +299,15 @@ Auto Suggest grid candidates now use an engine-owned cache key based on asset id
 | `fake-pixel-720p-single: auto grid cleanup uncached 0.92MP` | 79.71 ms | Compared benchmark | Baseline added |
 | `fake-pixel-720p-single: auto grid cleanup cached 0.92MP` | 79.71 ms | 19.00 ms | 76.2% faster |
 
+### Optimization 5.4.2 Result
+
+Grid detection now has an explicit sampled mode for large-source analysis paths. It samples rows for vertical edge profiles, samples columns for horizontal edge profiles, and samples Sobel tile scoring while preserving full per-column/per-row phase accumulation where candidate phase is selected. Auto Suggest and automation suggestion flows use the sampled mode; full detection remains available for exact detector callers and blocking-ready detector budgets.
+
+| Benchmark | Full | Sampled | Change |
+| --- | ---: | ---: | ---: |
+| `fake-pixel-720p-single: grid detection 0.92MP` | 61.74 ms | 30.82 ms | 50.1% faster |
+| `fake-pixel-1080p-single: grid detection 2.07MP` | 148.91 ms | 55.01 ms | 63.1% faster |
+
 ### Benchmark coverage matrix
 
 This matrix inventories the benchmark coverage that exists today. `Report-only` means the benchmark runs and prints timing data, but no pass/fail performance threshold is enforced. `Missing` means tests or product code may exist for the operation, but no repeatable benchmark currently measures it.
@@ -308,11 +317,13 @@ This matrix inventories the benchmark coverage that exists today. `Report-only` 
 | `detects crop-aware grid candidates` | `createSingleSpriteCleanupFixture()` fake-pixel sprite with foreground crop | Background-aware grid candidate detection | `single` / sprite | 706x878 source, 6x grid | Report-only | `packages/core/src/singleSpriteCleanup.bench.ts` |
 | `fixes cropped adaptive single sprite` | `createSingleSpriteCleanupFixture()` fake-pixel sprite with bright background | Full adaptive single-sprite fix: auto grid, crop, alpha/background cleanup, halo cleanup, palette cap | `single` / sprite | 706x878 source, 6x grid | Report-only | `packages/core/src/singleSpriteCleanup.bench.ts` |
 | `fake-pixel-720p-single: grid detection 0.92MP` | Lazy generated 720p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-720p-single: sampled grid detection 0.92MP` | Lazy generated 720p fake-pixel single sprite | Sampled grid candidate detection | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-720p-single: full cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, adaptive downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-720p-single: median cleanup 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with manual 8x grid, median downsample, background flood fill, halo cleanup, denoise, and palette cap | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-720p-single: auto grid cleanup uncached 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix with auto grid detection inside Fix | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-720p-single: auto grid cleanup cached 0.92MP` | Lazy generated 720p fake-pixel single sprite | Full single-sprite fix reusing precomputed auto grid candidates | `single` / sprite | 1280x720 source -> 160x90 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-1080p-single: grid detection 2.07MP` | Lazy generated 1080p fake-pixel single sprite | Grid candidate detection | `single` / sprite | 1920x1080 source -> 240x135 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
+| `fake-pixel-1080p-single: sampled grid detection 2.07MP` | Lazy generated 1080p fake-pixel single sprite | Sampled grid candidate detection | `single` / sprite | 1920x1080 source -> 240x135 native target | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `fake-pixel-large-sheet: frame-aware cleanup 64 frames` | Lazy generated large fake-pixel animation sheet | Full sheet fix with manual 8x grid, generated frame rects, dominant downsample, and shared palette remap | `spriteSheet` / animation sheet | 2048x2048 source -> 256x256 native sheet, 64 frames | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | `large-landscape-bands: palette remap 1.17MP` | Large generated landscape/background fixture | Isolated non-dithered nearest-palette remap with a 64-color benchmark palette | `single` / background | 1440x810 source | Report-only | `packages/core/src/fixtureSuite.bench.ts` |
 | Import/decode preparation | Browser imports, pasted files, and CLI/automation image IO | Decode preparation and source-buffer creation | Any imported asset | Typical source files, including large sprites and sheets | Missing | Needed in web/automation benchmark harness |

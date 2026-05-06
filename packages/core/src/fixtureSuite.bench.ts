@@ -19,6 +19,10 @@ describe("large cleanup fixtures", () => {
     detectGridCandidates(fake720p.createImage(), { maxScale: 16 });
   });
 
+  bench(`${fake720p.id}: sampled grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
+    detectGridCandidates(fake720p.createImage(), { maxScale: 16, sampling: "sampled" });
+  });
+
   bench(`${fake720p.id}: full cleanup ${formatPixels(fake720p.sourcePixels)}`, () => {
     fixImage(fake720p.createImage(), {
       mode: "single",
@@ -72,6 +76,10 @@ describe("large cleanup fixtures", () => {
 
   bench(`${fake1080p.id}: grid detection ${formatPixels(fake1080p.sourcePixels)}`, () => {
     detectGridCandidates(fake1080p.createImage(), { maxScale: 16 });
+  });
+
+  bench(`${fake1080p.id}: sampled grid detection ${formatPixels(fake1080p.sourcePixels)}`, () => {
+    detectGridCandidates(fake1080p.createImage(), { maxScale: 16, sampling: "sampled" });
   });
 
   bench(`${largeSheet.id}: frame-aware cleanup ${largeSheet.frameCount ?? 0} frames`, () => {

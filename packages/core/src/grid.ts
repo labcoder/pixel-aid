@@ -3,18 +3,21 @@ import { detectSpriteBounds } from "./bounds";
 
 export type GridDetectionOptions = {
   maxScale?: number;
+  sampling?: "full" | "sampled";
+  sampleStep?: number;
 };
 
 export function detectGridCandidates(image: RGBAImage, options: GridDetectionOptions = {}): GridCandidate[] {
   const maxScale = Math.max(1, Math.min(options.maxScale ?? 32, image.width, image.height));
+  const sampleStep = resolveSampleStep(image, options);
   const bounds = detectSpriteBounds(image);
   const cropBounds = hasMeaningfulCrop(bounds, image) ? bounds : undefined;
-  const vertical = verticalEdgeEnergy(image);
-  const horizontal = horizontalEdgeEnergy(image);
+  const vertical = verticalEdgeEnergy(image, sampleStep);
+  const horizontal = horizontalEdgeEnergy(image, sampleStep);
   const runScores = runLengthScores(image, bounds, maxScale);
   const sobelVoting =
     image.width >= 64 || image.height >= 64
-      ? analyzeSobelTileVoting(image, maxScale)
+      ? analyzeSobelTileVoting(image, maxScale, sampleStep)
       : sobelTileVotingFallback("Sobel tile voting skipped for tiny sources");
   const preferSobelVoting = sobelVoting.bestScore >= 0.45;
   const maxRunScore = max(runScores);
@@ -71,6 +74,9 @@ export function detectGridCandidates(image: RGBAImage, options: GridDetectionOpt
       notes.push("Sobel tile voting selected sparse foreground edges");
     } else if (sobelVoting.fallbackReason) {
       notes.push(sobelVoting.fallbackReason);
+    }
+    if (sampleStep > 1) {
+      notes.push(`Sampled detector step ${sampleStep}`);
     }
     const diagnostics: GridCandidateDiagnostics = {
       edgeScore: roundScore(edgeScore),
@@ -174,9 +180,9 @@ function sobelTileVotingFallback(fallbackReason: string): SobelTileVotingAnalysi
   };
 }
 
-function analyzeSobelTileVoting(image: RGBAImage, maxScale: number): SobelTileVotingAnalysis {
+function analyzeSobelTileVoting(image: RGBAImage, maxScale: number, sampleStep: number): SobelTileVotingAnalysis {
   const tileSize = Math.max(16, Math.min(64, Math.max(maxScale * 3, 24)));
-  const tiles = scoreSobelTiles(image, tileSize);
+  const tiles = scoreSobelTiles(image, tileSize, sampleStep);
   if (tiles.length === 0) {
     return sobelTileVotingFallback("Sobel tile voting fallback: no informative edge tiles");
   }
@@ -269,7 +275,7 @@ function sobelDiagnostics(analysis: SobelTileVotingAnalysis, vote: SobelScaleVot
   return diagnostics;
 }
 
-function scoreSobelTiles(image: RGBAImage, tileSize: number): SobelTile[] {
+function scoreSobelTiles(image: RGBAImage, tileSize: number, sampleStep: number): SobelTile[] {
   const tiles: SobelTile[] = [];
   for (let y = 0; y < image.height; y += tileSize) {
     for (let x = 0; x < image.width; x += tileSize) {
@@ -280,7 +286,7 @@ function scoreSobelTiles(image: RGBAImage, tileSize: number): SobelTile[] {
         h: Math.min(tileSize, image.height - y),
         score: 0
       };
-      tile.score = sobelTileEnergy(image, tile);
+      tile.score = sobelTileEnergy(image, tile, sampleStep);
       if (tile.score > 0) {
         tiles.push(tile);
       }
@@ -289,15 +295,15 @@ function scoreSobelTiles(image: RGBAImage, tileSize: number): SobelTile[] {
   return tiles;
 }
 
-function sobelTileEnergy(image: RGBAImage, tile: SobelTile): number {
+function sobelTileEnergy(image: RGBAImage, tile: SobelTile, sampleStep: number): number {
   let energy = 0;
   const xStart = Math.max(1, tile.x);
   const yStart = Math.max(1, tile.y);
   const xEnd = Math.min(image.width - 1, tile.x + tile.w - 1);
   const yEnd = Math.min(image.height - 1, tile.y + tile.h - 1);
 
-  for (let y = yStart; y < yEnd; y += 1) {
-    for (let x = xStart; x < xEnd; x += 1) {
+  for (let y = yStart; y < yEnd; y += sampleStep) {
+    for (let x = xStart; x < xEnd; x += sampleStep) {
       energy += sobelMagnitude(image, x, y);
     }
   }
@@ -656,9 +662,9 @@ function quantizedChannelsKey(r: number, g: number, b: number, a: number): numbe
   return ((r >> 5) << 9) | ((g >> 5) << 6) | ((b >> 5) << 3) | (a >> 5);
 }
 
-function verticalEdgeEnergy(image: RGBAImage): Float64Array {
+function verticalEdgeEnergy(image: RGBAImage, sampleStep: number): Float64Array {
   const energy = new Float64Array(image.width);
-  for (let y = 0; y < image.height; y += 1) {
+  for (let y = 0; y < image.height; y += sampleStep) {
     for (let x = 1; x < image.width; x += 1) {
       const left = (y * image.width + x - 1) * 4;
       const right = (y * image.width + x) * 4;
@@ -669,10 +675,10 @@ function verticalEdgeEnergy(image: RGBAImage): Float64Array {
   return energy;
 }
 
-function horizontalEdgeEnergy(image: RGBAImage): Float64Array {
+function horizontalEdgeEnergy(image: RGBAImage, sampleStep: number): Float64Array {
   const energy = new Float64Array(image.height);
   for (let y = 1; y < image.height; y += 1) {
-    for (let x = 0; x < image.width; x += 1) {
+    for (let x = 0; x < image.width; x += sampleStep) {
       const top = ((y - 1) * image.width + x) * 4;
       const bottom = (y * image.width + x) * 4;
       energy[y] = energy[y]! + pixelDistance(image.data, top, bottom);
@@ -706,6 +712,25 @@ function bestPhase(energy: Float64Array, scale: number): { phase: number; energy
   }
 
   return best;
+}
+
+function resolveSampleStep(image: RGBAImage, options: GridDetectionOptions): number {
+  if (options.sampling !== "sampled") {
+    return 1;
+  }
+
+  if (options.sampleStep !== undefined) {
+    return Math.max(1, Math.min(8, Math.floor(options.sampleStep)));
+  }
+
+  const pixels = image.width * image.height;
+  if (pixels >= 1_500_000) {
+    return 3;
+  }
+  if (pixels >= 450_000) {
+    return 2;
+  }
+  return 1;
 }
 
 function sum(values: Float64Array): number {

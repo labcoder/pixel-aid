@@ -860,6 +860,24 @@ describe("grid detection", () => {
     expect(candidate!.confidence).toBeGreaterThan(0.82);
   });
 
+  test("keeps sampled large-source grid detection aligned with full detection", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const [full] = detectGridCandidates(fixture.image, { maxScale: 16 });
+    const [sampled] = detectGridCandidates(fixture.image, { maxScale: 16, sampling: "sampled", sampleStep: 2 });
+
+    expect(sampled).toMatchObject({
+      outputWidth: full!.outputWidth,
+      outputHeight: full!.outputHeight,
+      scaleX: full!.scaleX,
+      scaleY: full!.scaleY,
+      phaseX: full!.phaseX,
+      phaseY: full!.phaseY,
+      sourceRect: full!.sourceRect
+    });
+    expect(sampled!.confidence).toBeGreaterThan(0.7);
+    expect(sampled!.diagnostics?.notes).toContain("Sampled detector step 2");
+  });
+
   test("attaches structured confidence diagnostics to grid candidates", () => {
     const fixture = createSingleSpriteCleanupFixture();
     const [candidate] = detectGridCandidates(fixture.image, { maxScale: 16 });

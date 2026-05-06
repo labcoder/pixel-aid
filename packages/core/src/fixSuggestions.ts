@@ -61,7 +61,7 @@ export type FixSettingSuggestion = {
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const atlasLayout = detectRegularAtlasLayout(image);
-  let candidates = detectGridCandidates(image, { maxScale: 32 });
+  let candidates = detectSuggestionGridCandidates(image);
   if (atlasLayout && atlasLayout.confidence >= 0.7) {
     candidates = [createAtlasGridCandidate(image, atlasLayout), ...candidates];
   }
@@ -112,7 +112,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const bakedTransparencyDetected = qualityReport.findings.some((finding) => finding.id === "baked-transparency-background");
   if (shouldUseBackgroundCleanedGrid(mode, classification.assetType, bakedTransparencyDetected, suggestedAlpha)) {
     const cleaned = applyAlphaMode(image, "backgroundFloodFill", preset.alphaSettings).image;
-    const cleanedCandidates = detectGridCandidates(cleaned, { maxScale: 32 });
+    const cleanedCandidates = detectSuggestionGridCandidates(cleaned);
     if (cleanedCandidates.length > 0) {
       candidates = cleanedCandidates;
       candidate = chooseSuggestionGrid(cleaned, candidates, mode);
@@ -206,6 +206,10 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     categoryWarnings,
     qualityReport
   };
+}
+
+function detectSuggestionGridCandidates(image: RGBAImage): GridCandidate[] {
+  return detectGridCandidates(image, { maxScale: 32, sampling: "sampled" });
 }
 
 export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: AssetType): FixSettingSuggestion {
