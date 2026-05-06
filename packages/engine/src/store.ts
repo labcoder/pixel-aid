@@ -78,7 +78,8 @@ export function reduceEngineState(state: EngineState, command: EngineCommand): E
   switch (command.type) {
     case "asset.select": {
       const selectedAssetId = selectEngineAsset(Object.values(state.assets), command.assetId);
-      if (selectedAssetId === state.selection.selectedAssetId && state.selection.selectedFrameIndex === 0) {
+      const selectedFrameIndex = selectedAssetId ? 0 : -1;
+      if (selectedAssetId === state.selection.selectedAssetId && state.selection.selectedFrameIndex === selectedFrameIndex) {
         return state;
       }
 
@@ -86,7 +87,7 @@ export function reduceEngineState(state: EngineState, command: EngineCommand): E
         ...state,
         selection: {
           selectedAssetId,
-          selectedFrameIndex: 0
+          selectedFrameIndex
         }
       };
     }
