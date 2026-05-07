@@ -151,6 +151,7 @@ import {
   type EditorPreferences
 } from "./lib/editorPreferences";
 import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
+import { createReactSafeRgbaImage } from "./lib/reactSafeImage";
 import {
   createEditorPerformanceMonitor,
   formatBytes,
@@ -257,6 +258,7 @@ import {
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
 import { createPreviewSurfaceCache } from "./lib/previewSurfaceCache";
 import { formatPaletteText, normalizePaletteBudget, normalizePaletteHex, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
+import { waitForNextPaint, waitForPaints } from "./lib/paintScheduling";
 import {
   addPaletteColor,
   exportPaletteLibraryEntry,
@@ -496,28 +498,6 @@ function createUniquePaletteLibraryId(
   }
 
   return nextId;
-}
-
-function waitForPaints(count = 1): Promise<void> {
-  const frameCount = Math.max(1, count);
-
-  return new Promise((resolve) => {
-    let remaining = frameCount;
-    const tick = () => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        resolve();
-        return;
-      }
-      window.requestAnimationFrame(tick);
-    };
-
-    window.requestAnimationFrame(tick);
-  });
-}
-
-function waitForNextPaint(): Promise<void> {
-  return waitForPaints();
 }
 
 function uint8ArrayToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -1541,6 +1521,10 @@ export function App() {
     () => (selectedAsset ? previewSurfaceCacheRef.current.getSurface({ assetId: selectedAsset.id, role: "source", image: selectedAsset.image }) : null),
     [selectedAsset?.id, selectedAsset?.image]
   );
+  const selectedPreviewImage = useMemo(
+    () => (selectedAsset ? createReactSafeRgbaImage(selectedAsset.image) : null),
+    [selectedAsset?.image]
+  );
   const selectedFixedSurface = useMemo(
     () =>
       selectedAsset && fixResult
@@ -1548,6 +1532,7 @@ export function App() {
         : null,
     [fixResult?.image, selectedAsset?.id]
   );
+  const fixedPreviewImage = useMemo(() => (fixResult ? createReactSafeRgbaImage(fixResult.image) : null), [fixResult?.image]);
   const previewSurfaceStats = previewSurfaceCacheRef.current.getStats();
   const thumbnailSurfaceStats = thumbnailSurfaceCacheRef.current.getStats();
   useEffect(() => {
@@ -2287,6 +2272,7 @@ export function App() {
   const timelineSourceModeLabel =
     timelineViewportSourceMode === "compare" ? "Input and output" : timelineViewportSourceMode === "output" ? "Output" : "Input";
   const previewImage = fixResult?.image ?? selectedAsset?.image ?? null;
+  const previewRenderImage = useMemo(() => (previewImage ? createReactSafeRgbaImage(previewImage) : null), [previewImage]);
   const tilesetDiagnostics = useMemo(
     () =>
       assetType === "tileset" && previewImage && sheetMode
@@ -6793,7 +6779,7 @@ export function App() {
     grid: (
       <>
         <GridCandidateReview
-          image={selectedAsset?.image ?? null}
+          image={selectedPreviewImage}
           candidates={gridCandidates}
           activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY, phaseX: gridPhaseX, phaseY: gridPhaseY }}
           onApply={applyGridCandidate}
@@ -7732,8 +7718,8 @@ export function App() {
               </div>
             </div>
             <TimelineViewportCanvas
-              inputImage={selectedAsset?.image ?? null}
-              outputImage={fixResult?.image ?? null}
+              inputImage={selectedPreviewImage}
+              outputImage={fixedPreviewImage}
               inputSurface={selectedSourceSurface}
               outputSurface={selectedFixedSurface}
               inputPlacements={inputTimelinePlacements}
@@ -7786,8 +7772,8 @@ export function App() {
                 </div>
               </div>
               <SpriteSandboxCanvas
-                inputImage={selectedAsset?.image ?? null}
-                outputImage={fixResult?.image ?? null}
+                inputImage={selectedPreviewImage}
+                outputImage={fixedPreviewImage}
                 inputSurface={selectedSourceSurface}
                 outputSurface={selectedFixedSurface}
                 inputPlacements={inputTimelinePlacements}
@@ -7809,8 +7795,8 @@ export function App() {
           </div>
         ) : (
           <ViewportCanvas
-            sourceImage={selectedAsset?.image ?? null}
-            fixedImage={fixResult?.image ?? null}
+            sourceImage={selectedPreviewImage}
+            fixedImage={fixedPreviewImage}
             sourceSurface={selectedSourceSurface}
             fixedSurface={selectedFixedSurface}
             fixedSourceRect={fixedComparisonSourceRect}
@@ -8430,7 +8416,7 @@ export function App() {
               </div>
               <div className="tile-preview-panel">
                 <TileRepeatPreviewCanvas
-                  image={previewImage}
+                  image={previewRenderImage}
                   layout={tileRepeatPreviewLayout}
                   seamIssueGuideLines={tileRepeatPreviewSeamGuideLines}
                 />

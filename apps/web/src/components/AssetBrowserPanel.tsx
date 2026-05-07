@@ -3,6 +3,7 @@ import { getAssetTypeDefinition } from "@pixelaid/shared";
 
 import type { AssetDirtyState } from "../lib/assetSessionDirty";
 import type { ImportedImageAsset } from "../lib/imageDecode";
+import { createReactSafeRgbaImage } from "../lib/reactSafeImage";
 import { AssetThumbnail } from "./AssetThumbnail";
 
 export type AssetBrowserMenuState = {
@@ -110,7 +111,7 @@ export function AssetBrowserPanel({
                       onOpenAssetMenu({ assetId: asset.id, x: event.clientX, y: event.clientY });
                     }}
                   >
-                    <AssetThumbnail image={asset.image} label={asset.name} surface={getThumbnailSurface(asset)} />
+                    <AssetThumbnail image={createReactSafeRgbaImage(asset.image)} label={asset.name} surface={getThumbnailSurface(asset)} />
                     <span className="asset-meta">
                       <strong>{asset.name}</strong>
                       <small>
