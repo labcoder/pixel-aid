@@ -3161,10 +3161,12 @@ export function App() {
     const resolvedAssetType = targetAssetSource === "manual" ? targetAssetType : suggestion.assetType;
     const resolvedMode = assetTypeToMode(resolvedAssetType);
     const preset = getAssetTypeCleanupPreset(resolvedAssetType);
-    const cleanupDefaults = targetAssetSource === "manual" ? preset : suggestion;
+    const useSuggestedStrictSheetCleanup = resolvedMode === "spriteSheet" && suggestion.matteCleanup;
+    const cleanupDefaults = targetAssetSource === "manual" && !useSuggestedStrictSheetCleanup ? preset : suggestion;
     const definition = getAssetTypeDefinition(resolvedAssetType);
     const usesSpriteCleanup = resolvedAssetType === "sprite" || resolvedAssetType === "icon";
-    const resolvedDownscale = targetAssetSource === "manual" && !usesSpriteCleanup ? preset.downscale : suggestion.downscale;
+    const resolvedDownscale =
+      targetAssetSource === "manual" && !usesSpriteCleanup && !useSuggestedStrictSheetCleanup ? preset.downscale : suggestion.downscale;
     const resolvedOutlineMode = usesSpriteCleanup ? suggestion.outlineMode : "none";
     const resolvedOutlineSourceColors = usesSpriteCleanup ? suggestion.outlineSourceColors : [];
     const resolvedContrastExpansionEnabled = usesSpriteCleanup ? suggestion.contrastExpansionEnabled : false;
@@ -3176,9 +3178,11 @@ export function App() {
     const resolvedCategoryConfidence = targetAssetSource === "manual" ? 1 : suggestion.categoryConfidence;
     const layout = resolvedMode === "spriteSheet" && suggestion.mode === "spriteSheet" ? suggestion.sheetLayout : undefined;
     const resolvedAlpha =
-      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon" ? preset.alpha : suggestion.alpha;
+      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon" && !useSuggestedStrictSheetCleanup
+        ? preset.alpha
+        : suggestion.alpha;
     const resolvedAlphaSettings =
-      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon"
+      targetAssetSource === "manual" && resolvedAssetType !== "sprite" && resolvedAssetType !== "icon" && !useSuggestedStrictSheetCleanup
         ? preset.alphaSettings
         : suggestion.alphaSettings;
     const layoutFrames = layout?.frames ?? [];
@@ -3245,7 +3249,7 @@ export function App() {
     setDownscale(resolvedDownscale);
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
-    setPaletteBudget(targetAssetSource === "manual" ? preset.maxColors : suggestion.maxColors);
+    setPaletteBudget(targetAssetSource === "manual" && !useSuggestedStrictSheetCleanup ? preset.maxColors : suggestion.maxColors);
     if (paletteMode === "fixed" && fixedPaletteColors.length === 0) {
       setPaletteMode("auto");
       setCustomPaletteText("");
@@ -3676,6 +3680,7 @@ export function App() {
       selectedColors: selectedOutlineSourceColors,
       candidates: outlineSourceCandidates
     });
+    const useMatteAwareMorphology = mode === "spriteSheet" && alpha === "binary" && inferNativeScale && maxColors <= 16;
     const options: FixOptions = {
       mode,
       assetType,
@@ -3716,6 +3721,15 @@ export function App() {
         removeHalos,
         denoiseStrength,
         inferNativeScale,
+        ...(useMatteAwareMorphology
+          ? {
+              morphology: {
+                enabled: true,
+                matteCleanup: true,
+                alphaThreshold
+              }
+            }
+          : {}),
         ...(contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
         outlineMode,
         outlineSize,

@@ -27,6 +27,8 @@ export type MorphologyCleanupResult = {
 const DEFAULT_ALPHA_THRESHOLD = 1;
 const DEFAULT_MAX_HOLE_PIXELS = 1;
 const DEFAULT_MAX_COMPONENT_PIXELS = 1;
+const MATTE_PEEL_ITERATIONS = 4;
+const MAX_MATTE_HINT_COLORS = 8;
 
 export function openMask(mask: Uint8Array, width: number, height: number, options: MorphologyMaskOptions = {}): Uint8Array {
   return dilateMask(erodeMask(mask, width, height, options), width, height, options);
@@ -207,10 +209,22 @@ export function applyMorphologyCleanup(
   diagnostics.pinholePixels = artifactDiagnostics.pinholePixels;
   diagnostics.tinyComponentPixels = artifactDiagnostics.tinyComponentPixels;
   diagnostics.brokenOutlinePixels = artifactDiagnostics.brokenOutlinePixels;
+
+  let output = applyMaskToAlphaImage(image, sourceMask, currentMask, alphaThreshold);
+  if (settings.matteCleanup) {
+    const matteResult = applyMatteCleanup(output, alphaThreshold);
+    output = matteResult.image;
+    diagnostics.mattePixels = matteResult.clearedPixels;
+    diagnostics.matteColorCount = matteResult.hintColorCount;
+    if (matteResult.clearedPixels > 0) {
+      diagnostics.operationCount += 1;
+    }
+  }
+
   addMorphologyWarnings(diagnostics, settings);
 
   return {
-    image: applyMaskToAlphaImage(image, sourceMask, currentMask, alphaThreshold),
+    image: output,
     diagnostics
   };
 }
@@ -224,6 +238,11 @@ function addMorphologyWarnings(diagnostics: MorphologyDiagnostics, settings: Mor
   if (diagnostics.removedComponentPixels > 0) {
     diagnostics.warnings.push(
       `Removed ${diagnostics.removedComponentPixels} tiny component pixel${diagnostics.removedComponentPixels === 1 ? "" : "s"} during morphology cleanup.`
+    );
+  }
+  if (diagnostics.mattePixels > 0) {
+    diagnostics.warnings.push(
+      `Cleared ${diagnostics.mattePixels} matte fringe pixel${diagnostics.mattePixels === 1 ? "" : "s"} during morphology cleanup.`
     );
   }
   if (settings.removeTinyComponents && (settings.preserveSinglePixelDetails ?? true) && diagnostics.tinyComponentPixels > 0) {
@@ -446,14 +465,329 @@ function fillAddedSubjectPixel(
   output.data[offset + 3] = 255;
 }
 
+type MatteCleanupResult = {
+  image: RGBAImage;
+  clearedPixels: number;
+  hintColorCount: number;
+};
+
+type MatteHints = {
+  colors: Uint8Array;
+  masks: Uint8Array;
+  count: number;
+};
+
+type MatteCandidateKind = "none" | "hint" | "fallback";
+
+function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteCleanupResult {
+  const output = cloneImage(image);
+  const outsideMask = buildOutsideMask(output, alphaThreshold);
+  const hints = collectMatteHints(image, alphaThreshold);
+  let clearedPixels = 0;
+
+  for (let pass = 0; pass < MATTE_PEEL_ITERATIONS; pass += 1) {
+    const toClear = new Uint8Array(image.width * image.height);
+    let passCleared = 0;
+
+    for (let y = 0; y < image.height; y += 1) {
+      for (let x = 0; x < image.width; x += 1) {
+        const index = y * image.width + x;
+        if (outsideMask[index] === 1) {
+          continue;
+        }
+
+        const offset = index * 4;
+        if (output.data[offset + 3]! < alphaThreshold) {
+          continue;
+        }
+
+        const candidate = classifyMatteCandidate(output.data, offset, hints);
+        if (candidate === "none") {
+          continue;
+        }
+
+        if (!hasOutsideNeighbor(outsideMask, image.width, image.height, x, y)) {
+          continue;
+        }
+
+        if (candidate === "fallback" && hasStrongLocalColorSupport(output, outsideMask, x, y, alphaThreshold)) {
+          continue;
+        }
+
+        toClear[index] = 1;
+        passCleared += 1;
+      }
+    }
+
+    if (passCleared === 0) {
+      break;
+    }
+
+    for (let index = 0; index < toClear.length; index += 1) {
+      if (toClear[index] === 0) {
+        continue;
+      }
+      const offset = index * 4;
+      output.data[offset] = 0;
+      output.data[offset + 1] = 0;
+      output.data[offset + 2] = 0;
+      output.data[offset + 3] = 0;
+      outsideMask[index] = 1;
+    }
+
+    clearedPixels += passCleared;
+  }
+
+  return { image: output, clearedPixels, hintColorCount: hints.count };
+}
+
+function buildOutsideMask(image: RGBAImage, alphaThreshold: number): Uint8Array {
+  const mask = new Uint8Array(image.width * image.height);
+  for (let index = 0; index < mask.length; index += 1) {
+    mask[index] = image.data[index * 4 + 3]! < alphaThreshold ? 1 : 0;
+  }
+  return mask;
+}
+
+function collectMatteHints(image: RGBAImage, alphaThreshold: number): MatteHints {
+  const bucketCounts = new Uint32Array(4096);
+  const bucketR = new Uint32Array(4096);
+  const bucketG = new Uint32Array(4096);
+  const bucketB = new Uint32Array(4096);
+
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! >= alphaThreshold) {
+      continue;
+    }
+
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (!isMatteHintColor(r, g, b)) {
+      continue;
+    }
+
+    const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+    bucketCounts[bucket] = bucketCounts[bucket]! + 1;
+    bucketR[bucket] = bucketR[bucket]! + r;
+    bucketG[bucket] = bucketG[bucket]! + g;
+    bucketB[bucket] = bucketB[bucket]! + b;
+  }
+
+  const colors = new Uint8Array(MAX_MATTE_HINT_COLORS * 3);
+  const masks = new Uint8Array(MAX_MATTE_HINT_COLORS);
+  let count = 0;
+
+  while (count < MAX_MATTE_HINT_COLORS) {
+    let bestBucket = -1;
+    let bestCount = 0;
+    for (let bucket = 0; bucket < bucketCounts.length; bucket += 1) {
+      if (bucketCounts[bucket]! > bestCount) {
+        bestBucket = bucket;
+        bestCount = bucketCounts[bucket]!;
+      }
+    }
+
+    if (bestBucket < 0 || bestCount === 0) {
+      break;
+    }
+
+    const colorOffset = count * 3;
+    const r = Math.round(bucketR[bestBucket]! / bestCount);
+    const g = Math.round(bucketG[bestBucket]! / bestCount);
+    const b = Math.round(bucketB[bestBucket]! / bestCount);
+    const mask = chromaFamilyMask(r, g, b);
+    if (mask !== 0 && !containsMatteFamily(masks, count, mask)) {
+      colors[colorOffset] = r;
+      colors[colorOffset + 1] = g;
+      colors[colorOffset + 2] = b;
+      masks[count] = mask;
+      count += 1;
+    }
+    bucketCounts[bestBucket] = 0;
+  }
+
+  return { colors, masks, count };
+}
+
+function containsMatteFamily(masks: Uint8Array, count: number, mask: number): boolean {
+  for (let index = 0; index < count; index += 1) {
+    if (masks[index] === mask) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: MatteHints): MatteCandidateKind {
+  const r = data[offset]!;
+  const g = data[offset + 1]!;
+  const b = data[offset + 2]!;
+  if (isProtectedSubjectColor(r, g, b)) {
+    return "none";
+  }
+
+  if (hints.count > 0 && matchesMatteHint(r, g, b, hints)) {
+    return "hint";
+  }
+
+  return isArtificialChromaMatteColor(r, g, b) ? "fallback" : "none";
+}
+
+function matchesMatteHint(r: number, g: number, b: number, hints: MatteHints): boolean {
+  const family = chromaFamilyMask(r, g, b);
+  if (family === 0) {
+    return false;
+  }
+
+  for (let index = 0; index < hints.count; index += 1) {
+    if (hints.masks[index] !== family) {
+      continue;
+    }
+
+    const colorOffset = index * 3;
+    const hr = hints.colors[colorOffset]!;
+    const hg = hints.colors[colorOffset + 1]!;
+    const hb = hints.colors[colorOffset + 2]!;
+    const dr = r - hr;
+    const dg = g - hg;
+    const db = b - hb;
+    if (dr * dr + dg * dg + db * db <= 150 * 150 * 3) {
+      return true;
+    }
+
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const hintMax = Math.max(hr, hg, hb);
+    const hintMin = Math.min(hr, hg, hb);
+    if (max >= 64 && hintMax >= 48 && min <= 96 && hintMin <= 96) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isMatteHintColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  return max >= 48 && spread >= 32 && colorfulness(r, g, b) >= 64 && !isProtectedSubjectColor(r, g, b);
+}
+
+function isArtificialChromaMatteColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  return max >= 150 && spread >= 96 && colorfulness(r, g, b) >= 180;
+}
+
+function isProtectedSubjectColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const brightness = r + g + b;
+  return (max <= 72 && spread <= 56) || (brightness >= 620 && spread <= 56);
+}
+
+function chromaFamilyMask(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  if (max < 48 || spread < 32) {
+    return 0;
+  }
+
+  const threshold = max - Math.max(24, Math.round(spread * 0.35));
+  let mask = 0;
+  if (r >= threshold) {
+    mask |= 1;
+  }
+  if (g >= threshold) {
+    mask |= 2;
+  }
+  if (b >= threshold) {
+    mask |= 4;
+  }
+  return mask;
+}
+
+function colorfulness(r: number, g: number, b: number): number {
+  return Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+}
+
+function hasOutsideNeighbor(mask: Uint8Array, width: number, height: number, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= width || ny >= height || mask[ny * width + nx] === 1) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function hasStrongLocalColorSupport(image: RGBAImage, outsideMask: Uint8Array, x: number, y: number, alphaThreshold: number): boolean {
+  const offset = (y * image.width + x) * 4;
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const family = chromaFamilyMask(r, g, b);
+  let similar = 0;
+
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const neighbor = ny * image.width + nx;
+      if (outsideMask[neighbor] === 1) {
+        continue;
+      }
+      const neighborOffset = neighbor * 4;
+      if (image.data[neighborOffset + 3]! < alphaThreshold) {
+        continue;
+      }
+      if (chromaFamilyMask(image.data[neighborOffset]!, image.data[neighborOffset + 1]!, image.data[neighborOffset + 2]!) !== family) {
+        continue;
+      }
+
+      const dr = r - image.data[neighborOffset]!;
+      const dg = g - image.data[neighborOffset + 1]!;
+      const db = b - image.data[neighborOffset + 2]!;
+      if (dr * dr + dg * dg + db * db <= 72 * 72 * 3) {
+        similar += 1;
+      }
+    }
+  }
+
+  return similar >= 3;
+}
+
 function createMorphologyDiagnostics(settings: MorphologyCleanupSettings | undefined): MorphologyDiagnostics {
   return {
     enabled: settings?.enabled ?? false,
-    target: "alpha",
+    target: settings?.matteCleanup ? "alpha+matte" : "alpha",
     operationCount: 0,
     openedPixels: 0,
     closedPixels: 0,
     filledHolePixels: 0,
+    mattePixels: 0,
+    matteColorCount: 0,
     removedComponentPixels: 0,
     pinholePixels: 0,
     tinyComponentPixels: 0,

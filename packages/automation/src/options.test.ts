@@ -136,6 +136,7 @@ describe("automation option normalization", () => {
         morphology: {
           enabled: true,
           fillTinyHoles: true,
+          matteCleanup: true,
           removeTinyComponents: true,
           maxHolePixels: 1,
           maxComponentPixels: 2,
@@ -150,6 +151,7 @@ describe("automation option normalization", () => {
     expect(result.value.cleanup.morphology).toEqual({
       enabled: true,
       fillTinyHoles: true,
+      matteCleanup: true,
       removeTinyComponents: true,
       maxHolePixels: 1,
       maxComponentPixels: 2,

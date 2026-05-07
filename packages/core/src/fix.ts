@@ -1,5 +1,6 @@
 import type {
   AlphaCleanupDiagnostics,
+  AlphaCleanupSettings,
   FixOptions,
   GridCandidate,
   GridDriftDiagnostics,
@@ -83,7 +84,9 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   assertNotCancelled(runtime?.signal);
-  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () => applyAlphaMode(downsampled, options.alpha, options.alphaSettings));
+  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () =>
+    applyAlphaMode(downsampled, options.alpha, getAlphaSettingsForPreCleanup(options))
+  );
   const alphaDiagnostics = sourceAlphaResult ? mergeAlphaDiagnostics(sourceAlphaResult.diagnostics, alphaResult.diagnostics) : alphaResult.diagnostics;
   const alphaCleaned = alphaResult.image;
   const outlinePadding = getAutoCroppedOutlinePadding(options, gridWithDrift);
@@ -92,7 +95,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const haloCleaned = haloResult.image;
   const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
-  const morphologyCleaned = morphologyResult.image;
+  const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
   const outlineResult = measurePhase(phaseTimer, "outline-cleanup", () =>
     applyOutlineCleanupDetailed(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
@@ -364,9 +367,13 @@ function fixSheetFrameSource(
     };
   }
 
-  const alphaCleaned = measurePhase(progress.phaseTimer, "alpha-cleanup", () =>
-    applyAlphaMode(frameSource, options.alpha, options.alphaSettings).image
-  );
+  const alphaCleaned = measurePhase(progress.phaseTimer, "alpha-cleanup", () => {
+    const prepared = applyAlphaMode(frameSource, options.alpha, getAlphaSettingsForPreCleanup(options)).image;
+    if (!options.cleanup.morphology?.enabled || !options.cleanup.morphology.matteCleanup) {
+      return prepared;
+    }
+    return decontaminateTransparentRgbAfterMatteCleanup(applyMorphologyCleanup(prepared, options.cleanup.morphology).image, options);
+  });
   const native = measurePhase(progress.phaseTimer, "downsampling", () =>
     downsampleBlocks(
       alphaCleaned,
@@ -588,6 +595,38 @@ type CleanFixedImageResult = {
   morphology?: MorphologyDiagnostics;
 };
 
+function getAlphaSettingsForPreCleanup(options: FixOptions): AlphaCleanupSettings | undefined {
+  if (!shouldDeferTransparentRgbDecontamination(options)) {
+    return options.alphaSettings;
+  }
+
+  return {
+    ...options.alphaSettings,
+    decontaminateRgb: false
+  };
+}
+
+function decontaminateTransparentRgbAfterMatteCleanup(image: RGBAImage, options: FixOptions): RGBAImage {
+  if (!shouldDeferTransparentRgbDecontamination(options)) {
+    return image;
+  }
+
+  return applyAlphaMode(image, "preserve", {
+    threshold: 1,
+    decontaminateRgb: true,
+    transparentRgb: options.alphaSettings?.transparentRgb ?? "#000000"
+  }).image;
+}
+
+function shouldDeferTransparentRgbDecontamination(options: FixOptions): boolean {
+  return (
+    options.alpha !== "preserve" &&
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true &&
+    (options.alphaSettings?.decontaminateRgb ?? true)
+  );
+}
+
 function cleanFixedImage(
   image: RGBAImage,
   options: FixOptions,
@@ -595,7 +634,9 @@ function cleanFixedImage(
   runtime?: FixRuntimeOptions
 ): CleanFixedImageResult {
   assertNotCancelled(runtime?.signal);
-  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () => applyAlphaMode(image, options.alpha, options.alphaSettings));
+  const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () =>
+    applyAlphaMode(image, options.alpha, getAlphaSettingsForPreCleanup(options))
+  );
   assertNotCancelled(runtime?.signal);
   const haloCleaned = measurePhase(phaseTimer, "halo-removal", () => applyHaloRemoval(alphaResult.image, { enabled: options.cleanup.removeHalos ?? false }));
   assertNotCancelled(runtime?.signal);
@@ -603,8 +644,9 @@ function cleanFixedImage(
   assertNotCancelled(runtime?.signal);
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   assertNotCancelled(runtime?.signal);
+  const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
   const outlined = measurePhase(phaseTimer, "outline-cleanup", () =>
-    applyOutlineCleanup(morphologyResult.image, options.cleanup.outlineMode ?? "none", {
+    applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
       sourceColors: options.cleanup.outlineSourceColors,
       alpha: options.cleanup.outlineAlpha,
@@ -679,10 +721,13 @@ function mergeMorphologyDiagnostics(
   return {
     ...current,
     enabled: current.enabled || next.enabled,
+    target: current.target === "alpha+matte" || next.target === "alpha+matte" ? "alpha+matte" : "alpha",
     operationCount: current.operationCount + next.operationCount,
     openedPixels: current.openedPixels + next.openedPixels,
     closedPixels: current.closedPixels + next.closedPixels,
     filledHolePixels: current.filledHolePixels + next.filledHolePixels,
+    mattePixels: current.mattePixels + next.mattePixels,
+    matteColorCount: Math.max(current.matteColorCount, next.matteColorCount),
     removedComponentPixels: current.removedComponentPixels + next.removedComponentPixels,
     pinholePixels: current.pinholePixels + next.pinholePixels,
     tinyComponentPixels: current.tinyComponentPixels + next.tinyComponentPixels,

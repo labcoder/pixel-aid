@@ -392,6 +392,7 @@ function normalizeMorphology(input: MorphologyCleanupSettings | undefined): Auto
   assignBoolean(morphology, "open", input.open);
   assignBoolean(morphology, "close", input.close);
   assignBoolean(morphology, "fillTinyHoles", input.fillTinyHoles);
+  assignBoolean(morphology, "matteCleanup", input.matteCleanup);
   assignBoolean(morphology, "removeTinyComponents", input.removeTinyComponents);
   assignBoolean(morphology, "preserveSinglePixelDetails", input.preserveSinglePixelDetails);
 

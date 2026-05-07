@@ -403,6 +403,7 @@ export type MorphologyCleanupSettings = {
   open?: boolean;
   close?: boolean;
   fillTinyHoles?: boolean;
+  matteCleanup?: boolean;
   removeTinyComponents?: boolean;
   maxHolePixels?: number;
   maxComponentPixels?: number;
@@ -413,11 +414,13 @@ export type MorphologyCleanupSettings = {
 
 export type MorphologyDiagnostics = {
   enabled: boolean;
-  target: "alpha";
+  target: "alpha" | "alpha+matte";
   operationCount: number;
   openedPixels: number;
   closedPixels: number;
   filledHolePixels: number;
+  mattePixels: number;
+  matteColorCount: number;
   removedComponentPixels: number;
   pinholePixels: number;
   tinyComponentPixels: number;

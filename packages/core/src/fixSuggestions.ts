@@ -43,6 +43,7 @@ export type FixSettingSuggestion = {
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
+  matteCleanup: boolean;
   denoiseStrength: number;
   inferNativeScale: boolean;
   contrastExpansionEnabled: boolean;
@@ -104,9 +105,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
-  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength)
-    : preset.denoiseStrength;
+  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
   const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
   const suggestedMaxColors = strictSourceSheetMaxColors;
   let qualityReport = analyzeQualityReport(image, {
@@ -203,6 +202,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     jaggyCleanup: cleanup.jaggyCleanup,
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
     removeHalos: cleanup.removeHalos,
+    matteCleanup: cleanup.matteCleanup,
     denoiseStrength: cleanup.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     contrastExpansionEnabled,
@@ -243,9 +243,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
-  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup
-    ? suggestStrictSourceSheetDenoiseStrength(preset.denoiseStrength)
-    : preset.denoiseStrength;
+  const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
       ? scaleSheetLayoutDetection(detectedSheetLayout, suggestion.gridScaleX, suggestion.gridScaleY)
@@ -267,7 +265,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     removeOrphans: sourceSizedSheetPreservation ? false : preset.removeOrphans,
     jaggyCleanup: sourceSizedSheetPreservation ? false : preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
-    removeHalos: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : preset.removeHalos,
+    removeHalos: strictSourceSheetCleanup ? false : sourceSizedSheetPreservation ? false : preset.removeHalos,
+    matteCleanup: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup,
     denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
@@ -359,8 +358,8 @@ function suggestStrictSourceSheetMaxColors(maxColors: number): number {
   return Math.min(maxColors, 16);
 }
 
-function suggestStrictSourceSheetDenoiseStrength(denoiseStrength: number): number {
-  return Math.max(denoiseStrength, 20);
+function suggestStrictSourceSheetDenoiseStrength(): number {
+  return 0;
 }
 
 function suggestDownscaleMethod(input: {
@@ -437,13 +436,14 @@ function suggestCleanupSettings(
   strictSourceSheetCleanup = false,
   strictSourceSheetDenoiseStrength?: number,
   sourceSizedSheetPreservation = false
-): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "denoiseStrength"> {
+): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "matteCleanup" | "denoiseStrength"> {
   if (strictSourceSheetCleanup) {
     return {
       removeOrphans: true,
       jaggyCleanup: true,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
-      removeHalos: true,
+      removeHalos: false,
+      matteCleanup: true,
       denoiseStrength: strictSourceSheetDenoiseStrength ?? Math.max(preset.denoiseStrength, 45)
     };
   }
@@ -454,6 +454,7 @@ function suggestCleanupSettings(
       jaggyCleanup: false,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
+      matteCleanup: false,
       denoiseStrength: 0
     };
   }
@@ -464,6 +465,7 @@ function suggestCleanupSettings(
       jaggyCleanup: preset.jaggyCleanup,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
+      matteCleanup: false,
       denoiseStrength: 0
     };
   }
@@ -479,6 +481,7 @@ function suggestCleanupSettings(
       jaggyCleanup: false,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
+      matteCleanup: false,
       denoiseStrength: 0
     };
   }
@@ -488,6 +491,7 @@ function suggestCleanupSettings(
     jaggyCleanup: preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
     removeHalos: preset.removeHalos,
+    matteCleanup: false,
     denoiseStrength: preset.denoiseStrength
   };
 }

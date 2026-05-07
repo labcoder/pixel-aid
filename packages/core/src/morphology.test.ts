@@ -51,6 +51,57 @@ function alphaImage(rows: readonly string[]): RGBAImage {
   return { width, height, data };
 }
 
+type Pixel = readonly [number, number, number, number];
+
+function createSolidImage(width: number, height: number, pixel: Pixel): RGBAImage {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let index = 0; index < width * height; index += 1) {
+    writeTestPixel(data, index * 4, pixel);
+  }
+  return { width, height, data };
+}
+
+function setTestPixel(image: RGBAImage, x: number, y: number, pixel: Pixel): void {
+  writeTestPixel(image.data, (y * image.width + x) * 4, pixel);
+}
+
+function getTestPixel(image: RGBAImage, x: number, y: number): Pixel {
+  const offset = (y * image.width + x) * 4;
+  return [
+    image.data[offset]!,
+    image.data[offset + 1]!,
+    image.data[offset + 2]!,
+    image.data[offset + 3]!
+  ];
+}
+
+function writeTestPixel(data: Uint8ClampedArray, offset: number, pixel: Pixel): void {
+  data[offset] = pixel[0];
+  data[offset + 1] = pixel[1];
+  data[offset + 2] = pixel[2];
+  data[offset + 3] = pixel[3];
+}
+
+function countVisibleChromaMattePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const alpha = image.data[offset + 3]!;
+    if (alpha === 0) {
+      continue;
+    }
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturatedWrongMatte = max >= 160 && max - min >= 120 && (Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r)) >= 260;
+    if (saturatedWrongMatte) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 describe("binary mask morphology", () => {
   test("openMask removes isolated noise without erasing a solid subject block", () => {
     const source = maskFromRows(["#.....", "..###.", "..###.", "..###.", "......"]);
@@ -179,5 +230,130 @@ describe("alpha-scoped morphology cleanup", () => {
 
     expect(report.recommendations.some((item) => item.id === "morphology-cleanup")).toBe(true);
     expect(report.findings.some((item) => item.recommendationId === "morphology-cleanup")).toBe(true);
+  });
+});
+
+describe("matte-aware morphology cleanup", () => {
+  test("clears saturated matte fringe without erasing dark outlines or pale subject pixels", () => {
+    const transparentMagenta: Pixel = [255, 0, 255, 0];
+    const matteMagenta: Pixel = [255, 0, 255, 255];
+    const matteGreen: Pixel = [0, 220, 0, 255];
+    const outline: Pixel = [12, 11, 18, 255];
+    const paleSubject: Pixel = [244, 244, 236, 255];
+    const cloak: Pixel = [38, 52, 82, 255];
+    const image = createSolidImage(7, 5, transparentMagenta);
+
+    setTestPixel(image, 2, 1, outline);
+    setTestPixel(image, 3, 1, paleSubject);
+    setTestPixel(image, 4, 1, outline);
+    setTestPixel(image, 1, 2, matteMagenta);
+    setTestPixel(image, 2, 2, outline);
+    setTestPixel(image, 3, 2, cloak);
+    setTestPixel(image, 4, 2, outline);
+    setTestPixel(image, 5, 2, matteGreen);
+    setTestPixel(image, 2, 3, outline);
+    setTestPixel(image, 3, 3, outline);
+    setTestPixel(image, 4, 3, outline);
+
+    const result = applyMorphologyCleanup(image, {
+      enabled: true,
+      matteCleanup: true,
+      alphaThreshold: 128
+    });
+
+    expect(getTestPixel(result.image, 1, 2)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 5, 2)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 2, 2)).toEqual(outline);
+    expect(getTestPixel(result.image, 3, 1)).toEqual(paleSubject);
+    expect(getTestPixel(result.image, 3, 2)).toEqual(cloak);
+    expect(result.diagnostics.mattePixels).toBe(2);
+    expect(result.diagnostics.target).toBe("alpha+matte");
+  });
+
+  test("fixImage keeps strict 16-color cleanup from preserving visible matte colors", () => {
+    const transparent: Pixel = [255, 0, 255, 0];
+    const source = createSolidImage(5, 5, transparent);
+    const outline: Pixel = [10, 10, 14, 255];
+    const subject: Pixel = [238, 238, 232, 255];
+
+    for (let y = 1; y <= 3; y += 1) {
+      setTestPixel(source, 1, y, [255, 0, 255, 255]);
+      setTestPixel(source, 3, y, [0, 220, 0, 255]);
+    }
+    setTestPixel(source, 2, 0, [0, 0, 220, 255]);
+    setTestPixel(source, 2, 1, outline);
+    setTestPixel(source, 2, 2, subject);
+    setTestPixel(source, 2, 3, outline);
+
+    const options: FixOptions = {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 5,
+      targetHeight: 5,
+      maxColors: 16,
+      grid: { detect: "manual", scale: 1 },
+      downscale: "dominant",
+      alpha: "binary",
+      alphaSettings: { threshold: 128, decontaminateRgb: true },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        morphology: {
+          enabled: true,
+          matteCleanup: true,
+          alphaThreshold: 128
+        }
+      }
+    };
+
+    const result = fixImage(source, options);
+
+    expect(countVisibleChromaMattePixels(result.image)).toBe(0);
+    expect(result.palette.length).toBeLessThanOrEqual(16);
+    expect(result.diagnostics?.morphology?.mattePixels).toBeGreaterThanOrEqual(7);
+  });
+
+  test("fixImage uses low-alpha matte colors as hints before transparent RGB decontamination", () => {
+    const transparentPurple: Pixel = [96, 0, 96, 0];
+    const source = createSolidImage(5, 5, transparentPurple);
+    const darkPurpleMatte: Pixel = [96, 0, 96, 255];
+    const outline: Pixel = [12, 12, 16, 255];
+    const subject: Pixel = [238, 238, 232, 255];
+
+    setTestPixel(source, 1, 2, darkPurpleMatte);
+    setTestPixel(source, 2, 1, outline);
+    setTestPixel(source, 2, 2, subject);
+    setTestPixel(source, 2, 3, outline);
+
+    const result = fixImage(source, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 5,
+      targetHeight: 5,
+      maxColors: 16,
+      grid: { detect: "manual", scale: 1 },
+      downscale: "dominant",
+      alpha: "binary",
+      alphaSettings: { threshold: 128, decontaminateRgb: true },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        morphology: {
+          enabled: true,
+          matteCleanup: true,
+          alphaThreshold: 128
+        }
+      }
+    });
+
+    expect(getTestPixel(result.image, 1, 2)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 2, 2)).toEqual(subject);
+    expect(result.diagnostics?.morphology?.matteColorCount).toBeGreaterThan(0);
   });
 });

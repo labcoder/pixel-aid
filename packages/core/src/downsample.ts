@@ -220,6 +220,10 @@ function dominantBlock(
 ): { pixel: [number, number, number, number]; dominant: DominantResult } {
   let total = 0;
   let alphaTotal = 0;
+  let transparentR = 0;
+  let transparentG = 0;
+  let transparentB = 0;
+  let transparentCount = 0;
   let bestBucket = 0;
   let bestCount = 0;
   resetDominantScratch(scratch);
@@ -231,6 +235,10 @@ function dominantBlock(
       alphaTotal += alpha;
       total += 1;
       if (alpha < 16) {
+        transparentR += image.data[offset]!;
+        transparentG += image.data[offset + 1]!;
+        transparentB += image.data[offset + 2]!;
+        transparentCount += 1;
         continue;
       }
 
@@ -255,7 +263,14 @@ function dominantBlock(
         clampByte(scratch.sumB[bestBucket]! / bestCount),
         alpha
       ] as [number, number, number, number])
-    : unpackRgb(bestColor, alpha);
+    : transparentCount > 0
+      ? ([
+          clampByte(transparentR / transparentCount),
+          clampByte(transparentG / transparentCount),
+          clampByte(transparentB / transparentCount),
+          alpha
+        ] as [number, number, number, number])
+      : unpackRgb(bestColor, alpha);
   return {
     pixel,
     dominant: {
