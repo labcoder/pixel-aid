@@ -1,6 +1,7 @@
 import type { GridCandidate } from "@pixelaid/shared";
 
-const emptyGridCandidates = Object.freeze([]) as GridCandidate[];
+const emptyGridCandidates: GridCandidate[] = [];
+Object.freeze(emptyGridCandidates);
 
 export function selectCachedGridCandidates(cache: Record<string, GridCandidate[]>, cacheKey: string): GridCandidate[] {
   if (!cacheKey) {
