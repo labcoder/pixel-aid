@@ -1164,13 +1164,16 @@ button:focus-visible {
 .viewport-panel {
   grid-area: viewport;
   min-width: 0;
+  min-height: 0;
   position: relative;
   display: grid;
-  grid-template-rows: 42px minmax(0, 1fr);
+  grid-template-rows: 42px auto minmax(0, 1fr);
+  overflow: hidden;
   background: #0f1010;
 }
 
 .timeline-viewport-shell {
+  grid-row: 3;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -1366,6 +1369,7 @@ button:focus-visible {
 }
 
 .diagnostic-overlay-bar {
+  grid-row: 2;
   min-height: 34px;
   display: flex;
   align-items: center;
@@ -1437,6 +1441,7 @@ button:focus-visible {
 }
 
 .viewport-canvas-wrap {
+  grid-row: 3;
   position: relative;
   min-width: 0;
   min-height: 0;
