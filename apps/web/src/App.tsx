@@ -188,6 +188,7 @@ import {
   targetSizePresets
 } from "./lib/fixControls";
 import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
+import { selectCachedGridCandidates } from "./lib/gridCandidateCache";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
 import { moveFrameBySourceDelta, resizeFrameBySourceDelta } from "./lib/frameEditing";
 import type { FrameResizeHandle } from "./lib/frameEditing";
@@ -2032,7 +2033,7 @@ export function App() {
     };
   }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, publishEditorPerformanceSnapshot, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
   const selectedGridCandidateCacheKey = selectedAsset ? getGridCandidateCacheKey(selectedAsset, gridCandidatePreprocessingForAlpha(alpha)) : "";
-  const gridCandidates = selectedGridCandidateCacheKey ? gridCandidateCache[selectedGridCandidateCacheKey] ?? [] : [];
+  const gridCandidates = selectCachedGridCandidates(gridCandidateCache, selectedGridCandidateCacheKey);
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
   const activePaletteLockScope: PaletteLockScope = sheetMode ? (paletteLockScope === "single" ? "sheet" : paletteLockScope) : "single";
