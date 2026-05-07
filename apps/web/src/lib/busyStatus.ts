@@ -46,7 +46,7 @@ export function selectVisibleBusyOperation({
   analysisOperation = null,
   fixOperation = null
 }: VisibleBusyOperationInput): BusyOperation | null {
-  return importOperation ?? activationOperation ?? analysisOperation ?? fixOperation;
+  return importOperation ?? activationOperation ?? fixOperation ?? analysisOperation;
 }
 
 export function hasBlockingBusyOperation({

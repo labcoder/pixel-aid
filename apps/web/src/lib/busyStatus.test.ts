@@ -57,4 +57,11 @@ describe("busy status", () => {
     expect(hasBlockingBusyOperation({ analysisOperation: analysis })).toBe(false);
     expect(hasBlockingBusyOperation({ analysisOperation: analysis, fixOperation: fix })).toBe(true);
   });
+
+  test("shows blocking fix progress ahead of passive diagnostics", () => {
+    const analysis = createBusyOperation(8, "analysis", "Preparing diagnostics for hero.png...");
+    const fix = createBusyOperation(9, "fix", "Fixing image...", "Downsampling 25%");
+
+    expect(selectVisibleBusyOperation({ analysisOperation: analysis, fixOperation: fix })).toEqual(fix);
+  });
 });

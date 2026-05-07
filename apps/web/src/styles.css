@@ -59,6 +59,7 @@ button:disabled {
   color: #69736f;
   border-color: #2a2f2f;
   background: #191c1c;
+  cursor: not-allowed;
 }
 
 button:focus-visible,

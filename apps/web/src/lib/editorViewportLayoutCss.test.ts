@@ -15,4 +15,8 @@ describe("editor viewport layout stylesheet contract", () => {
     expect(cssRule(".viewport-canvas-wrap")).toContain("grid-row: 3");
     expect(cssRule(".timeline-viewport-shell")).toContain("grid-row: 3");
   });
+
+  it("does not keep disabled controls in a pointer cursor state", () => {
+    expect(cssRule("button:disabled")).toContain("cursor: not-allowed");
+  });
 });
