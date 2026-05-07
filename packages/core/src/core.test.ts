@@ -22,6 +22,7 @@ import {
   reportProgress,
   resolvePalette,
   sliceSheetFrames,
+  suggestFixSettings,
   writePixel
 } from "./index";
 import type { FixPhaseTiming, FixProgressEvent } from "./index";
@@ -417,6 +418,41 @@ function outlinedSheetWithLabels(): RGBAImage {
       const x = startX + column * cellWidth;
       drawBlock(image, x + 15, row.y + 9, 18, 24, 92, 160, 150, 255);
       drawBlock(image, x + 21, row.y + 16, 10, 10, 0, 240, 240, 255);
+    }
+  }
+
+  return image;
+}
+
+function sourceSizedPseudoPixelSheet(): RGBAImage {
+  const image = createImage(768, 512);
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, 8, 10, 10, 255);
+    }
+  }
+
+  const rows = [
+    { labelX: 24, y: 28, frames: 3 },
+    { labelX: 24, y: 144, frames: 5 },
+    { labelX: 24, y: 260, frames: 4 },
+    { labelX: 24, y: 376, frames: 4 }
+  ];
+  const cellWidth = 112;
+  const cellHeight = 88;
+  const startX = 104;
+
+  for (const row of rows) {
+    drawBlock(image, row.labelX, row.y + 32, 52, 12, 0, 240, 240, 255);
+    for (let column = 0; column < row.frames; column += 1) {
+      const cellX = startX + column * cellWidth;
+      drawBlock(image, cellX, row.y, cellWidth, 4, 76, 80, 82, 255);
+      drawBlock(image, cellX, row.y + cellHeight - 4, cellWidth, 4, 76, 80, 82, 255);
+      drawBlock(image, cellX, row.y, 4, cellHeight, 76, 80, 82, 255);
+      drawBlock(image, cellX + cellWidth - 4, row.y, 4, cellHeight, 76, 80, 82, 255);
+      drawBlock(image, cellX + 36, row.y + 20, 40, 12, 92, 160, 150, 255);
+      drawBlock(image, cellX + 44, row.y + 36, 24, 32, 250, 250, 250, 255);
+      drawBlock(image, cellX + 48, row.y + 44, 16, 12, 0, 128, 255, 255);
     }
   }
 
@@ -1727,6 +1763,16 @@ describe("sheet slicing", () => {
     expect(detection.frames[4]!.name).toBe("row_2_000");
     expect(detection.warnings).toContain("Detected outlined cell separators; frame boxes may need review if the grid lines are decorative.");
     expect(detection.confidence).toBeGreaterThan(0.75);
+  });
+
+  test("keeps source-sized sheet cells when auto suggest recommends frame-first cleanup", () => {
+    const suggestion = suggestFixSettings(sourceSizedPseudoPixelSheet());
+
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.reason).toContain("Frame-first source conditioning");
+    expect(suggestion.sheetLayout?.frameWidth).toBeGreaterThanOrEqual(96);
+    expect(suggestion.sheetLayout?.frameHeight).toBeGreaterThanOrEqual(80);
+    expect(suggestion.targetWidth).toBeGreaterThanOrEqual(5 * 96);
   });
 
   test("normalizes uneven gutters from content centers when sheets have no cell borders", () => {

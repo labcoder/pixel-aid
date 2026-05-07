@@ -157,7 +157,11 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const outline = suggestOutlineRepair(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
   const sheetLayout =
     mode === "spriteSheet" && shouldSurfaceDetectedSheetLayout(detectedSheetLayout)
-      ? scaleSheetLayoutDetection(detectedSheetLayout, candidate?.scaleX ?? image.width / outputWidth, candidate?.scaleY ?? image.height / outputHeight)
+      ? scaleSheetLayoutDetection(
+          detectedSheetLayout,
+          sheetConditioning.recommendFrameFirst ? 1 : candidate?.scaleX ?? image.width / outputWidth,
+          sheetConditioning.recommendFrameFirst ? 1 : candidate?.scaleY ?? image.height / outputHeight
+        )
       : undefined;
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: outputWidth, height: outputHeight };
   const categoryWarnings = withConditioningWarnings(getAssetTypeWarnings(classification.assetType), mode, sheetConditioning.recommendFrameFirst);
