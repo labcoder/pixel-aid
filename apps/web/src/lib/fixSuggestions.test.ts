@@ -303,6 +303,51 @@ function noisyCodexPetAtlasLikeSource(): RGBAImage {
   return image;
 }
 
+function cleanSourceSizedPixelPerfectAtlasSource(trimRight = 0, trimBottom = 0): RGBAImage {
+  const cellWidth = 128;
+  const cellHeight = 128;
+  const columns = 8;
+  const rows = 9;
+  const image = blankImage(cellWidth * columns - trimRight, cellHeight * rows - trimBottom);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 0;
+    image.data[offset + 1] = 0;
+    image.data[offset + 2] = 0;
+    image.data[offset + 3] = 255;
+  }
+
+  const colors: [number, number, number, number][] = [
+    [0, 132, 232, 255],
+    [8, 16, 28, 255],
+    [20, 190, 255, 255],
+    [40, 80, 120, 255],
+    [0, 72, 164, 255]
+  ];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const cellX = column * cellWidth;
+      const cellY = row * cellHeight;
+      const driftX = (row + column) % 7;
+      const driftY = row % 5;
+      drawRect(image, cellX + 34 + driftX, cellY + 12 + driftY, 60, 42, colors[0]!);
+      drawRect(image, cellX + 42 + driftX, cellY + 20 + driftY, 44, 18, colors[1]!);
+      drawRect(image, cellX + 48 + driftX, cellY + 27 + driftY, 8, 4, colors[2]!);
+      drawRect(image, cellX + 70 + driftX, cellY + 27 + driftY, 8, 4, colors[2]!);
+      drawRect(image, cellX + 44 + driftX, cellY + 56 + driftY, 40, 42, colors[0]!);
+      drawRect(image, cellX + 54 + driftX, cellY + 62 + driftY, 20, 20, colors[3]!);
+      drawRect(image, cellX + 22 + driftX, cellY + 64 + driftY, 22, 42, colors[0]!);
+      drawRect(image, cellX + 84 + driftX, cellY + 64 + driftY, 22, 42, colors[0]!);
+      drawRect(image, cellX + 42 + driftX, cellY + 98 + driftY, 18, 24, colors[0]!);
+      drawRect(image, cellX + 68 + driftX, cellY + 98 + driftY, 18, 24, colors[0]!);
+      drawRect(image, cellX + 38 + driftX, cellY + 120, 26, 4, colors[4]!);
+      drawRect(image, cellX + 66 + driftX, cellY + 120, 26, 4, colors[4]!);
+    }
+  }
+
+  return image;
+}
+
 function lowScaleBakedCheckerboardPandaSource(): RGBAImage {
   const scale = 3;
   const nativeWidth = 91;
@@ -507,6 +552,25 @@ function cropImage(image: RGBAImage, rect: Rect): RGBAImage {
     }
   }
   return out;
+}
+
+function countChangedPixels(a: RGBAImage, b: RGBAImage): number {
+  if (a.width !== b.width || a.height !== b.height) {
+    return Number.POSITIVE_INFINITY;
+  }
+
+  let changed = 0;
+  for (let offset = 0; offset < a.data.length; offset += 4) {
+    if (
+      a.data[offset] !== b.data[offset] ||
+      a.data[offset + 1] !== b.data[offset + 1] ||
+      a.data[offset + 2] !== b.data[offset + 2] ||
+      a.data[offset + 3] !== b.data[offset + 3]
+    ) {
+      changed += 1;
+    }
+  }
+  return changed;
 }
 
 function frameDetailMetrics(image: RGBAImage): { darkPixels: number; edgeEnergy: number } {
@@ -919,6 +983,42 @@ describe("fix setting suggestions", () => {
     expect(suggestion.removeHalos).toBe(true);
     expect(suggestion.denoiseStrength).toBe(20);
     expect(suggestion.sheetLayout?.diagnostics?.conditioning?.recommendFrameFirst).toBe(false);
+  });
+
+  test("preserves clean source-sized pixel-perfect atlases by default", () => {
+    const source = cleanSourceSizedPixelPerfectAtlasSource();
+    const suggestion = suggestFixSettings(source);
+    const result = fixImage(source, buildSuggestedFixOptions(source));
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.gridScaleX).toBe(1);
+    expect(suggestion.gridScaleY).toBe(1);
+    expect(suggestion.removeOrphans).toBe(false);
+    expect(suggestion.jaggyCleanup).toBe(false);
+    expect(suggestion.removeHalos).toBe(false);
+    expect(suggestion.denoiseStrength).toBe(0);
+    expect(result.image.width).toBe(source.width);
+    expect(result.image.height).toBe(source.height);
+    expect(countChangedPixels(result.image, source)).toBe(0);
+  });
+
+  test("uses preservation cleanup for near-source-sized pixel-perfect atlases", () => {
+    const source = cleanSourceSizedPixelPerfectAtlasSource(3, 3);
+    const suggestion = suggestFixSettings(source);
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout).toMatchObject({
+      frameWidth: 128,
+      frameHeight: 128,
+      rows: 9,
+      columns: 8
+    });
+    expect(suggestion.removeOrphans).toBe(false);
+    expect(suggestion.jaggyCleanup).toBe(false);
+    expect(suggestion.removeHalos).toBe(false);
+    expect(suggestion.denoiseStrength).toBe(0);
   });
 
   test("preserves final frame detail better than destructive sheet cleanup for complex sheets", () => {

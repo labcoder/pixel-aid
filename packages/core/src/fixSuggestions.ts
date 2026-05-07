@@ -94,6 +94,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
   const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning);
+  const sourceSizedSheetPreservation = shouldUseSourceSizedSheetPreservation(
+    mode,
+    image,
+    detectedSheetLayout,
+    sheetConditioning,
+    strictSourceSheetCleanup
+  );
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
@@ -135,7 +142,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     classification.assetType,
     candidate,
     strictSourceSheetCleanup,
-    strictSourceSheetDenoiseStrength
+    strictSourceSheetDenoiseStrength,
+    sourceSizedSheetPreservation
   );
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
@@ -228,6 +236,10 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     mode === "spriteSheet" ? detectedSheetLayout?.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const strictSourceSheetCleanup =
     mode === "spriteSheet" && detectedSheetLayout ? shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning) : false;
+  const sourceSizedSheetPreservation =
+    mode === "spriteSheet" && detectedSheetLayout
+      ? shouldUseSourceSizedSheetPreservation(mode, image, detectedSheetLayout, sheetConditioning, strictSourceSheetCleanup)
+      : false;
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
@@ -252,11 +264,11 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
       strictSourceSheetCleanup || assetType === "sprite" || assetType === "icon"
         ? { ...suggestion.alphaSettings, decontaminateRgb: true }
         : { ...preset.alphaSettings },
-    removeOrphans: preset.removeOrphans,
-    jaggyCleanup: preset.jaggyCleanup,
+    removeOrphans: sourceSizedSheetPreservation ? false : preset.removeOrphans,
+    jaggyCleanup: sourceSizedSheetPreservation ? false : preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
-    removeHalos: strictSourceSheetCleanup ? true : preset.removeHalos,
-    denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : preset.denoiseStrength,
+    removeHalos: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : preset.removeHalos,
+    denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
     contrastExpansionEnabled: assetType === "sprite" || assetType === "icon" ? suggestion.contrastExpansionEnabled : false,
@@ -290,15 +302,39 @@ function shouldUseStrictSourceSheetCleanup(
     return false;
   }
 
-  return sheetConditioning.issues.some((issue) =>
-    issue.code === "soft-alpha-noise" ||
-    issue.code === "chroma-matte-artifacts" ||
-    issue.code === "excessive-exact-colors" ||
-    issue.code === "dense-coarse-palette"
+  return sheetConditioning.issues.some((issue) => isStrictSourceSheetCleanupIssue(issue.code));
+}
+
+function shouldUseSourceSizedSheetPreservation(
+  mode: AssetMode,
+  image: RGBAImage,
+  sheetLayout: SheetLayoutDetection,
+  sheetConditioning: SheetConditioningDiagnostics,
+  strictSourceSheetCleanup: boolean
+): boolean {
+  if (strictSourceSheetCleanup || mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
+    return false;
+  }
+
+  if (sheetConditioning.recommendFrameFirst) {
+    return false;
+  }
+
+  return !sheetConditioning.issues.some((issue) => issue.severity === "warning" || isStrictSourceSheetCleanupIssue(issue.code));
+}
+
+function isStrictSourceSheetCleanupIssue(code: SheetConditioningDiagnostics["issues"][number]["code"]): boolean {
+  return (
+    code === "soft-alpha-noise" ||
+    code === "chroma-matte-artifacts" ||
+    code === "excessive-exact-colors" ||
+    code === "dense-coarse-palette"
   );
 }
 
 function isSourceSizedSheetLayout(image: RGBAImage, sheetLayout: SheetLayoutDetection): boolean {
+  const packedWidth = sheetLayout.frameWidth * sheetLayout.columns;
+  const packedHeight = sheetLayout.frameHeight * sheetLayout.rows;
   return (
     sheetLayout.confidence >= 0.7 &&
     sheetLayout.rows >= 2 &&
@@ -307,10 +343,16 @@ function isSourceSizedSheetLayout(image: RGBAImage, sheetLayout: SheetLayoutDete
     sheetLayout.frameHeight >= 32 &&
     sheetLayout.margin === 0 &&
     sheetLayout.spacing === 0 &&
-    sheetLayout.frameWidth * sheetLayout.columns === image.width &&
-    sheetLayout.frameHeight * sheetLayout.rows === image.height &&
+    isNearSourceSheetDimension(image.width, packedWidth, sheetLayout.columns) &&
+    isNearSourceSheetDimension(image.height, packedHeight, sheetLayout.rows) &&
     sheetLayout.frames.length >= sheetLayout.rows * sheetLayout.columns * 0.75
   );
+}
+
+function isNearSourceSheetDimension(sourceSize: number, packedSize: number, divisions: number): boolean {
+  const delta = Math.abs(packedSize - sourceSize);
+  const maxDelta = Math.max(1, Math.min(4, Math.ceil(divisions * 0.5)));
+  return delta <= maxDelta;
 }
 
 function suggestStrictSourceSheetMaxColors(maxColors: number): number {
@@ -393,7 +435,8 @@ function suggestCleanupSettings(
   assetType?: AssetType,
   candidate?: GridCandidate,
   strictSourceSheetCleanup = false,
-  strictSourceSheetDenoiseStrength?: number
+  strictSourceSheetDenoiseStrength?: number,
+  sourceSizedSheetPreservation = false
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "denoiseStrength"> {
   if (strictSourceSheetCleanup) {
     return {
@@ -402,6 +445,16 @@ function suggestCleanupSettings(
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: true,
       denoiseStrength: strictSourceSheetDenoiseStrength ?? Math.max(preset.denoiseStrength, 45)
+    };
+  }
+
+  if (sourceSizedSheetPreservation) {
+    return {
+      removeOrphans: false,
+      jaggyCleanup: false,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: false,
+      denoiseStrength: 0
     };
   }
 
