@@ -815,8 +815,8 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
         (commonNativeFrameSizes.includes(frameHeight as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0);
       const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
       const codexPetBonus = codexPetAtlas ? 0.35 : 0;
-      const nearDivisible = widthCandidate.delta > 0 || heightCandidate.delta > 0;
-      if (nearDivisible && !codexPetAtlas && commonSizeBonus < 0.16) {
+      const hasCommonFrameSize = commonSizeBonus >= 0.16;
+      if (!codexPetAtlas && !hasCommonFrameSize) {
         continue;
       }
 

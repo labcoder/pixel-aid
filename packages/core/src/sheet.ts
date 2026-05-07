@@ -374,8 +374,8 @@ function detectRegularAtlasLayout(
         (regularAtlasNativeSizes.includes(frameWidth as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0) +
         (regularAtlasNativeSizes.includes(frameHeight as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0);
       const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
-      const nearDivisible = widthCandidate.delta > 0 || heightCandidate.delta > 0;
-      if (nearDivisible && !codexPetAtlas && commonSizeBonus < 0.16) {
+      const hasCommonFrameSize = commonSizeBonus >= 0.16;
+      if (!codexPetAtlas && !hasCommonFrameSize) {
         continue;
       }
 

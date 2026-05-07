@@ -26,6 +26,31 @@ function singleSpriteOnBrightBackground(): RGBAImage {
   return image;
 }
 
+function largeSingleSpriteWithDivisiblePortraitBounds(): RGBAImage {
+  const image = blankImage(472, 636);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    image.data[offset] = 48;
+    image.data[offset + 1] = 28;
+    image.data[offset + 2] = 28;
+    image.data[offset + 3] = 255;
+  }
+
+  drawRect(image, 132, 48, 208, 176, [238, 244, 246, 255]);
+  drawRect(image, 154, 82, 164, 88, [8, 14, 28, 255]);
+  drawRect(image, 184, 116, 34, 16, [16, 190, 248, 255]);
+  drawRect(image, 254, 116, 34, 16, [16, 190, 248, 255]);
+  drawRect(image, 172, 224, 128, 198, [238, 244, 246, 255]);
+  drawRect(image, 196, 240, 80, 102, [0, 136, 236, 255]);
+  drawRect(image, 82, 236, 92, 202, [238, 244, 246, 255]);
+  drawRect(image, 298, 236, 92, 202, [238, 244, 246, 255]);
+  drawRect(image, 142, 416, 74, 172, [238, 244, 246, 255]);
+  drawRect(image, 256, 416, 74, 172, [238, 244, 246, 255]);
+  drawRect(image, 128, 564, 96, 34, [0, 136, 236, 255]);
+  drawRect(image, 248, 564, 96, 34, [0, 136, 236, 255]);
+
+  return image;
+}
+
 function largeAnimationSheetLikeSource(): RGBAImage {
   const image = blankImage(768, 512);
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -679,6 +704,14 @@ describe("fix setting suggestions", () => {
     expect(suggestion.modeConfidence).toBeGreaterThan(0.85);
     expect(suggestion.targetWidth).toBeLessThanOrEqual(176);
     expect(suggestion.targetHeight).toBeLessThanOrEqual(220);
+  });
+
+  test("keeps large portrait sprites with divisible bounds as single sprites", () => {
+    const suggestion = suggestFixSettings(largeSingleSpriteWithDivisiblePortraitBounds());
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.assetType).not.toBe("animationSheet");
+    expect(suggestion.sheetLayout).toBeUndefined();
   });
 
   test("suggests background flood-fill for single sprites on bright opaque backgrounds", () => {
