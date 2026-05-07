@@ -389,6 +389,21 @@ function codexPetAtlasLikeSource(): RGBAImage {
   return image;
 }
 
+function cropImage(source: RGBAImage, width: number, height: number): RGBAImage {
+  const image = createImage(width, height);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const sourceOffset = pixelOffset(source, x, y);
+      const targetOffset = pixelOffset(image, x, y);
+      image.data[targetOffset] = source.data[sourceOffset]!;
+      image.data[targetOffset + 1] = source.data[sourceOffset + 1]!;
+      image.data[targetOffset + 2] = source.data[sourceOffset + 2]!;
+      image.data[targetOffset + 3] = source.data[sourceOffset + 3]!;
+    }
+  }
+  return image;
+}
+
 function outlinedSheetWithLabels(): RGBAImage {
   const image = createImage(420, 240);
   for (let y = 0; y < image.height; y += 1) {
@@ -1744,6 +1759,27 @@ describe("sheet slicing", () => {
     expect(detection.frames[71]!.rect).toEqual({ x: 1344, y: 1664, w: 192, h: 208 });
     expect(detection.rowAnimations.map((animation) => animation.frameNames.length)).toEqual(Array.from({ length: 9 }, () => 8));
     expect(detection.confidence).toBeGreaterThan(0.9);
+  });
+
+  test("detects slightly cropped Codex pet atlas grids instead of exact but wrong square grids", () => {
+    const detection = detectSheetLayout(cropImage(codexPetAtlasLikeSource(), 1533, 1869));
+
+    expect(detection).toMatchObject({
+      frameWidth: 192,
+      frameHeight: 208,
+      rows: 9,
+      columns: 8,
+      rowFrameCounts: Array.from({ length: 9 }, () => 8)
+    });
+    expect(detection.frames).toHaveLength(72);
+    expect(detection.confidence).toBeGreaterThan(0.9);
+  });
+
+  test("does not classify a standalone pseudo-pixel sprite as a cropped regular atlas", () => {
+    const detection = detectSheetLayout(createSingleSpriteCleanupFixture().image);
+
+    expect(detection.confidence).toBeLessThan(0.65);
+    expect(detection.rowFrameCounts).not.toEqual(Array.from({ length: 5 }, () => 4));
   });
 
   test("detects outlined sprite sheet cells when row borders form one wide segment", () => {

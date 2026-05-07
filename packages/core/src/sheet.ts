@@ -341,19 +341,21 @@ function detectRegularAtlasLayout(
     | undefined;
 
   for (let rows = 2; rows <= 12; rows += 1) {
-    if (image.height % rows !== 0) {
+    const heightCandidate = regularAtlasFrameSize(image.height, rows);
+    if (!heightCandidate) {
       continue;
     }
-    const frameHeight = image.height / rows;
+    const frameHeight = heightCandidate.size;
     if (frameHeight < 32 || frameHeight > 320) {
       continue;
     }
 
     for (let columns = 4; columns <= 12; columns += 1) {
-      if (image.width % columns !== 0) {
+      const widthCandidate = regularAtlasFrameSize(image.width, columns);
+      if (!widthCandidate) {
         continue;
       }
-      const frameWidth = image.width / columns;
+      const frameWidth = widthCandidate.size;
       if (frameWidth < 32 || frameWidth > 320) {
         continue;
       }
@@ -372,11 +374,17 @@ function detectRegularAtlasLayout(
         (regularAtlasNativeSizes.includes(frameWidth as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0) +
         (regularAtlasNativeSizes.includes(frameHeight as (typeof regularAtlasNativeSizes)[number]) ? 0.08 : 0);
       const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
+      const nearDivisible = widthCandidate.delta > 0 || heightCandidate.delta > 0;
+      if (nearDivisible && !codexPetAtlas && commonSizeBonus < 0.16) {
+        continue;
+      }
+
       const dimensionBonus = Math.min(0.2, Math.log2(Math.max(2, columns * rows)) / 30);
       const frameCountBonus = Math.min(0.16, (columns * rows) / 72 * 0.16);
       const aspectBonus = 0.16 - Math.min(0.16, Math.abs(Math.log(cellRatio)) * 0.12);
+      const nearDivisibilityPenalty = Math.min(0.08, (widthCandidate.delta + heightCandidate.delta) / Math.max(1, frameWidth + frameHeight));
       const score = codexPetAtlas
-        ? 0.99
+        ? 0.99 - nearDivisibilityPenalty
         : Math.min(
             0.96,
             0.24 +
@@ -386,7 +394,8 @@ function detectRegularAtlasLayout(
               commonSizeBonus +
               dimensionBonus +
               frameCountBonus +
-              aspectBonus
+              aspectBonus -
+              nearDivisibilityPenalty
           );
 
       if (!best || score > best.score) {
@@ -408,6 +417,13 @@ function detectRegularAtlasLayout(
     conditioning,
     reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
   });
+}
+
+function regularAtlasFrameSize(sourceSize: number, divisions: number): { size: number; delta: number } | undefined {
+  const size = Math.max(1, Math.round(sourceSize / divisions));
+  const delta = Math.abs(size * divisions - sourceSize);
+  const maxDelta = Math.max(1, Math.min(4, Math.ceil(divisions * 0.5)));
+  return delta <= maxDelta ? { size, delta } : undefined;
 }
 
 function createRegularAtlasLayout({
