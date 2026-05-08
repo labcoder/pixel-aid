@@ -364,7 +364,8 @@ function isStrictSourceSheetCleanupIssue(code: SheetConditioningDiagnostics["iss
     code === "soft-alpha-noise" ||
     code === "chroma-matte-artifacts" ||
     code === "excessive-exact-colors" ||
-    code === "dense-coarse-palette"
+    code === "dense-coarse-palette" ||
+    code === "presentation-sheet-artifacts"
   );
 }
 

@@ -29,7 +29,8 @@ export function analyzeSheetConditioning(
   const coarseForegroundBins = new Set<number>();
   let foregroundPixels = 0;
   let softAlphaPixels = 0;
-  let chromaMattePixels = 0;
+  let softChromaMattePixels = 0;
+  let opaqueChromaMattePixels = 0;
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
@@ -43,7 +44,11 @@ export function analyzeSheetConditioning(
         softAlphaPixels += 1;
       }
       if (a > 0 && isChromaMatteColor(image, x, y, r, g, b, a, background)) {
-        chromaMattePixels += 1;
+        if (a < 255) {
+          softChromaMattePixels += 1;
+        } else {
+          opaqueChromaMattePixels += 1;
+        }
       }
 
       if (a > 0 && colorDistance(r, g, b, background.r, background.g, background.b) > foregroundDistanceThreshold) {
@@ -62,6 +67,14 @@ export function analyzeSheetConditioning(
   const checkerboardCells = detectBakedCheckerboardCells(image, background);
   const captionOrBracketMarks = detectCaptionOrBracketMarks(image, background);
   const issues: SheetConditioningIssue[] = [];
+  const opaqueChromaMatteRatio = opaqueChromaMattePixels / pixelCount;
+  const noisyOpaqueChromaMattePixels =
+    exactColors.size > 16 || coarseForegroundBins.size > 8 || opaqueChromaMatteRatio >= 0.004 ? opaqueChromaMattePixels : 0;
+  const actionableChromaMattePixels = softChromaMattePixels + noisyOpaqueChromaMattePixels;
+  const presentationChromaMattePixels =
+    opaqueDarkBackground && (checkerboardCells.detected || captionOrBracketMarks.detected)
+      ? Math.max(actionableChromaMattePixels, Math.round(pixelCount * 0.001))
+      : actionableChromaMattePixels;
 
   if (exactColors.size > maxExactColors) {
     issues.push({
@@ -87,11 +100,11 @@ export function analyzeSheetConditioning(
     });
   }
 
-  if (chromaMattePixels >= Math.max(64, pixelCount * 0.0005)) {
+  if (presentationChromaMattePixels >= Math.max(64, pixelCount * 0.0005)) {
     issues.push({
       code: "chroma-matte-artifacts",
       severity: "warning",
-      message: `Detected ${chromaMattePixels.toLocaleString()} saturated matte pixels; remove edge halos before palette locking.`
+      message: `Detected ${presentationChromaMattePixels.toLocaleString()} saturated matte pixels; remove edge halos before palette locking.`
     });
   }
 
@@ -141,7 +154,7 @@ export function analyzeSheetConditioning(
     exactColors.size > maxExactColors ||
     coarseForegroundBins.size > maxCoarseBins ||
     softAlphaPixels >= Math.max(256, pixelCount * 0.01) ||
-    chromaMattePixels >= Math.max(64, pixelCount * 0.0005);
+    presentationChromaMattePixels >= Math.max(64, pixelCount * 0.0005);
 
   return {
     exactColorCount: exactColors.size,
