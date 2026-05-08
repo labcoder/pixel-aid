@@ -35,12 +35,23 @@ export type CleanupEligibilityPass =
 export type CleanupEligibilityDecision = {
   pass: CleanupEligibilityPass;
   enabled: boolean;
+  reasonCode: string;
   reason: string;
+};
+
+export type AssetTypeClassificationCandidate = {
+  assetType: AssetType;
+  mode: AssetMode;
+  confidence: number;
+  reason: string;
+  evidence: string[];
+  warnings: AssetTypeWarning[];
 };
 
 export type FixSettingSuggestion = {
   assetType: AssetType;
   mode: AssetMode;
+  classificationCandidates: AssetTypeClassificationCandidate[];
   targetWidth: number;
   targetHeight: number;
   maxColors: number;
@@ -98,7 +109,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   let outputHeight = candidate?.outputHeight ?? image.height;
   const sourceRatio = image.width / image.height;
   const classifiedMode = classifyMode(image.width, image.height, outputWidth, outputHeight, sheetLayoutScore);
-  const classification = classifyAssetType({
+  const classificationInput = {
     mode: classifiedMode,
     width: image.width,
     height: image.height,
@@ -106,7 +117,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     outputHeight,
     sheetLayoutScore,
     sheetLayout: detectedSheetLayout
-  });
+  };
+  const classificationCandidates = rankAssetTypeCandidates(classificationInput);
+  const classification = classificationFromCandidate(classificationCandidates[0]);
   const mode = assetTypeToMode(classification.assetType);
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
@@ -206,6 +219,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   return {
     assetType: classification.assetType,
     mode,
+    classificationCandidates,
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
     maxColors: suggestedMaxColors,
@@ -290,6 +304,12 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     ...suggestion,
     assetType,
     mode,
+    classificationCandidates: [
+      createAssetTypeCandidate(assetType, 1, `Manual asset type: ${definition.label}. ${definition.description}`, [
+        "manual override"
+      ]),
+      ...suggestion.classificationCandidates.filter((candidate) => candidate.assetType !== assetType)
+    ],
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
     maxColors: strictSourceSheetMaxColors,
@@ -482,6 +502,7 @@ function suggestCleanupEligibility(input: {
     {
       pass: "binaryAlpha",
       enabled: cleanupAllowed && (spriteLike || input.bakedTransparencyDetected || matteIssue),
+      reasonCode: cleanupAllowed ? "alpha-cleanup-eligible" : "preservation-alpha",
       reason: cleanupAllowed
         ? "Binary alpha is eligible when the source has sprite-like cells, baked background, or matte artifacts."
         : "Scene-style or preservation-first assets keep alpha conservative by default."
@@ -489,6 +510,7 @@ function suggestCleanupEligibility(input: {
     {
       pass: "matteCleanup",
       enabled: cleanupAllowed && (input.strictSourceSheetCleanup || matteIssue),
+      reasonCode: matteIssue ? "matte-artifact-evidence" : "no-matte-evidence",
       reason: matteIssue
         ? "Saturated matte, soft alpha, or palette-density issues were detected independently of asset type."
         : "No matte-specific conditioning issue was detected."
@@ -496,26 +518,31 @@ function suggestCleanupEligibility(input: {
     {
       pass: "haloRemoval",
       enabled: cleanupAllowed && (spriteLike || sheetLike || input.bakedTransparencyDetected || matteIssue),
+      reasonCode: cleanupAllowed ? "edge-cleanup-eligible" : "preservation-halo",
       reason: cleanupAllowed ? "Edge halo cleanup can run on sprites, sheets, object grids, and matte-cleanup sources." : "Preservation mode disables halo cleanup."
     },
     {
       pass: "outlineRepair",
       enabled: cleanupAllowed && outlineEvidence && selectedScale >= 1,
+      reasonCode: outlineEvidence ? "outline-candidate-evidence" : "no-outline-evidence",
       reason: outlineEvidence ? "Outline-colored edge evidence was detected." : "No outline repair candidates were detected."
     },
     {
       pass: "jaggyCleanup",
       enabled: cleanupAllowed && (spriteLike || sheetLike),
+      reasonCode: cleanupAllowed ? "cell-asset-jaggy-eligible" : "preservation-jaggy",
       reason: cleanupAllowed ? "Jaggy cleanup is eligible for cell-based pixel assets." : "Preservation mode disables jaggy cleanup."
     },
     {
       pass: "paletteLimit",
       enabled: input.assetType !== "background",
+      reasonCode: input.assetType === "background" ? "background-palette-preserve" : "game-asset-palette-limit",
       reason: input.assetType === "background" ? "Large scene backgrounds keep a larger palette budget." : "Palette limiting is eligible for game-asset outputs."
     },
     {
       pass: "nativeScaleInference",
       enabled: input.strictSourceSheetCleanup,
+      reasonCode: input.strictSourceSheetCleanup ? "source-sized-cleanup-first" : "native-scale-not-needed",
       reason: input.strictSourceSheetCleanup
         ? "Frame-first cleanup should infer each source cell native scale before final packing."
         : "Native scale inference is only needed for source-sized sheets with cleanup artifacts."
@@ -625,57 +652,144 @@ function classifyAssetType(input: {
   sheetLayoutScore: number;
   sheetLayout?: SheetLayoutDetection;
 }): AssetTypeClassification {
+  return classificationFromCandidate(rankAssetTypeCandidates(input)[0]);
+}
+
+function classificationFromCandidate(candidate: AssetTypeClassificationCandidate | undefined): AssetTypeClassification {
+  const fallback = createAssetTypeCandidate("sprite", 0.72, "Source proportions look like a standalone sprite or prop.", [
+    "fallback sprite proportions"
+  ]);
+  const selected = candidate ?? fallback;
+  return {
+    assetType: selected.assetType,
+    confidence: selected.confidence,
+    reason: selected.reason,
+    warnings: [...selected.warnings]
+  };
+}
+
+function rankAssetTypeCandidates(input: {
+  mode: AssetMode;
+  width: number;
+  height: number;
+  outputWidth: number;
+  outputHeight: number;
+  sheetLayoutScore: number;
+  sheetLayout?: SheetLayoutDetection;
+}): AssetTypeClassificationCandidate[] {
   const sourceRatio = input.width / input.height;
   const outputRatio = input.outputWidth / input.outputHeight;
   const sourceMax = Math.max(input.width, input.height);
   const outputMax = Math.max(input.outputWidth, input.outputHeight);
-  let assetType: AssetType = "sprite";
-  let confidence = 0.72;
-  let reason = "Source proportions look like a standalone sprite or prop.";
+  const candidates: AssetTypeClassificationCandidate[] = [];
+
+  candidates.push(
+    createAssetTypeCandidate("sprite", 0.72, "Source proportions look like a standalone sprite or prop.", [
+      "balanced standalone proportions"
+    ])
+  );
 
   if (input.mode === "tileSheet") {
-    assetType = "tileset";
-    confidence = 0.78;
-    reason = "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.";
+    candidates.push(
+      createAssetTypeCandidate("tileset", 0.78, "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.", [
+        "square evenly divisible source",
+        "tile sheet processing mode"
+      ])
+    );
   } else if (input.mode === "spriteSheet") {
     if (input.sheetLayout && isObjectAtlasLayout(input.sheetLayout)) {
-      assetType = "iconSet";
-      confidence = Math.min(0.94, Math.max(0.78, input.sheetLayoutScore));
-      reason = "Detected a regular object or icon grid, so cells should be sliced without timeline playback.";
+      candidates.push(
+        createAssetTypeCandidate("iconSet", Math.min(0.94, Math.max(0.78, input.sheetLayoutScore)), "Detected a regular object or icon grid, so cells should be sliced without timeline playback.", [
+          "regular object atlas grid",
+          "isolated occupied cells",
+          "no row animation labels"
+        ])
+      );
     } else if (input.sheetLayoutScore >= 0.55 || (input.sheetLayout?.rowAnimations.length ?? 0) >= 2) {
-      assetType = "animationSheet";
-      confidence = Math.min(0.95, Math.max(0.78, input.sheetLayoutScore));
-      reason = "Detected repeated frame rows, so animation is represented as sheet frames plus timeline metadata.";
-    } else {
-      assetType = "spriteSheet";
-      confidence = 0.74;
-      reason = "Wide or tall source looks like a sprite sheet with multiple frame cells.";
+      candidates.push(
+        createAssetTypeCandidate("animationSheet", Math.min(0.95, Math.max(0.78, input.sheetLayoutScore)), "Detected repeated frame rows, so animation is represented as sheet frames plus timeline metadata.", [
+          "repeated frame rows",
+          "sheet layout confidence"
+        ])
+      );
     }
-  } else if (sourceMax >= 512 && sourceRatio >= 1.45) {
-    assetType = "background";
-    confidence = 0.76;
-    reason = "Large landscape single-image proportions look like a background or scene backdrop.";
-  } else if (sourceMax >= 512 && input.height / input.width >= 1.15) {
-    assetType = "portrait";
-    confidence = 0.74;
-    reason = "Tall single-image proportions look like a portrait.";
-  } else if (outputMax <= 64 && outputRatio >= 0.75 && outputRatio <= 1.35 && (sourceMax <= 128 || (sourceRatio >= 0.9 && sourceRatio <= 1.1))) {
-    assetType = "icon";
-    confidence = 0.72;
-    reason = "Small near-square native output looks like an icon.";
-  } else if (sourceRatio >= 2.25 || sourceRatio <= 0.45) {
-    assetType = "uiElement";
-    confidence = 0.62;
-    reason = "Wide or short single-image proportions look like a UI element.";
+
+    candidates.push(
+      createAssetTypeCandidate("spriteSheet", 0.74, "Wide or tall source looks like a sprite sheet with multiple frame cells.", [
+        "sheet processing mode",
+        input.sheetLayoutScore >= 0.35 ? "partial sheet layout evidence" : "source aspect ratio"
+      ])
+    );
+    if (input.sheetLayout && !isObjectAtlasLayout(input.sheetLayout)) {
+      candidates.push(
+        createAssetTypeCandidate("iconSet", Math.max(0.42, Math.min(0.68, input.sheetLayoutScore - 0.08)), "Regular sheets can also be object/icon grids if cells are unrelated.", [
+          "sheet-like grid",
+          "manual review alternative"
+        ])
+      );
+    }
+    candidates.push(
+      createAssetTypeCandidate("animationSheet", Math.max(0.44, Math.min(0.7, input.sheetLayoutScore)), "Sheet-like sources may contain animation rows when frame sequences are related.", [
+        "sheet-like grid",
+        "animation alternative"
+      ])
+    );
   }
 
+  if (sourceMax >= 512 && sourceRatio >= 1.45) {
+    candidates.push(
+      createAssetTypeCandidate("background", 0.76, "Large landscape single-image proportions look like a background or scene backdrop.", [
+        "large landscape source"
+      ])
+    );
+  } else if (sourceMax >= 512 && input.height / input.width >= 1.15) {
+    candidates.push(
+      createAssetTypeCandidate("portrait", 0.74, "Tall single-image proportions look like a portrait.", ["large portrait source"])
+    );
+  } else if (outputMax <= 64 && outputRatio >= 0.75 && outputRatio <= 1.35 && (sourceMax <= 128 || (sourceRatio >= 0.9 && sourceRatio <= 1.1))) {
+    candidates.push(
+      createAssetTypeCandidate("icon", 0.72, "Small near-square native output looks like an icon.", [
+        "small near-square native output"
+      ])
+    );
+  } else if (sourceRatio >= 2.25 || sourceRatio <= 0.45) {
+    candidates.push(
+      createAssetTypeCandidate("uiElement", 0.62, "Wide or short single-image proportions look like a UI element.", [
+        "extreme single-image aspect ratio"
+      ])
+    );
+  }
+
+  const unique = new Map<AssetType, AssetTypeClassificationCandidate>();
+  for (const candidate of candidates) {
+    const current = unique.get(candidate.assetType);
+    if (!current || candidate.confidence > current.confidence) {
+      unique.set(candidate.assetType, candidate);
+    }
+  }
+
+  return [...unique.values()].sort((a, b) => b.confidence - a.confidence);
+}
+
+function createAssetTypeCandidate(
+  assetType: AssetType,
+  confidence: number,
+  reason: string,
+  evidence: string[]
+): AssetTypeClassificationCandidate {
   const definition = getAssetTypeDefinition(assetType);
   return {
     assetType,
-    confidence,
+    mode: assetTypeToMode(assetType),
+    confidence: clampConfidence(confidence),
     reason,
+    evidence,
     warnings: [...definition.defaultWarnings]
   };
+}
+
+function clampConfidence(confidence: number): number {
+  return Math.max(0.05, Math.min(1, Number.isFinite(confidence) ? confidence : 0.05));
 }
 
 function isObjectAtlasLayout(layout: SheetLayoutDetection): boolean {

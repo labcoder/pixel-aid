@@ -108,6 +108,19 @@ describe("optimization 6.6 heuristic audit", () => {
 
     expect(suggestion.assetType).toBe("iconSet");
     expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.classificationCandidates[0]).toMatchObject({
+      assetType: "iconSet",
+      mode: "spriteSheet"
+    });
+    expect(suggestion.classificationCandidates.map((candidate) => candidate.confidence)).toEqual(
+      [...suggestion.classificationCandidates.map((candidate) => candidate.confidence)].sort((a, b) => b - a)
+    );
+    expect(suggestion.classificationCandidates.map((candidate) => candidate.assetType)).toEqual(
+      expect.arrayContaining(["iconSet", "animationSheet", "spriteSheet"])
+    );
+    expect(suggestion.classificationCandidates[0]?.evidence).toEqual(
+      expect.arrayContaining([expect.stringContaining("object")])
+    );
     expect(suggestion.sheetLayout).toMatchObject({
       frameWidth: 72,
       frameHeight: 72,
@@ -127,7 +140,8 @@ describe("optimization 6.6 heuristic audit", () => {
     expect(suggestion.cleanupEligibility).toContainEqual(
       expect.objectContaining({
         pass: "matteCleanup",
-        enabled: true
+        enabled: true,
+        reasonCode: "matte-artifact-evidence"
       })
     );
   });
