@@ -54,6 +54,21 @@ export function getAssetTypeCleanupPreset(assetType: AssetType): AssetTypeCleanu
         lockPaletteAcrossFrames: false,
         warningCodes: []
       };
+    case "iconSet":
+      return {
+        maxColors: 16,
+        downscale: "dominant",
+        alpha: "binary",
+        alphaSettings: strictIconAlpha,
+        alphaWarningCodes: [],
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        removeHalos: true,
+        denoiseStrength: 15,
+        lockPaletteAcrossFrames: true,
+        warningCodes: []
+      };
     case "sprite":
       return {
         maxColors: 24,

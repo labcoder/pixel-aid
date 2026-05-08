@@ -11,6 +11,7 @@ const assetTypes: AssetType[] = [
   "tilemap",
   "portrait",
   "icon",
+  "iconSet",
   "uiElement",
   "background"
 ];
@@ -27,6 +28,7 @@ describe("asset type taxonomy", () => {
   it("maps product asset types to processing modes", () => {
     expect(assetTypeToMode("sprite")).toBe("single");
     expect(assetTypeToMode("icon")).toBe("single");
+    expect(assetTypeToMode("iconSet")).toBe("spriteSheet");
     expect(assetTypeToMode("animationSheet")).toBe("spriteSheet");
     expect(assetTypeToMode("characterSheet")).toBe("spriteSheet");
     expect(assetTypeToMode("tileset")).toBe("tileSheet");
@@ -41,6 +43,7 @@ describe("asset type taxonomy", () => {
   it("marks full, inspect-only, and future support levels", () => {
     expect(getAssetTypeDefinition("sprite").support).toBe("full");
     expect(getAssetTypeDefinition("icon").support).toBe("full");
+    expect(getAssetTypeDefinition("iconSet").support).toBe("full");
     expect(getAssetTypeDefinition("spriteSheet").support).toBe("full");
     expect(getAssetTypeDefinition("animationSheet").support).toBe("full");
     expect(getAssetTypeDefinition("characterSheet").support).toBe("full");

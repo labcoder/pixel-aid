@@ -27,6 +27,7 @@ export type AutomationAssetTypeInput =
   | "character-sheet"
   | "tile"
   | "tile-sheet"
+  | "icon-set"
   | "ui";
 
 export type AutomationTargetInput = string | { width: number; height: number };
@@ -89,6 +90,8 @@ const assetTypeAliases: Record<string, AssetType> = {
   tilemap: "tilemap",
   portrait: "portrait",
   icon: "icon",
+  iconset: "iconSet",
+  "icon-set": "iconSet",
   ui: "uiElement",
   uielement: "uiElement",
   background: "background",
@@ -119,6 +122,7 @@ const presets: Record<AssetType, AssetPreset> = {
   tilemap: createPreset(64, "averageThenPalette", "preserve", "sheet"),
   portrait: createPreset(64, "averageThenPalette", "preserve", "single"),
   icon: createPreset(16, "dominant", "backgroundFloodFill", "single"),
+  iconSet: createPreset(16, "dominant", "binary", "sheet"),
   uiElement: createPreset(64, "averageThenPalette", "preserve", "single"),
   background: createPreset(64, "averageThenPalette", "preserve", "single"),
 };

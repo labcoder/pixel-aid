@@ -102,6 +102,15 @@ export const assetTypeDefinitions: readonly AssetTypeDefinition[] = [
     defaultWarnings: []
   },
   {
+    type: "iconSet",
+    label: "Icon set",
+    shortLabel: "Icon set",
+    support: "full",
+    processingMode: "spriteSheet",
+    description: "Grid of unrelated icons, props, or objects that should be sliced as cells without animation playback.",
+    defaultWarnings: []
+  },
+  {
     type: "uiElement",
     label: "UI element",
     shortLabel: "UI",

@@ -15,6 +15,7 @@ export type AssetType =
   | "tilemap"
   | "portrait"
   | "icon"
+  | "iconSet"
   | "uiElement"
   | "background";
 

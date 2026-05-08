@@ -13,6 +13,8 @@ describe("automation option normalization", () => {
     ["tilemap", "tilemap", "tileSheet"],
     ["portrait", "portrait", "single"],
     ["icon", "icon", "single"],
+    ["icon-set", "iconSet", "spriteSheet"],
+    ["iconSet", "iconSet", "spriteSheet"],
     ["ui", "uiElement", "single"],
     ["background", "background", "single"],
   ])("maps %s to %s", (input, assetType, mode) => {

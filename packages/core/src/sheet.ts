@@ -337,6 +337,7 @@ function detectRegularAtlasLayout(
         frameWidth: number;
         frameHeight: number;
         score: number;
+        semantics: "animationRows" | "objectGrid";
       }
     | undefined;
 
@@ -366,16 +367,19 @@ function detectRegularAtlasLayout(
       }
 
       const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
+      const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
+      const repeatedCellSignatures = occupancy.signatureRepeatRatio >= 0.3;
+      const isolatedObjectGrid =
+        occupancy.edgeIsolationRatio >= 0.8 && occupancy.meanInsetRatio >= 0.04 && boundarySeparation >= 0.55 && occupancy.activeRatio >= 0.75;
       if (
         occupancy.activeRatio < 0.5 ||
         occupancy.activeCells < 8 ||
-        occupancy.signatureRepeatRatio < 0.3 ||
         occupancy.edgeIsolationRatio < 0.55 ||
-        occupancy.edgeTouchRatio > 0.45
+        occupancy.edgeTouchRatio > 0.45 ||
+        (!repeatedCellSignatures && !isolatedObjectGrid)
       ) {
         continue;
       }
-      const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
       if (boundarySeparation < 0.45) {
         continue;
       }
@@ -407,7 +411,7 @@ function detectRegularAtlasLayout(
       const cellCount = columns * rows;
       const bestCellCount = best ? best.columns * best.rows : 0;
       if (!best || score > best.score + 0.02 || (Math.abs(score - best.score) <= 0.02 && cellCount > bestCellCount)) {
-        best = { columns, rows, frameWidth, frameHeight, score };
+        best = { columns, rows, frameWidth, frameHeight, score, semantics: repeatedCellSignatures ? "animationRows" : "objectGrid" };
       }
     }
   }
@@ -423,7 +427,11 @@ function detectRegularAtlasLayout(
     frameHeight: best.frameHeight,
     confidence: best.score,
     conditioning,
-    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
+    semantics: best.semantics,
+    reason:
+      best.semantics === "objectGrid"
+        ? `Detected a regular ${best.columns}x${best.rows} object atlas grid with isolated occupied cells.`
+        : `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`
   });
 }
 
@@ -441,6 +449,7 @@ function createRegularAtlasLayout({
   frameHeight,
   confidence,
   conditioning,
+  semantics,
   reason
 }: {
   columns: number;
@@ -449,6 +458,7 @@ function createRegularAtlasLayout({
   frameHeight: number;
   confidence: number;
   conditioning: SheetConditioningDiagnostics;
+  semantics: "animationRows" | "objectGrid";
   reason: string;
 }): SheetLayoutDetection {
   const frames: SpriteFrame[] = [];
@@ -462,17 +472,22 @@ function createRegularAtlasLayout({
     const frameNames: string[] = [];
     const rowY = row * frameHeight;
     rowRects.push({ x: 0, y: rowY, w: columns * frameWidth, h: frameHeight });
-    rowLabels.push({
-      rowIndex: row,
-      name: rowName,
-      rawText: rowName,
-      confidence: 0.82,
-      rect: { x: 0, y: rowY, w: 0, h: frameHeight }
-    });
+    if (semantics === "animationRows") {
+      rowLabels.push({
+        rowIndex: row,
+        name: rowName,
+        rawText: rowName,
+        confidence: 0.82,
+        rect: { x: 0, y: rowY, w: 0, h: frameHeight }
+      });
+    }
 
     for (let column = 0; column < columns; column += 1) {
       const x = column * frameWidth;
-      const name = `${rowName}_${column.toString().padStart(3, "0")}`;
+      const name =
+        semantics === "objectGrid"
+          ? `cell_${String(row * columns + column).padStart(3, "0")}`
+          : `${rowName}_${column.toString().padStart(3, "0")}`;
       frameNames.push(name);
       frames.push({
         name,
@@ -480,18 +495,24 @@ function createRegularAtlasLayout({
         sourceRect: { x, y: rowY, w: frameWidth, h: frameHeight },
         pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
         durationMs: 120,
-        tags: [rowName]
+        ...(semantics === "animationRows" ? { tags: [rowName] } : {})
       });
     }
 
-    rowAnimations.push({
-      name: rowName,
-      frameNames,
-      fps: 8,
-      loop: true
-    });
+    if (semantics === "animationRows") {
+      rowAnimations.push({
+        name: rowName,
+        frameNames,
+        fps: 8,
+        loop: true
+      });
+    }
   }
 
+  const warnings =
+    semantics === "objectGrid"
+      ? ["Detected a regular object/icon atlas grid; cells are sliced without timeline animation semantics."]
+      : ["Detected a regular atlas grid; inspect intentionally unused cells before export."];
   const diagnostics = createSheetDiagnostics({
     rows,
     columns,
@@ -503,10 +524,10 @@ function createRegularAtlasLayout({
     usedDriftFitting: false,
     usedOutlinedCells: false,
     usedContentCentering: false,
-    labelNames: [],
-    labelRowCount: 0,
+    labelNames: rowLabels.map((label) => label.name),
+    labelRowCount: rowLabels.length,
     labelConfidences: [],
-    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."],
+    warnings,
     conditioning
   });
   diagnostics.notes.push(reason);
@@ -526,7 +547,7 @@ function createRegularAtlasLayout({
     confidence,
     diagnostics,
     reason,
-    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."]
+    warnings
   };
 }
 

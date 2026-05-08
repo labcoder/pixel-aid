@@ -12,6 +12,10 @@ describe("bottom panel layout", () => {
     expect(getBottomPanelSections("tileSheet", "spriteSheet", 12)).toEqual(["timeline", "diagnostics"]);
   });
 
+  test("keeps object and icon sets in cell diagnostics instead of animation playback", () => {
+    expect(getBottomPanelSections("spriteSheet", "iconSet", 24)).toEqual(["diagnostics"]);
+  });
+
   test("uses repeat preview for tilesets and no timeline for backgrounds", () => {
     expect(getBottomPanelSections("tileSheet", "tileset")).toEqual(["tilePreview", "diagnostics"]);
     expect(getBottomPanelSections("single", "background")).toEqual(["diagnostics"]);

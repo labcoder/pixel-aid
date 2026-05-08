@@ -23,6 +23,21 @@ import type {
 
 const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 208, 256, 512] as const;
 
+export type CleanupEligibilityPass =
+  | "binaryAlpha"
+  | "matteCleanup"
+  | "haloRemoval"
+  | "outlineRepair"
+  | "jaggyCleanup"
+  | "paletteLimit"
+  | "nativeScaleInference";
+
+export type CleanupEligibilityDecision = {
+  pass: CleanupEligibilityPass;
+  enabled: boolean;
+  reason: string;
+};
+
 export type FixSettingSuggestion = {
   assetType: AssetType;
   mode: AssetMode;
@@ -50,6 +65,7 @@ export type FixSettingSuggestion = {
   outlineMode: OutlineMode;
   outlineSize: number;
   outlineSourceColors: string[];
+  cleanupEligibility: CleanupEligibilityDecision[];
   sheetLayout?: SheetLayoutDetection;
   reason: string;
   confidence: number;
@@ -144,6 +160,16 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     strictSourceSheetDenoiseStrength,
     sourceSizedSheetPreservation
   );
+  const cleanupEligibility = suggestCleanupEligibility({
+    mode,
+    assetType: classification.assetType,
+    sheetConditioning,
+    bakedTransparencyDetected,
+    qualityReport,
+    candidate,
+    strictSourceSheetCleanup,
+    sourceSizedSheetPreservation
+  });
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
     mode,
@@ -156,12 +182,11 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   });
   const contrastExpansionEnabled = suggestContrastExpansionEnabled(
     qualityReport,
-    mode,
-    classification.assetType,
+    cleanupEligibility,
     bakedTransparencyDetected,
     candidate
   );
-  const outline = suggestOutlineRepair(qualityReport, mode, classification.assetType, bakedTransparencyDetected);
+  const outline = suggestOutlineRepair(qualityReport, cleanupEligibility, bakedTransparencyDetected);
   const sheetLayout =
     mode === "spriteSheet" && shouldSurfaceDetectedSheetLayout(detectedSheetLayout)
       ? scaleSheetLayoutDetection(
@@ -209,6 +234,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     outlineMode: outline.mode,
     outlineSize: outline.size,
     outlineSourceColors: outline.sourceColors,
+    cleanupEligibility,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason,
     confidence: candidate?.confidence ?? 0.25,
@@ -244,6 +270,16 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
+  const cleanupEligibility = suggestCleanupEligibility({
+    mode,
+    assetType,
+    sheetConditioning,
+    bakedTransparencyDetected: suggestion.qualityReport.findings.some((finding) => finding.id === "baked-transparency-background"),
+    qualityReport: suggestion.qualityReport,
+    candidate: suggestion.gridCandidates[0],
+    strictSourceSheetCleanup,
+    sourceSizedSheetPreservation
+  });
   const sheetLayout =
     mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
       ? scaleSheetLayoutDetection(detectedSheetLayout, suggestion.gridScaleX, suggestion.gridScaleY)
@@ -270,9 +306,10 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
-    contrastExpansionEnabled: assetType === "sprite" || assetType === "icon" ? suggestion.contrastExpansionEnabled : false,
-    outlineMode: assetType === "sprite" || assetType === "icon" ? suggestion.outlineMode : "none",
-    outlineSourceColors: assetType === "sprite" || assetType === "icon" ? suggestion.outlineSourceColors : [],
+    contrastExpansionEnabled: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.contrastExpansionEnabled : false,
+    outlineMode: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineMode : "none",
+    outlineSourceColors: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineSourceColors : [],
+    cleanupEligibility,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason: `Manual asset type override applied. ${mode === "spriteSheet" && sheetLayout ? "Reprocessed source for sheet rows and frames. " : ""}${suggestion.reason}`,
     modeConfidence: 1,
@@ -385,13 +422,11 @@ function suggestDownscaleMethod(input: {
 
 function suggestContrastExpansionEnabled(
   report: QualityReport,
-  mode: AssetMode,
-  assetType: AssetType,
+  cleanupEligibility: readonly CleanupEligibilityDecision[],
   bakedTransparencyDetected: boolean,
   candidate: GridCandidate | undefined
 ): boolean {
-  const spriteLike = mode === "single" && (assetType === "sprite" || assetType === "icon");
-  if (!spriteLike) {
+  if (!isCleanupPassEnabled(cleanupEligibility, "outlineRepair")) {
     return false;
   }
 
@@ -405,12 +440,10 @@ function suggestContrastExpansionEnabled(
 
 function suggestOutlineRepair(
   report: QualityReport,
-  mode: AssetMode,
-  assetType: AssetType,
+  cleanupEligibility: readonly CleanupEligibilityDecision[],
   bakedTransparencyDetected: boolean
 ): { mode: OutlineMode; size: number; sourceColors: string[] } {
-  const spriteLike = mode === "single" && (assetType === "sprite" || assetType === "icon");
-  if (!spriteLike || (!bakedTransparencyDetected && report.metrics.outline.candidateCount === 0)) {
+  if (!isCleanupPassEnabled(cleanupEligibility, "outlineRepair") || (!bakedTransparencyDetected && report.metrics.outline.candidateCount === 0)) {
     return { mode: "none", size: 1, sourceColors: [] };
   }
 
@@ -424,6 +457,73 @@ function suggestOutlineRepair(
   }
 
   return { mode: "repairExisting", size: 1, sourceColors };
+}
+
+function suggestCleanupEligibility(input: {
+  mode: AssetMode;
+  assetType: AssetType;
+  sheetConditioning: SheetConditioningDiagnostics;
+  bakedTransparencyDetected: boolean;
+  qualityReport: QualityReport;
+  candidate: GridCandidate | undefined;
+  strictSourceSheetCleanup: boolean;
+  sourceSizedSheetPreservation: boolean;
+}): CleanupEligibilityDecision[] {
+  const matteIssue = input.sheetConditioning.issues.some((issue) => isStrictSourceSheetCleanupIssue(issue.code));
+  const preservesScene = input.assetType === "background" || input.assetType === "tilemap";
+  const cleanupAllowed = !preservesScene && !input.sourceSizedSheetPreservation;
+  const spriteLike = input.assetType === "sprite" || input.assetType === "icon" || input.assetType === "iconSet";
+  const sheetLike = input.mode === "spriteSheet" || input.mode === "tileSheet";
+  const selectedScale = Math.min(input.candidate?.scaleX ?? 1, input.candidate?.scaleY ?? input.candidate?.scaleX ?? 1);
+  const outlineEvidence = input.bakedTransparencyDetected || input.qualityReport.metrics.outline.candidateCount > 0;
+
+  return [
+    {
+      pass: "binaryAlpha",
+      enabled: cleanupAllowed && (spriteLike || input.bakedTransparencyDetected || matteIssue),
+      reason: cleanupAllowed
+        ? "Binary alpha is eligible when the source has sprite-like cells, baked background, or matte artifacts."
+        : "Scene-style or preservation-first assets keep alpha conservative by default."
+    },
+    {
+      pass: "matteCleanup",
+      enabled: cleanupAllowed && (input.strictSourceSheetCleanup || matteIssue),
+      reason: matteIssue
+        ? "Saturated matte, soft alpha, or palette-density issues were detected independently of asset type."
+        : "No matte-specific conditioning issue was detected."
+    },
+    {
+      pass: "haloRemoval",
+      enabled: cleanupAllowed && (spriteLike || sheetLike || input.bakedTransparencyDetected || matteIssue),
+      reason: cleanupAllowed ? "Edge halo cleanup can run on sprites, sheets, object grids, and matte-cleanup sources." : "Preservation mode disables halo cleanup."
+    },
+    {
+      pass: "outlineRepair",
+      enabled: cleanupAllowed && outlineEvidence && selectedScale >= 1,
+      reason: outlineEvidence ? "Outline-colored edge evidence was detected." : "No outline repair candidates were detected."
+    },
+    {
+      pass: "jaggyCleanup",
+      enabled: cleanupAllowed && (spriteLike || sheetLike),
+      reason: cleanupAllowed ? "Jaggy cleanup is eligible for cell-based pixel assets." : "Preservation mode disables jaggy cleanup."
+    },
+    {
+      pass: "paletteLimit",
+      enabled: input.assetType !== "background",
+      reason: input.assetType === "background" ? "Large scene backgrounds keep a larger palette budget." : "Palette limiting is eligible for game-asset outputs."
+    },
+    {
+      pass: "nativeScaleInference",
+      enabled: input.strictSourceSheetCleanup,
+      reason: input.strictSourceSheetCleanup
+        ? "Frame-first cleanup should infer each source cell native scale before final packing."
+        : "Native scale inference is only needed for source-sized sheets with cleanup artifacts."
+    }
+  ];
+}
+
+function isCleanupPassEnabled(decisions: readonly CleanupEligibilityDecision[], pass: CleanupEligibilityPass): boolean {
+  return decisions.some((decision) => decision.pass === pass && decision.enabled);
 }
 
 function suggestCleanupSettings(
@@ -537,7 +637,11 @@ function classifyAssetType(input: {
     confidence = 0.78;
     reason = "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.";
   } else if (input.mode === "spriteSheet") {
-    if (input.sheetLayoutScore >= 0.55 || (input.sheetLayout?.rowAnimations.length ?? 0) >= 2) {
+    if (input.sheetLayout && isObjectAtlasLayout(input.sheetLayout)) {
+      assetType = "iconSet";
+      confidence = Math.min(0.94, Math.max(0.78, input.sheetLayoutScore));
+      reason = "Detected a regular object or icon grid, so cells should be sliced without timeline playback.";
+    } else if (input.sheetLayoutScore >= 0.55 || (input.sheetLayout?.rowAnimations.length ?? 0) >= 2) {
       assetType = "animationSheet";
       confidence = Math.min(0.95, Math.max(0.78, input.sheetLayoutScore));
       reason = "Detected repeated frame rows, so animation is represented as sheet frames plus timeline metadata.";
@@ -571,6 +675,15 @@ function classifyAssetType(input: {
     reason,
     warnings: [...definition.defaultWarnings]
   };
+}
+
+function isObjectAtlasLayout(layout: SheetLayoutDetection): boolean {
+  if (layout.rowAnimations.length > 0 || layout.rowLabels.length > 0) {
+    return false;
+  }
+
+  const notes = [layout.reason, ...(layout.diagnostics?.notes ?? []), ...layout.warnings];
+  return notes.some((note) => note.includes("object atlas") || note.includes("object/icon atlas"));
 }
 
 function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number, scaleY: number): SheetLayoutDetection {
@@ -687,7 +800,7 @@ export function chooseSuggestionGrid(
 
 function suggestAlphaMode(image: RGBAImage, mode: AssetMode, assetType: AssetType, fallback: AlphaMode): AlphaMode {
   if (mode !== "single") {
-    return "preserve";
+    return fallback;
   }
 
   const sampleSize = Math.max(1, Math.min(12, image.width, image.height));
@@ -835,7 +948,17 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
 
   const background = estimateCornerColor(image);
   const conditioning = analyzeSheetConditioning(image);
-  let best: { columns: number; rows: number; frameWidth: number; frameHeight: number; score: number; activeRatio: number } | undefined;
+  let best:
+    | {
+        columns: number;
+        rows: number;
+        frameWidth: number;
+        frameHeight: number;
+        score: number;
+        activeRatio: number;
+        semantics: "animationRows" | "objectGrid";
+      }
+    | undefined;
 
   for (let rows = 2; rows <= 12; rows += 1) {
     const heightCandidate = regularAtlasFrameSize(image.height, rows);
@@ -863,16 +986,19 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
       }
 
       const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
+      const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
+      const repeatedCellSignatures = occupancy.signatureRepeatRatio >= 0.3;
+      const isolatedObjectGrid =
+        occupancy.edgeIsolationRatio >= 0.8 && occupancy.meanInsetRatio >= 0.04 && boundarySeparation >= 0.55 && occupancy.activeRatio >= 0.75;
       if (
         occupancy.activeRatio < 0.5 ||
         occupancy.activeCells < 8 ||
-        occupancy.signatureRepeatRatio < 0.3 ||
         occupancy.edgeIsolationRatio < 0.55 ||
-        occupancy.edgeTouchRatio > 0.45
+        occupancy.edgeTouchRatio > 0.45 ||
+        (!repeatedCellSignatures && !isolatedObjectGrid)
       ) {
         continue;
       }
-      const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
       if (boundarySeparation < 0.45) {
         continue;
       }
@@ -904,7 +1030,15 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
       const cellCount = columns * rows;
       const bestCellCount = best ? best.columns * best.rows : 0;
       if (!best || score > best.score + 0.02 || (Math.abs(score - best.score) <= 0.02 && cellCount > bestCellCount)) {
-        best = { columns, rows, frameWidth, frameHeight, score, activeRatio: occupancy.activeRatio };
+        best = {
+          columns,
+          rows,
+          frameWidth,
+          frameHeight,
+          score,
+          activeRatio: occupancy.activeRatio,
+          semantics: repeatedCellSignatures ? "animationRows" : "objectGrid"
+        };
       }
     }
   }
@@ -919,7 +1053,11 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
     frameWidth: best.frameWidth,
     frameHeight: best.frameHeight,
     confidence: best.score,
-    reason: `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`,
+    reason:
+      best.semantics === "objectGrid"
+        ? `Detected a regular ${best.columns}x${best.rows} object atlas grid with isolated occupied cells.`
+        : `Detected a regular ${best.columns}x${best.rows} atlas grid with repeated occupied frame cells.`,
+    semantics: best.semantics,
     conditioning
   });
 }
@@ -938,6 +1076,7 @@ function createRegularAtlasLayout({
   frameHeight,
   confidence,
   reason,
+  semantics,
   conditioning
 }: {
   columns: number;
@@ -946,6 +1085,7 @@ function createRegularAtlasLayout({
   frameHeight: number;
   confidence: number;
   reason: string;
+  semantics: "animationRows" | "objectGrid";
   conditioning?: SheetConditioningDiagnostics;
 }): SheetLayoutDetection {
   const frames: SpriteFrame[] = [];
@@ -957,17 +1097,22 @@ function createRegularAtlasLayout({
   for (let row = 0; row < rows; row += 1) {
     const rowName = `row_${row + 1}`;
     const frameNames: string[] = [];
-    rowLabels.push({
-      rowIndex: row,
-      name: rowName,
-      rawText: rowName,
-      confidence: 0.82,
-      rect: { x: 0, y: row * frameHeight, w: 0, h: frameHeight }
-    });
+    if (semantics === "animationRows") {
+      rowLabels.push({
+        rowIndex: row,
+        name: rowName,
+        rawText: rowName,
+        confidence: 0.82,
+        rect: { x: 0, y: row * frameHeight, w: 0, h: frameHeight }
+      });
+    }
     rowRects.push({ x: 0, y: row * frameHeight, w: columns * frameWidth, h: frameHeight });
 
     for (let column = 0; column < columns; column += 1) {
-      const name = `${rowName}_${String(column).padStart(3, "0")}`;
+      const name =
+        semantics === "objectGrid"
+          ? `cell_${String(row * columns + column).padStart(3, "0")}`
+          : `${rowName}_${String(column).padStart(3, "0")}`;
       frameNames.push(name);
       frames.push({
         name,
@@ -975,18 +1120,24 @@ function createRegularAtlasLayout({
         sourceRect: { x: column * frameWidth, y: row * frameHeight, w: frameWidth, h: frameHeight },
         pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
         durationMs: 120,
-        tags: [rowName]
+        ...(semantics === "animationRows" ? { tags: [rowName] } : {})
       });
     }
 
-    rowAnimations.push({
-      name: rowName,
-      frameNames,
-      loop: true,
-      fps: 8,
-      direction: "forward" as const
-    });
+    if (semantics === "animationRows") {
+      rowAnimations.push({
+        name: rowName,
+        frameNames,
+        loop: true,
+        fps: 8,
+        direction: "forward" as const
+      });
+    }
   }
+  const warnings =
+    semantics === "objectGrid"
+      ? ["Detected a regular object/icon atlas grid; cells are sliced without timeline animation semantics."]
+      : ["Detected a regular atlas grid; inspect intentionally unused cells before export."];
 
   return {
     frameWidth,
@@ -1002,7 +1153,7 @@ function createRegularAtlasLayout({
     rowLabels,
     confidence,
     reason,
-    warnings: ["Detected a regular atlas grid; inspect intentionally unused cells before export."],
+    warnings,
     diagnostics: {
       rowConfidence: {
         label: "high",

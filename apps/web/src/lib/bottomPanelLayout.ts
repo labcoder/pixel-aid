@@ -7,6 +7,10 @@ export function getBottomPanelSections(mode: AssetMode, assetType: AssetType = "
     return ["tilePreview", "diagnostics"];
   }
 
+  if (assetType === "iconSet") {
+    return ["diagnostics"];
+  }
+
   if (mode === "single" || timelineFrameCount <= 0) {
     return ["diagnostics"];
   }

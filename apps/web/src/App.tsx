@@ -3165,11 +3165,15 @@ export function App() {
     const cleanupDefaults = targetAssetSource === "manual" && !useSuggestedStrictSheetCleanup ? preset : suggestion;
     const definition = getAssetTypeDefinition(resolvedAssetType);
     const usesSpriteCleanup = resolvedAssetType === "sprite" || resolvedAssetType === "icon";
+    const suggestionAllowsCleanup = (pass: FixSettingSuggestion["cleanupEligibility"][number]["pass"]) =>
+      suggestion.cleanupEligibility.some((decision) => decision.pass === pass && decision.enabled);
+    const resolvedPreservesScene = resolvedAssetType === "background" || resolvedAssetType === "tilemap";
+    const usesEdgeCleanup = !resolvedPreservesScene && (usesSpriteCleanup || useSuggestedStrictSheetCleanup || suggestionAllowsCleanup("outlineRepair"));
     const resolvedDownscale =
       targetAssetSource === "manual" && !usesSpriteCleanup && !useSuggestedStrictSheetCleanup ? preset.downscale : suggestion.downscale;
-    const resolvedOutlineMode = usesSpriteCleanup ? suggestion.outlineMode : "none";
-    const resolvedOutlineSourceColors = usesSpriteCleanup ? suggestion.outlineSourceColors : [];
-    const resolvedContrastExpansionEnabled = usesSpriteCleanup ? suggestion.contrastExpansionEnabled : false;
+    const resolvedOutlineMode = usesEdgeCleanup ? suggestion.outlineMode : "none";
+    const resolvedOutlineSourceColors = usesEdgeCleanup ? suggestion.outlineSourceColors : [];
+    const resolvedContrastExpansionEnabled = usesEdgeCleanup ? suggestion.contrastExpansionEnabled : false;
     const resolvedWarnings = targetAssetSource === "manual" ? getAssetTypeWarnings(resolvedAssetType) : suggestion.categoryWarnings;
     const resolvedCategoryReason =
       targetAssetSource === "manual"
@@ -3259,7 +3263,7 @@ export function App() {
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
-    setInferNativeScale(resolvedMode === "spriteSheet" && suggestion.inferNativeScale);
+    setInferNativeScale(resolvedMode === "spriteSheet" && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
     setOutlineColorEdited(false);
