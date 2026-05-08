@@ -10,16 +10,35 @@ describe("timeline state", () => {
   });
 
   test("enables timeline when sheet frames exist", () => {
-    expect(getTimelineState("spriteSheet", 8)).toEqual({
+    expect(getTimelineState("spriteSheet", 8, "animationSheet")).toEqual({
       enabled: true,
       message: "8 frames ready for timeline preview."
     });
   });
 
   test("keeps one-frame clips editable even though playback is disabled", () => {
-    expect(getTimelineState("spriteSheet", 1)).toEqual({
+    expect(getTimelineState("spriteSheet", 1, "characterSheet")).toEqual({
       enabled: true,
       message: "1 frame ready for timeline preview."
+    });
+  });
+
+  test("keeps generic and object sheets in no-player mode by default", () => {
+    expect(getTimelineState("spriteSheet", 8, "spriteSheet")).toEqual({
+      enabled: false,
+      message: "Sheet cells are available without timeline playback."
+    });
+    expect(getTimelineState("spriteSheet", 8, "iconSet")).toEqual({
+      enabled: false,
+      message: "Sheet cells are available without timeline playback."
+    });
+  });
+
+  test("allows explicit player and no-player overrides", () => {
+    expect(getTimelineState("spriteSheet", 8, "iconSet", "player")).toMatchObject({ enabled: true });
+    expect(getTimelineState("spriteSheet", 8, "animationSheet", "none")).toEqual({
+      enabled: false,
+      message: "Sheet playback is disabled; cell/frame editing remains available."
     });
   });
 

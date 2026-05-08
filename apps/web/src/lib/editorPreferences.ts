@@ -17,6 +17,7 @@ import { defaultInspectorGroupOrder, type InspectorGroupId } from "./inspectorGr
 import type { EditorPreset, EditorSettingsState } from "./presets";
 import type { OutlineSourceMode } from "./outlineControls";
 import type { TimelineViewportSourceMode } from "./timelineViewportSources";
+import type { SheetPlaybackMode } from "./timelineState";
 import type { PaletteImportFormat, PaletteLibraryEntry } from "./paletteLibrary";
 import { normalizePaletteHex } from "./paletteControls";
 
@@ -58,6 +59,7 @@ export type EditorPreferenceSettings = {
   playbackFps: number;
   playbackLoop: boolean;
   playbackDirection: PlaybackDirection;
+  sheetPlaybackMode: SheetPlaybackMode;
   normalizeTimelineFrames: boolean;
   showOnionSkin: boolean;
   timelineViewportSourceMode: TimelineViewportSourceMode;
@@ -128,6 +130,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   playbackFps: 8,
   playbackLoop: true,
   playbackDirection: "forward",
+  sheetPlaybackMode: "auto",
   normalizeTimelineFrames: true,
   showOnionSkin: false,
   timelineViewportSourceMode: "input",
@@ -239,6 +242,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       playbackFps: numberSetting(settings.playbackFps, defaults.settings.playbackFps, 1, 60),
       playbackLoop: booleanSetting(settings.playbackLoop, defaults.settings.playbackLoop),
       playbackDirection: unionSetting(settings.playbackDirection, ["forward", "reverse", "ping-pong", "hold"], defaults.settings.playbackDirection),
+      sheetPlaybackMode: unionSetting(settings.sheetPlaybackMode, ["auto", "player", "none"], defaults.settings.sheetPlaybackMode),
       normalizeTimelineFrames: booleanSetting(settings.normalizeTimelineFrames, defaults.settings.normalizeTimelineFrames),
       showOnionSkin: booleanSetting(settings.showOnionSkin, defaults.settings.showOnionSkin),
       timelineViewportSourceMode: unionSetting(settings.timelineViewportSourceMode, ["input", "output", "compare"], defaults.settings.timelineViewportSourceMode),

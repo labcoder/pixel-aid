@@ -348,7 +348,7 @@ import {
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
 import { createOperationErrorReport, createWebDiagnosticReport, type OperationErrorReport } from "./lib/diagnosticReport";
-import { getTimelineState, isSheetLikeMode } from "./lib/timelineState";
+import { getTimelineState, isSheetLikeMode, type SheetPlaybackMode } from "./lib/timelineState";
 import { createThumbnailSurfaceCache } from "./lib/thumbnailSurface";
 import {
   coerceTimelineViewportSourceMode,
@@ -861,6 +861,7 @@ type AssetEditorSession = {
     playbackFps: number;
     playbackLoop: boolean;
     playbackDirection: PlaybackDirection;
+    sheetPlaybackMode: SheetPlaybackMode;
     normalizeTimelineFrames: boolean;
     showOnionSkin: boolean;
     timelineViewportSourceMode: TimelineViewportSourceMode;
@@ -1023,6 +1024,7 @@ export function App() {
   const [playbackFps, setPlaybackFps] = useState(initialSettings.playbackFps);
   const [playbackLoop, setPlaybackLoop] = useState(initialSettings.playbackLoop);
   const [playbackDirection, setPlaybackDirection] = useState<PlaybackDirection>(initialSettings.playbackDirection);
+  const [sheetPlaybackMode, setSheetPlaybackMode] = useState<SheetPlaybackMode>(initialSettings.sheetPlaybackMode);
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(initialSettings.normalizeTimelineFrames);
   const [showOnionSkin, setShowOnionSkin] = useState(initialSettings.showOnionSkin);
   const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>(initialSettings.timelineViewportSourceMode);
@@ -1227,6 +1229,7 @@ export function App() {
       setPlaybackFps(settings.playbackFps);
       setPlaybackLoop(settings.playbackLoop);
       setPlaybackDirection(settings.playbackDirection);
+      setSheetPlaybackMode(settings.sheetPlaybackMode);
       setNormalizeTimelineFrames(settings.normalizeTimelineFrames);
       setShowOnionSkin(settings.showOnionSkin);
       setTimelineViewportSourceMode(settings.timelineViewportSourceMode);
@@ -1305,6 +1308,7 @@ export function App() {
         playbackFps,
         playbackLoop,
         playbackDirection,
+        sheetPlaybackMode,
         normalizeTimelineFrames,
         showOnionSkin,
         timelineViewportSourceMode,
@@ -1377,6 +1381,7 @@ export function App() {
     playbackDirection,
     playbackFps,
     playbackLoop,
+    sheetPlaybackMode,
     pivotPreset,
     preserveSinglePixelDetails,
     removeHalos,
@@ -1650,6 +1655,7 @@ export function App() {
         playbackFps,
         playbackLoop,
         playbackDirection,
+        sheetPlaybackMode,
         normalizeTimelineFrames,
         showOnionSkin,
         timelineViewportSourceMode,
@@ -1740,6 +1746,7 @@ export function App() {
       playbackDirection,
       playbackFps,
       playbackLoop,
+      sheetPlaybackMode,
       preserveSinglePixelDetails,
       recommendationConfidence,
       removeHalos,
@@ -1895,6 +1902,7 @@ export function App() {
     setPlaybackFps(timeline.playbackFps);
     setPlaybackLoop(timeline.playbackLoop);
     setPlaybackDirection(timeline.playbackDirection);
+    setSheetPlaybackMode(timeline.sheetPlaybackMode ?? "auto");
     setNormalizeTimelineFrames(timeline.normalizeTimelineFrames);
     setShowOnionSkin(timeline.showOnionSkin);
     setTimelineViewportSourceMode(timeline.timelineViewportSourceMode);
@@ -2678,11 +2686,11 @@ export function App() {
     (sheetLayoutScope !== "frame" || selectedDetectedFrame !== undefined);
   const canUndoFrameEdit = canUndoFrameEditHistory(frameEditHistory);
   const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
-  const timelineState = getTimelineState(mode, timelineFrames.length);
+  const timelineState = getTimelineState(mode, timelineFrames.length, assetType, sheetPlaybackMode);
   const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
   const bottomPanelSections = useMemo(
-    () => getBottomPanelSections(mode, assetType, selectedAsset && sheetMode ? timelineFrames.length : 0),
-    [assetType, mode, selectedAsset, sheetMode, timelineFrames.length]
+    () => getBottomPanelSections(mode, assetType, selectedAsset && sheetMode ? timelineFrames.length : 0, sheetPlaybackMode),
+    [assetType, mode, selectedAsset, sheetMode, sheetPlaybackMode, timelineFrames.length]
   );
   const activeBottomPanelTab = bottomPanelSections.includes(bottomPanelTab) ? bottomPanelTab : (bottomPanelSections[0] ?? "diagnostics");
   const showTimelinePanel = activeBottomPanelTab === "timeline";
@@ -3240,6 +3248,7 @@ export function App() {
       )
     );
     setIsPlaying(false);
+    setSheetPlaybackMode("auto");
     setPivotPreset("bottomCenter");
     setCustomPivotX(Math.floor((layout?.frameWidth ?? suggestion.targetWidth) / 2));
     setCustomPivotY(layout?.frameHeight ?? suggestion.targetHeight);
@@ -3263,7 +3272,7 @@ export function App() {
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
-    setInferNativeScale(resolvedMode === "spriteSheet" && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
+    setInferNativeScale(isSheetLikeMode(resolvedMode) && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
     setOutlineColorEdited(false);
@@ -6048,7 +6057,7 @@ export function App() {
     const manifestName = `${baseName}_manifest.json`;
     const bundleName = exportName.filename;
     const animations =
-      sheetRowAnimations.length > 0
+      timelineState.enabled && sheetRowAnimations.length > 0
         ? animationTagsToManifestAnimations(sheetRowAnimations, {
             fallbackFps: playbackFps,
             fallbackLoop: playbackLoop,
@@ -6193,6 +6202,7 @@ export function App() {
     sheetOptions,
     sheetRowAnimations,
     sheetSpacing,
+    timelineState.enabled,
     tilemapIdentityThreshold,
     tilemapOffsetX,
     tilemapOffsetY
@@ -6883,6 +6893,16 @@ export function App() {
     ),
     frame: sheetMode ? (
       <>
+        <SelectField
+          label="Playback"
+          value={sheetPlaybackMode}
+          options={[
+            ["auto", "Auto"],
+            ["player", "Player"],
+            ["none", "No player"]
+          ]}
+          onChange={(value) => setSheetPlaybackMode(value as SheetPlaybackMode)}
+        />
         {detectedSheetFrames.length > 0 ? (
           <div className="sheet-detection-notes" aria-label="Sheet detection notes">
             {sheetDetectionNotes.map((note) => (

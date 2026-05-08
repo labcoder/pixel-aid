@@ -91,6 +91,16 @@ describe("editor preferences", () => {
     expect(preferences.settings.playbackDirection).toBe("hold");
   });
 
+  test("preserves sheet playback mode preferences", () => {
+    const player = normalizeEditorPreferences({ settings: { sheetPlaybackMode: "player" } });
+    const none = normalizeEditorPreferences({ settings: { sheetPlaybackMode: "none" } });
+    const invalid = normalizeEditorPreferences({ settings: { sheetPlaybackMode: "loop" } });
+
+    expect(player.settings.sheetPlaybackMode).toBe("player");
+    expect(none.settings.sheetPlaybackMode).toBe("none");
+    expect(invalid.settings.sheetPlaybackMode).toBe("auto");
+  });
+
   test("preserves contrast expansion cleanup preference", () => {
     const enabled = normalizeEditorPreferences({ settings: { contrastExpansionEnabled: true } });
     const defaults = createDefaultEditorPreferences();

@@ -6,14 +6,17 @@ describe("bottom panel layout", () => {
     expect(getBottomPanelSections("single")).toEqual(["diagnostics"]);
   });
 
-  test("keeps timeline and diagnostics for sheet-like modes with frames", () => {
+  test("keeps timeline and diagnostics for animation sheet modes with frames", () => {
     expect(getBottomPanelSections("spriteSheet")).toEqual(["diagnostics"]);
-    expect(getBottomPanelSections("spriteSheet", "spriteSheet", 6)).toEqual(["timeline", "diagnostics"]);
-    expect(getBottomPanelSections("tileSheet", "spriteSheet", 12)).toEqual(["timeline", "diagnostics"]);
+    expect(getBottomPanelSections("spriteSheet", "animationSheet", 6)).toEqual(["timeline", "diagnostics"]);
+    expect(getBottomPanelSections("spriteSheet", "characterSheet", 12)).toEqual(["timeline", "diagnostics"]);
   });
 
   test("keeps object and icon sets in cell diagnostics instead of animation playback", () => {
+    expect(getBottomPanelSections("spriteSheet", "spriteSheet", 24)).toEqual(["diagnostics"]);
     expect(getBottomPanelSections("spriteSheet", "iconSet", 24)).toEqual(["diagnostics"]);
+    expect(getBottomPanelSections("spriteSheet", "iconSet", 24, "player")).toEqual(["timeline", "diagnostics"]);
+    expect(getBottomPanelSections("spriteSheet", "animationSheet", 24, "none")).toEqual(["diagnostics"]);
   });
 
   test("uses repeat preview for tilesets and no timeline for backgrounds", () => {
