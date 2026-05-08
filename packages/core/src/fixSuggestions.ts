@@ -863,41 +863,47 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
       }
 
       const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
-      if (occupancy.activeRatio < 0.5 || occupancy.activeCells < 8 || occupancy.signatureRepeatRatio < 0.3) {
+      if (
+        occupancy.activeRatio < 0.5 ||
+        occupancy.activeCells < 8 ||
+        occupancy.signatureRepeatRatio < 0.3 ||
+        occupancy.edgeIsolationRatio < 0.55 ||
+        occupancy.edgeTouchRatio > 0.45
+      ) {
+        continue;
+      }
+      const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
+      if (boundarySeparation < 0.45) {
         continue;
       }
 
       const commonSizeBonus =
         (commonNativeFrameSizes.includes(frameWidth as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0) +
         (commonNativeFrameSizes.includes(frameHeight as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0);
-      const codexPetAtlas = columns === 8 && rows === 9 && frameWidth >= 128 && frameHeight >= 128;
-      const codexPetBonus = codexPetAtlas ? 0.35 : 0;
-      const hasCommonFrameSize = commonSizeBonus >= 0.16;
-      if (!codexPetAtlas && !hasCommonFrameSize) {
-        continue;
-      }
 
       const dimensionBonus = Math.min(0.2, Math.log2(Math.max(2, columns * rows)) / 30);
       const frameCountBonus = Math.min(0.16, (columns * rows) / 72 * 0.16);
       const aspectBonus = 0.16 - Math.min(0.16, Math.abs(Math.log(cellRatio)) * 0.12);
       const nearDivisibilityPenalty = Math.min(0.08, (widthCandidate.delta + heightCandidate.delta) / Math.max(1, frameWidth + frameHeight));
-      const score = codexPetAtlas
-        ? 0.99 - nearDivisibilityPenalty
-        : Math.min(
-            0.96,
-            0.32 +
-              occupancy.activeRatio * 0.22 +
-              occupancy.consistency * 0.12 +
-              occupancy.signatureRepeatRatio * 0.12 +
-              commonSizeBonus +
-              codexPetBonus +
-              dimensionBonus +
-              frameCountBonus +
-              aspectBonus -
-              nearDivisibilityPenalty
-          );
+      const score = Math.min(
+        0.96,
+        0.24 +
+          occupancy.activeRatio * 0.18 +
+          occupancy.consistency * 0.1 +
+          occupancy.signatureRepeatRatio * 0.16 +
+          occupancy.edgeIsolationRatio * 0.14 +
+          occupancy.meanInsetRatio * 0.08 +
+          boundarySeparation * 0.22 +
+          commonSizeBonus +
+          dimensionBonus +
+          frameCountBonus +
+          aspectBonus -
+          nearDivisibilityPenalty
+      );
 
-      if (!best || score > best.score) {
+      const cellCount = columns * rows;
+      const bestCellCount = best ? best.columns * best.rows : 0;
+      if (!best || score > best.score + 0.02 || (Math.abs(score - best.score) <= 0.02 && cellCount > bestCellCount)) {
         best = { columns, rows, frameWidth, frameHeight, score, activeRatio: occupancy.activeRatio };
       }
     }
@@ -1024,12 +1030,23 @@ function measureAtlasOccupancy(
   frameWidth: number,
   frameHeight: number,
   background: { r: number; g: number; b: number; a: number }
-): { activeCells: number; activeRatio: number; consistency: number; signatureRepeatRatio: number } {
+): {
+  activeCells: number;
+  activeRatio: number;
+  consistency: number;
+  signatureRepeatRatio: number;
+  edgeIsolationRatio: number;
+  edgeTouchRatio: number;
+  meanInsetRatio: number;
+} {
   const ratios: number[] = [];
   const signatures: string[] = [];
   const sampleColumns = Math.min(24, Math.max(8, Math.floor(frameWidth / 8)));
   const sampleRows = Math.min(24, Math.max(8, Math.floor(frameHeight / 8)));
   const threshold = 54;
+  let edgeIsolatedCells = 0;
+  let edgeTouchCells = 0;
+  let insetTotal = 0;
 
   for (let row = 0; row < rows; row += 1) {
     for (let column = 0; column < columns; column += 1) {
@@ -1038,6 +1055,10 @@ function measureAtlasOccupancy(
       let r = 0;
       let g = 0;
       let b = 0;
+      let minSampleX = sampleColumns;
+      let minSampleY = sampleRows;
+      let maxSampleX = -1;
+      let maxSampleY = -1;
       const startX = column * frameWidth;
       const startY = row * frameHeight;
 
@@ -1056,6 +1077,10 @@ function measureAtlasOccupancy(
             r += image.data[offset]!;
             g += image.data[offset + 1]!;
             b += image.data[offset + 2]!;
+            minSampleX = Math.min(minSampleX, sx);
+            minSampleY = Math.min(minSampleY, sy);
+            maxSampleX = Math.max(maxSampleX, sx);
+            maxSampleY = Math.max(maxSampleY, sy);
           }
           total += 1;
         }
@@ -1065,6 +1090,16 @@ function measureAtlasOccupancy(
       ratios.push(ratio);
       if (ratio >= 0.025) {
         const invActive = 1 / Math.max(1, active);
+        const touchesEdge = minSampleX === 0 || minSampleY === 0 || maxSampleX === sampleColumns - 1 || maxSampleY === sampleRows - 1;
+        if (touchesEdge) {
+          edgeTouchCells += 1;
+        } else {
+          edgeIsolatedCells += 1;
+        }
+        insetTotal += Math.max(
+          0,
+          Math.min(minSampleX, minSampleY, sampleColumns - 1 - maxSampleX, sampleRows - 1 - maxSampleY) / Math.max(sampleColumns, sampleRows)
+        );
         signatures.push([
           Math.round((r * invActive) / 32),
           Math.round((g * invActive) / 32),
@@ -1088,8 +1123,67 @@ function measureAtlasOccupancy(
     activeCells: activeRatios.length,
     activeRatio: activeRatios.length / Math.max(1, ratios.length),
     consistency: Math.max(0, 1 - variance / Math.max(0.01, mean)),
-    signatureRepeatRatio: repeatedSignatures / Math.max(1, signatures.length)
+    signatureRepeatRatio: repeatedSignatures / Math.max(1, signatures.length),
+    edgeIsolationRatio: edgeIsolatedCells / Math.max(1, activeRatios.length),
+    edgeTouchRatio: edgeTouchCells / Math.max(1, activeRatios.length),
+    meanInsetRatio: insetTotal / Math.max(1, activeRatios.length)
   };
+}
+
+function measureAtlasBoundarySeparation(
+  image: RGBAImage,
+  columns: number,
+  rows: number,
+  frameWidth: number,
+  frameHeight: number,
+  background: { r: number; g: number; b: number; a: number }
+): number {
+  let backgroundLike = 0;
+  let samples = 0;
+  const rowStep = Math.max(1, Math.floor(image.height / 160));
+  const columnStep = Math.max(1, Math.floor(image.width / 160));
+
+  for (let column = 1; column < columns; column += 1) {
+    const x = Math.min(image.width - 1, column * frameWidth);
+    for (let y = 0; y < image.height; y += rowStep) {
+      if (isAtlasBoundaryBackgroundLike(image, x, y, background) || isAtlasBoundaryBackgroundLike(image, Math.max(0, x - 1), y, background)) {
+        backgroundLike += 1;
+      }
+      samples += 1;
+    }
+  }
+
+  for (let row = 1; row < rows; row += 1) {
+    const y = Math.min(image.height - 1, row * frameHeight);
+    for (let x = 0; x < image.width; x += columnStep) {
+      if (isAtlasBoundaryBackgroundLike(image, x, y, background) || isAtlasBoundaryBackgroundLike(image, x, Math.max(0, y - 1), background)) {
+        backgroundLike += 1;
+      }
+      samples += 1;
+    }
+  }
+
+  return samples > 0 ? backgroundLike / samples : 1;
+}
+
+function isAtlasBoundaryBackgroundLike(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  background: { r: number; g: number; b: number; a: number }
+): boolean {
+  const offset = (y * image.width + x) * 4;
+  const alpha = image.data[offset + 3] ?? 0;
+  if (alpha <= 16) {
+    return true;
+  }
+
+  const distance =
+    Math.abs((image.data[offset] ?? 0) - background.r) +
+    Math.abs((image.data[offset + 1] ?? 0) - background.g) +
+    Math.abs((image.data[offset + 2] ?? 0) - background.b) +
+    Math.abs(alpha - background.a);
+  return distance <= 54;
 }
 
 function estimateCornerColor(image: RGBAImage): { r: number; g: number; b: number; a: number } {
