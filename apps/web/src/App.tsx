@@ -237,7 +237,8 @@ import { createFrameSequenceImages } from "./lib/frameSequenceExport";
 import { normalizeFramePlacements, type FramePreviewPlacement } from "./lib/frameNormalization";
 import { assertAutoSuggestScheduled, describeAutoSuggestTrigger } from "./lib/autoSuggestScheduling";
 import { startEngineAutoSuggestJob } from "./lib/engineAutoSuggestJobAdapter";
-import type { FixSettingSuggestion } from "./lib/fixSuggestions";
+import { createCleanupComparisonVariants } from "./lib/fixSuggestions";
+import type { CleanupComparisonVariant, FixSettingSuggestion } from "./lib/fixSuggestions";
 import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
@@ -901,6 +902,7 @@ type AssetEditorSession = {
   recommendation: {
     suggestionReason: string;
     recommendationConfidence: number;
+    cleanupComparisonVariants: CleanupComparisonVariant[];
   };
   cacheKeys: {
     sourceAnalysisKey: string;
@@ -1073,6 +1075,7 @@ export function App() {
   const [contrastExpansionEnabled, setContrastExpansionEnabled] = useState(initialSettings.contrastExpansionEnabled);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
   const [recommendationConfidence, setRecommendationConfidence] = useState(0);
+  const [cleanupComparisonVariants, setCleanupComparisonVariants] = useState<CleanupComparisonVariant[]>([]);
   const [fixResult, setFixResult] = useState<PixelFixResult | null>(null);
   const [tilesetRepairBackup, setTilesetRepairBackup] = useState<PixelFixResult | null>(null);
   const [lastExportValidation, setLastExportValidation] = useState<ExportValidationSummary | null>(null);
@@ -1714,7 +1717,8 @@ export function App() {
       },
       recommendation: {
         suggestionReason,
-        recommendationConfidence
+        recommendationConfidence,
+        cleanupComparisonVariants: cloneSessionValue(cleanupComparisonVariants)
       },
       cacheKeys: {
         sourceAnalysisKey: getSourceAnalysisCacheKey(asset)
@@ -1727,6 +1731,7 @@ export function App() {
       alphaTolerance,
       aspectLocked,
       bottomPanelTab,
+      cleanupComparisonVariants,
       contrastExpansionEnabled,
       cropToBounds,
       customPaletteText,
@@ -1959,6 +1964,7 @@ export function App() {
     setLastExportValidation(result.lastExportValidation);
     setSuggestionReason(recommendation.suggestionReason);
     setRecommendationConfidence(recommendation.recommendationConfidence);
+    setCleanupComparisonVariants(cloneSessionValue(recommendation.cleanupComparisonVariants ?? []));
 
     sourceFrameEditStartSnapshotRef.current = null;
     sourceFrameEditGestureRef.current = null;
@@ -3249,6 +3255,33 @@ export function App() {
     ]
   );
 
+  const applyCleanupComparisonVariant = useCallback(
+    (variant: CleanupComparisonVariant) => {
+      const morphology = variant.cleanup.morphology;
+      setPaletteBudget(variant.maxColors);
+      setDownscale(variant.downscale);
+      setAlpha(variant.alpha);
+      applyAlphaSettings(variant.alphaSettings);
+      setRemoveOrphans(variant.cleanup.removeOrphans);
+      setJaggyCleanup(variant.cleanup.jaggyCleanup);
+      setPreserveSinglePixelDetails(variant.cleanup.preserveSinglePixelDetails);
+      setRemoveHalos(variant.cleanup.removeHalos ?? false);
+      setDenoiseStrength(variant.cleanup.denoiseStrength ?? 0);
+      setDominantThreshold(variant.cleanup.dominantThreshold ?? 0.6);
+      setInferNativeScale(variant.cleanup.inferNativeScale ?? false);
+      setMorphologyCleanup(Boolean(morphology?.enabled && (morphology.close || morphology.fillTinyHoles || morphology.removeTinyComponents)));
+      setMatteCleanup(Boolean(morphology?.enabled && morphology.matteCleanup && variant.alpha === "binary"));
+      setOutlineMode(variant.cleanup.outlineMode ?? "none");
+      setOutlineSize(variant.cleanup.outlineSize ?? 1);
+      setOutlineColorEdited(false);
+      setOutlineSourceMode(variant.cleanup.outlineSourceColors && variant.cleanup.outlineSourceColors.length > 0 ? "manual" : "auto");
+      setSelectedOutlineSourceColors([...(variant.cleanup.outlineSourceColors ?? [])]);
+      setSuggestionReason(`${variant.label}: ${variant.description}`);
+      appendLog(`Applied cleanup variant: ${variant.label}`);
+    },
+    [appendLog, applyAlphaSettings, setPaletteBudget]
+  );
+
   const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion, targetAsset: ImportedImageAsset | null = selectedAsset) => {
     const targetAssetType = targetAsset?.assetType ?? suggestion.assetType;
     const targetAssetSource = targetAsset?.assetTypeSource ?? "auto";
@@ -3378,6 +3411,7 @@ export function App() {
     setSelectedOutlineSourceColors(resolvedOutlineSourceColors);
     setContrastExpansionEnabled(resolvedContrastExpansionEnabled);
     setRecommendationConfidence(suggestion.confidence);
+    setCleanupComparisonVariants(createCleanupComparisonVariants(suggestion));
     setViewMode("before");
     setSuggestionReason(
       formatSuggestionReason(
@@ -3728,6 +3762,7 @@ export function App() {
         );
         cacheFixSuggestionAnalysis(sampleImport.asset, suggestion);
         applyOnboardingSampleSettings(sampleImport, suggestion.gridCandidates);
+        setCleanupComparisonVariants(createCleanupComparisonVariants(suggestion));
         pendingCleanSnapshotAssetIdRef.current = sampleImport.asset.id;
         setLastOperationError(null);
         appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
@@ -5865,6 +5900,7 @@ export function App() {
           clearDetectedSheetLayout();
           setSuggestionReason("Run Auto Suggest to seed this asset's controls.");
           setRecommendationConfidence(0);
+          setCleanupComparisonVariants([]);
         }
         qualityReportSwitchFallbackRef.current = { assetId };
         markActiveAssetSwitchTimingForAsset(assetId, "stateResetFinished");
@@ -6652,6 +6688,15 @@ export function App() {
           options={qualityProfileOptions}
           onChange={(value) => applyQualityProfile(value as QualityProfileId)}
         />
+        {cleanupComparisonVariants.length > 0 ? (
+          <div className="guided-actions cleanup-variant-actions" aria-label="Cleanup comparison variants">
+            {cleanupComparisonVariants.map((variant) => (
+              <button key={variant.id} type="button" onClick={() => applyCleanupComparisonVariant(variant)} title={variant.description}>
+                {variant.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <SelectField
           label="Max colors"
           value={String(maxColors)}

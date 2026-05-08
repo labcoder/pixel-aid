@@ -1815,6 +1815,11 @@ button:focus-visible {
   border-color: var(--cyan);
 }
 
+.cleanup-variant-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 0;
+}
+
 .advanced-collapsed-note {
   display: flex;
   align-items: center;

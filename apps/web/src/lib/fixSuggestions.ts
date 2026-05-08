@@ -1,2 +1,2 @@
-export { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
-export type { FixSettingSuggestion } from "@pixelaid/core";
+export { chooseSuggestionGrid, createCleanupComparisonVariants, suggestFixSettings, suggestFixSettingsForAssetType, summarizeCleanupRationale } from "@pixelaid/core";
+export type { CleanupComparisonVariant, CleanupRationaleItem, FixSettingSuggestion } from "@pixelaid/core";

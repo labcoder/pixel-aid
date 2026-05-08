@@ -36,6 +36,8 @@ export { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 export type { HaloRemovalOptions, HaloRemovalResult } from "./halo";
 export { applyContrastExpansion } from "./contrastExpansion";
 export type { ContrastExpansionOptions, ContrastExpansionResult } from "./contrastExpansion";
+export { createCleanupComparisonVariants, summarizeCleanupRationale } from "./cleanupVariants";
+export type { CleanupComparisonVariant, CleanupComparisonVariantId, CleanupRationaleItem, CleanupRationaleStatus } from "./cleanupVariants";
 export {
   analyzeMaskArtifacts,
   applyMorphologyCleanup,
