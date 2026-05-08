@@ -716,20 +716,6 @@ function withConditioningWarnings(
   ];
 }
 
-function classifyAssetType(input: {
-  mode: AssetMode;
-  width: number;
-  height: number;
-  outputWidth: number;
-  outputHeight: number;
-  sheetLayoutScore: number;
-  sheetLayout?: SheetLayoutDetection;
-  tilemapDiagnostics?: TilemapDiagnostics;
-  foregroundEvidence?: ForegroundObjectEvidence;
-}): AssetTypeClassification {
-  return classificationFromCandidate(rankAssetTypeCandidates(input)[0]);
-}
-
 function classificationFromCandidate(candidate: AssetTypeClassificationCandidate | undefined): AssetTypeClassification {
   const fallback = createAssetTypeCandidate("sprite", 0.72, "Source proportions look like a standalone sprite or prop.", [
     "fallback sprite proportions"
@@ -758,6 +744,9 @@ function rankAssetTypeCandidates(input: {
   const outputRatio = input.outputWidth / input.outputHeight;
   const sourceMax = Math.max(input.width, input.height);
   const outputMax = Math.max(input.outputWidth, input.outputHeight);
+  const surfacedSheetLayout = input.sheetLayout ? shouldSurfaceDetectedSheetLayout(input.sheetLayout) : false;
+  const sheetLikeMode = input.mode === "spriteSheet" || surfacedSheetLayout;
+  const tileGridContext = !surfacedSheetLayout && Math.abs(sourceRatio - 1) < 0.12 && input.width >= 96 && input.height >= 96;
   const candidates: AssetTypeClassificationCandidate[] = [];
 
   candidates.push(
@@ -766,7 +755,7 @@ function rankAssetTypeCandidates(input: {
     ])
   );
 
-  if (input.foregroundEvidence?.singleForegroundObject) {
+  if (input.foregroundEvidence?.singleForegroundObject && !sheetLikeMode) {
     candidates.push(
       createAssetTypeCandidate("sprite", 0.86, "A single isolated foreground object dominates the source, so it should stay a standalone sprite.", [
         "single foreground object",
@@ -776,7 +765,13 @@ function rankAssetTypeCandidates(input: {
   }
 
   const selectedTilemap = input.tilemapDiagnostics?.selected;
-  if (selectedTilemap && !input.foregroundEvidence?.singleForegroundObject) {
+  if (
+    (input.mode === "tileSheet" || tileGridContext) &&
+    !surfacedSheetLayout &&
+    selectedTilemap &&
+    hasPlacedTilemapEvidence(selectedTilemap) &&
+    !input.foregroundEvidence?.singleForegroundObject
+  ) {
     candidates.push(
       createAssetTypeCandidate("tilemap", Math.min(0.9, Math.max(0.8, selectedTilemap.confidence + 0.16)), "Repeated tile identities look like placed tilemap data that should use grid review instead of animation playback.", [
         `${Math.round(selectedTilemap.repeatedTileRatio * 100)}% repeated tile signatures`,
@@ -785,14 +780,14 @@ function rankAssetTypeCandidates(input: {
     );
   }
 
-  if (input.mode === "tileSheet") {
+  if (input.mode === "tileSheet" && !surfacedSheetLayout) {
     candidates.push(
       createAssetTypeCandidate("tileset", 0.78, "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.", [
         "square evenly divisible source",
         "tile sheet processing mode"
       ])
     );
-  } else if (input.mode === "spriteSheet") {
+  } else if (sheetLikeMode) {
     if (input.sheetLayout && isObjectAtlasLayout(input.sheetLayout)) {
       candidates.push(
         createAssetTypeCandidate("iconSet", Math.min(0.94, Math.max(0.78, input.sheetLayoutScore)), "Detected a regular object or icon grid, so cells should be sliced without timeline playback.", [
@@ -843,19 +838,19 @@ function rankAssetTypeCandidates(input: {
     );
   }
 
-  if (sourceMax >= 512 && sourceRatio >= 1.45) {
+  if (!sheetLikeMode && sourceMax >= 512 && sourceRatio >= 1.45) {
     candidates.push(
       createAssetTypeCandidate("background", 0.76, "Large landscape single-image proportions look like a background or scene backdrop.", [
         "large landscape source"
       ])
     );
-  } else if (sourceMax >= 512 && input.height / input.width >= 1.15) {
+  } else if (!sheetLikeMode && sourceMax >= 512 && input.height / input.width >= 1.15) {
     candidates.push(
       createAssetTypeCandidate("portrait", 0.74, "Tall single-image proportions look like a portrait.", ["large portrait source"])
     );
   } else if (outputMax <= 64 && outputRatio >= 0.75 && outputRatio <= 1.35 && (sourceMax <= 128 || (sourceRatio >= 0.9 && sourceRatio <= 1.1))) {
     candidates.push(
-      createAssetTypeCandidate("icon", 0.72, "Small near-square native output looks like an icon.", [
+      createAssetTypeCandidate("icon", 0.76, "Small near-square native output looks like an icon.", [
         "small near-square native output"
       ])
     );
@@ -876,6 +871,19 @@ function rankAssetTypeCandidates(input: {
   }
 
   return [...unique.values()].sort((a, b) => b.confidence - a.confidence);
+}
+
+function hasPlacedTilemapEvidence(candidate: TilemapDiagnostics["selected"]): boolean {
+  if (!candidate) {
+    return false;
+  }
+  return (
+    candidate.uniqueTileSignatures >= 3 &&
+    candidate.tileCount >= 16 &&
+    candidate.repeatedTileRatio >= 0.35 &&
+    candidate.dimensionFitScore >= 0.95 &&
+    candidate.confidence >= 0.62
+  );
 }
 
 type ForegroundObjectEvidence = {
