@@ -121,4 +121,24 @@ describe("sheet source conditioning diagnostics", () => {
       expect.arrayContaining(["soft-alpha-noise", "chroma-matte-artifacts"])
     );
   });
+
+  test("flags saturated matte artifacts without depending on a green color family", () => {
+    const source = image(160, 120, rgba(0, 0, 0, 0));
+    for (let y = 18; y < 102; y += 1) {
+      for (let x = 18; x < 142; x += 1) {
+        writePixel(source, x, y, rgba(245, 245, 245));
+      }
+    }
+    for (let y = 20; y < 88; y += 1) {
+      writePixel(source, 14, y, rgba(255, 0, 220, 160));
+      writePixel(source, 15, y, rgba(0, 220, 255, 160));
+      writePixel(source, 146, y, rgba(82, 18, 104, 255));
+    }
+
+    const diagnostics = analyzeSheetConditioning(source);
+
+    expect(diagnostics.recommendFrameFirst).toBe(true);
+    expect(diagnostics.issues.map((issue) => issue.code)).toContain("chroma-matte-artifacts");
+    expect(diagnostics.issues.find((issue) => issue.code === "chroma-matte-artifacts")?.message).not.toContain("green");
+  });
 });

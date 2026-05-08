@@ -31,22 +31,25 @@ export function analyzeSheetConditioning(
   let softAlphaPixels = 0;
   let chromaMattePixels = 0;
 
-  for (let offset = 0; offset < image.data.length; offset += 4) {
-    const r = image.data[offset] ?? 0;
-    const g = image.data[offset + 1] ?? 0;
-    const b = image.data[offset + 2] ?? 0;
-    const a = image.data[offset + 3] ?? 0;
-    exactColors.add(packRgba(r, g, b, a));
-    if (a > 0 && a < 255) {
-      softAlphaPixels += 1;
-    }
-    if (a > 0 && isChromaMatteColor(r, g, b, background)) {
-      chromaMattePixels += 1;
-    }
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const r = image.data[offset] ?? 0;
+      const g = image.data[offset + 1] ?? 0;
+      const b = image.data[offset + 2] ?? 0;
+      const a = image.data[offset + 3] ?? 0;
+      exactColors.add(packRgba(r, g, b, a));
+      if (a > 0 && a < 255) {
+        softAlphaPixels += 1;
+      }
+      if (a > 0 && isChromaMatteColor(image, x, y, r, g, b, a, background)) {
+        chromaMattePixels += 1;
+      }
 
-    if (a > 0 && colorDistance(r, g, b, background.r, background.g, background.b) > foregroundDistanceThreshold) {
-      foregroundPixels += 1;
-      coarseForegroundBins.add(packRgb555(r, g, b));
+      if (a > 0 && colorDistance(r, g, b, background.r, background.g, background.b) > foregroundDistanceThreshold) {
+        foregroundPixels += 1;
+        coarseForegroundBins.add(packRgb555(r, g, b));
+      }
     }
   }
 
@@ -88,7 +91,7 @@ export function analyzeSheetConditioning(
     issues.push({
       code: "chroma-matte-artifacts",
       severity: "warning",
-      message: `Detected ${chromaMattePixels.toLocaleString()} green/teal matte pixels; remove edge halos before palette locking.`
+      message: `Detected ${chromaMattePixels.toLocaleString()} saturated matte pixels; remove edge halos before palette locking.`
     });
   }
 
@@ -360,22 +363,113 @@ function packRgb555(r: number, g: number, b: number): number {
 }
 
 function isChromaMatteColor(
+  image: RGBAImage,
+  x: number,
+  y: number,
   r: number,
   g: number,
   b: number,
+  a: number,
   background: SheetConditioningDiagnostics["background"]
 ): boolean {
-  if (isGreenishBackground(background)) {
+  if (isSameChromaFamily(r, g, b, background.r, background.g, background.b) && colorDistance(r, g, b, background.r, background.g, background.b) <= 64) {
     return false;
   }
 
-  const neonGreen = g >= 150 && r <= 90 && b <= 110 && g - r >= 70 && g - b >= 45;
-  const darkGreen = g >= 64 && r <= 56 && b <= 96 && g >= r + 22 && g >= b - 8;
-  return neonGreen || darkGreen;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const colorfulness = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+  const artificialChroma = max >= 150 && spread >= 88 && colorfulness >= 160;
+  const darkSaturated = max >= 56 && min <= 112 && spread >= 38 && colorfulness >= 72;
+  if (!artificialChroma && !darkSaturated) {
+    return false;
+  }
+
+  if (a < 255) {
+    return true;
+  }
+
+  return hasWeakLocalColorSupport(image, x, y, r, g, b, a, background);
 }
 
-function isGreenishBackground(background: SheetConditioningDiagnostics["background"]): boolean {
-  return background.a > 16 && background.g >= 64 && background.g >= background.r + 22 && background.g >= background.b - 8;
+function hasWeakLocalColorSupport(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  background: SheetConditioningDiagnostics["background"]
+): boolean {
+  let similarNeighbors = 0;
+  let backgroundNeighbors = 0;
+  const left = inspectMatteNeighbor(image, x - 1, y, r, g, b, a, background);
+  similarNeighbors += left & 1;
+  backgroundNeighbors += left >> 1;
+  const right = inspectMatteNeighbor(image, x + 1, y, r, g, b, a, background);
+  similarNeighbors += right & 1;
+  backgroundNeighbors += right >> 1;
+  const up = inspectMatteNeighbor(image, x, y - 1, r, g, b, a, background);
+  similarNeighbors += up & 1;
+  backgroundNeighbors += up >> 1;
+  const down = inspectMatteNeighbor(image, x, y + 1, r, g, b, a, background);
+  similarNeighbors += down & 1;
+  backgroundNeighbors += down >> 1;
+
+  return backgroundNeighbors > 0 && similarNeighbors <= 2;
+}
+
+function inspectMatteNeighbor(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  r: number,
+  g: number,
+  b: number,
+  a: number,
+  background: SheetConditioningDiagnostics["background"]
+): number {
+  if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
+    return 2;
+  }
+
+  const offset = (y * image.width + x) * 4;
+  const nr = image.data[offset] ?? 0;
+  const ng = image.data[offset + 1] ?? 0;
+  const nb = image.data[offset + 2] ?? 0;
+  const na = image.data[offset + 3] ?? 0;
+  const similar = Math.abs(na - a) <= 24 && colorDistance(r, g, b, nr, ng, nb) <= 42 ? 1 : 0;
+  const backgroundLike = na <= 16 || colorDistance(nr, ng, nb, background.r, background.g, background.b) <= 36 ? 1 : 0;
+  return similar | (backgroundLike << 1);
+}
+
+function isSameChromaFamily(r: number, g: number, b: number, otherR: number, otherG: number, otherB: number): boolean {
+  const mask = chromaFamilyMask(r, g, b);
+  return mask !== 0 && mask === chromaFamilyMask(otherR, otherG, otherB);
+}
+
+function chromaFamilyMask(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  if (max < 48 || spread < 24) {
+    return 0;
+  }
+
+  const threshold = max - Math.max(20, Math.round(spread * 0.35));
+  let mask = 0;
+  if (r >= threshold) {
+    mask |= 1;
+  }
+  if (g >= threshold) {
+    mask |= 2;
+  }
+  if (b >= threshold) {
+    mask |= 4;
+  }
+  return mask;
 }
 
 function colorDistance(r1: number, g1: number, b1: number, r2: number, g2: number, b2: number): number {
