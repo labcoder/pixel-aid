@@ -55,7 +55,13 @@ export { downsampleBlocks } from "./downsample";
 export type { DownsampleOptions } from "./downsample";
 export { fixImage } from "./fix";
 export { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetType } from "./fixSuggestions";
-export type { AssetTypeClassificationCandidate, CleanupEligibilityDecision, CleanupEligibilityPass, FixSettingSuggestion } from "./fixSuggestions";
+export type {
+  AssetTypeClassificationCandidate,
+  CleanupEligibilityDecision,
+  CleanupEligibilityPass,
+  FixSettingSuggestion,
+  NativeScaleInferenceDiagnostic
+} from "./fixSuggestions";
 export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./image";
 export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup, applyOutlineCleanupDetailed, detectOutlineColorCandidates } from "./outline";

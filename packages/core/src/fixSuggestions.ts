@@ -50,6 +50,16 @@ export type AssetTypeClassificationCandidate = {
   warnings: AssetTypeWarning[];
 };
 
+export type NativeScaleInferenceDiagnostic = {
+  enabled: boolean;
+  scope: "none" | "cell-grid";
+  scaleX: number;
+  scaleY: number;
+  confidence: number;
+  reasonCode: string;
+  reason: string;
+};
+
 export type FixSettingSuggestion = {
   assetType: AssetType;
   mode: AssetMode;
@@ -74,6 +84,7 @@ export type FixSettingSuggestion = {
   matteCleanup: boolean;
   denoiseStrength: number;
   inferNativeScale: boolean;
+  nativeScaleInference: NativeScaleInferenceDiagnostic;
   contrastExpansionEnabled: boolean;
   outlineMode: OutlineMode;
   outlineSize: number;
@@ -179,6 +190,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     strictSourceSheetDenoiseStrength,
     sourceSizedSheetPreservation
   );
+  const nativeScaleInference = describeNativeScaleInference({
+    enabled: strictSourceSheetCleanup,
+    image,
+    sheetLayout: detectedSheetLayout,
+    candidate,
+    sourceSizedSheetPreservation
+  });
   const cleanupEligibility = suggestCleanupEligibility({
     mode,
     assetType: classification.assetType,
@@ -250,6 +268,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     matteCleanup: cleanup.matteCleanup,
     denoiseStrength: cleanup.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
+    nativeScaleInference,
     contrastExpansionEnabled,
     outlineMode: outline.mode,
     outlineSize: outline.size,
@@ -277,13 +296,13 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
   const preset = getAssetTypeCleanupPreset(assetType);
   const warnings = getAssetTypeWarnings(assetType);
   const detectedSheetLayout =
-    mode === "spriteSheet" ? (suggestion.sheetLayout ?? detectSheetLayout(image)) : undefined;
+    isCellGridMode(mode) ? (suggestion.sheetLayout ?? detectSheetLayout(image)) : undefined;
   const sheetConditioning =
-    mode === "spriteSheet" ? detectedSheetLayout?.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
+    isCellGridMode(mode) ? detectedSheetLayout?.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const strictSourceSheetCleanup =
-    mode === "spriteSheet" && detectedSheetLayout ? shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning) : false;
+    isCellGridMode(mode) && detectedSheetLayout ? shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning) : false;
   const sourceSizedSheetPreservation =
-    mode === "spriteSheet" && detectedSheetLayout
+    isCellGridMode(mode) && detectedSheetLayout
       ? shouldUseSourceSizedSheetPreservation(mode, image, detectedSheetLayout, sheetConditioning, strictSourceSheetCleanup)
       : false;
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
@@ -301,10 +320,17 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     sourceSizedSheetPreservation
   });
   const sheetLayout =
-    mode === "spriteSheet" && detectedSheetLayout && detectedSheetLayout.frames.length > 0
+    isCellGridMode(mode) && detectedSheetLayout && detectedSheetLayout.frames.length > 0
       ? scaleSheetLayoutDetection(detectedSheetLayout, suggestion.gridScaleX, suggestion.gridScaleY)
       : undefined;
   const targetSize = sheetLayout ? packedSheetSize(sheetLayout) : { width: suggestion.targetWidth, height: suggestion.targetHeight };
+  const nativeScaleInference = describeNativeScaleInference({
+    enabled: strictSourceSheetCleanup,
+    image,
+    sheetLayout: detectedSheetLayout,
+    candidate: suggestion.gridCandidates[0],
+    sourceSizedSheetPreservation
+  });
 
   return {
     ...suggestion,
@@ -331,6 +357,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     matteCleanup: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup,
     denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
+    nativeScaleInference,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
     contrastExpansionEnabled: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.contrastExpansionEnabled : false,
     outlineMode: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineMode : "none",
@@ -354,13 +381,17 @@ function shouldUseBackgroundCleanedGrid(
   return mode === "single" && (assetType === "sprite" || assetType === "icon") && bakedTransparencyDetected && alpha === "backgroundFloodFill";
 }
 
+function isCellGridMode(mode: AssetMode): boolean {
+  return mode === "spriteSheet" || mode === "tileSheet";
+}
+
 function shouldUseStrictSourceSheetCleanup(
   mode: AssetMode,
   image: RGBAImage,
   sheetLayout: SheetLayoutDetection,
   sheetConditioning: SheetConditioningDiagnostics
 ): boolean {
-  if (mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
+  if (!isCellGridMode(mode) || !isSourceSizedSheetLayout(image, sheetLayout)) {
     return false;
   }
 
@@ -374,7 +405,7 @@ function shouldUseSourceSizedSheetPreservation(
   sheetConditioning: SheetConditioningDiagnostics,
   strictSourceSheetCleanup: boolean
 ): boolean {
-  if (strictSourceSheetCleanup || mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
+  if (strictSourceSheetCleanup || !isCellGridMode(mode) || !isSourceSizedSheetLayout(image, sheetLayout)) {
     return false;
   }
 
@@ -424,6 +455,42 @@ function suggestStrictSourceSheetMaxColors(maxColors: number): number {
 
 function suggestStrictSourceSheetDenoiseStrength(): number {
   return 0;
+}
+
+function describeNativeScaleInference(input: {
+  enabled: boolean;
+  image: RGBAImage;
+  sheetLayout: SheetLayoutDetection | undefined;
+  candidate: GridCandidate | undefined;
+  sourceSizedSheetPreservation: boolean;
+}): NativeScaleInferenceDiagnostic {
+  if (!input.enabled || !input.sheetLayout || input.sheetLayout.frames.length === 0) {
+    return {
+      enabled: false,
+      scope: "none",
+      scaleX: input.candidate?.scaleX ?? 1,
+      scaleY: input.candidate?.scaleY ?? 1,
+      confidence: input.sourceSizedSheetPreservation ? 0.55 : 0,
+      reasonCode: input.sourceSizedSheetPreservation ? "source-sized-preservation" : "native-scale-not-needed",
+      reason: input.sourceSizedSheetPreservation
+        ? "Source-sized cells already look clean enough to preserve without cleanup-first native scale inference."
+        : "Native scale inference was skipped because cleanup-first cell processing was not justified."
+    };
+  }
+
+  const packedWidth = Math.max(1, input.sheetLayout.frameWidth * input.sheetLayout.columns);
+  const packedHeight = Math.max(1, input.sheetLayout.frameHeight * input.sheetLayout.rows);
+  const scaleX = input.image.width / packedWidth;
+  const scaleY = input.image.height / packedHeight;
+  return {
+    enabled: true,
+    scope: "cell-grid",
+    scaleX: Number(scaleX.toFixed(3)),
+    scaleY: Number(scaleY.toFixed(3)),
+    confidence: Math.min(0.98, Math.max(0.7, input.sheetLayout.confidence)),
+    reasonCode: "source-sized-cleanup-first",
+    reason: "Source-sized cell grid has cleanup artifacts, so PixelAid should infer native cell scale before final packing."
+  };
 }
 
 function suggestDownscaleMethod(input: {

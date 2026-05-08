@@ -193,6 +193,13 @@ describe("optimization 6.6 heuristic audit", () => {
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.matteCleanup).toBe(true);
     expect(suggestion.inferNativeScale).toBe(true);
+    expect(suggestion.nativeScaleInference).toMatchObject({
+      enabled: true,
+      scope: "cell-grid",
+      scaleX: 1,
+      scaleY: 1
+    });
+    expect(suggestion.nativeScaleInference?.confidence).toBeGreaterThanOrEqual(0.7);
     expect(suggestion.cleanupEligibility).toContainEqual(
       expect.objectContaining({
         pass: "matteCleanup",
@@ -200,6 +207,36 @@ describe("optimization 6.6 heuristic audit", () => {
         reasonCode: "matte-artifact-evidence"
       })
     );
+  });
+
+  test("allows source-sized cleanup-first native scale inference for matte-heavy tilesets", () => {
+    const suggestion = suggestFixSettingsForAssetType(matteArtifactIconSetGrid(), "tileset");
+
+    expect(suggestion.assetType).toBe("tileset");
+    expect(suggestion.mode).toBe("tileSheet");
+    expect(suggestion.inferNativeScale).toBe(true);
+    expect(suggestion.nativeScaleInference).toMatchObject({
+      enabled: true,
+      scope: "cell-grid"
+    });
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "nativeScaleInference",
+        enabled: true,
+        reasonCode: "source-sized-cleanup-first"
+      })
+    );
+  });
+
+  test("keeps low-confidence background overrides out of native scale inference", () => {
+    const suggestion = suggestFixSettingsForAssetType(matteArtifactIconSetGrid(), "background");
+
+    expect(suggestion.assetType).toBe("background");
+    expect(suggestion.inferNativeScale).toBe(false);
+    expect(suggestion.nativeScaleInference).toMatchObject({
+      enabled: false,
+      scope: "none"
+    });
   });
 
   test("classifies repeated placed grids as tilemaps rather than animation sheets", () => {
