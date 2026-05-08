@@ -81,6 +81,62 @@ function matteArtifactIconSetGrid(): RGBAImage {
   return image;
 }
 
+function repeatedTilemap(): RGBAImage {
+  const columns = 8;
+  const rows = 8;
+  const tileSize = 16;
+  const image = createImage(columns * tileSize, rows * tileSize, [0, 0, 0, 255]);
+  const palette: readonly (readonly [number, number, number, number])[] = [
+    [28, 68, 52, 255],
+    [48, 104, 68, 255],
+    [74, 136, 82, 255],
+    [32, 52, 84, 255]
+  ];
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const color = palette[(row + column * 2) % palette.length]!;
+      fillRect(image, column * tileSize, row * tileSize, tileSize, tileSize, color);
+      fillRect(image, column * tileSize + 3, row * tileSize + 3, 4, 4, [color[0] + 8, color[1] + 8, color[2] + 8, 255]);
+    }
+  }
+
+  return image;
+}
+
+function uniqueTileset(): RGBAImage {
+  const columns = 8;
+  const rows = 8;
+  const tileSize = 16;
+  const image = createImage(columns * tileSize, rows * tileSize, [0, 0, 0, 255]);
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      const seed = row * columns + column;
+      const x = column * tileSize;
+      const y = row * tileSize;
+      fillRect(image, x, y, tileSize, tileSize, [24 + (seed * 11) % 96, 32 + (seed * 17) % 104, 48 + (seed * 23) % 96, 255]);
+      fillRect(image, x + (seed % 6), y + ((seed * 3) % 6), 6, 6, [160 + (seed * 5) % 80, 96 + (seed * 7) % 120, 48 + (seed * 13) % 144, 255]);
+    }
+  }
+
+  return image;
+}
+
+function largeSingleSprite(): RGBAImage {
+  const image = createImage(512, 512, [0, 0, 0, 0]);
+  fillRect(image, 160, 104, 192, 152, [238, 242, 236, 255]);
+  fillRect(image, 196, 148, 120, 52, [18, 22, 36, 255]);
+  fillRect(image, 216, 168, 16, 14, [36, 184, 224, 255]);
+  fillRect(image, 280, 168, 16, 14, [36, 184, 224, 255]);
+  fillRect(image, 212, 256, 88, 120, [36, 132, 220, 255]);
+  fillRect(image, 128, 284, 84, 36, [238, 242, 236, 255]);
+  fillRect(image, 300, 284, 84, 36, [238, 242, 236, 255]);
+  fillRect(image, 196, 376, 44, 96, [238, 242, 236, 255]);
+  fillRect(image, 272, 376, 44, 96, [238, 242, 236, 255]);
+  return image;
+}
+
 describe("optimization 6.6 heuristic audit", () => {
   test("detects regular atlases from grid evidence without requiring common frame sizes", () => {
     const image = nonCommonRegularObjectGrid();
@@ -143,6 +199,41 @@ describe("optimization 6.6 heuristic audit", () => {
         enabled: true,
         reasonCode: "matte-artifact-evidence"
       })
+    );
+  });
+
+  test("classifies repeated placed grids as tilemaps rather than animation sheets", () => {
+    const suggestion = suggestFixSettings(repeatedTilemap());
+
+    expect(suggestion.assetType).toBe("tilemap");
+    expect(suggestion.classificationCandidates[0]).toMatchObject({
+      assetType: "tilemap",
+      mode: "tileSheet"
+    });
+    expect(suggestion.classificationCandidates[0]?.evidence).toEqual(
+      expect.arrayContaining([expect.stringContaining("repeated tile")])
+    );
+  });
+
+  test("keeps unique square grids out of tilemap classification", () => {
+    const suggestion = suggestFixSettings(uniqueTileset());
+
+    expect(suggestion.assetType).toBe("tileset");
+    expect(suggestion.classificationCandidates[0]).toMatchObject({
+      assetType: "tileset"
+    });
+    expect(suggestion.classificationCandidates[0]?.evidence).toEqual(
+      expect.arrayContaining([expect.stringContaining("unique")])
+    );
+  });
+
+  test("keeps large isolated foreground objects classified as single sprites", () => {
+    const suggestion = suggestFixSettings(largeSingleSprite());
+
+    expect(suggestion.assetType).toBe("sprite");
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.classificationCandidates[0]?.evidence).toEqual(
+      expect.arrayContaining([expect.stringContaining("single foreground object")])
     );
   });
 });

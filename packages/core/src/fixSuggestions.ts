@@ -3,6 +3,7 @@ import { detectGridCandidates } from "./grid";
 import { analyzeQualityReport, type QualityReport } from "./qualityReport";
 import { detectSheetLayout } from "./sheet";
 import { analyzeSheetConditioning } from "./sheetConditioning";
+import { analyzeTilemapDiagnostics } from "./tilemapDiagnostics";
 import { assetTypeToMode, getAssetTypeCleanupPreset, getAssetTypeDefinition, getAssetTypeWarnings } from "@pixelaid/shared";
 import type {
   AlphaMode,
@@ -18,7 +19,8 @@ import type {
   RGBAImage,
   SheetConditioningDiagnostics,
   SheetLayoutDetection,
-  SpriteFrame
+  SpriteFrame,
+  TilemapDiagnostics
 } from "@pixelaid/shared";
 
 const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 208, 256, 512] as const;
@@ -104,6 +106,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const sheetConditioning =
     shouldAnalyzeSheet ? detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const sheetLayoutScore = Math.max(quickSheetLayoutScore, detectedSheetLayout.confidence);
+  const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
+  const foregroundEvidence = estimateForegroundObjectEvidence(image);
   let candidate = chooseSuggestionGrid(image, candidates, initialMode);
   let outputWidth = candidate?.outputWidth ?? image.width;
   let outputHeight = candidate?.outputHeight ?? image.height;
@@ -116,7 +120,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     outputWidth,
     outputHeight,
     sheetLayoutScore,
-    sheetLayout: detectedSheetLayout
+    sheetLayout: detectedSheetLayout,
+    tilemapDiagnostics,
+    foregroundEvidence
   };
   const classificationCandidates = rankAssetTypeCandidates(classificationInput);
   const classification = classificationFromCandidate(classificationCandidates[0]);
@@ -651,6 +657,8 @@ function classifyAssetType(input: {
   outputHeight: number;
   sheetLayoutScore: number;
   sheetLayout?: SheetLayoutDetection;
+  tilemapDiagnostics?: TilemapDiagnostics;
+  foregroundEvidence?: ForegroundObjectEvidence;
 }): AssetTypeClassification {
   return classificationFromCandidate(rankAssetTypeCandidates(input)[0]);
 }
@@ -676,6 +684,8 @@ function rankAssetTypeCandidates(input: {
   outputHeight: number;
   sheetLayoutScore: number;
   sheetLayout?: SheetLayoutDetection;
+  tilemapDiagnostics?: TilemapDiagnostics;
+  foregroundEvidence?: ForegroundObjectEvidence;
 }): AssetTypeClassificationCandidate[] {
   const sourceRatio = input.width / input.height;
   const outputRatio = input.outputWidth / input.outputHeight;
@@ -688,6 +698,25 @@ function rankAssetTypeCandidates(input: {
       "balanced standalone proportions"
     ])
   );
+
+  if (input.foregroundEvidence?.singleForegroundObject) {
+    candidates.push(
+      createAssetTypeCandidate("sprite", 0.86, "A single isolated foreground object dominates the source, so it should stay a standalone sprite.", [
+        "single foreground object",
+        `foreground bounds cover ${Math.round(input.foregroundEvidence.boundsCoverage * 100)}% of the source`
+      ])
+    );
+  }
+
+  const selectedTilemap = input.tilemapDiagnostics?.selected;
+  if (selectedTilemap && !input.foregroundEvidence?.singleForegroundObject) {
+    candidates.push(
+      createAssetTypeCandidate("tilemap", Math.min(0.9, Math.max(0.8, selectedTilemap.confidence + 0.16)), "Repeated tile identities look like placed tilemap data that should use grid review instead of animation playback.", [
+        `${Math.round(selectedTilemap.repeatedTileRatio * 100)}% repeated tile signatures`,
+        `${selectedTilemap.columns}x${selectedTilemap.rows} placed map grid`
+      ])
+    );
+  }
 
   if (input.mode === "tileSheet") {
     candidates.push(
@@ -736,6 +765,17 @@ function rankAssetTypeCandidates(input: {
     );
   }
 
+  const squareSource = Math.abs(sourceRatio - 1) < 0.12 && input.width >= 96 && input.height >= 96;
+  const bestTilemap = input.tilemapDiagnostics?.candidates[0];
+  if (squareSource && !selectedTilemap && !input.foregroundEvidence?.singleForegroundObject) {
+    candidates.push(
+      createAssetTypeCandidate("tileset", 0.77, "Square grid source has mostly unique cells, so it is safer as a tileset/object grid than a repeated tilemap.", [
+        "square grid source",
+        bestTilemap ? `${Math.round((1 - bestTilemap.repeatedTileRatio) * 100)}% unique tile signatures` : "unique cell evidence"
+      ])
+    );
+  }
+
   if (sourceMax >= 512 && sourceRatio >= 1.45) {
     candidates.push(
       createAssetTypeCandidate("background", 0.76, "Large landscape single-image proportions look like a background or scene backdrop.", [
@@ -769,6 +809,66 @@ function rankAssetTypeCandidates(input: {
   }
 
   return [...unique.values()].sort((a, b) => b.confidence - a.confidence);
+}
+
+type ForegroundObjectEvidence = {
+  singleForegroundObject: boolean;
+  foregroundRatio: number;
+  boundsCoverage: number;
+  edgeTouchRatio: number;
+};
+
+function estimateForegroundObjectEvidence(image: RGBAImage): ForegroundObjectEvidence {
+  const background = estimateCornerColor(image);
+  const step = Math.max(1, Math.floor(Math.max(image.width, image.height) / 160));
+  const threshold = 64;
+  let foreground = 0;
+  let total = 0;
+  let edgeTouch = 0;
+  let minX = image.width;
+  let minY = image.height;
+  let maxX = -1;
+  let maxY = -1;
+
+  for (let y = 0; y < image.height; y += step) {
+    for (let x = 0; x < image.width; x += step) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3] ?? 0;
+      const distance =
+        Math.abs((image.data[offset] ?? 0) - background.r) +
+        Math.abs((image.data[offset + 1] ?? 0) - background.g) +
+        Math.abs((image.data[offset + 2] ?? 0) - background.b) +
+        Math.abs(alpha - background.a);
+      const active = alpha > 16 && (background.a <= 16 ? true : distance > threshold);
+      if (active) {
+        foreground += 1;
+        minX = Math.min(minX, x);
+        minY = Math.min(minY, y);
+        maxX = Math.max(maxX, x);
+        maxY = Math.max(maxY, y);
+        if (x <= step || y <= step || x >= image.width - step * 2 || y >= image.height - step * 2) {
+          edgeTouch += 1;
+        }
+      }
+      total += 1;
+    }
+  }
+
+  const foregroundRatio = foreground / Math.max(1, total);
+  const boundsArea = maxX >= minX && maxY >= minY ? (maxX - minX + step) * (maxY - minY + step) : 0;
+  const boundsCoverage = boundsArea / Math.max(1, image.width * image.height);
+  const edgeTouchRatio = edgeTouch / Math.max(1, foreground);
+  return {
+    singleForegroundObject:
+      foregroundRatio >= 0.04 &&
+      foregroundRatio <= 0.65 &&
+      boundsCoverage >= 0.18 &&
+      boundsCoverage <= 0.78 &&
+      edgeTouchRatio <= 0.08,
+    foregroundRatio,
+    boundsCoverage,
+    edgeTouchRatio
+  };
 }
 
 function createAssetTypeCandidate(
