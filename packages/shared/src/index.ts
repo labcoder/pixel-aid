@@ -50,6 +50,7 @@ export type {
   PixelAssetManifest,
   PixelFixDiagnostics,
   PixelFixResult,
+  QualityProfileId,
   Rect,
   RGBAImage,
   SceneAssetDiagnostics,
@@ -97,3 +98,5 @@ export { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition } from ".
 export type { AssetTypeDefinition } from "./assetTypes";
 export { getAssetTypeCleanupPreset, getAssetTypeWarnings } from "./assetTypePresets";
 export type { AssetTypeCleanupPreset } from "./assetTypePresets";
+export { applyQualityProfileToFixOptions, getQualityProfileDefinition, qualityProfileDefinitions } from "./qualityProfiles";
+export type { QualityProfileDefinition, QualityProfileFixOverride, QualityProfileSettings } from "./qualityProfiles";

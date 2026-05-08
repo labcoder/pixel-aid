@@ -338,6 +338,10 @@ function normalizeCleanup(
     outlineSize: normalizeIntegerOrDefault(input?.outlineSize, fallback.outlineSize ?? 1),
     outlineAlpha: normalizeIntegerOrDefault(input?.outlineAlpha, fallback.outlineAlpha ?? 255),
   };
+  const dominantThreshold = normalizeRatioOrDefault(input?.dominantThreshold, fallback.dominantThreshold);
+  if (dominantThreshold !== undefined) {
+    cleanup.dominantThreshold = dominantThreshold;
+  }
   const removeHalos = input?.removeHalos ?? fallback.removeHalos;
   if (removeHalos !== undefined) {
     cleanup.removeHalos = removeHalos;
@@ -476,6 +480,11 @@ function normalizeNonNegativeInteger(value: number, name: string): AutomationRes
 
 function normalizeIntegerOrDefault(value: number | undefined, fallback: number): number {
   return Number.isFinite(value) ? Math.round(value!) : fallback;
+}
+
+function normalizeRatioOrDefault(value: number | undefined, fallback: number | undefined): number | undefined {
+  const raw = Number.isFinite(value) ? value! : fallback;
+  return Number.isFinite(raw) ? Math.min(1, Math.max(0.05, raw!)) : undefined;
 }
 
 function assignFinite<T extends object, K extends keyof T>(target: T, key: K, value: T[K] | undefined): void {

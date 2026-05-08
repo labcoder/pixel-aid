@@ -71,7 +71,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
         ...localDriftBoundaries,
         method: options.downscale,
-        alpha: options.alpha
+        alpha: options.alpha,
+        ...adaptiveCoverageOption(options)
       },
       {
         runtime,
@@ -344,7 +345,8 @@ function fixSheetFrameSource(
             phaseX: sourceRect.x,
             phaseY: sourceRect.y,
             method: options.downscale,
-            alpha: options.alpha
+            alpha: options.alpha,
+            ...adaptiveCoverageOption(options)
           },
           {
             runtime: progress.runtime,
@@ -463,6 +465,18 @@ function getSheetFrameCleanupOptions(options: FixOptions, inferredNativeScale: b
       denoiseStrength: Math.min(options.cleanup.denoiseStrength ?? 0, 12)
     }
   };
+}
+
+function normalizeDominantThreshold(value: number | undefined): number | undefined {
+  if (!Number.isFinite(value)) {
+    return undefined;
+  }
+  return Math.min(1, Math.max(0.05, value!));
+}
+
+function adaptiveCoverageOption(options: FixOptions): { adaptiveCoverage?: number } {
+  const adaptiveCoverage = normalizeDominantThreshold(options.cleanup.dominantThreshold);
+  return adaptiveCoverage === undefined ? {} : { adaptiveCoverage };
 }
 
 function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {

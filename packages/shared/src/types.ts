@@ -429,6 +429,14 @@ export type MorphologyDiagnostics = {
   warnings: string[];
 };
 
+export type QualityProfileId =
+  | "balanced"
+  | "cleanSprite"
+  | "cleanSheet"
+  | "cleanIconSet"
+  | "tilesetSafe"
+  | "preserveBackground";
+
 export type GridCandidate = {
   outputWidth: number;
   outputHeight: number;
@@ -507,6 +515,7 @@ export type FixOptions = {
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     denoiseStrength?: number;
+    dominantThreshold?: number;
     morphology?: MorphologyCleanupSettings;
     removeHalos?: boolean;
     inferNativeScale?: boolean;

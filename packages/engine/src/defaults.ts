@@ -6,7 +6,8 @@ import type {
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
-  PaletteStrategy
+  PaletteStrategy,
+  QualityProfileId
 } from "@pixelaid/shared";
 
 export type EngineGridDetectMode = "auto" | "manual";
@@ -59,11 +60,15 @@ export type EngineDefaultFixSettings = {
   outlineSourceMode: EngineOutlineSourceMode;
   outlineManualColor: string;
   selectedOutlineSourceColors: string[];
+  qualityProfile: QualityProfileId;
   removeOrphans: boolean;
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
+  dominantThreshold: number;
+  morphologyCleanup: boolean;
+  matteCleanup: boolean;
   inferNativeScale: boolean;
   contrastExpansionEnabled: boolean;
 };
@@ -114,11 +119,15 @@ const defaultFixSettings: EngineDefaultFixSettings = {
   outlineSourceMode: "auto",
   outlineManualColor: "#101112",
   selectedOutlineSourceColors: [],
+  qualityProfile: "balanced",
   removeOrphans: true,
   jaggyCleanup: true,
   preserveSinglePixelDetails: true,
   removeHalos: true,
   denoiseStrength: 20,
+  dominantThreshold: 0.6,
+  morphologyCleanup: false,
+  matteCleanup: false,
   inferNativeScale: false,
   contrastExpansionEnabled: false
 };

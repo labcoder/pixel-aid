@@ -7,7 +7,8 @@ import type {
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
-  PaletteStrategy
+  PaletteStrategy,
+  QualityProfileId
 } from "@pixelaid/shared";
 import { createDefaultFixSettings } from "@pixelaid/engine";
 import type { EngineExportTarget } from "@pixelaid/exporters";
@@ -75,11 +76,15 @@ export type EditorPreferenceSettings = {
   outlineAlpha: number;
   outlineColorEdited: boolean;
   outlineSourceMode: OutlineSourceMode;
+  qualityProfile: QualityProfileId;
   removeOrphans: boolean;
   jaggyCleanup: boolean;
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
+  dominantThreshold: number;
+  morphologyCleanup: boolean;
+  matteCleanup: boolean;
   contrastExpansionEnabled: boolean;
   engineExportTargets: EngineExportTarget[];
   showAdvancedControls: boolean;
@@ -146,11 +151,15 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   outlineAlpha: engineFixDefaults.outlineAlpha,
   outlineColorEdited: engineFixDefaults.outlineColorEdited,
   outlineSourceMode: engineFixDefaults.outlineSourceMode,
+  qualityProfile: engineFixDefaults.qualityProfile,
   removeOrphans: engineFixDefaults.removeOrphans,
   jaggyCleanup: engineFixDefaults.jaggyCleanup,
   preserveSinglePixelDetails: engineFixDefaults.preserveSinglePixelDetails,
   removeHalos: engineFixDefaults.removeHalos,
   denoiseStrength: engineFixDefaults.denoiseStrength,
+  dominantThreshold: engineFixDefaults.dominantThreshold,
+  morphologyCleanup: engineFixDefaults.morphologyCleanup,
+  matteCleanup: engineFixDefaults.matteCleanup,
   contrastExpansionEnabled: engineFixDefaults.contrastExpansionEnabled,
   engineExportTargets: ["godot", "unity", "phaser"],
   showAdvancedControls: false,
@@ -258,11 +267,19 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       outlineAlpha: integerSetting(settings.outlineAlpha, defaults.settings.outlineAlpha, 0, 255),
       outlineColorEdited: booleanSetting(settings.outlineColorEdited, defaults.settings.outlineColorEdited),
       outlineSourceMode: unionSetting(settings.outlineSourceMode, ["auto", "manual"], defaults.settings.outlineSourceMode),
+      qualityProfile: unionSetting(
+        settings.qualityProfile,
+        ["balanced", "cleanSprite", "cleanSheet", "cleanIconSet", "tilesetSafe", "preserveBackground"],
+        defaults.settings.qualityProfile
+      ),
       removeOrphans: booleanSetting(settings.removeOrphans, defaults.settings.removeOrphans),
       jaggyCleanup: booleanSetting(settings.jaggyCleanup, defaults.settings.jaggyCleanup),
       preserveSinglePixelDetails: booleanSetting(settings.preserveSinglePixelDetails, defaults.settings.preserveSinglePixelDetails),
       removeHalos: booleanSetting(settings.removeHalos, defaults.settings.removeHalos),
       denoiseStrength: numberSetting(settings.denoiseStrength, defaults.settings.denoiseStrength, 0, 100),
+      dominantThreshold: ratioSetting(settings.dominantThreshold, defaults.settings.dominantThreshold),
+      morphologyCleanup: booleanSetting(settings.morphologyCleanup, defaults.settings.morphologyCleanup),
+      matteCleanup: booleanSetting(settings.matteCleanup, defaults.settings.matteCleanup),
       contrastExpansionEnabled: booleanSetting(settings.contrastExpansionEnabled, defaults.settings.contrastExpansionEnabled),
       engineExportTargets: engineTargetsSetting(settings.engineExportTargets, defaults.settings.engineExportTargets),
       showAdvancedControls: booleanSetting(settings.showAdvancedControls, defaults.settings.showAdvancedControls),
@@ -291,6 +308,10 @@ function booleanSetting(value: unknown, fallback: boolean): boolean {
 
 function numberSetting(value: unknown, fallback: number, min: number, max: number): number {
   return typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
+}
+
+function ratioSetting(value: unknown, fallback: number): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0.05 && value <= 1 ? value : fallback;
 }
 
 function integerSetting(value: unknown, fallback: number, min: number, max: number): number {

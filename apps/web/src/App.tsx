@@ -41,6 +41,7 @@ import type {
   PaletteMode,
   PaletteStrategy,
   PixelFixResult,
+  QualityProfileId,
   RGBAImage,
   SheetLayoutDiagnostics,
   SheetLayoutDetection,
@@ -52,7 +53,14 @@ import type {
   WorkerProgress,
   WorkerProgressStage
 } from "@pixelaid/shared";
-import { assetTypeDefinitions, assetTypeToMode, getAssetTypeDefinition, PIXELAID_VERSION } from "@pixelaid/shared";
+import {
+  assetTypeDefinitions,
+  assetTypeToMode,
+  getAssetTypeDefinition,
+  getQualityProfileDefinition,
+  PIXELAID_VERSION,
+  qualityProfileDefinitions
+} from "@pixelaid/shared";
 import {
   analyzeSceneAssetDiagnostics,
   analyzeTilesetSeams,
@@ -395,6 +403,7 @@ const palettePresetOptions = [
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
   ["pixelaid-ui-8", "PixelAid UI 8"]
 ] as const;
+const qualityProfileOptions = qualityProfileDefinitions.map((profile) => [profile.id, profile.label] as const);
 const paletteExportExtensions: Record<PaletteImportFormat, string> = {
   hex: "hex",
   gpl: "gpl",
@@ -841,11 +850,15 @@ type AssetEditorSession = {
     outlineSourceMode: OutlineSourceMode;
     outlineManualColor: string;
     selectedOutlineSourceColors: string[];
+    qualityProfile: QualityProfileId;
     removeOrphans: boolean;
     jaggyCleanup: boolean;
     preserveSinglePixelDetails: boolean;
     removeHalos: boolean;
     denoiseStrength: number;
+    dominantThreshold: number;
+    morphologyCleanup: boolean;
+    matteCleanup: boolean;
     inferNativeScale: boolean;
     contrastExpansionEnabled: boolean;
     showAdvancedControls: boolean;
@@ -1047,11 +1060,15 @@ export function App() {
   const [outlineSourceMode, setOutlineSourceMode] = useState<OutlineSourceMode>(initialSettings.outlineSourceMode);
   const [outlineManualColor, setOutlineManualColor] = useState("#101112");
   const [selectedOutlineSourceColors, setSelectedOutlineSourceColors] = useState<string[]>([]);
+  const [qualityProfile, setQualityProfile] = useState<QualityProfileId>(initialSettings.qualityProfile);
   const [removeOrphans, setRemoveOrphans] = useState(initialSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(initialSettings.jaggyCleanup);
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(initialSettings.preserveSinglePixelDetails);
   const [removeHalos, setRemoveHalos] = useState(initialSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(initialSettings.denoiseStrength);
+  const [dominantThreshold, setDominantThreshold] = useState(initialSettings.dominantThreshold);
+  const [morphologyCleanup, setMorphologyCleanup] = useState(initialSettings.morphologyCleanup);
+  const [matteCleanup, setMatteCleanup] = useState(initialSettings.matteCleanup);
   const [inferNativeScale, setInferNativeScale] = useState(false);
   const [contrastExpansionEnabled, setContrastExpansionEnabled] = useState(initialSettings.contrastExpansionEnabled);
   const [suggestionReason, setSuggestionReason] = useState("Import an asset, then use Auto Suggest to seed the controls.");
@@ -1246,11 +1263,15 @@ export function App() {
       setOutlineColorEdited(settings.outlineColorEdited);
       setOutlineSourceMode(settings.outlineSourceMode);
       setSelectedOutlineSourceColors([]);
+      setQualityProfile(settings.qualityProfile);
       setRemoveOrphans(settings.removeOrphans);
       setJaggyCleanup(settings.jaggyCleanup);
       setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
       setRemoveHalos(settings.removeHalos);
       setDenoiseStrength(settings.denoiseStrength);
+      setDominantThreshold(settings.dominantThreshold);
+      setMorphologyCleanup(settings.morphologyCleanup);
+      setMatteCleanup(settings.matteCleanup);
       setContrastExpansionEnabled(settings.contrastExpansionEnabled);
       setEngineExportTargets(settings.engineExportTargets);
       setShowAdvancedControls(settings.showAdvancedControls);
@@ -1324,11 +1345,15 @@ export function App() {
         outlineAlpha,
         outlineColorEdited,
         outlineSourceMode,
+        qualityProfile,
         removeOrphans,
         jaggyCleanup,
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        dominantThreshold,
+        morphologyCleanup,
+        matteCleanup,
         contrastExpansionEnabled,
         engineExportTargets,
         showAdvancedControls,
@@ -1350,6 +1375,7 @@ export function App() {
     customPivotX,
     customPivotY,
     decontaminateRgb,
+    dominantThreshold,
     denoiseStrength,
     contrastExpansionEnabled,
     downscale,
@@ -1365,7 +1391,9 @@ export function App() {
     jaggyCleanup,
     localCorrection,
     maxColors,
+    matteCleanup,
     mode,
+    morphologyCleanup,
     normalizeTimelineFrames,
     outlineAlpha,
     outlineColor,
@@ -1384,6 +1412,7 @@ export function App() {
     sheetPlaybackMode,
     pivotPreset,
     preserveSinglePixelDetails,
+    qualityProfile,
     removeHalos,
     removeOrphans,
     savedEditorPresets,
@@ -1635,11 +1664,15 @@ export function App() {
         outlineSourceMode,
         outlineManualColor,
         selectedOutlineSourceColors: [...selectedOutlineSourceColors],
+        qualityProfile,
         removeOrphans,
         jaggyCleanup,
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        dominantThreshold,
+        morphologyCleanup,
+        matteCleanup,
         inferNativeScale,
         contrastExpansionEnabled,
         showAdvancedControls,
@@ -1700,6 +1733,7 @@ export function App() {
       customPivotX,
       customPivotY,
       decontaminateRgb,
+      dominantThreshold,
       denoiseStrength,
       inferNativeScale,
       detectedRowAnimations,
@@ -1727,7 +1761,9 @@ export function App() {
       lastExportValidation,
       localCorrection,
       maxColors,
+      matteCleanup,
       mode,
+      morphologyCleanup,
       normalizeTimelineFrames,
       outlineAlpha,
       outlineColor,
@@ -1748,6 +1784,7 @@ export function App() {
       playbackLoop,
       sheetPlaybackMode,
       preserveSinglePixelDetails,
+      qualityProfile,
       recommendationConfidence,
       removeHalos,
       removeOrphans,
@@ -1867,11 +1904,15 @@ export function App() {
     setOutlineSourceMode(settings.outlineSourceMode);
     setOutlineManualColor(settings.outlineManualColor);
     setSelectedOutlineSourceColors([...settings.selectedOutlineSourceColors]);
+    setQualityProfile(settings.qualityProfile ?? "balanced");
     setRemoveOrphans(settings.removeOrphans);
     setJaggyCleanup(settings.jaggyCleanup);
     setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
     setRemoveHalos(settings.removeHalos);
     setDenoiseStrength(settings.denoiseStrength);
+    setDominantThreshold(settings.dominantThreshold ?? 0.6);
+    setMorphologyCleanup(settings.morphologyCleanup ?? false);
+    setMatteCleanup(settings.matteCleanup ?? false);
     setInferNativeScale(settings.inferNativeScale ?? false);
     setContrastExpansionEnabled(settings.contrastExpansionEnabled);
     setShowAdvancedControls(settings.showAdvancedControls);
@@ -2902,11 +2943,15 @@ export function App() {
         downscale,
         alpha,
         cleanup: {
+          qualityProfile,
           removeOrphans,
           jaggyCleanup,
           preserveSinglePixelDetails,
           removeHalos,
           denoiseStrength,
+          dominantThreshold,
+          morphologyCleanup,
+          matteCleanup,
           inferNativeScale,
           contrastExpansionEnabled,
           outlineMode,
@@ -2961,6 +3006,7 @@ export function App() {
     contrastExpansionEnabled,
     cropToBounds,
     denoiseStrength,
+    dominantThreshold,
     inferNativeScale,
     detectedSheetWarnings,
     downscale,
@@ -2982,7 +3028,9 @@ export function App() {
     localCorrection,
     logs,
     maxColors,
+    matteCleanup,
     mode,
+    morphologyCleanup,
     outlineMode,
     outlineSize,
     outlineSourceMode,
@@ -2995,6 +3043,7 @@ export function App() {
     previewSurfaceStats,
     qualityReport?.findings,
     qualityReport?.summary,
+    qualityProfile,
     removeHalos,
     removeOrphans,
     route,
@@ -3163,6 +3212,43 @@ export function App() {
     setDecontaminateRgb(settings?.decontaminateRgb ?? true);
   }, []);
 
+  const applyQualityProfile = useCallback(
+    (profileId: QualityProfileId) => {
+      const profile = getQualityProfileDefinition(profileId);
+      const profileMorphology = profile.settings.cleanup.morphology;
+      setQualityProfile(profileId);
+      setPaletteBudget(profile.settings.maxColors);
+      setDownscale(profile.settings.downscale);
+      setAlpha(profile.settings.alpha);
+      applyAlphaSettings(profile.settings.alphaSettings);
+      if (profile.settings.paletteSettings?.lockScope) {
+        setPaletteLockScope(profile.settings.paletteSettings.lockScope);
+      }
+      setRemoveOrphans(profile.settings.cleanup.removeOrphans ?? removeOrphans);
+      setJaggyCleanup(profile.settings.cleanup.jaggyCleanup ?? jaggyCleanup);
+      setPreserveSinglePixelDetails(profile.settings.cleanup.preserveSinglePixelDetails ?? preserveSinglePixelDetails);
+      setRemoveHalos(profile.settings.cleanup.removeHalos ?? removeHalos);
+      setDenoiseStrength(profile.settings.cleanup.denoiseStrength ?? denoiseStrength);
+      setDominantThreshold(profile.settings.cleanup.dominantThreshold ?? dominantThreshold);
+      setInferNativeScale(profile.settings.cleanup.inferNativeScale ?? inferNativeScale);
+      setMorphologyCleanup(
+        Boolean(profileMorphology?.enabled && (profileMorphology.close || profileMorphology.fillTinyHoles || profileMorphology.removeTinyComponents))
+      );
+      setMatteCleanup(Boolean(profileMorphology?.enabled && profileMorphology.matteCleanup && profile.settings.alpha === "binary"));
+    },
+    [
+      applyAlphaSettings,
+      denoiseStrength,
+      dominantThreshold,
+      inferNativeScale,
+      jaggyCleanup,
+      preserveSinglePixelDetails,
+      removeHalos,
+      removeOrphans,
+      setPaletteBudget
+    ]
+  );
+
   const applyFixSuggestion = useCallback((suggestion: FixSettingSuggestion, targetAsset: ImportedImageAsset | null = selectedAsset) => {
     const targetAssetType = targetAsset?.assetType ?? suggestion.assetType;
     const targetAssetSource = targetAsset?.assetTypeSource ?? "auto";
@@ -3183,6 +3269,9 @@ export function App() {
     const resolvedOutlineSourceColors = usesEdgeCleanup ? suggestion.outlineSourceColors : [];
     const resolvedContrastExpansionEnabled = usesEdgeCleanup ? suggestion.contrastExpansionEnabled : false;
     const resolvedWarnings = targetAssetSource === "manual" ? getAssetTypeWarnings(resolvedAssetType) : suggestion.categoryWarnings;
+    const resolvedQualityProfile = getDefaultQualityProfileForAssetType(resolvedAssetType, useSuggestedStrictSheetCleanup);
+    const resolvedQualityProfileSettings = getQualityProfileDefinition(resolvedQualityProfile).settings;
+    const resolvedProfileMorphology = resolvedQualityProfileSettings.cleanup.morphology;
     const resolvedCategoryReason =
       targetAssetSource === "manual"
         ? `Manual asset type: ${definition.label}. ${definition.description}`
@@ -3272,6 +3361,15 @@ export function App() {
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
+    setQualityProfile(resolvedQualityProfile);
+    setDominantThreshold(resolvedQualityProfileSettings.cleanup.dominantThreshold ?? 0.6);
+    setMorphologyCleanup(
+      Boolean(
+        resolvedProfileMorphology?.enabled &&
+          (resolvedProfileMorphology.close || resolvedProfileMorphology.fillTinyHoles || resolvedProfileMorphology.removeTinyComponents)
+      )
+    );
+    setMatteCleanup(Boolean(resolvedProfileMorphology?.enabled && resolvedProfileMorphology.matteCleanup && resolvedAlpha === "binary"));
     setInferNativeScale(isSheetLikeMode(resolvedMode) && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
@@ -3553,6 +3651,12 @@ export function App() {
       setPreserveSinglePixelDetails(settings.cleanup.preserveSinglePixelDetails);
       setRemoveHalos(settings.cleanup.removeHalos ?? false);
       setDenoiseStrength(settings.cleanup.denoiseStrength ?? 0);
+      setQualityProfile(getDefaultQualityProfileForAssetType(settings.assetType, Boolean(settings.cleanup.morphology?.matteCleanup)));
+      setDominantThreshold(settings.cleanup.dominantThreshold ?? 0.6);
+      setMorphologyCleanup(
+        Boolean(settings.cleanup.morphology?.enabled && (settings.cleanup.morphology.close || settings.cleanup.morphology.fillTinyHoles || settings.cleanup.morphology.removeTinyComponents))
+      );
+      setMatteCleanup(Boolean(settings.cleanup.morphology?.enabled && settings.cleanup.morphology.matteCleanup));
       setInferNativeScale(settings.cleanup.inferNativeScale ?? false);
       setOutlineMode(settings.cleanup.outlineMode ?? "none");
       setOutlineSize(settings.cleanup.outlineSize ?? initialSettings.outlineSize);
@@ -3693,7 +3797,9 @@ export function App() {
       selectedColors: selectedOutlineSourceColors,
       candidates: outlineSourceCandidates
     });
-    const useMatteAwareMorphology = mode === "spriteSheet" && alpha === "binary" && inferNativeScale && maxColors <= 16;
+    const autoMatteCleanup = isSheetLikeMode(mode) && alpha === "binary" && inferNativeScale && maxColors <= 16;
+    const useMatteAwareMorphology = alpha === "binary" && (matteCleanup || autoMatteCleanup);
+    const useMorphologyCleanup = morphologyCleanup || useMatteAwareMorphology;
     const options: FixOptions = {
       mode,
       assetType,
@@ -3733,13 +3839,21 @@ export function App() {
         preserveSinglePixelDetails,
         removeHalos,
         denoiseStrength,
+        dominantThreshold: clampDominantThreshold(dominantThreshold),
         inferNativeScale,
-        ...(useMatteAwareMorphology
+        ...(useMorphologyCleanup
           ? {
               morphology: {
                 enabled: true,
-                matteCleanup: true,
-                alphaThreshold
+                close: morphologyCleanup,
+                fillTinyHoles: morphologyCleanup,
+                removeTinyComponents: morphologyCleanup,
+                preserveSinglePixelDetails,
+                maxHolePixels: 1,
+                maxComponentPixels: 1,
+                matteCleanup: useMatteAwareMorphology,
+                alphaThreshold,
+                connectivity: 8
               }
             }
           : {}),
@@ -3763,6 +3877,7 @@ export function App() {
     assetType,
     contrastExpansionEnabled,
     decontaminateRgb,
+    dominantThreshold,
     denoiseStrength,
     downscale,
     gridDetect,
@@ -3778,7 +3893,9 @@ export function App() {
     inferNativeScale,
     localCorrection,
     maxColors,
+    matteCleanup,
     mode,
+    morphologyCleanup,
     outlineColor,
     outlineAlpha,
     outlineColorEdited,
@@ -6530,6 +6647,12 @@ export function App() {
     cleanup: (
       <>
         <SelectField
+          label="Quality"
+          value={qualityProfile}
+          options={qualityProfileOptions}
+          onChange={(value) => applyQualityProfile(value as QualityProfileId)}
+        />
+        <SelectField
           label="Max colors"
           value={String(maxColors)}
           options={paletteBudgets.map((budget) => [String(budget), String(budget)] as const)}
@@ -6632,6 +6755,14 @@ export function App() {
             ["averageThenPalette", "Average + palette"]
           ]}
           onChange={(value) => setDownscale(value as DownscaleMethod)}
+        />
+        <NumberField
+          label="Dominant threshold"
+          value={dominantThreshold}
+          min={0.05}
+          max={1}
+          step={0.01}
+          onChange={(value) => setDominantThreshold(clampDominantThreshold(value))}
         />
         <SelectField
           label="Alpha"
@@ -6790,6 +6921,14 @@ export function App() {
         <label className="toggle-row">
           <input type="checkbox" checked={jaggyCleanup} onChange={(event) => setJaggyCleanup(event.currentTarget.checked)} />
           Close 1px gaps
+        </label>
+        <label className="toggle-row">
+          <input type="checkbox" checked={morphologyCleanup} onChange={(event) => setMorphologyCleanup(event.currentTarget.checked)} />
+          Morphological cleanup
+        </label>
+        <label className="toggle-row">
+          <input type="checkbox" checked={matteCleanup} disabled={alpha !== "binary"} onChange={(event) => setMatteCleanup(event.currentTarget.checked)} />
+          Matte cleanup
         </label>
         <label className="toggle-row">
           <input
@@ -9754,6 +9893,26 @@ function rgbToHex(r: number, g: number, b: number): string {
 
 function clampAlpha(value: number): number {
   return Number.isFinite(value) ? Math.max(0, Math.min(255, Math.round(value))) : 255;
+}
+
+function clampDominantThreshold(value: number): number {
+  return Number.isFinite(value) ? Math.max(0.05, Math.min(1, value)) : 0.6;
+}
+
+function getDefaultQualityProfileForAssetType(assetType: AssetType, strictSheetCleanup: boolean): QualityProfileId {
+  if (strictSheetCleanup) {
+    return "cleanSheet";
+  }
+  if (assetType === "iconSet") {
+    return "cleanIconSet";
+  }
+  if (assetType === "tileset" || assetType === "tilemap") {
+    return "tilesetSafe";
+  }
+  if (assetType === "background" || assetType === "portrait" || assetType === "uiElement") {
+    return "preserveBackground";
+  }
+  return "balanced";
 }
 
 function ReadonlyField({ label, value, text = false, disabled = false }: { label: string; value: string; text?: boolean; disabled?: boolean }) {

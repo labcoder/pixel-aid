@@ -58,6 +58,7 @@ describe("automation option normalization", () => {
         jaggyCleanup: false,
         preserveSinglePixelDetails: true,
         removeHalos: true,
+        dominantThreshold: 0.72,
         denoiseStrength: 20,
         outlineMode: "repairExisting",
         outlineSourceColors: ["#102020", "#203030"],
@@ -90,6 +91,7 @@ describe("automation option normalization", () => {
       localCorrection: true,
     });
     expect(result.value.alphaSettings).toMatchObject({ threshold: 96 });
+    expect(result.value.cleanup.dominantThreshold).toBe(0.72);
     expect(result.value.cleanup.outlineSourceColors).toEqual(["#102020", "#203030"]);
     expect(result.value.cleanup.contrastExpansion).toMatchObject({
       enabled: true,

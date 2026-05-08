@@ -109,6 +109,34 @@ describe("editor preferences", () => {
     expect(enabled.settings.contrastExpansionEnabled).toBe(true);
   });
 
+  test("preserves advanced quality cleanup preferences", () => {
+    const preferences = normalizeEditorPreferences({
+      settings: {
+        qualityProfile: "cleanSheet",
+        dominantThreshold: 0.82,
+        morphologyCleanup: true,
+        matteCleanup: true
+      }
+    });
+    const invalid = normalizeEditorPreferences({
+      settings: {
+        qualityProfile: "laser",
+        dominantThreshold: 5,
+        morphologyCleanup: "yes",
+        matteCleanup: "no"
+      }
+    });
+
+    expect(preferences.settings.qualityProfile).toBe("cleanSheet");
+    expect(preferences.settings.dominantThreshold).toBe(0.82);
+    expect(preferences.settings.morphologyCleanup).toBe(true);
+    expect(preferences.settings.matteCleanup).toBe(true);
+    expect(invalid.settings.qualityProfile).toBe("balanced");
+    expect(invalid.settings.dominantThreshold).toBe(0.6);
+    expect(invalid.settings.morphologyCleanup).toBe(false);
+    expect(invalid.settings.matteCleanup).toBe(false);
+  });
+
   test("preserves tile and atlas engine export targets", () => {
     const preferences = normalizeEditorPreferences({ settings: { engineExportTargets: ["texturepacker", "tiled", "ldtk", "phaser", "bad"] } });
 

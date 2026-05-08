@@ -1976,6 +1976,59 @@ describe("sheet slicing", () => {
 });
 
 describe("fix pipeline", () => {
+  test("passes cleanup dominant threshold into adaptive downsampling", () => {
+    const source = imageFromPixels(4, [
+      rgba(240, 0, 0),
+      rgba(240, 0, 0),
+      rgba(0, 240, 0),
+      rgba(0, 0, 240),
+      rgba(0, 0, 240),
+      rgba(0, 240, 0),
+      rgba(255, 255, 255),
+      rgba(255, 255, 255)
+    ]);
+    const baseOptions: FixOptions = {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 2,
+      targetHeight: 1,
+      maxColors: 8,
+      grid: {
+        detect: "manual",
+        scaleX: 2,
+        scaleY: 2,
+        phaseX: 0,
+        phaseY: 0,
+        cropToBounds: false,
+        localCorrection: false
+      },
+      downscale: "adaptive",
+      alpha: "preserve",
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        outlineMode: "none",
+        dominantThreshold: 0.5
+      }
+    };
+
+    const permissive = fixImage(source, baseOptions);
+    const strict = fixImage(source, {
+      ...baseOptions,
+      cleanup: {
+        ...baseOptions.cleanup,
+        dominantThreshold: 0.75
+      }
+    });
+
+    expect(readPixel(permissive.image, 0, 0)).toEqual([240, 0, 0, 255]);
+    expect(readPixel(strict.image, 0, 0)).toEqual([120, 0, 0, 255]);
+    expect(strict.settings.cleanup.dominantThreshold).toBe(0.75);
+  });
+
   test("reports coarse progress stages for a single image fix", () => {
     const events: FixProgressEvent[] = [];
 
