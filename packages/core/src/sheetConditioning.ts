@@ -31,6 +31,7 @@ export function analyzeSheetConditioning(
   let softAlphaPixels = 0;
   let softChromaMattePixels = 0;
   let opaqueChromaMattePixels = 0;
+  let presentationChromaMattePixels = 0;
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
@@ -49,6 +50,9 @@ export function analyzeSheetConditioning(
         } else {
           opaqueChromaMattePixels += 1;
         }
+      }
+      if (a >= 240 && isPresentationMatteChroma(r, g, b, background)) {
+        presentationChromaMattePixels += 1;
       }
 
       if (a > 0 && colorDistance(r, g, b, background.r, background.g, background.b) > foregroundDistanceThreshold) {
@@ -75,9 +79,11 @@ export function analyzeSheetConditioning(
       ? opaqueChromaMattePixels
       : 0;
   const actionableChromaMattePixels = softChromaMattePixels + noisyOpaqueChromaMattePixels;
-  const presentationChromaMattePixels =
+  const mattePresentationPixels =
     opaqueDarkBackground && (checkerboardCells.detected || captionOrBracketMarks.detected)
-      ? Math.max(actionableChromaMattePixels, Math.round(pixelCount * 0.001))
+      ? Math.max(actionableChromaMattePixels, presentationChromaMattePixels, Math.round(pixelCount * 0.001))
+      : opaqueDarkBackground
+        ? Math.max(actionableChromaMattePixels, presentationChromaMattePixels)
       : actionableChromaMattePixels;
 
   if (exactColors.size > maxExactColors) {
@@ -104,11 +110,11 @@ export function analyzeSheetConditioning(
     });
   }
 
-  if (presentationChromaMattePixels >= Math.max(64, pixelCount * 0.0005)) {
+  if (mattePresentationPixels >= Math.max(64, pixelCount * 0.0005)) {
     issues.push({
       code: "chroma-matte-artifacts",
       severity: "warning",
-      message: `Detected ${presentationChromaMattePixels.toLocaleString()} saturated matte pixels; remove edge halos before palette locking.`
+      message: `Detected ${mattePresentationPixels.toLocaleString()} saturated matte pixels; remove edge halos before palette locking.`
     });
   }
 
@@ -158,7 +164,7 @@ export function analyzeSheetConditioning(
     exactColors.size > maxExactColors ||
     coarseForegroundBins.size > maxCoarseBins ||
     softAlphaPixels >= Math.max(256, pixelCount * 0.01) ||
-    presentationChromaMattePixels >= Math.max(64, pixelCount * 0.0005);
+    mattePresentationPixels >= Math.max(64, pixelCount * 0.0005);
 
   return {
     exactColorCount: exactColors.size,
@@ -410,6 +416,30 @@ function isChromaMatteColor(
   const family = chromaFamilyMask(r, g, b);
   const blueOrCyanFamily = (family & 4) !== 0 && (family & 1) === 0;
   return hasWeakLocalColorSupport(image, x, y, r, g, b, a, background, blueOrCyanFamily ? 2 : 3);
+}
+
+function isPresentationMatteChroma(
+  r: number,
+  g: number,
+  b: number,
+  background: SheetConditioningDiagnostics["background"]
+): boolean {
+  if (isSameChromaFamily(r, g, b, background.r, background.g, background.b) && colorDistance(r, g, b, background.r, background.g, background.b) <= 64) {
+    return false;
+  }
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const colorfulness = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+  if ((max < 56 || spread < 38 || colorfulness < 72) && (max < 150 || spread < 88 || colorfulness < 160)) {
+    return false;
+  }
+
+  const family = chromaFamilyMask(r, g, b);
+  const green = (family & 2) !== 0 && (family & 1) === 0 && (family & 4) === 0;
+  const magenta = (family & 1) !== 0 && (family & 4) !== 0 && (family & 2) === 0;
+  return green || magenta;
 }
 
 function hasWeakLocalColorSupport(

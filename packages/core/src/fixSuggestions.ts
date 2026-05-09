@@ -128,6 +128,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const transparentGridCandidate = detectTransparentGridCandidate(image);
   const foregroundEvidence = estimateForegroundObjectEvidence(image);
   const exactColorCount = countExactColorsUpTo(image, 65);
+  const bakedTransparencyBackgroundHint = detectBakedTransparencyBackgroundHint(image);
   let candidate = chooseSuggestionGrid(image, candidates, initialMode);
   let outputWidth = candidate?.outputWidth ?? image.width;
   let outputHeight = candidate?.outputHeight ?? image.height;
@@ -144,7 +145,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     tilemapDiagnostics,
     transparentGridCandidate,
     exactColorCount,
-    foregroundEvidence
+    foregroundEvidence,
+    bakedTransparencyBackgroundHint
   };
   const classificationCandidates = rankAssetTypeCandidates(classificationInput);
   const classification = classificationFromCandidate(classificationCandidates[0]);
@@ -786,6 +788,7 @@ function rankAssetTypeCandidates(input: {
   transparentGridCandidate?: TilemapGridCandidate | undefined;
   exactColorCount: number;
   foregroundEvidence?: ForegroundObjectEvidence;
+  bakedTransparencyBackgroundHint: boolean;
 }): AssetTypeClassificationCandidate[] {
   const sourceRatio = input.width / input.height;
   const outputRatio = input.outputWidth / input.outputHeight;
@@ -793,7 +796,8 @@ function rankAssetTypeCandidates(input: {
   const outputMax = Math.max(input.outputWidth, input.outputHeight);
   const surfacedSheetLayout = input.sheetLayout ? shouldSurfaceDetectedSheetLayout(input.sheetLayout) : false;
   const sheetLikeMode = input.mode === "spriteSheet" || surfacedSheetLayout;
-  const tileGridContext = !surfacedSheetLayout && Math.abs(sourceRatio - 1) < 0.12 && input.width >= 96 && input.height >= 96;
+  const tileGridContext =
+    !input.bakedTransparencyBackgroundHint && !surfacedSheetLayout && Math.abs(sourceRatio - 1) < 0.12 && input.width >= 96 && input.height >= 96;
   const candidates: AssetTypeClassificationCandidate[] = [];
 
   candidates.push(
@@ -821,6 +825,7 @@ function rankAssetTypeCandidates(input: {
     selectLowColorRectGridCandidate(input.tilemapDiagnostics, sourceRatio, input.exactColorCount);
   if (
     selectedTilemap &&
+    !input.bakedTransparencyBackgroundHint &&
     (!surfacedSheetLayout || hasTransparentGridEvidence(selectedTilemap)) &&
     (input.mode === "tileSheet" ||
       tileGridContext ||
@@ -837,7 +842,7 @@ function rankAssetTypeCandidates(input: {
     );
   }
 
-  if (input.mode === "tileSheet" && !surfacedSheetLayout) {
+  if (input.mode === "tileSheet" && !surfacedSheetLayout && !input.bakedTransparencyBackgroundHint) {
     candidates.push(
       createAssetTypeCandidate("tileset", 0.78, "Square, evenly divisible source looks like a tileset; repeat preview and seam diagnostics are available.", [
         "square evenly divisible source",
@@ -886,7 +891,7 @@ function rankAssetTypeCandidates(input: {
 
   const squareSource = Math.abs(sourceRatio - 1) < 0.12 && input.width >= 96 && input.height >= 96;
   const bestTilemap = input.tilemapDiagnostics?.candidates[0];
-  if (squareSource && !selectedTilemap && !input.foregroundEvidence?.singleForegroundObject) {
+  if (squareSource && !selectedTilemap && !input.foregroundEvidence?.singleForegroundObject && !input.bakedTransparencyBackgroundHint) {
     candidates.push(
       createAssetTypeCandidate("tileset", 0.77, "Square grid source has mostly unique cells, so it is safer as a tileset/object grid than a repeated tilemap.", [
         "square grid source",
@@ -957,7 +962,7 @@ function selectLowColorRectGridCandidate(
   sourceRatio: number,
   exactColorCount: number
 ): TilemapGridCandidate | undefined {
-  if (exactColorCount > 64 || Math.abs(sourceRatio - 1) < 0.12) {
+  if (exactColorCount < 3 || exactColorCount > 64 || Math.abs(sourceRatio - 1) < 0.12) {
     return undefined;
   }
 
@@ -967,7 +972,9 @@ function selectLowColorRectGridCandidate(
 function hasLowColorRectGridEvidence(candidate: TilemapGridCandidate, sourceRatio: number, exactColorCount: number): boolean {
   return (
     exactColorCount <= 64 &&
+    exactColorCount >= 3 &&
     Math.abs(sourceRatio - 1) >= 0.12 &&
+    candidate.uniqueTileSignatures >= 3 &&
     candidate.tileWidth >= 8 &&
     candidate.tileHeight >= 8 &&
     candidate.rows >= 4 &&
@@ -1025,6 +1032,70 @@ function countExactColorsUpTo(image: RGBAImage, cap: number): number {
     }
   }
   return colors.size;
+}
+
+function detectBakedTransparencyBackgroundHint(image: RGBAImage): boolean {
+  if (image.width < 8 || image.height < 8) {
+    return false;
+  }
+
+  const counts = new Uint32Array(4096);
+  let sampleCount = 0;
+  const sample = (x: number, y: number): void => {
+    const offset = (y * image.width + x) * 4;
+    if ((image.data[offset + 3] ?? 0) < 240) {
+      return;
+    }
+    const bucket = ((image.data[offset]! >> 4) << 8) | ((image.data[offset + 1]! >> 4) << 4) | (image.data[offset + 2]! >> 4);
+    counts[bucket] = counts[bucket]! + 1;
+    sampleCount += 1;
+  };
+
+  for (let x = 0; x < image.width; x += 1) {
+    sample(x, 0);
+    sample(x, image.height - 1);
+  }
+  for (let y = 1; y < image.height - 1; y += 1) {
+    sample(0, y);
+    sample(image.width - 1, y);
+  }
+
+  let first = 0;
+  let second = 0;
+  for (let bucket = 0; bucket < counts.length; bucket += 1) {
+    if (counts[bucket]! > counts[first]!) {
+      second = first;
+      first = bucket;
+    } else if (bucket !== first && counts[bucket]! > counts[second]!) {
+      second = bucket;
+    }
+  }
+
+  const firstColor = bucketCenter(first);
+  const secondColor = bucketCenter(second);
+  const firstBrightness = firstColor.r + firstColor.g + firstColor.b;
+  const secondBrightness = secondColor.r + secondColor.g + secondColor.b;
+  const coverage = sampleCount > 0 ? (counts[first]! + counts[second]!) / sampleCount : 0;
+  const secondRatio = counts[first]! > 0 ? counts[second]! / counts[first]! : 0;
+  const neutral =
+    colorSpread(firstColor.r, firstColor.g, firstColor.b) <= 24 &&
+    colorSpread(secondColor.r, secondColor.g, secondColor.b) <= 24;
+  const bright = firstBrightness > 540 && secondBrightness > 540;
+  const contrast = Math.abs(firstBrightness - secondBrightness);
+
+  return neutral && bright && coverage >= 0.72 && secondRatio >= 0.2 && contrast >= 40 && contrast <= 220;
+}
+
+function bucketCenter(bucket: number): { r: number; g: number; b: number } {
+  return {
+    r: ((bucket >> 8) & 0xf) * 16 + 8,
+    g: ((bucket >> 4) & 0xf) * 16 + 8,
+    b: (bucket & 0xf) * 16 + 8
+  };
+}
+
+function colorSpread(r: number, g: number, b: number): number {
+  return Math.max(r, g, b) - Math.min(r, g, b);
 }
 
 function detectTransparentGridCandidate(image: RGBAImage): TilemapGridCandidate | undefined {
@@ -1297,7 +1368,7 @@ function estimateForegroundObjectEvidence(image: RGBAImage): ForegroundObjectEvi
     singleForegroundObject:
       foregroundRatio >= 0.04 &&
       foregroundRatio <= 0.65 &&
-      boundsCoverage >= 0.18 &&
+      boundsCoverage >= 0.04 &&
       boundsCoverage <= 0.78 &&
       edgeTouchRatio <= 0.08,
     foregroundRatio,
