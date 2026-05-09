@@ -403,7 +403,9 @@ function isChromaMatteColor(
     return true;
   }
 
-  return hasWeakLocalColorSupport(image, x, y, r, g, b, a, background);
+  const family = chromaFamilyMask(r, g, b);
+  const blueOrCyanFamily = (family & 4) !== 0 && (family & 1) === 0;
+  return hasWeakLocalColorSupport(image, x, y, r, g, b, a, background, blueOrCyanFamily ? 2 : 3);
 }
 
 function hasWeakLocalColorSupport(
@@ -414,7 +416,8 @@ function hasWeakLocalColorSupport(
   g: number,
   b: number,
   a: number,
-  background: SheetConditioningDiagnostics["background"]
+  background: SheetConditioningDiagnostics["background"],
+  maxSimilarNeighbors: number
 ): boolean {
   let similarNeighbors = 0;
   let backgroundNeighbors = 0;
@@ -431,7 +434,7 @@ function hasWeakLocalColorSupport(
   similarNeighbors += down & 1;
   backgroundNeighbors += down >> 1;
 
-  return backgroundNeighbors > 0 && similarNeighbors <= 2;
+  return backgroundNeighbors > 0 && similarNeighbors <= maxSimilarNeighbors;
 }
 
 function inspectMatteNeighbor(

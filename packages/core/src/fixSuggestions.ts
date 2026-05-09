@@ -102,18 +102,21 @@ export type FixSettingSuggestion = {
 
 export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const atlasLayout = detectRegularAtlasLayout(image);
-  let candidates = detectSuggestionGridCandidates(image);
-  if (atlasLayout && atlasLayout.confidence >= 0.7) {
-    candidates = [createAtlasGridCandidate(image, atlasLayout), ...candidates];
+  const detectedGridCandidates = detectSuggestionGridCandidates(image);
+  const usableAtlasLayout =
+    atlasLayout && !shouldSuppressAtlasForStrongNativeGrid(image, atlasLayout, detectedGridCandidates) ? atlasLayout : undefined;
+  let candidates = detectedGridCandidates;
+  if (usableAtlasLayout && usableAtlasLayout.confidence >= 0.7) {
+    candidates = [createAtlasGridCandidate(image, usableAtlasLayout), ...candidates];
   }
   const initial = candidates[0];
   const initialOutputWidth = initial?.outputWidth ?? image.width;
   const initialOutputHeight = initial?.outputHeight ?? image.height;
-  const quickSheetLayoutScore = Math.max(estimateSheetLayoutScore(image), atlasLayout?.confidence ?? 0);
+  const quickSheetLayoutScore = Math.max(estimateSheetLayoutScore(image), usableAtlasLayout?.confidence ?? 0);
   const initialMode = classifyMode(image.width, image.height, initialOutputWidth, initialOutputHeight, quickSheetLayoutScore);
   const shouldAnalyzeSheet = shouldAnalyzeSheetSuggestion(image, initialMode, quickSheetLayoutScore);
   const rawDetectedSheetLayout = shouldAnalyzeSheet ? detectSheetLayout(image) : emptySheetLayoutDetection();
-  const detectedSheetLayout = chooseSheetLayoutDetection(rawDetectedSheetLayout, atlasLayout);
+  const detectedSheetLayout = chooseSheetLayoutDetection(rawDetectedSheetLayout, usableAtlasLayout);
   const sheetConditioning =
     shouldAnalyzeSheet ? detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const sheetLayoutScore = Math.max(quickSheetLayoutScore, detectedSheetLayout.confidence);
@@ -755,11 +758,15 @@ function rankAssetTypeCandidates(input: {
     ])
   );
 
-  if (input.foregroundEvidence?.singleForegroundObject) {
+  const foregroundEvidence = input.foregroundEvidence;
+  const foregroundLooksLikeSingle =
+    foregroundEvidence?.singleForegroundObject &&
+    (!sheetLikeMode || sourceRatio < 0.95 || (sourceRatio <= 1.1 && foregroundEvidence.boundsCoverage <= 0.65));
+  if (foregroundLooksLikeSingle) {
     candidates.push(
       createAssetTypeCandidate("sprite", 0.97, "A single isolated foreground object dominates the source, so it should stay a standalone sprite.", [
         "single foreground object",
-        `foreground bounds cover ${Math.round(input.foregroundEvidence.boundsCoverage * 100)}% of the source`
+        `foreground bounds cover ${Math.round(foregroundEvidence.boundsCoverage * 100)}% of the source`
       ])
     );
   }
@@ -1196,7 +1203,7 @@ function createPlausibleSingleSpriteGrid(image: Pick<RGBAImage, "width" | "heigh
     scaleY: scale,
     phaseX: 0,
     phaseY: 0,
-    confidence: 0.35,
+    confidence: 0.56,
     reason: "Plausible single-sprite native size"
   };
 }
@@ -1212,6 +1219,33 @@ function createAtlasGridCandidate(image: Pick<RGBAImage, "width" | "height">, la
     confidence: layout.confidence,
     reason: `Regular ${layout.columns}x${layout.rows} atlas grid; keeping source frame size for cleanup-first processing.`
   };
+}
+
+function shouldSuppressAtlasForStrongNativeGrid(
+  image: Pick<RGBAImage, "width" | "height">,
+  layout: SheetLayoutDetection,
+  candidates: readonly GridCandidate[]
+): boolean {
+  const strongNativeGrid = candidates.find((candidate) => {
+    const maxOutput = Math.max(candidate.outputWidth, candidate.outputHeight);
+    const minOutput = Math.min(candidate.outputWidth, candidate.outputHeight);
+    return (
+      candidate.scaleX >= 4 &&
+      candidate.scaleY >= 4 &&
+      candidate.confidence >= 0.74 &&
+      minOutput >= 32 &&
+      maxOutput <= 220
+    );
+  });
+  if (!strongNativeGrid) {
+    return false;
+  }
+
+  const packedArea = Math.max(1, layout.frameWidth * layout.columns * layout.frameHeight * layout.rows);
+  const sourceArea = Math.max(1, image.width * image.height);
+  const packedCoverage = packedArea / sourceArea;
+  const atlasAdvantage = layout.confidence - strongNativeGrid.confidence;
+  return packedCoverage >= 0.96 && atlasAdvantage <= 0.06 && layout.columns * layout.rows >= 40;
 }
 
 function chooseSheetLayoutDetection(detected: SheetLayoutDetection, atlas: SheetLayoutDetection | undefined): SheetLayoutDetection {
