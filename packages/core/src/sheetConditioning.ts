@@ -69,7 +69,11 @@ export function analyzeSheetConditioning(
   const issues: SheetConditioningIssue[] = [];
   const opaqueChromaMatteRatio = opaqueChromaMattePixels / pixelCount;
   const noisyOpaqueChromaMattePixels =
-    exactColors.size > 16 || coarseForegroundBins.size > 8 || opaqueChromaMatteRatio >= 0.004 ? opaqueChromaMattePixels : 0;
+    exactColors.size > 32 ||
+    (coarseForegroundBins.size > 18 && opaqueChromaMatteRatio >= 0.002) ||
+    opaqueChromaMatteRatio >= 0.008
+      ? opaqueChromaMattePixels
+      : 0;
   const actionableChromaMattePixels = softChromaMattePixels + noisyOpaqueChromaMattePixels;
   const presentationChromaMattePixels =
     opaqueDarkBackground && (checkerboardCells.detected || captionOrBracketMarks.detected)

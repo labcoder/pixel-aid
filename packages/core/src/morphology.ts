@@ -631,6 +631,10 @@ function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: 
     return "hint";
   }
 
+  if (isMutedArtificialMatteColor(r, g, b)) {
+    return "hint";
+  }
+
   return isArtificialChromaMatteColor(r, g, b) ? "fallback" : "none";
 }
 
@@ -679,7 +683,14 @@ function isArtificialChromaMatteColor(r: number, g: number, b: number): boolean 
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const spread = max - min;
-  return max >= 150 && spread >= 96 && colorfulness(r, g, b) >= 180;
+  const artificialChroma = max >= 150 && spread >= 96 && colorfulness(r, g, b) >= 180;
+  return artificialChroma || isMutedArtificialMatteColor(r, g, b);
+}
+
+function isMutedArtificialMatteColor(r: number, g: number, b: number): boolean {
+  const mutedGreenMatte = g >= 64 && g - r >= 24 && g - b >= 24;
+  const mutedMagentaMatte = r >= 90 && b >= 64 && g <= Math.min(r, b) - 24;
+  return mutedGreenMatte || mutedMagentaMatte;
 }
 
 function isProtectedSubjectColor(r: number, g: number, b: number): boolean {

@@ -20,6 +20,7 @@ import type {
   SheetConditioningDiagnostics,
   SheetLayoutDetection,
   SpriteFrame,
+  TilemapGridCandidate,
   TilemapDiagnostics
 } from "@pixelaid/shared";
 
@@ -120,8 +121,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const sheetConditioning =
     shouldAnalyzeSheet ? detectedSheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image) : emptySheetConditioning();
   const sheetLayoutScore = Math.max(quickSheetLayoutScore, detectedSheetLayout.confidence);
-  const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
+  const tilemapDiagnostics = analyzeTilemapDiagnostics(image, {
+    candidateSizes: [4, 5, 8, 10, 12, 16, 20, 24, 32, 48, 64],
+    selectionThreshold: 0.5
+  });
+  const transparentGridCandidate = detectTransparentGridCandidate(image);
   const foregroundEvidence = estimateForegroundObjectEvidence(image);
+  const exactColorCount = countExactColorsUpTo(image, 65);
   let candidate = chooseSuggestionGrid(image, candidates, initialMode);
   let outputWidth = candidate?.outputWidth ?? image.width;
   let outputHeight = candidate?.outputHeight ?? image.height;
@@ -136,11 +142,19 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     sheetLayoutScore,
     sheetLayout: detectedSheetLayout,
     tilemapDiagnostics,
+    transparentGridCandidate,
+    exactColorCount,
     foregroundEvidence
   };
   const classificationCandidates = rankAssetTypeCandidates(classificationInput);
   const classification = classificationFromCandidate(classificationCandidates[0]);
   const mode = assetTypeToMode(classification.assetType);
+  if (shouldPreserveNativeGridAsset(classification.assetType)) {
+    candidate = createSourcePreservationGridCandidate(image, `${classification.assetType} sources preserve native pixels by default.`);
+    outputWidth = image.width;
+    outputHeight = image.height;
+    candidates = [candidate, ...candidates.filter((item) => item.scaleX !== 1 || item.scaleY !== 1)];
+  }
   const modeConfidence = classifyModeConfidence(mode, sourceRatio, image.width, image.height, sheetLayoutScore);
   const preset = getAssetTypeCleanupPreset(classification.assetType);
   const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(mode, image, detectedSheetLayout, sheetConditioning);
@@ -155,7 +169,18 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
-  const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha);
+  const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence);
+  const singleSpriteMatteCleanup =
+    suggestedAlpha === "backgroundFloodFill" &&
+    mode === "single" &&
+    (classification.assetType === "sprite" || classification.assetType === "icon") &&
+    hasVisibleChromaMatteAgainstBackground(image);
+  if (singleSpriteMatteCleanup && Math.min(candidate?.scaleX ?? 1, candidate?.scaleY ?? candidate?.scaleX ?? 1) < 4) {
+    candidate = createSourcePreservationGridCandidate(image, "Low-scale sprite cleanup preserves native pixels while removing matte/background artifacts.");
+    outputWidth = image.width;
+    outputHeight = image.height;
+    candidates = [candidate, ...candidates.filter((item) => item.scaleX !== 1 || item.scaleY !== 1)];
+  }
   const suggestedMaxColors = strictSourceSheetMaxColors;
   let qualityReport = analyzeQualityReport(image, {
     assetType: classification.assetType,
@@ -191,7 +216,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     candidate,
     strictSourceSheetCleanup,
     strictSourceSheetDenoiseStrength,
-    sourceSizedSheetPreservation
+    sourceSizedSheetPreservation,
+    singleSpriteMatteCleanup
   );
   const nativeScaleInference = describeNativeScaleInference({
     enabled: strictSourceSheetCleanup,
@@ -208,7 +234,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     qualityReport,
     candidate,
     strictSourceSheetCleanup,
-    sourceSizedSheetPreservation
+    sourceSizedSheetPreservation,
+    singleSpriteMatteCleanup
   });
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
@@ -320,7 +347,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     qualityReport: suggestion.qualityReport,
     candidate: suggestion.gridCandidates[0],
     strictSourceSheetCleanup,
-    sourceSizedSheetPreservation
+    sourceSizedSheetPreservation,
+    singleSpriteMatteCleanup: false
   });
   const sheetLayout =
     isCellGridMode(mode) && detectedSheetLayout && detectedSheetLayout.frames.length > 0
@@ -565,6 +593,7 @@ function suggestCleanupEligibility(input: {
   candidate: GridCandidate | undefined;
   strictSourceSheetCleanup: boolean;
   sourceSizedSheetPreservation: boolean;
+  singleSpriteMatteCleanup: boolean;
 }): CleanupEligibilityDecision[] {
   const matteIssue = input.sheetConditioning.issues.some((issue) => isStrictSourceSheetCleanupIssue(issue.code));
   const preservesScene = input.assetType === "background" || input.assetType === "tilemap";
@@ -573,6 +602,7 @@ function suggestCleanupEligibility(input: {
   const sheetLike = input.mode === "spriteSheet" || input.mode === "tileSheet";
   const selectedScale = Math.min(input.candidate?.scaleX ?? 1, input.candidate?.scaleY ?? input.candidate?.scaleX ?? 1);
   const outlineEvidence = input.bakedTransparencyDetected || input.qualityReport.metrics.outline.candidateCount > 0;
+  const matteCleanupEvidence = input.strictSourceSheetCleanup || matteIssue || input.singleSpriteMatteCleanup;
 
   return [
     {
@@ -585,10 +615,10 @@ function suggestCleanupEligibility(input: {
     },
     {
       pass: "matteCleanup",
-      enabled: cleanupAllowed && (input.strictSourceSheetCleanup || matteIssue),
-      reasonCode: matteIssue ? "matte-artifact-evidence" : "no-matte-evidence",
-      reason: matteIssue
-        ? "Saturated matte, soft alpha, or palette-density issues were detected independently of asset type."
+      enabled: cleanupAllowed && matteCleanupEvidence,
+      reasonCode: matteCleanupEvidence ? "matte-artifact-evidence" : "no-matte-evidence",
+      reason: matteCleanupEvidence
+        ? "Matte-colored edge artifacts were detected independently of resize scale."
         : "No matte-specific conditioning issue was detected."
     },
     {
@@ -599,7 +629,7 @@ function suggestCleanupEligibility(input: {
     },
     {
       pass: "outlineRepair",
-      enabled: cleanupAllowed && outlineEvidence && selectedScale >= 1,
+      enabled: cleanupAllowed && outlineEvidence && selectedScale >= 1 && !input.singleSpriteMatteCleanup,
       reasonCode: outlineEvidence ? "outline-candidate-evidence" : "no-outline-evidence",
       reason: outlineEvidence ? "Outline-colored edge evidence was detected." : "No outline repair candidates were detected."
     },
@@ -639,7 +669,8 @@ function suggestCleanupSettings(
   candidate?: GridCandidate,
   strictSourceSheetCleanup = false,
   strictSourceSheetDenoiseStrength?: number,
-  sourceSizedSheetPreservation = false
+  sourceSizedSheetPreservation = false,
+  singleSpriteMatteCleanup = false
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "matteCleanup" | "denoiseStrength"> {
   if (strictSourceSheetCleanup) {
     return {
@@ -686,6 +717,17 @@ function suggestCleanupSettings(
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
       matteCleanup: false,
+      denoiseStrength: 0
+    };
+  }
+
+  if (singleSpriteMatteCleanup) {
+    return {
+      removeOrphans: false,
+      jaggyCleanup: false,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: false,
+      matteCleanup: true,
       denoiseStrength: 0
     };
   }
@@ -739,8 +781,10 @@ function rankAssetTypeCandidates(input: {
   outputWidth: number;
   outputHeight: number;
   sheetLayoutScore: number;
-  sheetLayout?: SheetLayoutDetection;
-  tilemapDiagnostics?: TilemapDiagnostics;
+  sheetLayout?: SheetLayoutDetection | undefined;
+  tilemapDiagnostics?: TilemapDiagnostics | undefined;
+  transparentGridCandidate?: TilemapGridCandidate | undefined;
+  exactColorCount: number;
   foregroundEvidence?: ForegroundObjectEvidence;
 }): AssetTypeClassificationCandidate[] {
   const sourceRatio = input.width / input.height;
@@ -771,12 +815,18 @@ function rankAssetTypeCandidates(input: {
     );
   }
 
-  const selectedTilemap = input.tilemapDiagnostics?.selected;
+  const selectedTilemap =
+    input.transparentGridCandidate ??
+    selectPlacedTilemapCandidate(input.tilemapDiagnostics) ??
+    selectLowColorRectGridCandidate(input.tilemapDiagnostics, sourceRatio, input.exactColorCount);
   if (
-    (input.mode === "tileSheet" || tileGridContext) &&
-    !surfacedSheetLayout &&
     selectedTilemap &&
-    hasPlacedTilemapEvidence(selectedTilemap) &&
+    (!surfacedSheetLayout || hasTransparentGridEvidence(selectedTilemap)) &&
+    (input.mode === "tileSheet" ||
+      tileGridContext ||
+      hasPlacedTilemapEvidence(selectedTilemap) ||
+      hasTransparentGridEvidence(selectedTilemap) ||
+      hasLowColorRectGridEvidence(selectedTilemap, sourceRatio, input.exactColorCount)) &&
     !input.foregroundEvidence?.singleForegroundObject
   ) {
     candidates.push(
@@ -890,6 +940,309 @@ function hasPlacedTilemapEvidence(candidate: TilemapDiagnostics["selected"]): bo
     candidate.repeatedTileRatio >= 0.35 &&
     candidate.dimensionFitScore >= 0.95 &&
     candidate.confidence >= 0.62
+  );
+}
+
+function selectPlacedTilemapCandidate(diagnostics: TilemapDiagnostics | undefined): TilemapGridCandidate | undefined {
+  return diagnostics?.candidates.find(
+    (candidate) =>
+      candidate.tileWidth >= 8 &&
+      candidate.tileHeight >= 8 &&
+      hasPlacedTilemapEvidence(candidate)
+  );
+}
+
+function selectLowColorRectGridCandidate(
+  diagnostics: TilemapDiagnostics | undefined,
+  sourceRatio: number,
+  exactColorCount: number
+): TilemapGridCandidate | undefined {
+  if (exactColorCount > 64 || Math.abs(sourceRatio - 1) < 0.12) {
+    return undefined;
+  }
+
+  return diagnostics?.candidates.find((candidate) => hasLowColorRectGridEvidence(candidate, sourceRatio, exactColorCount));
+}
+
+function hasLowColorRectGridEvidence(candidate: TilemapGridCandidate, sourceRatio: number, exactColorCount: number): boolean {
+  return (
+    exactColorCount <= 64 &&
+    Math.abs(sourceRatio - 1) >= 0.12 &&
+    candidate.tileWidth >= 8 &&
+    candidate.tileHeight >= 8 &&
+    candidate.rows >= 4 &&
+    candidate.columns >= 4 &&
+    candidate.tileCount >= 32 &&
+    candidate.dimensionFitScore >= 0.95 &&
+    candidate.gridConsistencyScore >= 0.85 &&
+    candidate.confidence >= 0.48
+  );
+}
+
+function hasTransparentGridEvidence(candidate: TilemapGridCandidate): boolean {
+  return (
+    candidate.reason.includes("transparent separator") &&
+    candidate.tileCount >= 16 &&
+    candidate.rows >= 4 &&
+    candidate.columns >= 4 &&
+    candidate.dimensionFitScore >= 0.95 &&
+    candidate.confidence >= 0.72
+  );
+}
+
+function shouldPreserveNativeGridAsset(assetType: AssetType): boolean {
+  return assetType === "tilemap" || assetType === "tileset";
+}
+
+function createSourcePreservationGridCandidate(
+  image: Pick<RGBAImage, "width" | "height">,
+  reason: string
+): GridCandidate {
+  return {
+    outputWidth: image.width,
+    outputHeight: image.height,
+    scaleX: 1,
+    scaleY: 1,
+    phaseX: 0,
+    phaseY: 0,
+    confidence: 0.98,
+    reason
+  };
+}
+
+function countExactColorsUpTo(image: RGBAImage, cap: number): number {
+  const colors = new Set<number>();
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    colors.add(
+      (((image.data[offset + 3] ?? 0) << 24) |
+        ((image.data[offset] ?? 0) << 16) |
+        ((image.data[offset + 1] ?? 0) << 8) |
+        (image.data[offset + 2] ?? 0)) >>>
+        0
+    );
+    if (colors.size > cap) {
+      return colors.size;
+    }
+  }
+  return colors.size;
+}
+
+function detectTransparentGridCandidate(image: RGBAImage): TilemapGridCandidate | undefined {
+  if (image.width < 32 || image.height < 32) {
+    return undefined;
+  }
+
+  const verticalLines = findTransparentSeparatorLines(image, "vertical");
+  const horizontalLines = findTransparentSeparatorLines(image, "horizontal");
+  const columnPitch = estimateSeparatorPitch(verticalLines);
+  const rowPitch = estimateSeparatorPitch(horizontalLines);
+  if (!columnPitch || !rowPitch) {
+    return undefined;
+  }
+
+  const columns = Math.max(0, verticalLines.length - 1);
+  const rows = Math.max(0, horizontalLines.length - 1);
+  if (columns < 4 || rows < 4) {
+    return undefined;
+  }
+
+  const tileWidth = Math.max(1, columnPitch - 1);
+  const tileHeight = Math.max(1, rowPitch - 1);
+  const tileCount = rows * columns;
+  return {
+    tileWidth,
+    tileHeight,
+    rows,
+    columns,
+    tileCount,
+    uniqueTileSignatures: tileCount,
+    repeatedTileRatio: 0,
+    dimensionFitScore: 1,
+    gridConsistencyScore: 1,
+    confidence: 0.92,
+    reason: `Detected transparent separator grid with ${columns}x${rows} cells.`
+  };
+}
+
+function findTransparentSeparatorLines(image: RGBAImage, axis: "vertical" | "horizontal"): number[] {
+  const limit = axis === "vertical" ? image.width : image.height;
+  const crossLimit = axis === "vertical" ? image.height : image.width;
+  const lines: number[] = [];
+  const minTransparent = Math.max(4, Math.ceil(crossLimit * 0.86));
+
+  for (let position = 0; position < limit; position += 1) {
+    let transparent = 0;
+    for (let cross = 0; cross < crossLimit; cross += 1) {
+      const x = axis === "vertical" ? position : cross;
+      const y = axis === "vertical" ? cross : position;
+      if ((image.data[(y * image.width + x) * 4 + 3] ?? 0) <= 16) {
+        transparent += 1;
+      }
+    }
+
+    if (transparent >= minTransparent) {
+      const previous = lines[lines.length - 1];
+      if (previous === undefined || position > previous + 1) {
+        lines.push(position);
+      }
+    }
+  }
+
+  return lines;
+}
+
+function estimateSeparatorPitch(lines: readonly number[]): number | undefined {
+  if (lines.length < 5) {
+    return undefined;
+  }
+
+  const counts = new Map<number, number>();
+  for (let index = 1; index < lines.length; index += 1) {
+    const pitch = (lines[index] ?? 0) - (lines[index - 1] ?? 0);
+    if (pitch < 4 || pitch > 128) {
+      continue;
+    }
+    counts.set(pitch, (counts.get(pitch) ?? 0) + 1);
+  }
+
+  let bestPitch = 0;
+  let bestCount = 0;
+  for (const [pitch, count] of counts) {
+    if (count > bestCount) {
+      bestPitch = pitch;
+      bestCount = count;
+    }
+  }
+
+  return bestCount >= Math.max(3, Math.floor((lines.length - 1) * 0.75)) ? bestPitch : undefined;
+}
+
+function hasOpaqueRemovableBackground(image: RGBAImage, foregroundEvidence: ForegroundObjectEvidence | undefined): boolean {
+  if (foregroundEvidence && (!foregroundEvidence.singleForegroundObject || foregroundEvidence.edgeTouchRatio > 0.16)) {
+    return false;
+  }
+
+  const background = estimateCornerColor(image);
+  if (background.a < 240) {
+    return false;
+  }
+
+  const step = Math.max(1, Math.floor(Math.max(image.width, image.height) / 160));
+  let edgeSamples = 0;
+  let edgeBackground = 0;
+  let interiorSamples = 0;
+  let interiorForeground = 0;
+  for (let x = 0; x < image.width; x += step) {
+    edgeSamples += 2;
+    if (isCloseToColor(image, x, 0, background, 54)) {
+      edgeBackground += 1;
+    }
+    if (isCloseToColor(image, x, image.height - 1, background, 54)) {
+      edgeBackground += 1;
+    }
+  }
+  for (let y = 0; y < image.height; y += step) {
+    edgeSamples += 2;
+    if (isCloseToColor(image, 0, y, background, 54)) {
+      edgeBackground += 1;
+    }
+    if (isCloseToColor(image, image.width - 1, y, background, 54)) {
+      edgeBackground += 1;
+    }
+  }
+
+  const insetX = Math.max(1, Math.floor(image.width * 0.12));
+  const insetY = Math.max(1, Math.floor(image.height * 0.12));
+  for (let y = insetY; y < image.height - insetY; y += step) {
+    for (let x = insetX; x < image.width - insetX; x += step) {
+      interiorSamples += 1;
+      if (!isCloseToColor(image, x, y, background, 64)) {
+        interiorForeground += 1;
+      }
+    }
+  }
+
+  return edgeSamples > 0 && edgeBackground / edgeSamples >= 0.62 && interiorForeground / Math.max(1, interiorSamples) >= 0.08;
+}
+
+function hasVisibleChromaMatteAgainstBackground(image: RGBAImage): boolean {
+  const background = estimateCornerColor(image);
+  if (background.a < 240) {
+    return false;
+  }
+
+  let candidates = 0;
+  let visible = 0;
+  const stride = Math.max(1, Math.floor(Math.sqrt((image.width * image.height) / 80_000)));
+  for (let y = 0; y < image.height; y += stride) {
+    for (let x = 0; x < image.width; x += stride) {
+      const offset = (y * image.width + x) * 4;
+      const a = image.data[offset + 3] ?? 0;
+      if (a <= 16) {
+        continue;
+      }
+      visible += 1;
+      const r = image.data[offset] ?? 0;
+      const g = image.data[offset + 1] ?? 0;
+      const b = image.data[offset + 2] ?? 0;
+      if (looksLikeArtificialMatteColor(r, g, b) && hasNeighborCloseToColor(image, x, y, background, 64)) {
+        candidates += 1;
+      }
+    }
+  }
+
+  return candidates >= Math.max(4, Math.floor(visible * 0.003));
+}
+
+function looksLikeArtificialMatteColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const colorfulness = Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+  const saturatedMatte = max >= 140 && spread >= 80 && colorfulness >= 150;
+  const mutedGreenMatte = g >= 64 && g - r >= 24 && g - b >= 24;
+  const mutedMagentaMatte = r >= 90 && b >= 64 && g <= Math.min(r, b) - 24;
+  return saturatedMatte || mutedGreenMatte || mutedMagentaMatte;
+}
+
+function hasNeighborCloseToColor(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  color: { r: number; g: number; b: number; a: number },
+  tolerance: number
+): boolean {
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        return true;
+      }
+      if (isCloseToColor(image, nx, ny, color, tolerance)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function isCloseToColor(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  color: { r: number; g: number; b: number; a: number },
+  tolerance: number
+): boolean {
+  const offset = (y * image.width + x) * 4;
+  return (
+    Math.abs((image.data[offset] ?? 0) - color.r) +
+      Math.abs((image.data[offset + 1] ?? 0) - color.g) +
+      Math.abs((image.data[offset + 2] ?? 0) - color.b) <= tolerance &&
+    Math.abs((image.data[offset + 3] ?? 0) - color.a) <= 32
   );
 }
 
@@ -1095,7 +1448,13 @@ export function chooseSuggestionGrid(
   return candidate;
 }
 
-function suggestAlphaMode(image: RGBAImage, mode: AssetMode, assetType: AssetType, fallback: AlphaMode): AlphaMode {
+function suggestAlphaMode(
+  image: RGBAImage,
+  mode: AssetMode,
+  assetType: AssetType,
+  fallback: AlphaMode,
+  foregroundEvidence?: ForegroundObjectEvidence
+): AlphaMode {
   if (mode !== "single") {
     return fallback;
   }
@@ -1125,7 +1484,11 @@ function suggestAlphaMode(image: RGBAImage, mode: AssetMode, assetType: AssetTyp
   const brightness = (r + g + b) / (count * 3);
   const alpha = a / count;
   const canFloodFillBackground = assetType === "sprite" || assetType === "icon";
-  return canFloodFillBackground && alpha > 240 && brightness > 220 ? "backgroundFloodFill" : fallback;
+  if (!canFloodFillBackground || alpha <= 240) {
+    return fallback;
+  }
+
+  return brightness > 220 || hasOpaqueRemovableBackground(image, foregroundEvidence) ? "backgroundFloodFill" : fallback;
 }
 
 function estimateBlockPurity(image: RGBAImage, candidate: GridCandidate | undefined): number {
