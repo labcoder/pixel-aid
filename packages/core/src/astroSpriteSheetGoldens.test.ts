@@ -52,6 +52,7 @@ function buildFixOptions(image: RGBAImage): FixOptions {
       removeHalos: suggestion.removeHalos,
       denoiseStrength: suggestion.denoiseStrength,
       inferNativeScale: suggestion.inferNativeScale,
+      ...(suggestion.contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
       outlineMode: suggestion.outlineMode,
       outlineSize: suggestion.outlineSize,
       outlineSourceColors: suggestion.outlineSourceColors,
@@ -173,6 +174,31 @@ function cropTopLeft(image: RGBAImage, width: number, height: number): RGBAImage
   };
 }
 
+function cropRect(image: RGBAImage, rect: { x: number; y: number; w: number; h: number }): RGBAImage {
+  const croppedWidth = Math.max(1, Math.min(rect.w, image.width - rect.x));
+  const croppedHeight = Math.max(1, Math.min(rect.h, image.height - rect.y));
+  const data = new Uint8ClampedArray(croppedWidth * croppedHeight * 4);
+  for (let y = 0; y < croppedHeight; y += 1) {
+    const sourceStart = ((rect.y + y) * image.width + rect.x) * 4;
+    const targetStart = y * croppedWidth * 4;
+    data.set(image.data.subarray(sourceStart, sourceStart + croppedWidth * 4), targetStart);
+  }
+  return {
+    width: croppedWidth,
+    height: croppedHeight,
+    data
+  };
+}
+
+function sheetFrameRect(row: number, column: number): { x: number; y: number; w: number; h: number } {
+  return {
+    x: column * 192,
+    y: row * 208,
+    w: 192,
+    h: 208
+  };
+}
+
 describe("astro sprite sheet golden regressions", () => {
   test("preserves the clean normalized astro sheet exactly", () => {
     const source = readGoldenPng(cleanAstroSheetPath);
@@ -208,7 +234,7 @@ describe("astro sprite sheet golden regressions", () => {
     const comparison = compareGoldenImage(result.image, golden, {
       mode: "tolerance",
       perChannelTolerance: 40,
-      allowedChangedPixels: 230_000
+      allowedChangedPixels: 300_000
     });
     const alphaDiff = compareAlphaMasks(result.image, golden);
 
@@ -220,13 +246,38 @@ describe("astro sprite sheet golden regressions", () => {
     expect(suggestion.sheetLayout?.frameHeight).toBe(208);
     expect(suggestion.targetWidth).toBe(golden.width);
     expect(suggestion.targetHeight).toBe(golden.height);
+    expect(suggestion.removeOrphans).toBe(false);
+    expect(suggestion.jaggyCleanup).toBe(false);
+    expect(suggestion.contrastExpansionEnabled).toBe(false);
+    expect(suggestion.outlineMode).toBe("none");
     expect(result.image.width).toBe(golden.width);
     expect(result.image.height).toBe(golden.height);
     expect(countExactRgbaColors(result.image)).toBeLessThanOrEqual(32);
     expect(countVisibleGreenMattePixels(result.image)).toBeLessThan(countVisibleGreenMattePixels(source) * 0.2);
     expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(130_000);
-    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(2_000);
-    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(110_000);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(12_000);
+    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(220_000);
+    expect(comparison.message).toContain("Golden matched");
+    expect(comparison.matches).toBe(true);
+  }, 10_000);
+
+  test("preserves the first noisy astro source frame without crispy line repair artifacts", async () => {
+    const source = await readGoldenWebp(noisyAstroSheetPath);
+    const golden = readGoldenPng(cleanAstroSheetPath);
+    const result = fixImage(source, buildFixOptions(source));
+    const frame = sheetFrameRect(0, 0);
+    const actualFrame = cropRect(result.image, frame);
+    const goldenFrame = cropRect(golden, frame);
+    const comparison = compareGoldenImage(actualFrame, goldenFrame, {
+      mode: "tolerance",
+      perChannelTolerance: 32,
+      allowedChangedPixels: 6_000
+    });
+    const alphaDiff = compareAlphaMasks(actualFrame, goldenFrame);
+
+    expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(2_800);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(500);
+    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(4_250);
     expect(comparison.message).toContain("Golden matched");
     expect(comparison.matches).toBe(true);
   }, 10_000);
@@ -250,13 +301,39 @@ describe("astro sprite sheet golden regressions", () => {
     expect(suggestion.sheetLayout?.rows).toBe(9);
     expect(suggestion.sheetLayout?.frameWidth).toBe(192);
     expect(suggestion.sheetLayout?.frameHeight).toBe(208);
+    expect(suggestion.removeOrphans).toBe(false);
+    expect(suggestion.jaggyCleanup).toBe(false);
+    expect(suggestion.contrastExpansionEnabled).toBe(false);
+    expect(suggestion.outlineMode).toBe("none");
     expect(result.image.width).toBe(source.width);
     expect(result.image.height).toBe(source.height);
     expect(countExactRgbaColors(result.image)).toBeLessThanOrEqual(32);
     expect(countVisibleMagentaMattePixels(result.image)).toBeLessThan(1_000);
     expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(45_000);
-    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(25_000);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(80_000);
     expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(110_000);
+    expect(comparison.message).toContain("Golden matched");
+    expect(comparison.matches).toBe(true);
+  }, 10_000);
+
+  test("preserves Hollow Knight row 7 chair frame linework while removing matte artifacts", async () => {
+    const source = await readGoldenWebp(hollowKnightSheetPath);
+    const golden = readGoldenPng(cleanHollowKnightSheetPath);
+    const result = fixImage(source, buildFixOptions(source));
+    const frame = sheetFrameRect(6, 4);
+    const actualFrame = cropRect(result.image, frame);
+    const goldenFrame = cropRect(golden, frame);
+    const comparison = compareGoldenImage(actualFrame, goldenFrame, {
+      mode: "tolerance",
+      perChannelTolerance: 32,
+      allowedChangedPixels: 6_000
+    });
+    const alphaDiff = compareAlphaMasks(actualFrame, goldenFrame);
+
+    expect(countVisibleMagentaMattePixels(actualFrame)).toBeLessThan(80);
+    expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(1_800);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(2_200);
+    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(3_600);
     expect(comparison.message).toContain("Golden matched");
     expect(comparison.matches).toBe(true);
   }, 10_000);

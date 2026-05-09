@@ -534,7 +534,7 @@ function describeNativeScaleInference(input: {
     scaleY: Number(scaleY.toFixed(3)),
     confidence: Math.min(0.98, Math.max(0.7, input.sheetLayout.confidence)),
     reasonCode: "source-sized-cleanup-first",
-    reason: "Source-sized cell grid has cleanup artifacts, so PixelAid should infer native cell scale before final packing."
+    reason: "Source-sized cell grid has cleanup artifacts, so PixelAid should condition each cell at source resolution before final packing."
   };
 }
 
@@ -617,6 +617,7 @@ function suggestCleanupEligibility(input: {
   const selectedScale = Math.min(input.candidate?.scaleX ?? 1, input.candidate?.scaleY ?? input.candidate?.scaleX ?? 1);
   const outlineEvidence = input.bakedTransparencyDetected || input.qualityReport.metrics.outline.candidateCount > 0;
   const matteCleanupEvidence = input.strictSourceSheetCleanup || matteIssue || input.singleSpriteMatteCleanup;
+  const sourceSizedSheetCleanup = input.strictSourceSheetCleanup && sheetLike && selectedScale <= 1.25;
 
   return [
     {
@@ -643,9 +644,13 @@ function suggestCleanupEligibility(input: {
     },
     {
       pass: "outlineRepair",
-      enabled: cleanupAllowed && outlineEvidence && selectedScale >= 1 && !input.singleSpriteMatteCleanup,
-      reasonCode: outlineEvidence ? "outline-candidate-evidence" : "no-outline-evidence",
-      reason: outlineEvidence ? "Outline-colored edge evidence was detected." : "No outline repair candidates were detected."
+      enabled: cleanupAllowed && !sourceSizedSheetCleanup && outlineEvidence && selectedScale >= 1 && !input.singleSpriteMatteCleanup,
+      reasonCode: sourceSizedSheetCleanup ? "source-sized-line-preservation" : outlineEvidence ? "outline-candidate-evidence" : "no-outline-evidence",
+      reason: sourceSizedSheetCleanup
+        ? "Source-sized sheet cleanup preserves existing linework instead of rebuilding outlines."
+        : outlineEvidence
+          ? "Outline-colored edge evidence was detected."
+          : "No outline repair candidates were detected."
     },
     {
       pass: "jaggyCleanup",
@@ -664,7 +669,7 @@ function suggestCleanupEligibility(input: {
       enabled: input.strictSourceSheetCleanup,
       reasonCode: input.strictSourceSheetCleanup ? "source-sized-cleanup-first" : "native-scale-not-needed",
       reason: input.strictSourceSheetCleanup
-        ? "Frame-first cleanup should infer each source cell native scale before final packing."
+        ? "Frame-first cleanup should condition each source cell at source resolution before final packing."
         : "Native scale inference is only needed for source-sized sheets with cleanup artifacts."
     }
   ];
@@ -688,8 +693,8 @@ function suggestCleanupSettings(
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "matteCleanup" | "denoiseStrength"> {
   if (strictSourceSheetCleanup) {
     return {
-      removeOrphans: true,
-      jaggyCleanup: true,
+      removeOrphans: false,
+      jaggyCleanup: false,
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
       matteCleanup: true,

@@ -231,9 +231,10 @@ function fixSheetFrames(
         scratch
       });
       const cleanedFrame = cleanFixedImage(frameFix.image, getSheetFrameCleanupOptions(options, frameFix.inferredNativeScale), phaseTimer, runtime);
-      alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, cleanedFrame.alpha);
+      const restoredFrame = frameFix.sourceReference ? restoreSubjectPixelsFromSource(cleanedFrame.image, frameFix.sourceReference) : cleanedFrame.image;
+      alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, refreshAlphaDiagnosticsFromImage(cleanedFrame.alpha, restoredFrame));
       morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
-      pasteImage(cleanedFrame.image, packed, frame.rect);
+      pasteImage(restoredFrame, packed, frame.rect);
       reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
       assertNotCancelled(runtime?.signal);
     }
@@ -313,6 +314,7 @@ function fixSheetFrames(
 type SheetFrameFix = {
   image: RGBAImage;
   inferredNativeScale: boolean;
+  sourceReference?: RGBAImage;
 };
 
 type SheetFrameScratch = {
@@ -361,6 +363,14 @@ function fixSheetFrameSource(
   }
 
   const frameSource = copyImageRect(image, sourceRect, progress.scratch);
+  if (shouldUseSourceResolutionSheetFrameCleanup(options, sourceRect, outputRect)) {
+    return {
+      image: frameSource,
+      inferredNativeScale: false,
+      sourceReference: frameSource
+    };
+  }
+
   const inferred = options.cleanup.inferNativeScale ? inferNativeScaleFrame(frameSource) : undefined;
   if (!inferred) {
     return {
@@ -406,6 +416,19 @@ function fixSheetFrameSource(
     image: restoreSubjectPixelsFromSource(clipped, frameSource),
     inferredNativeScale: true
   };
+}
+
+function shouldUseSourceResolutionSheetFrameCleanup(options: FixOptions, sourceRect: Rect, outputRect: Rect): boolean {
+  const scaleX = options.grid.scaleX ?? options.grid.scale ?? 1;
+  const scaleY = options.grid.scaleY ?? options.grid.scale ?? scaleX;
+  return (
+    options.cleanup.inferNativeScale === true &&
+    isSameSizeFrameSource(sourceRect, outputRect) &&
+    scaleX <= 1.25 &&
+    scaleY <= 1.25 &&
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true
+  );
 }
 
 function shouldUseCoveragePreservingNativeScale(options: FixOptions): boolean {
