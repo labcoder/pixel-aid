@@ -4,6 +4,7 @@ import {
   getSimpleDenoiseChoice,
   getSimpleDenoiseStrength,
   getSimpleOutlineChoice,
+  getSimpleResizeChoice,
   getSimpleSheetCellSizeChoice
 } from "./simpleSpriteControls";
 
@@ -28,6 +29,12 @@ describe("simple sprite controls", () => {
     expect(getSimpleOutlineChoice("repairExisting")).toBe("repair");
     expect(getSimpleOutlineChoice("add")).toBe("add");
     expect(getSimpleOutlineChoice("none")).toBe("none");
+  });
+
+  test("maps single-image resize controls to keep, preset, or custom choices", () => {
+    expect(getSimpleResizeChoice({ sourceWidth: 1533, sourceHeight: 1869, targetWidth: 1533, targetHeight: 1869 })).toBe("keep");
+    expect(getSimpleResizeChoice({ sourceWidth: 706, sourceHeight: 878, targetWidth: 64, targetHeight: 80 })).toBe("64");
+    expect(getSimpleResizeChoice({ sourceWidth: 706, sourceHeight: 878, targetWidth: 91, targetHeight: 113 })).toBe("custom");
   });
 
   test("maps consistent square sheet cells to quick size choices", () => {

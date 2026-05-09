@@ -193,6 +193,7 @@ import {
   applyTargetSizePreset,
   denoiseStrengthLabel,
   deriveGridScale,
+  keepSourceSize,
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
@@ -344,6 +345,7 @@ import {
   getSimpleDenoiseChoice,
   getSimpleDenoiseStrength,
   getSimpleOutlineChoice,
+  getSimpleResizeChoice,
   getSimpleSheetCellSizeChoice,
   simpleAlphaChoices,
   simpleColorChoices,
@@ -352,6 +354,7 @@ import {
   simpleResizeChoices,
   simpleSheetCellSizeChoices,
   simpleSheetKeepSizeChoice,
+  simpleSpriteKeepSizeChoice,
   type SimpleAlphaChoice,
   type SimpleDenoiseChoice,
   type SimpleOutlineChoice
@@ -2239,6 +2242,16 @@ export function App() {
         fallbackHeight: frameHeight
       }),
     [frameHeight, frameWidth, plannedSheetLayout.rows]
+  );
+  const simpleSpriteResizeChoice = useMemo(
+    () =>
+      getSimpleResizeChoice({
+        sourceWidth: selectedAsset?.image.width ?? targetWidth,
+        sourceHeight: selectedAsset?.image.height ?? targetHeight,
+        targetWidth,
+        targetHeight
+      }),
+    [selectedAsset, targetHeight, targetWidth]
   );
   const effectiveTargetWidth = sheetMode ? plannedSheetLayout.width : targetWidth;
   const effectiveTargetHeight = sheetMode ? plannedSheetLayout.height : targetHeight;
@@ -4507,6 +4520,16 @@ export function App() {
     [commitTargetSize, selectedAsset, targetHeight, targetWidth]
   );
 
+  const applyKeepSourceSize = useCallback(() => {
+    if (!selectedAsset) {
+      return;
+    }
+
+    setAspectLocked(true);
+    commitTargetSize(keepSourceSize(selectedAsset.image));
+    appendLog("Set output size to keep source dimensions");
+  }, [appendLog, commitTargetSize, selectedAsset]);
+
   const applySimpleAlphaChoice = useCallback(
     (choice: SimpleAlphaChoice) => {
       setAlpha(choice === "remove" ? "backgroundFloodFill" : "preserve");
@@ -6661,6 +6684,9 @@ export function App() {
               activeValue={targetWidth}
               onSelect={(preset) => applyTargetPreset("width", preset)}
             />
+            <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={applyKeepSourceSize}>
+              Keep Source Size
+            </button>
             {!aspectLocked ? (
               <TargetPresetButtons
                 label="Height presets"
@@ -8068,12 +8094,13 @@ export function App() {
               />
             ) : selectedAsset && mode === "single" ? (
               <SimpleSpriteControls
-                targetWidth={targetWidth}
+                resizeChoice={simpleSpriteResizeChoice}
                 maxColors={maxColors}
                 alphaChoice={getSimpleAlphaChoice(alpha)}
                 denoiseChoice={getSimpleDenoiseChoice(denoiseStrength)}
                 outlineChoice={getSimpleOutlineChoice(outlineMode)}
                 onResize={applySimpleSpriteResize}
+                onKeepSize={applyKeepSourceSize}
                 onAlphaChange={applySimpleAlphaChoice}
                 onDenoiseChange={applySimpleDenoiseChoice}
                 onOutlineChange={applySimpleOutlineChoice}
@@ -9072,23 +9099,25 @@ function GuidedFixPanel({
 }
 
 function SimpleSpriteControls({
-  targetWidth,
+  resizeChoice,
   maxColors,
   alphaChoice,
   denoiseChoice,
   outlineChoice,
   onResize,
+  onKeepSize,
   onAlphaChange,
   onDenoiseChange,
   onOutlineChange,
   onMaxColorsChange
 }: {
-  targetWidth: number;
+  resizeChoice: string;
   maxColors: number;
   alphaChoice: SimpleAlphaChoice;
   denoiseChoice: SimpleDenoiseChoice;
   outlineChoice: SimpleOutlineChoice;
   onResize: (value: number) => void;
+  onKeepSize: () => void;
   onAlphaChange: (value: SimpleAlphaChoice) => void;
   onDenoiseChange: (value: SimpleDenoiseChoice) => void;
   onOutlineChange: (value: SimpleOutlineChoice) => void;
@@ -9098,9 +9127,15 @@ function SimpleSpriteControls({
     <div className="simple-sprite-controls" aria-label="Simple sprite controls">
       <SimpleButtonGroup
         label="Resize"
-        options={simpleResizeChoices.map((size) => ({ id: String(size), label: String(size) }))}
-        value={String(targetWidth)}
-        onChange={(value) => onResize(Number(value))}
+        options={[simpleSpriteKeepSizeChoice, ...simpleResizeChoices.map((size) => ({ id: String(size), label: String(size) }))]}
+        value={resizeChoice}
+        onChange={(value) => {
+          if (value === simpleSpriteKeepSizeChoice.id) {
+            onKeepSize();
+            return;
+          }
+          onResize(Number(value));
+        }}
       />
       <SimpleButtonGroup
         label="Background"

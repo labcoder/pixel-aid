@@ -4,6 +4,7 @@ import {
   defaultCleanupSettings,
   denoiseStrengthLabel,
   deriveGridScale,
+  keepSourceSize,
   resizeWithAspectLock,
   targetSizePresets
 } from "./fixControls";
@@ -72,6 +73,13 @@ describe("fix controls", () => {
         locked: false
       })
     ).toEqual({ targetWidth: 64, targetHeight: 48 });
+  });
+
+  test("keeps source dimensions for cleanup-only passes", () => {
+    expect(keepSourceSize({ width: 1533, height: 1869 })).toEqual({
+      targetWidth: 1533,
+      targetHeight: 1869
+    });
   });
 
   test("defaults single-sprite cleanup toward conservative mask repair", () => {

@@ -82,6 +82,13 @@ export function applyTargetSizePreset(request: TargetSizePresetRequest): { targe
   });
 }
 
+export function keepSourceSize(source: Size): { targetWidth: number; targetHeight: number } {
+  return {
+    targetWidth: Math.max(1, Math.round(source.width)),
+    targetHeight: Math.max(1, Math.round(source.height))
+  };
+}
+
 export function deriveGridScale(source: Size, target: Size): { scaleX: number; scaleY: number } {
   return {
     scaleX: target.width > 0 ? source.width / target.width : 1,

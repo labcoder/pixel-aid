@@ -31,6 +31,7 @@ export const simpleOutlineChoices: Array<{ id: SimpleOutlineChoice; label: strin
 
 export const simpleColorChoices = [16, 24, 32, 64] as const;
 export const simpleResizeChoices = [32, 48, 64, 96, 128] as const;
+export const simpleSpriteKeepSizeChoice = { id: "keep", label: "Keep" } as const;
 export const simpleSheetCellSizeChoices = [16, 24, 32, 48, 64] as const;
 export const simpleSheetKeepSizeChoice = { id: "keep", label: "Keep" } as const;
 
@@ -62,6 +63,28 @@ export function getSimpleOutlineChoice(outline: OutlineMode): SimpleOutlineChoic
     return "repair";
   }
   return outline === "add" ? "add" : "none";
+}
+
+export function getSimpleResizeChoice({
+  sourceWidth,
+  sourceHeight,
+  targetWidth,
+  targetHeight
+}: {
+  sourceWidth: number;
+  sourceHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+}): string {
+  if (Math.round(sourceWidth) === Math.round(targetWidth) && Math.round(sourceHeight) === Math.round(targetHeight)) {
+    return simpleSpriteKeepSizeChoice.id;
+  }
+
+  if (simpleResizeChoices.includes(targetWidth as (typeof simpleResizeChoices)[number])) {
+    return String(targetWidth);
+  }
+
+  return "custom";
 }
 
 export function getSimpleSheetCellSizeChoice({
