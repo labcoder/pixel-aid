@@ -138,8 +138,9 @@ export function clampZoom(value: number): number {
 
 export function getWheelZoom(zoom: number, deltaY: number): number {
   const direction = deltaY < 0 ? 1 : -1;
-  const step = zoom < 1 ? 0.1 : 1;
-  return clampZoom(zoom + direction * step);
+  const magnitude = Math.min(3, Math.max(0.01, Math.abs(deltaY) / 100));
+  const factor = Math.pow(1.12, direction * magnitude);
+  return clampZoom(zoom * factor);
 }
 
 export function getAutoViewportZoom({

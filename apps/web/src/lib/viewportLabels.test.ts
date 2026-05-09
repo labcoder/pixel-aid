@@ -5,8 +5,8 @@ describe("viewport labels", () => {
   test("uses input/output language for comparison modes", () => {
     expect(getViewportModeLabel("before")).toBe("Input");
     expect(getViewportModeLabel("after")).toBe("Output");
-    expect(getViewportModeLabel("sideBySide")).toBe("Side by side");
-    expect(getViewportModeLabel("split")).toBe("Slider");
+    expect(getViewportModeLabel("sideBySide")).toBe("Compare");
+    expect(getViewportModeLabel("split")).toBe("Compare");
     expect(getViewportModeLabel("timeline")).toBe("Timeline");
   });
 

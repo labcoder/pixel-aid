@@ -1,5 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
-import { useEffect, useMemo, useRef } from "react";
+import type { PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FramePreviewPlacement } from "../lib/frameNormalization";
 import { tickPlayback, type PlaybackDirection, type PlaybackStepDirection } from "../lib/playbackModel";
 import { getTimelineViewportLayout, type TimelineViewportCompareMode, type TimelineViewportPane } from "../lib/timelineViewportLayout";
@@ -59,6 +60,9 @@ export function TimelineViewportCanvas({
 }: TimelineViewportCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
+  const splitDragRef = useRef<{ pointerId: number } | null>(null);
+  const splitRatioRef = useRef(0.5);
+  const [renderKey, setRenderKey] = useState(0);
   const ownedInputCanvas = useMemo(() => (!inputSurface && inputImage ? imageToCanvas(inputImage) : null), [inputImage, inputSurface]);
   const ownedOutputCanvas = useMemo(() => (!outputSurface && outputImage ? imageToCanvas(outputImage) : null), [outputImage, outputSurface]);
   const inputCanvas = inputSurface ?? ownedInputCanvas;
@@ -129,6 +133,7 @@ export function TimelineViewportCanvas({
         outputPlacements,
         sourceMode,
         compareMode,
+        splitRatio: splitRatioRef.current,
         frameIndex: liveStateRef.current.frameIndex,
         showOnionSkin,
         wrapOnion: loop && direction !== "ping-pong" && direction !== "hold"
@@ -171,14 +176,55 @@ export function TimelineViewportCanvas({
     outputOverlayCanvas,
     outputPlacements,
     playDirection,
+    renderKey,
     selectedTimelinePosition,
     showOnionSkin,
     sourceMode
   ]);
 
+  const onPointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0 || sourceMode !== "compare" || compareMode !== "split") {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const pointerX = event.clientX - rect.left;
+    const splitX = rect.width * splitRatioRef.current;
+    if (Math.abs(pointerX - splitX) > 12) {
+      return;
+    }
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    splitDragRef.current = { pointerId: event.pointerId };
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLCanvasElement>) => {
+    const splitDrag = splitDragRef.current;
+    if (splitDrag?.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    splitRatioRef.current = Math.max(0.05, Math.min(0.95, (event.clientX - rect.left) / Math.max(1, rect.width)));
+    setRenderKey((key) => key + 1);
+  };
+
+  const onPointerUp = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (splitDragRef.current?.pointerId === event.pointerId) {
+      splitDragRef.current = null;
+    }
+  };
+
   return (
     <div className="timeline-viewport-player">
-      <canvas ref={canvasRef} aria-label="Timeline animation viewport" />
+      <canvas
+        ref={canvasRef}
+        aria-label="Timeline animation viewport"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      />
     </div>
   );
 }
@@ -193,6 +239,7 @@ function drawCanvas({
   outputPlacements,
   sourceMode,
   compareMode,
+  splitRatio,
   frameIndex,
   showOnionSkin,
   wrapOnion
@@ -206,6 +253,7 @@ function drawCanvas({
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
   compareMode: TimelineViewportCompareMode;
+  splitRatio: number;
   frameIndex: number;
   showOnionSkin: boolean;
   wrapOnion: boolean;
@@ -237,6 +285,7 @@ function drawCanvas({
     viewport: { width, height },
     mode: sourceMode,
     compareMode,
+    splitRatio,
     inputCanvas: inputPlacement?.canvas ?? null,
     outputCanvas: outputPlacement?.canvas ?? null
   });

@@ -2,8 +2,8 @@ import type { EditorViewMode } from "./viewportModes";
 
 const viewportModeLabels: Record<EditorViewMode, string> = {
   before: "Input",
-  sideBySide: "Side by side",
-  split: "Slider",
+  sideBySide: "Compare",
+  split: "Compare",
   after: "Output",
   timeline: "Timeline"
 };

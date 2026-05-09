@@ -11,22 +11,24 @@ export function getFrameCompareViewportConfig({
   sheetMode,
   timelineEnabled,
   viewMode,
+  compareMode,
   hasInput,
   hasOutput
 }: {
   sheetMode: boolean;
   timelineEnabled: boolean;
   viewMode: EditorViewMode;
+  compareMode: TimelineViewportCompareMode;
   hasInput: boolean;
   hasOutput: boolean;
 }): FrameCompareViewportConfig | null {
-  if (!sheetMode || timelineEnabled || (viewMode !== "sideBySide" && viewMode !== "split")) {
+  if (!sheetMode || timelineEnabled || viewMode !== "split") {
     return null;
   }
 
   return {
     sourceMode: getFrameCompareSourceMode(hasInput, hasOutput),
-    compareMode: viewMode === "split" ? "split" : "sideBySide"
+    compareMode
   };
 }
 

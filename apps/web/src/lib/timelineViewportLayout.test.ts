@@ -40,6 +40,7 @@ describe("timeline viewport layout", () => {
       viewport: { width: 900, height: 420 },
       mode: "compare",
       compareMode: "split",
+      splitRatio: 0.3,
       inputCanvas: { width: 64, height: 64 },
       outputCanvas: { width: 64, height: 64 }
     });
@@ -47,7 +48,7 @@ describe("timeline viewport layout", () => {
     expect(layout.compareMode).toBe("split");
     expect(layout.panes.map((pane) => pane.id)).toEqual(["input", "output"]);
     expect(layout.panes[0]?.drawRect).toEqual(layout.panes[1]?.drawRect);
-    expect(layout.dividerX).toBe(450);
+    expect(layout.dividerX).toBe(270);
   });
 
   test("falls back to input pane when output is unavailable", () => {

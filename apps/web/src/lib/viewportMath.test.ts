@@ -119,9 +119,10 @@ describe("viewport math", () => {
     ).toBeCloseTo(0.57, 2);
   });
 
-  test("uses smaller wheel zoom steps below 100 percent", () => {
-    expect(getWheelZoom(0.72, -1)).toBe(0.82);
-    expect(getWheelZoom(0.72, 1)).toBe(0.62);
-    expect(getWheelZoom(4, -1)).toBe(5);
+  test("uses smooth proportional wheel zoom steps", () => {
+    expect(getWheelZoom(0.72, -1)).toBeCloseTo(0.72, 2);
+    expect(getWheelZoom(0.72, -100)).toBeCloseTo(0.81, 2);
+    expect(getWheelZoom(0.72, 100)).toBeCloseTo(0.64, 2);
+    expect(getWheelZoom(4, -100)).toBeCloseTo(4.48, 2);
   });
 });

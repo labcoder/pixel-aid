@@ -25,12 +25,14 @@ export function getTimelineViewportLayout({
   viewport,
   mode,
   compareMode = "sideBySide",
+  splitRatio = 0.5,
   inputCanvas,
   outputCanvas
 }: {
   viewport: TimelineViewportCanvasSize;
   mode: TimelineViewportSourceMode;
   compareMode?: TimelineViewportCompareMode;
+  splitRatio?: number;
   inputCanvas: TimelineViewportCanvasSize | null;
   outputCanvas: TimelineViewportCanvasSize | null;
 }): TimelineViewportLayout {
@@ -53,7 +55,7 @@ export function getTimelineViewportLayout({
           { ...pane, id: "input", label: "Input", canvas: inputCanvas },
           { ...pane, id: "output", label: "Output", canvas: outputCanvas }
         ],
-        dividerX: Math.floor(safeViewport.width / 2)
+        dividerX: Math.floor(safeViewport.width * clampRatio(splitRatio))
       };
     }
 
@@ -114,4 +116,8 @@ function createPane(
       h
     }
   };
+}
+
+function clampRatio(value: number): number {
+  return Math.max(0.05, Math.min(0.95, Number.isFinite(value) ? value : 0.5));
 }

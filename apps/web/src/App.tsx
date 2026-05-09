@@ -818,6 +818,7 @@ type AssetEditorSession = {
   settings: {
     mode: AssetMode;
     viewMode: EditorViewMode;
+    canvasCompareMode: TimelineViewportCompareMode;
     targetWidth: number;
     targetHeight: number;
     maxColors: number;
@@ -892,6 +893,7 @@ type AssetEditorSession = {
     normalizeTimelineFrames: boolean;
     showOnionSkin: boolean;
     timelineViewportSourceMode: TimelineViewportSourceMode;
+    timelineViewportCompareMode: TimelineViewportCompareMode;
     sandboxSpeed: number;
     sandboxScale: number;
     showSandboxGuides: boolean;
@@ -996,6 +998,7 @@ export function App() {
   const [assetActivationOperation, setAssetActivationOperation] = useState<BusyOperation | null>(null);
   const [analysisOperation, setAnalysisOperation] = useState<BusyOperation | null>(null);
   const [viewMode, setViewMode] = useState<EditorViewMode>("split");
+  const [canvasCompareMode, setCanvasCompareMode] = useState<TimelineViewportCompareMode>("split");
   const [showGrid, setShowGrid] = useState(initialSettings.showGrid);
   const [diagnosticOverlayMode, setDiagnosticOverlayMode] = useState<DiagnosticOverlayMode>("none");
   const [zoom, setZoom] = useState(initialSettings.zoom);
@@ -1637,6 +1640,7 @@ export function App() {
       settings: {
         mode,
         viewMode,
+        canvasCompareMode,
         targetWidth,
         targetHeight,
         maxColors,
@@ -1711,6 +1715,7 @@ export function App() {
         normalizeTimelineFrames,
         showOnionSkin,
         timelineViewportSourceMode,
+        timelineViewportCompareMode,
         sandboxSpeed,
         sandboxScale,
         showSandboxGuides
@@ -1747,6 +1752,7 @@ export function App() {
       alphaTolerance,
       aspectLocked,
       bottomPanelTab,
+      canvasCompareMode,
       cleanupComparisonVariants,
       contrastExpansionEnabled,
       cropToBounds,
@@ -1832,6 +1838,7 @@ export function App() {
       tilemapOffsetY,
       tilesetRepairBackup,
       timelineViewportSourceMode,
+      timelineViewportCompareMode,
       viewMode
     ]
   );
@@ -1879,6 +1886,7 @@ export function App() {
 
     setMode(settings.mode);
     setViewMode(settings.viewMode);
+    setCanvasCompareMode(settings.canvasCompareMode ?? "split");
     setTargetWidth(settings.targetWidth);
     setTargetHeight(settings.targetHeight);
     setMaxColors(settings.maxColors);
@@ -1968,6 +1976,7 @@ export function App() {
     setNormalizeTimelineFrames(timeline.normalizeTimelineFrames);
     setShowOnionSkin(timeline.showOnionSkin);
     setTimelineViewportSourceMode(timeline.timelineViewportSourceMode);
+    setTimelineViewportCompareMode(timeline.timelineViewportCompareMode ?? "sideBySide");
     setSandboxSpeed(timeline.sandboxSpeed);
     setSandboxScale(timeline.sandboxScale);
     setShowSandboxGuides(timeline.showSandboxGuides);
@@ -2425,7 +2434,7 @@ export function App() {
       }),
     [fixResult?.grid, fixResult?.image, mode]
   );
-  const canvasViewMode = getCanvasViewMode(viewMode, fixResult !== null);
+  const canvasViewMode = getCanvasViewMode(viewMode, fixResult !== null, canvasCompareMode);
   const viewportNativeReadout = useMemo(
     () =>
       getViewportNativeReadout({
@@ -2766,12 +2775,14 @@ export function App() {
         sheetMode,
         timelineEnabled: timelineState.enabled,
         viewMode,
+        compareMode: canvasCompareMode,
         hasInput: timelineViewportSourceAvailability.hasInput,
         hasOutput: timelineViewportSourceAvailability.hasOutput
       }),
-    [sheetMode, timelineState.enabled, timelineViewportSourceAvailability.hasInput, timelineViewportSourceAvailability.hasOutput, viewMode]
+    [canvasCompareMode, sheetMode, timelineState.enabled, timelineViewportSourceAvailability.hasInput, timelineViewportSourceAvailability.hasOutput, viewMode]
   );
   const editorViewModes = useMemo(() => getEditorViewModes(mode, { timelineEnabled: timelineState.enabled }), [mode, timelineState.enabled]);
+  const showCanvasCompareControls = viewMode === "split" && fixResult !== null;
   const bottomPanelSections = useMemo(
     () => getBottomPanelSections(mode, assetType, selectedAsset && sheetMode ? timelineFrames.length : 0, sheetPlaybackMode),
     [assetType, mode, selectedAsset, sheetMode, sheetPlaybackMode, timelineFrames.length]
@@ -7933,6 +7944,24 @@ export function App() {
               </button>
             ))}
           </div>
+          {showCanvasCompareControls ? (
+            <div className="view-controls compare-layout-controls" aria-label="Compare layout controls">
+              {[
+                ["split", "Slider"],
+                ["sideBySide", "Side by side"]
+              ].map(([modeOption, label]) => (
+                <button
+                  key={modeOption}
+                  type="button"
+                  className={canvasCompareMode === modeOption ? "active" : ""}
+                  aria-pressed={canvasCompareMode === modeOption}
+                  onClick={() => setCanvasCompareMode(modeOption as TimelineViewportCompareMode)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          ) : null}
           {sheetMode && editableSheetFrames.length > 0 ? (
             <div className="edit-history-controls" aria-label="Frame edit history controls">
               <button

@@ -7,7 +7,8 @@ describe("frame compare viewport", () => {
       getFrameCompareViewportConfig({
         sheetMode: true,
         timelineEnabled: false,
-        viewMode: "sideBySide",
+        viewMode: "split",
+        compareMode: "sideBySide",
         hasInput: true,
         hasOutput: true
       })
@@ -18,6 +19,7 @@ describe("frame compare viewport", () => {
         sheetMode: true,
         timelineEnabled: false,
         viewMode: "split",
+        compareMode: "split",
         hasInput: true,
         hasOutput: true
       })
@@ -29,7 +31,8 @@ describe("frame compare viewport", () => {
       getFrameCompareViewportConfig({
         sheetMode: true,
         timelineEnabled: true,
-        viewMode: "sideBySide",
+        viewMode: "split",
+        compareMode: "sideBySide",
         hasInput: true,
         hasOutput: true
       })
@@ -38,7 +41,18 @@ describe("frame compare viewport", () => {
       getFrameCompareViewportConfig({
         sheetMode: false,
         timelineEnabled: false,
+        viewMode: "split",
+        compareMode: "sideBySide",
+        hasInput: true,
+        hasOutput: true
+      })
+    ).toBeNull();
+    expect(
+      getFrameCompareViewportConfig({
+        sheetMode: true,
+        timelineEnabled: false,
         viewMode: "sideBySide",
+        compareMode: "sideBySide",
         hasInput: true,
         hasOutput: true
       })
