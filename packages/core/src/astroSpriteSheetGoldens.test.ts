@@ -8,6 +8,14 @@ import type { FixOptions, RGBAImage, SheetLayoutDetection } from "@pixelaid/shar
 const goldenDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "goldens");
 const cleanAstroSheetPath = path.join(goldenDir, "astro-spritesheet-normalized-fixed.png");
 const noisyAstroSheetPath = path.join(goldenDir, "astro-spritesheet-source.webp");
+const hollowKnightSheetPath = path.join(goldenDir, "hollowknight-source.webp");
+const cleanHollowKnightSheetPath = path.join(goldenDir, "hollowknight-unfake-pixel-art-scaled.png");
+
+type AlphaMaskDiff = {
+  falseOpaque: number;
+  falseTransparent: number;
+  bothOpaqueChanged: number;
+};
 
 function buildFixOptions(image: RGBAImage): FixOptions {
   const suggestion = suggestFixSettings(image);
@@ -98,6 +106,73 @@ function countVisibleGreenMattePixels(image: RGBAImage): number {
   return count;
 }
 
+function countVisibleMagentaMattePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const a = image.data[offset + 3]!;
+    if (a > 0 && r > 90 && b > 64 && g < Math.min(r, b) - 20) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function compareAlphaMasks(actual: RGBAImage, expected: RGBAImage): AlphaMaskDiff {
+  const width = Math.min(actual.width, expected.width);
+  const height = Math.min(actual.height, expected.height);
+  let falseOpaque = 0;
+  let falseTransparent = 0;
+  let bothOpaqueChanged = 0;
+
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const actualOffset = (y * actual.width + x) * 4;
+      const expectedOffset = (y * expected.width + x) * 4;
+      const actualAlpha = actual.data[actualOffset + 3]!;
+      const expectedAlpha = expected.data[expectedOffset + 3]!;
+      if (actualAlpha > 0 && expectedAlpha === 0) {
+        falseOpaque += 1;
+        continue;
+      }
+      if (actualAlpha === 0 && expectedAlpha > 0) {
+        falseTransparent += 1;
+        continue;
+      }
+      if (actualAlpha === 0 || expectedAlpha === 0) {
+        continue;
+      }
+      if (
+        Math.abs(actual.data[actualOffset]! - expected.data[expectedOffset]!) > 40 ||
+        Math.abs(actual.data[actualOffset + 1]! - expected.data[expectedOffset + 1]!) > 40 ||
+        Math.abs(actual.data[actualOffset + 2]! - expected.data[expectedOffset + 2]!) > 40
+      ) {
+        bothOpaqueChanged += 1;
+      }
+    }
+  }
+
+  return { falseOpaque, falseTransparent, bothOpaqueChanged };
+}
+
+function cropTopLeft(image: RGBAImage, width: number, height: number): RGBAImage {
+  const croppedWidth = Math.min(image.width, width);
+  const croppedHeight = Math.min(image.height, height);
+  const data = new Uint8ClampedArray(croppedWidth * croppedHeight * 4);
+  for (let y = 0; y < croppedHeight; y += 1) {
+    const sourceStart = y * image.width * 4;
+    const targetStart = y * croppedWidth * 4;
+    data.set(image.data.subarray(sourceStart, sourceStart + croppedWidth * 4), targetStart);
+  }
+  return {
+    width: croppedWidth,
+    height: croppedHeight,
+    data
+  };
+}
+
 describe("astro sprite sheet golden regressions", () => {
   test("preserves the clean normalized astro sheet exactly", () => {
     const source = readGoldenPng(cleanAstroSheetPath);
@@ -133,8 +208,9 @@ describe("astro sprite sheet golden regressions", () => {
     const comparison = compareGoldenImage(result.image, golden, {
       mode: "tolerance",
       perChannelTolerance: 40,
-      allowedChangedPixels: 350_000
+      allowedChangedPixels: 230_000
     });
+    const alphaDiff = compareAlphaMasks(result.image, golden);
 
     expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.mode).toBe("spriteSheet");
@@ -148,6 +224,39 @@ describe("astro sprite sheet golden regressions", () => {
     expect(result.image.height).toBe(golden.height);
     expect(countExactRgbaColors(result.image)).toBeLessThanOrEqual(32);
     expect(countVisibleGreenMattePixels(result.image)).toBeLessThan(countVisibleGreenMattePixels(source) * 0.2);
+    expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(130_000);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(2_000);
+    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(110_000);
+    expect(comparison.message).toContain("Golden matched");
+    expect(comparison.matches).toBe(true);
+  }, 10_000);
+
+  test("recovers the noisy Hollow Knight WebP toward the cleaned sheet golden", async () => {
+    const source = await readGoldenWebp(hollowKnightSheetPath);
+    const golden = readGoldenPng(cleanHollowKnightSheetPath);
+    const suggestion = suggestFixSettings(source);
+    const result = fixImage(source, buildFixOptions(source));
+    const comparableResult = cropTopLeft(result.image, golden.width, golden.height);
+    const comparison = compareGoldenImage(comparableResult, golden, {
+      mode: "tolerance",
+      perChannelTolerance: 40,
+      allowedChangedPixels: 190_000
+    });
+    const alphaDiff = compareAlphaMasks(comparableResult, golden);
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.sheetLayout?.columns).toBe(8);
+    expect(suggestion.sheetLayout?.rows).toBe(9);
+    expect(suggestion.sheetLayout?.frameWidth).toBe(192);
+    expect(suggestion.sheetLayout?.frameHeight).toBe(208);
+    expect(result.image.width).toBe(source.width);
+    expect(result.image.height).toBe(source.height);
+    expect(countExactRgbaColors(result.image)).toBeLessThanOrEqual(32);
+    expect(countVisibleMagentaMattePixels(result.image)).toBeLessThan(1_000);
+    expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(45_000);
+    expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(25_000);
+    expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(110_000);
     expect(comparison.message).toContain("Golden matched");
     expect(comparison.matches).toBe(true);
   }, 10_000);

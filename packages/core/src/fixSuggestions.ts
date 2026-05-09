@@ -367,6 +367,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     candidate: suggestion.gridCandidates[0],
     sourceSizedSheetPreservation
   });
+  const preserveSuggestedSingleCleanup = assetType === "sprite" || assetType === "icon";
 
   return {
     ...suggestion,
@@ -386,12 +387,12 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
       strictSourceSheetCleanup || assetType === "sprite" || assetType === "icon"
         ? { ...suggestion.alphaSettings, decontaminateRgb: true }
         : { ...preset.alphaSettings },
-    removeOrphans: sourceSizedSheetPreservation ? false : preset.removeOrphans,
-    jaggyCleanup: sourceSizedSheetPreservation ? false : preset.jaggyCleanup,
+    removeOrphans: preserveSuggestedSingleCleanup ? suggestion.removeOrphans : sourceSizedSheetPreservation ? false : preset.removeOrphans,
+    jaggyCleanup: preserveSuggestedSingleCleanup ? suggestion.jaggyCleanup : sourceSizedSheetPreservation ? false : preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
-    removeHalos: strictSourceSheetCleanup ? false : sourceSizedSheetPreservation ? false : preset.removeHalos,
+    removeHalos: preserveSuggestedSingleCleanup ? suggestion.removeHalos : strictSourceSheetCleanup ? false : sourceSizedSheetPreservation ? false : preset.removeHalos,
     matteCleanup: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup,
-    denoiseStrength: strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
+    denoiseStrength: preserveSuggestedSingleCleanup ? suggestion.denoiseStrength : strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     nativeScaleInference,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,

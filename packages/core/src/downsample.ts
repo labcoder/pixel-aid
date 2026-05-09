@@ -17,6 +17,7 @@ export type DownsampleOptions = {
   yBoundaryColumns?: Int32Array;
   method: DownscaleMethod;
   alpha: AlphaMode;
+  binaryAlphaThreshold?: number;
   adaptiveCoverage?: number;
   disableFastPath?: boolean;
 };
@@ -111,7 +112,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
       output.data[offset] = pixel[0];
       output.data[offset + 1] = pixel[1];
       output.data[offset + 2] = pixel[2];
-      output.data[offset + 3] = options.alpha === "binary" ? (pixel[3] >= 128 ? 255 : 0) : pixel[3];
+      output.data[offset + 3] = options.alpha === "binary" ? (pixel[3] >= (options.binaryAlphaThreshold ?? 128) ? 255 : 0) : pixel[3];
     }
   }
 

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { encode as encodeJpeg } from "jpeg-js";
 import { describe, expect, it } from "vitest";
 import type { RGBAImage, SpriteFrame } from "@pixelaid/shared";
@@ -11,6 +12,11 @@ type CliCapture = {
   stdout: string[];
   stderr: string[];
 };
+
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(testDir, "../../..");
+const astroSourceSheet = path.join(repoRoot, "packages/core/src/goldens/astro-spritesheet-source.webp");
+const hollowKnightSourceSheet = path.join(repoRoot, "packages/core/src/goldens/hollowknight-source.webp");
 
 async function withFixture<T>(run: (paths: { dir: string; input: string; frames: string }) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-cli-"));
@@ -50,6 +56,67 @@ describe("pixelaid CLI", () => {
       expect(body.result.options.targetWidth).toBe(2);
     });
   });
+
+  it("prints core-matched source-sheet recovery suggestions for golden WebPs", async () => {
+    for (const input of [astroSourceSheet, hollowKnightSourceSheet]) {
+      const capture = createCapture();
+      const code = await runCli(["suggest", input, "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.result.options).toMatchObject({
+        assetType: "animationSheet",
+        mode: "spriteSheet",
+        targetWidth: 1536,
+        targetHeight: 1872,
+        maxColors: 32,
+        alpha: "binary",
+        cleanup: {
+          removeHalos: false,
+          denoiseStrength: 0,
+          inferNativeScale: true,
+          morphology: {
+            enabled: true,
+            matteCleanup: true
+          }
+        },
+        sheet: {
+          frameWidth: 192,
+          frameHeight: 208,
+          rows: 9,
+          columns: 8
+        }
+      });
+    }
+  }, 20_000);
+
+  it("fix-sheet uses the same core source-sheet cleanup defaults as web", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-cli-sheet-golden-"));
+    try {
+      const capture = createCapture();
+      const code = await runCli(["fix-sheet", astroSourceSheet, "--out-dir", dir, "--overwrite", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.result.result?.image).toMatchObject({ width: 1536, height: 1872 });
+      expect(body.result.result?.settings).toMatchObject({
+        assetType: "animationSheet",
+        maxColors: 32,
+        alpha: "binary",
+        cleanup: {
+          removeHalos: false,
+          denoiseStrength: 0,
+          inferNativeScale: true,
+          morphology: {
+            enabled: true,
+            matteCleanup: true
+          }
+        }
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 20_000);
 
   it("prints batch quality report JSON", async () => {
     await withFixture(async ({ input }) => {
@@ -475,10 +542,11 @@ type CliJson = {
   command?: string;
   result: {
     image?: { width: number; height: number };
-    options?: { assetType: string; targetWidth?: number; targetHeight?: number };
+    options?: SuggestedOptionsJson;
     files?: Array<{ kind: string; relativePath: string }>;
     result?: {
       image: { width: number; height: number; dataByteLength: number; data?: unknown };
+      settings?: SuggestedOptionsJson;
     };
     manifest?: { frames: unknown[] };
     palette?: string[];
@@ -494,6 +562,30 @@ type CliJson = {
     reports?: Array<{ findings: Array<{ id: string }> }>;
   };
   error?: { code: string };
+};
+
+type SuggestedOptionsJson = {
+  assetType: string;
+  mode?: string;
+  targetWidth?: number;
+  targetHeight?: number;
+  maxColors?: number;
+  alpha?: string;
+  cleanup?: {
+    removeHalos?: boolean;
+    denoiseStrength?: number;
+    inferNativeScale?: boolean;
+    morphology?: {
+      enabled?: boolean;
+      matteCleanup?: boolean;
+    };
+  };
+  sheet?: {
+    frameWidth?: number;
+    frameHeight?: number;
+    rows?: number;
+    columns?: number;
+  };
 };
 
 function parseStdout(capture: CliCapture): CliJson {

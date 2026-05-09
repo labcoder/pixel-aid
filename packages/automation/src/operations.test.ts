@@ -43,7 +43,7 @@ describe("automation operations", () => {
       });
       expect(result.value.palette.exactColorCount).toBeGreaterThan(1);
       expect(result.value.gridCandidates.length).toBeGreaterThan(0);
-      expect(result.value.suggestion.options.assetType).toBe("sprite");
+      expect(result.value.suggestion.options.assetType).toBe("icon");
     });
   });
 
@@ -99,12 +99,16 @@ describe("automation operations", () => {
       expect(result.value.options.mode).toBe("spriteSheet");
       expect(result.value.options.targetWidth).toBe(1536);
       expect(result.value.options.targetHeight).toBe(1872);
-      expect(result.value.options.maxColors).toBe(16);
+      expect(result.value.options.maxColors).toBe(32);
       expect(result.value.options.alpha).toBe("binary");
       expect(result.value.options.alphaSettings?.decontaminateRgb).toBe(true);
-      expect(result.value.options.cleanup.removeHalos).toBe(true);
-      expect(result.value.options.cleanup.denoiseStrength).toBe(20);
+      expect(result.value.options.cleanup.removeHalos).toBe(false);
+      expect(result.value.options.cleanup.denoiseStrength).toBe(0);
       expect(result.value.options.cleanup.inferNativeScale).toBe(true);
+      expect(result.value.options.cleanup.morphology).toMatchObject({
+        enabled: true,
+        matteCleanup: true
+      });
       expect(result.value.options.grid.scaleX).toBe(1);
       expect(result.value.options.grid.scaleY).toBe(1);
       expect(result.value.options.sheet).toMatchObject({
@@ -130,11 +134,15 @@ describe("automation operations", () => {
       if (!result.ok) return;
       expect(result.value.options.assetType).toBe("animationSheet");
       expect(result.value.options.mode).toBe("spriteSheet");
-      expect(result.value.options.maxColors).toBe(16);
+      expect(result.value.options.maxColors).toBe(32);
       expect(result.value.options.alpha).toBe("binary");
-      expect(result.value.options.cleanup.removeHalos).toBe(true);
-      expect(result.value.options.cleanup.denoiseStrength).toBe(20);
+      expect(result.value.options.cleanup.removeHalos).toBe(false);
+      expect(result.value.options.cleanup.denoiseStrength).toBe(0);
       expect(result.value.options.cleanup.inferNativeScale).toBe(true);
+      expect(result.value.options.cleanup.morphology).toMatchObject({
+        enabled: true,
+        matteCleanup: true
+      });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

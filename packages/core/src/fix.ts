@@ -387,7 +387,8 @@ function fixSheetFrameSource(
         phaseX: inferred.phaseX,
         phaseY: inferred.phaseY,
         method: "dominant",
-        alpha: options.alpha
+        alpha: options.alpha,
+        ...(shouldUseCoveragePreservingNativeScale(options) ? { binaryAlphaThreshold: 64 } : {})
       },
       {
         runtime: progress.runtime,
@@ -398,10 +399,200 @@ function fixSheetFrameSource(
     )
   );
 
+  const scaled = scaleNearest(native, outputRect.w, outputRect.h);
+  const clipped = applySourceAlphaClip(scaled, alphaCleaned);
+
   return {
-    image: scaleNearest(native, outputRect.w, outputRect.h),
+    image: restoreSubjectPixelsFromSource(clipped, frameSource),
     inferredNativeScale: true
   };
+}
+
+function shouldUseCoveragePreservingNativeScale(options: FixOptions): boolean {
+  return (
+    options.alpha === "binary" &&
+    options.cleanup.inferNativeScale === true &&
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true
+  );
+}
+
+function applySourceAlphaClip(image: RGBAImage, sourceAlpha: RGBAImage): RGBAImage {
+  if (image.width !== sourceAlpha.width || image.height !== sourceAlpha.height) {
+    return image;
+  }
+
+  const output = createImage(image.width, image.height);
+  output.data.set(image.data);
+  for (let offset = 0; offset < output.data.length; offset += 4) {
+    if (sourceAlpha.data[offset + 3]! >= 128) {
+      continue;
+    }
+
+    const pixel = offset / 4;
+    const x = pixel % image.width;
+    const y = Math.floor(pixel / image.width);
+    if (!shouldClipExpandedMatteColor(output.data[offset]!, output.data[offset + 1]!, output.data[offset + 2]!)) {
+      continue;
+    }
+    if (hasSubjectSupportForAlphaClip(output, x, y)) {
+      continue;
+    }
+
+    output.data[offset] = 0;
+    output.data[offset + 1] = 0;
+    output.data[offset + 2] = 0;
+    output.data[offset + 3] = 0;
+  }
+  return output;
+}
+
+function shouldClipExpandedMatteColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const darkNeutral = max <= 80 && max - min <= 56;
+  const darkCool = max <= 130 && ((g >= 24 && g - r >= 14) || (b >= 24 && b - r >= 16 && b - g <= 48));
+  const darkMagenta = max <= 130 && r >= 24 && b >= 24 && Math.min(r, b) - g >= 14;
+  return darkNeutral || darkCool || darkMagenta;
+}
+
+function hasSubjectSupportForAlphaClip(image: RGBAImage, x: number, y: number): boolean {
+  let subjectNeighbors = 0;
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const offset = (ny * image.width + nx) * 4;
+      if (image.data[offset + 3]! < 128) {
+        continue;
+      }
+
+      if (!shouldClipExpandedMatteColor(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!)) {
+        subjectNeighbors += 1;
+        if (subjectNeighbors >= 2) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
+function restoreSubjectPixelsFromSource(image: RGBAImage, source: RGBAImage): RGBAImage {
+  if (image.width !== source.width || image.height !== source.height) {
+    return image;
+  }
+
+  const output = createImage(image.width, image.height);
+  output.data.set(image.data);
+  for (let y = 0; y < output.height; y += 1) {
+    for (let x = 0; x < output.width; x += 1) {
+      const offset = (y * output.width + x) * 4;
+      if (output.data[offset + 3]! >= 128 || source.data[offset + 3]! < 48) {
+        continue;
+      }
+
+      const r = source.data[offset]!;
+      const g = source.data[offset + 1]!;
+      const b = source.data[offset + 2]!;
+      if (!isSubjectRestoreColor(r, g, b)) {
+        continue;
+      }
+
+      if (source.data[offset + 3]! < 128 && !hasOpaqueNeighbor(output, x, y)) {
+        continue;
+      }
+
+      output.data[offset] = r;
+      output.data[offset + 1] = g;
+      output.data[offset + 2] = b;
+      output.data[offset + 3] = 255;
+    }
+  }
+  return clearResidualMatteFromSource(output, source);
+}
+
+function isSubjectRestoreColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const greenMatte = g >= 64 && g - r >= 24 && g - b >= 20;
+  const magentaMatte = r >= 64 && b >= 48 && Math.min(r, b) - g >= 20;
+  if (greenMatte || magentaMatte) {
+    return false;
+  }
+
+  const brightSubject = max >= 112;
+  const darkBlueSubject = b >= 56 && g >= 36 && b - r >= 20 && g - r >= 8;
+  const darkNeutralLine = max <= 72 && max - min <= 48;
+  return brightSubject || darkBlueSubject || darkNeutralLine;
+}
+
+function hasOpaqueNeighbor(image: RGBAImage, x: number, y: number): boolean {
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      if (image.data[(ny * image.width + nx) * 4 + 3]! >= 128) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function clearResidualMatteFromSource(image: RGBAImage, source: RGBAImage): RGBAImage {
+  if (image.width !== source.width || image.height !== source.height) {
+    return image;
+  }
+
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! < 128) {
+      continue;
+    }
+
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (!isResidualMatteColor(r, g, b)) {
+      continue;
+    }
+
+    const sr = source.data[offset]!;
+    const sg = source.data[offset + 1]!;
+    const sb = source.data[offset + 2]!;
+    if (source.data[offset + 3]! >= 128 && !isResidualMatteColor(sr, sg, sb)) {
+      continue;
+    }
+
+    image.data[offset] = 0;
+    image.data[offset + 1] = 0;
+    image.data[offset + 2] = 0;
+    image.data[offset + 3] = 0;
+  }
+  return image;
+}
+
+function isResidualMatteColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const darkMagenta = max <= 120 && r >= 16 && b >= 16 && Math.min(r, b) - g >= 10;
+  const darkGreen = max <= 140 && g >= 24 && g - r >= 18 && g - b >= 18;
+  return darkMagenta || darkGreen;
 }
 
 function inferNativeScaleFrame(image: RGBAImage): GridCandidate | undefined {

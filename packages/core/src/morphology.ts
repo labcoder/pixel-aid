@@ -27,8 +27,9 @@ export type MorphologyCleanupResult = {
 const DEFAULT_ALPHA_THRESHOLD = 1;
 const DEFAULT_MAX_HOLE_PIXELS = 1;
 const DEFAULT_MAX_COMPONENT_PIXELS = 1;
-const MATTE_PEEL_ITERATIONS = 4;
-const MAX_MATTE_HINT_COLORS = 8;
+const MATTE_PEEL_ITERATIONS = 8;
+const MAX_MATTE_HINT_COLORS = 12;
+const DARK_BACKGROUND_FAMILY_MASK = 8;
 
 export function openMask(mask: Uint8Array, width: number, height: number, options: MorphologyMaskOptions = {}): Uint8Array {
   return dilateMask(erodeMask(mask, width, height, options), width, height, options);
@@ -477,7 +478,7 @@ type MatteHints = {
   count: number;
 };
 
-type MatteCandidateKind = "none" | "hint" | "fallback";
+type MatteCandidateKind = "none" | "hint" | "protectedHint" | "fallback";
 
 function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteCleanupResult {
   const output = cloneImage(image);
@@ -510,7 +511,10 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
           continue;
         }
 
-        if (candidate === "fallback" && hasStrongLocalColorSupport(output, outsideMask, x, y, alphaThreshold)) {
+        if (
+          (candidate === "fallback" && hasStrongLocalColorSupport(output, outsideMask, x, y, alphaThreshold)) ||
+          (candidate === "protectedHint" && hasSubjectColorNeighbor(output, outsideMask, x, y, alphaThreshold, hints))
+        ) {
           continue;
         }
 
@@ -538,7 +542,32 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
     clearedPixels += passCleared;
   }
 
+  clearedPixels += clearResidualDarkDominantMatte(output, hints, alphaThreshold);
+
   return { image: output, clearedPixels, hintColorCount: hints.count };
+}
+
+function clearResidualDarkDominantMatte(image: RGBAImage, hints: MatteHints, alphaThreshold: number): number {
+  let clearedPixels = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! < alphaThreshold) {
+      continue;
+    }
+
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (!isDarkDominantMatteColor(r, g, b) || !matchesMatteHint(r, g, b, hints)) {
+      continue;
+    }
+
+    image.data[offset] = 0;
+    image.data[offset + 1] = 0;
+    image.data[offset + 2] = 0;
+    image.data[offset + 3] = 0;
+    clearedPixels += 1;
+  }
+  return clearedPixels;
 }
 
 function clearExteriorConnectedMatte(
@@ -595,7 +624,10 @@ function clearExteriorConnectedMatte(
           continue;
         }
 
-        if (candidate === "fallback" && hasStrongLocalColorSupport(image, outsideMask, nx, ny, alphaThreshold)) {
+        if (
+          (candidate === "fallback" && hasStrongLocalColorSupport(image, outsideMask, nx, ny, alphaThreshold)) ||
+          (candidate === "protectedHint" && hasSubjectColorNeighbor(image, outsideMask, nx, ny, alphaThreshold, hints))
+        ) {
           continue;
         }
 
@@ -627,6 +659,7 @@ function collectMatteHints(image: RGBAImage, alphaThreshold: number): MatteHints
   const bucketR = new Uint32Array(4096);
   const bucketG = new Uint32Array(4096);
   const bucketB = new Uint32Array(4096);
+  const allowDarkNeutralHints = hasCoolLowAlphaMatteEvidence(image, alphaThreshold);
 
   for (let offset = 0; offset < image.data.length; offset += 4) {
     if (image.data[offset + 3]! >= alphaThreshold) {
@@ -636,7 +669,7 @@ function collectMatteHints(image: RGBAImage, alphaThreshold: number): MatteHints
     const r = image.data[offset]!;
     const g = image.data[offset + 1]!;
     const b = image.data[offset + 2]!;
-    if (!isMatteHintColor(r, g, b)) {
+    if (!isMatteHintColor(r, g, b) && !isLowAlphaBackgroundHintColor(r, g, b, allowDarkNeutralHints)) {
       continue;
     }
 
@@ -669,7 +702,7 @@ function collectMatteHints(image: RGBAImage, alphaThreshold: number): MatteHints
     const r = Math.round(bucketR[bestBucket]! / bestCount);
     const g = Math.round(bucketG[bestBucket]! / bestCount);
     const b = Math.round(bucketB[bestBucket]! / bestCount);
-    const mask = chromaFamilyMask(r, g, b);
+    const mask = matteFamilyMask(r, g, b);
     if (mask !== 0 && !containsMatteFamily(masks, count, mask)) {
       colors[colorOffset] = r;
       colors[colorOffset + 1] = g;
@@ -696,12 +729,16 @@ function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: 
   const r = data[offset]!;
   const g = data[offset + 1]!;
   const b = data[offset + 2]!;
-  if (isProtectedSubjectColor(r, g, b)) {
-    return "none";
-  }
 
   if (hints.count > 0 && matchesMatteHint(r, g, b, hints)) {
-    return "hint";
+    if (isDarkDominantMatteColor(r, g, b)) {
+      return "hint";
+    }
+    return isProtectedSubjectColor(r, g, b) ? "protectedHint" : "hint";
+  }
+
+  if (isProtectedSubjectColor(r, g, b)) {
+    return "none";
   }
 
   if (isMutedArtificialMatteColor(r, g, b)) {
@@ -712,7 +749,7 @@ function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: 
 }
 
 function matchesMatteHint(r: number, g: number, b: number, hints: MatteHints): boolean {
-  const family = chromaFamilyMask(r, g, b) || darkDominantMatteFamilyMask(r, g, b);
+  const family = matteFamilyMask(r, g, b);
   if (family === 0) {
     return false;
   }
@@ -754,6 +791,42 @@ function isMatteHintColor(r: number, g: number, b: number): boolean {
   const min = Math.min(r, g, b);
   const spread = max - min;
   return max >= 48 && spread >= 32 && colorfulness(r, g, b) >= 64 && !isProtectedSubjectColor(r, g, b);
+}
+
+function hasCoolLowAlphaMatteEvidence(image: RGBAImage, alphaThreshold: number): boolean {
+  let coolCount = 0;
+  let magentaCount = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! >= alphaThreshold) {
+      continue;
+    }
+
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (isCoolDarkMatteEvidenceColor(r, g, b)) {
+      coolCount += 1;
+    } else if (darkDominantMatteFamilyMask(r, g, b) === (1 | 4)) {
+      magentaCount += 1;
+    }
+  }
+
+  return coolCount >= 500 && coolCount > magentaCount * 1.5;
+}
+
+function isLowAlphaBackgroundHintColor(r: number, g: number, b: number, allowDarkNeutralHints: boolean): boolean {
+  return isDarkDominantMatteColor(r, g, b) || (allowDarkNeutralHints && isDarkNeutralBackgroundColor(r, g, b));
+}
+
+function isCoolDarkMatteEvidenceColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  if (max > 120) {
+    return false;
+  }
+
+  const greenOrCyan = g >= 24 && g - r >= 16;
+  const blueCyan = b >= 24 && b - r >= 18 && b - g <= 40;
+  return greenOrCyan || blueCyan;
 }
 
 function isArtificialChromaMatteColor(r: number, g: number, b: number): boolean {
@@ -800,6 +873,10 @@ function chromaFamilyMask(r: number, g: number, b: number): number {
   return mask;
 }
 
+function matteFamilyMask(r: number, g: number, b: number): number {
+  return chromaFamilyMask(r, g, b) || darkDominantMatteFamilyMask(r, g, b) || (isDarkNeutralBackgroundColor(r, g, b) ? DARK_BACKGROUND_FAMILY_MASK : 0);
+}
+
 function darkDominantMatteFamilyMask(r: number, g: number, b: number): number {
   const green = g >= 24 && g - r >= 18 && g - b >= 18;
   const magenta = r >= 32 && b >= 24 && Math.min(r, b) - g >= 18;
@@ -816,8 +893,60 @@ function isDarkDominantMatteColor(r: number, g: number, b: number): boolean {
   return darkDominantMatteFamilyMask(r, g, b) !== 0;
 }
 
+function isDarkNeutralBackgroundColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  return max <= 72 && max - min <= 44;
+}
+
 function colorfulness(r: number, g: number, b: number): number {
   return Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+}
+
+function hasSubjectColorNeighbor(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  hints: MatteHints
+): boolean {
+  let subjectNeighbors = 0;
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const neighbor = ny * image.width + nx;
+      if (outsideMask[neighbor] === 1) {
+        continue;
+      }
+
+      const offset = neighbor * 4;
+      if (image.data[offset + 3]! < alphaThreshold) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      if (!matchesMatteHint(r, g, b, hints) && !isArtificialChromaMatteColor(r, g, b)) {
+        subjectNeighbors += 1;
+        if (subjectNeighbors >= 1) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
 }
 
 function hasOutsideNeighbor(mask: Uint8Array, width: number, height: number, x: number, y: number): boolean {

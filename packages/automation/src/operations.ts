@@ -7,11 +7,13 @@ import {
   analyzeQualityReport,
   analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
-  applyAlphaMode,
   detectGridCandidates,
   detectSheetLayout,
   extractPalette,
   fixImage,
+  suggestFixSettings as suggestCoreFixSettings,
+  suggestFixSettingsForAssetType as suggestCoreFixSettingsForAssetType,
+  type FixSettingSuggestion as CoreFixSettingSuggestion,
   type QualityFindingSeverity,
   type QualityReport,
 } from "@pixelaid/core";
@@ -25,10 +27,7 @@ import {
 import {
   getAssetTypeDefinition,
   type AnimationTag,
-  type AssetMode,
-  type AssetType,
   type FixOptions,
-  type GridCandidate,
   type PixelAssetManifest,
   type PixelFixResult,
   type RGBAImage,
@@ -486,17 +485,17 @@ export async function fixSpriteSheet(
     }
 
     const sheet = sheetFromFrames(frames, layout, request.options?.sheet);
-    const options = normalizeFixOptions({
+    const suggestion = createFixSuggestion(imageResult.value, {
       assetType: request.options?.assetType ?? "animationSheet",
       ...request.options,
       sheet,
       sheetFrames: frames,
     });
-    if (!options.ok) {
-      return options;
+    if (!suggestion.ok) {
+      return suggestion;
     }
 
-    const fixed = runFix(imageResult.value, options.value, scopedRuntime, operation);
+    const fixed = runFix(imageResult.value, suggestion.value.options, scopedRuntime, operation);
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "output-write", 92, "Writing fixed sheet PNG");
     const imageWrite = await encodePngFile(fixed.image, output.value.path);
@@ -522,7 +521,7 @@ export async function fixSpriteSheet(
       fileRecord("image", output.value.path, outDir),
       fileRecord("manifest", manifestOutput.value.path, outDir),
     ];
-    const warnings = [...options.warnings, ...layout.warnings];
+    const warnings = [...suggestion.warnings, ...layout.warnings];
     reportAutomationProgress(scopedRuntime, operation, "complete", 100, "Sprite sheet fix complete");
     return automationOk({ result: fixed, manifest: pixelManifest, files, warnings }, warnings);
   } catch (error) {
@@ -690,191 +689,154 @@ export async function exportEngineBundle(
 }
 
 function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsInput | undefined): AutomationResult<FixSuggestion> {
-  const detectedGridCandidates = withFallbackGridCandidates(image);
-  const sheetLayout = detectSheetLayout(image);
-  const gridCandidates = isSourceSizedSheetLayout(image, sheetLayout)
-    ? [createSourceSizedSheetGridCandidate(image, sheetLayout), ...detectedGridCandidates]
-    : detectedGridCandidates;
-  const tilemapDiagnostics = analyzeTilemapDiagnostics(image);
-  const bakedTransparencyDetected = detectBakedTransparencyForSuggestion(image, gridCandidates, sheetLayout, overrides);
-  const assetType = overrides?.assetType
-    ? parseAutomationAssetType(overrides.assetType)
-    : classifyAssetType(image, sheetLayout, tilemapDiagnostics, bakedTransparencyDetected);
-  if (!assetType.ok) {
-    return assetType;
+  const parsedAssetType = overrides?.assetType ? parseAutomationAssetType(overrides.assetType) : undefined;
+  if (parsedAssetType && !parsedAssetType.ok) {
+    return parsedAssetType;
   }
 
-  const effectiveGridCandidates = resolveSuggestionGridCandidates(image, gridCandidates, assetType.value.assetType, bakedTransparencyDetected, overrides);
-  const bestGrid = effectiveGridCandidates[0]!;
-  const defaultTarget = sheetLayout.confidence >= 0.65 && assetType.value.mode === "spriteSheet"
-    ? packedSheetSize(sheetLayout)
-    : { width: bestGrid.outputWidth, height: bestGrid.outputHeight };
-  const gridOverrides: NonNullable<AutomationFixOptionsInput["grid"]> = {
-    detect: overrides?.grid?.detect ?? "auto",
-    scaleX: overrides?.grid?.scaleX ?? bestGrid.scaleX,
-    scaleY: overrides?.grid?.scaleY ?? bestGrid.scaleY,
-    phaseX: overrides?.grid?.phaseX ?? bestGrid.phaseX,
-    phaseY: overrides?.grid?.phaseY ?? bestGrid.phaseY,
-  };
-  if (overrides?.grid?.cropToBounds !== undefined) {
-    gridOverrides.cropToBounds = overrides.grid.cropToBounds;
-  }
-  if (overrides?.grid?.localCorrection !== undefined) {
-    gridOverrides.localCorrection = overrides.grid.localCorrection;
-  }
-
-  const sheetConditioning = sheetLayout.diagnostics?.conditioning ?? analyzeSheetConditioning(image);
-  const strictSourceSheetCleanup = shouldUseStrictSourceSheetCleanup(image, assetType.value.mode, sheetLayout, sheetConditioning);
-  const strictSourceSheetMaxColors = suggestStrictSourceSheetMaxColors();
-  const strictSourceSheetDenoiseStrength = suggestStrictSourceSheetDenoiseStrength();
-  const suggestedCleanup = suggestAutomationCleanupOverrides(
-    overrides?.cleanup,
-    assetType.value.assetType,
-    bakedTransparencyDetected,
-    bestGrid,
-    strictSourceSheetCleanup,
-    strictSourceSheetDenoiseStrength
-  );
-  const suggestedAlpha = strictSourceSheetCleanup && overrides?.alpha === undefined
-    ? "binary"
-    : shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.alpha === undefined
-    ? "backgroundFloodFill"
-    : overrides?.alpha;
-  const suggestedDownscale = shouldCleanBakedBackground(assetType.value.assetType, bakedTransparencyDetected) && overrides?.downscale === undefined
-    ? "dominant"
-    : overrides?.downscale;
-  const suggestedMaxColors = strictSourceSheetCleanup && overrides?.maxColors === undefined ? strictSourceSheetMaxColors : overrides?.maxColors;
-
-  const normalized = normalizeFixOptions({
-    assetType: assetType.value.assetType,
-    targetWidth: defaultTarget.width,
-    targetHeight: defaultTarget.height,
-    ...overrides,
-    ...(suggestedMaxColors ? { maxColors: suggestedMaxColors } : {}),
-    ...(suggestedAlpha ? { alpha: suggestedAlpha } : {}),
-    ...(suggestedDownscale ? { downscale: suggestedDownscale } : {}),
-    grid: gridOverrides,
-    ...(suggestedCleanup ? { cleanup: suggestedCleanup } : {}),
-    ...(sheetLayout.confidence >= 0.65 && assetType.value.mode === "spriteSheet" ? { sheet: sheetFromLayout(sheetLayout) } : {}),
-  });
+  const coreSuggestion = parsedAssetType
+    ? suggestCoreFixSettingsForAssetType(image, parsedAssetType.value.assetType)
+    : suggestCoreFixSettings(image);
+  const normalized = normalizeFixOptions(mergeSuggestedFixOptions(coreSuggestion, overrides));
   if (!normalized.ok) {
     return normalized;
   }
 
   const definition = getAssetTypeDefinition(normalized.value.assetType);
-  const warnings = [...normalized.warnings, ...definition.defaultWarnings.map((warning) => warning.message)];
+  const warnings = uniqueWarnings([
+    ...normalized.warnings,
+    ...coreSuggestion.categoryWarnings.map((warning) => warning.message),
+    ...definition.defaultWarnings.map((warning) => warning.message),
+  ]);
   return automationOk({
     options: normalized.value,
-    confidence: Math.max(bestGrid.confidence, sheetLayout.confidence),
-    reason: suggestionReason(normalized.value.assetType, bestGrid, sheetLayout),
+    confidence: coreSuggestion.confidence,
+    reason: coreSuggestion.reason,
     warnings,
     support: definition.support,
   }, warnings);
 }
 
-function detectBakedTransparencyForSuggestion(
-  image: RGBAImage,
-  gridCandidates: GridCandidate[],
-  sheetLayout: SheetLayoutDetection,
+function mergeSuggestedFixOptions(
+  suggestion: CoreFixSettingSuggestion,
   overrides: AutomationFixOptionsInput | undefined,
-): boolean {
-  const report = analyzeQualityReport(image, {
-    assetType: "sprite",
-    maxColors: overrides?.maxColors ?? 24,
-    alpha: "backgroundFloodFill",
-    gridCandidates,
-    sheetLayout,
-  });
-  return report.findings.some((finding) => finding.id === "baked-transparency-background");
-}
-
-function resolveSuggestionGridCandidates(
-  image: RGBAImage,
-  fallbackCandidates: GridCandidate[],
-  assetType: AssetType,
-  bakedTransparencyDetected: boolean,
-  overrides: AutomationFixOptionsInput | undefined,
-): GridCandidate[] {
-  if (!shouldCleanBakedBackground(assetType, bakedTransparencyDetected) || overrides?.grid?.detect === "manual") {
-    return fallbackCandidates;
-  }
-
-  const cleaned = applyAlphaMode(image, "backgroundFloodFill", alphaSettingsFromOverrides(overrides)).image;
-  return withFallbackGridCandidates(cleaned);
-}
-
-function shouldCleanBakedBackground(assetType: AssetType, bakedTransparencyDetected: boolean): boolean {
-  return bakedTransparencyDetected && (assetType === "sprite" || assetType === "icon");
-}
-
-function shouldUseStrictSourceSheetCleanup(
-  image: RGBAImage,
-  mode: AssetMode,
-  sheetLayout: SheetLayoutDetection,
-  sheetConditioning: ReturnType<typeof analyzeSheetConditioning>,
-): boolean {
-  if (mode !== "spriteSheet" || !isSourceSizedSheetLayout(image, sheetLayout)) {
-    return false;
-  }
-
-  return sheetConditioning.issues.some((issue) =>
-    issue.code === "soft-alpha-noise" ||
-    issue.code === "chroma-matte-artifacts" ||
-    issue.code === "excessive-exact-colors" ||
-    issue.code === "dense-coarse-palette"
-  );
-}
-
-function suggestStrictSourceSheetMaxColors(): number {
-  return 16;
-}
-
-function suggestStrictSourceSheetDenoiseStrength(): number {
-  return 20;
-}
-
-function alphaSettingsFromOverrides(overrides: AutomationFixOptionsInput | undefined): NonNullable<FixOptions["alphaSettings"]> {
-  return {
-    threshold: overrides?.alphaThreshold ?? 128,
-    tolerance: overrides?.alphaTolerance ?? 18,
-    colorKey: overrides?.alphaColorKey ?? "#ffffff",
-    decontaminateRgb: overrides?.decontaminateRgb ?? true,
-    transparentRgb: overrides?.transparentRgb ?? "#000000",
+): AutomationFixOptionsInput {
+  const base = automationOptionsFromCoreSuggestion(suggestion);
+  const merged: AutomationFixOptionsInput = {
+    ...base,
+    ...overrides,
+    grid: {
+      ...base.grid,
+      ...overrides?.grid,
+    },
+    cleanup: {
+      ...base.cleanup,
+      ...overrides?.cleanup,
+      ...(base.cleanup?.morphology || overrides?.cleanup?.morphology
+        ? {
+            morphology: {
+              ...base.cleanup?.morphology,
+              ...overrides?.cleanup?.morphology,
+            },
+          }
+        : {}),
+      ...(base.cleanup?.contrastExpansion || overrides?.cleanup?.contrastExpansion
+        ? {
+            contrastExpansion: {
+              ...base.cleanup?.contrastExpansion,
+              ...overrides?.cleanup?.contrastExpansion,
+            },
+          }
+        : {}),
+    },
+    ...(overrides?.sheetFrames ? { sheetFrames: overrides.sheetFrames } : base.sheetFrames ? { sheetFrames: base.sheetFrames } : {}),
   };
-}
-
-function suggestAutomationCleanupOverrides(
-  overrides: Partial<FixOptions["cleanup"]> | undefined,
-  assetType: AssetType,
-  bakedTransparencyDetected: boolean,
-  grid: GridCandidate,
-  strictSourceSheetCleanup = false,
-  strictSourceSheetDenoiseStrength = 45,
-): Partial<FixOptions["cleanup"]> | undefined {
-  if (strictSourceSheetCleanup) {
-    return {
-      removeOrphans: true,
-      jaggyCleanup: true,
-      removeHalos: true,
-      denoiseStrength: strictSourceSheetDenoiseStrength,
-      inferNativeScale: true,
-      ...overrides,
+  if (base.sheet || overrides?.sheet) {
+    merged.sheet = {
+      ...base.sheet,
+      ...overrides?.sheet,
     };
   }
 
-  const selectedScale = Math.min(grid.scaleX, grid.scaleY);
-  const lowScaleBakedSprite = shouldCleanBakedBackground(assetType, bakedTransparencyDetected) && selectedScale < 4;
-  if (!lowScaleBakedSprite) {
-    return overrides;
+  return merged;
+}
+
+function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestion): AutomationFixOptionsInput {
+  const options: AutomationFixOptionsInput = {
+    assetType: suggestion.assetType,
+    targetWidth: suggestion.targetWidth,
+    targetHeight: suggestion.targetHeight,
+    maxColors: suggestion.maxColors,
+    paletteMode: "auto",
+    paletteStrategy: "medianCut",
+    paletteLockScope: suggestion.mode === "single" ? "single" : "sheet",
+    paletteDithering: "none",
+    downscale: suggestion.downscale,
+    alpha: suggestion.alpha,
+    alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
+    alphaTolerance: suggestion.alphaSettings.tolerance ?? 18,
+    ...(suggestion.alphaSettings.colorKey ? { alphaColorKey: suggestion.alphaSettings.colorKey } : {}),
+    decontaminateRgb: suggestion.alphaSettings.decontaminateRgb ?? true,
+    transparentRgb: suggestion.alphaSettings.transparentRgb ?? "#000000",
+    grid: {
+      detect: suggestion.gridDetect,
+      scaleX: suggestion.gridScaleX,
+      scaleY: suggestion.gridScaleY,
+      phaseX: suggestion.gridPhaseX,
+      phaseY: suggestion.gridPhaseY,
+      cropToBounds: false,
+      localCorrection: suggestion.localCorrection,
+    },
+    cleanup: {
+      removeOrphans: suggestion.removeOrphans,
+      jaggyCleanup: suggestion.jaggyCleanup,
+      preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
+      removeHalos: suggestion.removeHalos,
+      denoiseStrength: suggestion.denoiseStrength,
+      inferNativeScale: suggestion.inferNativeScale,
+      outlineMode: suggestion.outlineMode,
+      outlineSize: suggestion.outlineSize,
+      ...(suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {}),
+      ...(suggestion.matteCleanup
+        ? {
+            morphology: {
+              enabled: true,
+              matteCleanup: true,
+              alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
+            },
+          }
+        : {}),
+      ...(suggestion.contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
+    },
+  };
+  const sheet = sheetFromCoreSuggestion(suggestion);
+  if (sheet && suggestion.sheetLayout) {
+    options.sheet = sheet;
+    options.sheetFrames = suggestion.sheetLayout.frames;
+  }
+
+  return options;
+}
+
+function sheetFromCoreSuggestion(suggestion: CoreFixSettingSuggestion): SheetSliceOptions | undefined {
+  const sheet = suggestion.sheetLayout;
+  if (!sheet) {
+    return undefined;
   }
 
   return {
-    removeOrphans: false,
-    jaggyCleanup: false,
-    removeHalos: false,
-    denoiseStrength: 0,
-    ...overrides,
+    frameWidth: sheet.frameWidth,
+    frameHeight: sheet.frameHeight,
+    rows: sheet.rows,
+    columns: sheet.columns,
+    margin: sheet.margin,
+    spacing: sheet.spacing,
+    extrude: 0,
   };
+}
+
+function uniqueWarnings(warnings: readonly string[]): string[] {
+  return [...new Set(warnings)];
 }
 
 function normalizeQualityReportAssets(request: CreateQualityReportRequest): QualityReportAssetRequest[] {
@@ -920,73 +882,6 @@ function mergeSeverity(
   if (current === "warning" || next === "warning") return "warning";
   if (current === "info" || next === "info") return "info";
   return "none";
-}
-
-function isSourceSizedSheetLayout(image: RGBAImage, layout: SheetLayoutDetection): boolean {
-  return (
-    layout.confidence >= 0.7 &&
-    layout.rows >= 2 &&
-    layout.columns >= 2 &&
-    layout.frameWidth >= 32 &&
-    layout.frameHeight >= 32 &&
-    layout.margin === 0 &&
-    layout.spacing === 0 &&
-    layout.frameWidth * layout.columns === image.width &&
-    layout.frameHeight * layout.rows === image.height &&
-    layout.frames.length >= layout.rows * layout.columns * 0.75
-  );
-}
-
-function createSourceSizedSheetGridCandidate(image: RGBAImage, layout: SheetLayoutDetection): GridCandidate {
-  return {
-    outputWidth: image.width,
-    outputHeight: image.height,
-    scaleX: 1,
-    scaleY: 1,
-    phaseX: 0,
-    phaseY: 0,
-    confidence: layout.confidence,
-    reason: `Regular ${layout.columns}x${layout.rows} atlas grid; keeping source frame size for cleanup-first processing.`
-  };
-}
-
-function classifyAssetType(
-  image: RGBAImage,
-  sheetLayout: SheetLayoutDetection,
-  tilemapDiagnostics: ReturnType<typeof analyzeTilemapDiagnostics>,
-  bakedTransparencyDetected = false,
-): AutomationResult<ReturnType<typeof parseAutomationAssetType> extends AutomationResult<infer T> ? T : never> {
-  if (sheetLayout.confidence >= 0.65) {
-    return parseAutomationAssetType("animationSheet");
-  }
-
-  const tilemapCandidate = tilemapDiagnostics.selected;
-  if (
-    tilemapCandidate &&
-    image.width >= 96 &&
-    image.height >= 96 &&
-    tilemapCandidate.repeatedTileRatio >= 0.35 &&
-    tilemapCandidate.rows >= 4 &&
-    tilemapCandidate.columns >= 4
-  ) {
-    return parseAutomationAssetType("tilemap");
-  }
-
-  const ratio = image.width / image.height;
-  if (ratio >= 2 || ratio <= 0.5) {
-    return parseAutomationAssetType("spriteSheet");
-  }
-
-  if (bakedTransparencyDetected) {
-    return parseAutomationAssetType("sprite");
-  }
-
-  const isSquare = Math.abs(ratio - 1) <= 0.08;
-  if (isSquare && image.width >= 96 && image.height >= 96) {
-    return parseAutomationAssetType("tileset");
-  }
-
-  return parseAutomationAssetType("sprite");
 }
 
 function runFix(
@@ -1085,21 +980,6 @@ function countAlphaPixels(image: RGBAImage): { transparentPixels: number; softAl
   return { transparentPixels, softAlphaPixels };
 }
 
-function suggestionReason(assetType: AssetType, grid: ReturnType<typeof detectGridCandidates>[number], sheetLayout: SheetLayoutDetection): string {
-  if (assetType === "animationSheet" || assetType === "spriteSheet" || assetType === "characterSheet") {
-    return sheetLayout.confidence >= 0.65
-      ? `Detected sprite-sheet rows with ${(sheetLayout.confidence * 100).toFixed(0)}% confidence.`
-      : `Source proportions suggest multiple frames; best grid is ${grid.outputWidth}x${grid.outputHeight}.`;
-  }
-  if (assetType === "tileset") {
-    return `Square source suggests a tileset; best grid is ${grid.outputWidth}x${grid.outputHeight}.`;
-  }
-  if (assetType === "tilemap") {
-    return `Repeated tile signatures suggest a tilemap; best pixel grid is ${grid.outputWidth}x${grid.outputHeight}.`;
-  }
-  return `Best grid is ${grid.outputWidth}x${grid.outputHeight} with ${(grid.confidence * 100).toFixed(0)}% confidence.`;
-}
-
 function layoutFromFrames(
   frames: readonly SpriteFrame[],
   rowAnimations: readonly AnimationTag[] | undefined,
@@ -1148,26 +1028,6 @@ function sheetFromFrames(
     spacing: overrides?.spacing ?? 0,
     extrude: overrides?.extrude ?? 0,
     ...(overrides?.pivot ? { pivot: { ...overrides.pivot } } : {}),
-  };
-}
-
-function sheetFromLayout(layout: SheetLayoutDetection): SheetSliceOptions {
-  return {
-    frameWidth: layout.frameWidth,
-    frameHeight: layout.frameHeight,
-    rows: layout.rows,
-    columns: layout.columns,
-    margin: layout.margin,
-    spacing: layout.spacing,
-    extrude: 0,
-  };
-}
-
-function packedSheetSize(layout: SheetLayoutDetection): { width: number; height: number } {
-  const widestRow = Math.max(1, ...layout.rowFrameCounts);
-  return {
-    width: layout.margin * 2 + widestRow * layout.frameWidth + Math.max(0, widestRow - 1) * layout.spacing,
-    height: layout.margin * 2 + layout.rows * layout.frameHeight + Math.max(0, layout.rows - 1) * layout.spacing,
   };
 }
 

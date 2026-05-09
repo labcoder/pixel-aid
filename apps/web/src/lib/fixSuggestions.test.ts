@@ -933,7 +933,7 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.assetType).toBe("animationSheet");
     expect(suggestion.alpha).toBe("binary");
-    expect(suggestion.maxColors).toBe(16);
+    expect(suggestion.maxColors).toBe(32);
     expect(suggestion.removeHalos).toBe(false);
     expect(suggestion.matteCleanup).toBe(true);
     expect(suggestion.denoiseStrength).toBe(0);
@@ -956,7 +956,7 @@ describe("fix setting suggestions", () => {
 
     expect(suggestion.mode).toBe("spriteSheet");
     expect(suggestion.assetType).toBe("animationSheet");
-    expect(suggestion.maxColors).toBe(16);
+    expect(suggestion.maxColors).toBe(32);
     expect(suggestion.alpha).toBe("binary");
     expect(suggestion.removeHalos).toBe(false);
     expect(suggestion.matteCleanup).toBe(true);
