@@ -783,12 +783,22 @@ function getFrameSourceRect(
   phaseY: number,
   image: RGBAImage
 ): Rect {
+  const hasExplicitSourceRect = frame.sourceRect !== undefined;
   const rect = frame.sourceRect ?? {
     x: phaseX + frame.rect.x * scaleX,
     y: phaseY + frame.rect.y * scaleY,
     w: frame.rect.w * scaleX,
     h: frame.rect.h * scaleY
   };
+
+  if (hasExplicitSourceRect) {
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      w: Math.max(1, Math.round(rect.w)),
+      h: Math.max(1, Math.round(rect.h))
+    };
+  }
 
   const x = clampInteger(rect.x, 0, Math.max(0, image.width - 1));
   const y = clampInteger(rect.y, 0, Math.max(0, image.height - 1));

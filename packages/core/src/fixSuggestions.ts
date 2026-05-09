@@ -755,9 +755,9 @@ function rankAssetTypeCandidates(input: {
     ])
   );
 
-  if (input.foregroundEvidence?.singleForegroundObject && !sheetLikeMode) {
+  if (input.foregroundEvidence?.singleForegroundObject) {
     candidates.push(
-      createAssetTypeCandidate("sprite", 0.86, "A single isolated foreground object dominates the source, so it should stay a standalone sprite.", [
+      createAssetTypeCandidate("sprite", 0.97, "A single isolated foreground object dominates the source, so it should stay a standalone sprite.", [
         "single foreground object",
         `foreground bounds cover ${Math.round(input.foregroundEvidence.boundsCoverage * 100)}% of the source`
       ])
@@ -1245,7 +1245,10 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
         frameWidth: number;
         frameHeight: number;
         score: number;
+        rankScore: number;
         activeRatio: number;
+        commonSizeBonus: number;
+        cellArea: number;
         semantics: "animationRows" | "objectGrid";
       }
     | undefined;
@@ -1277,57 +1280,92 @@ function detectRegularAtlasLayout(image: RGBAImage): SheetLayoutDetection | unde
 
       const occupancy = measureAtlasOccupancy(image, columns, rows, frameWidth, frameHeight, background);
       const boundarySeparation = measureAtlasBoundarySeparation(image, columns, rows, frameWidth, frameHeight, background);
-      const repeatedCellSignatures = occupancy.signatureRepeatRatio >= 0.3;
-      const isolatedObjectGrid =
-        occupancy.edgeIsolationRatio >= 0.8 && occupancy.meanInsetRatio >= 0.04 && boundarySeparation >= 0.55 && occupancy.activeRatio >= 0.75;
-      if (
-        occupancy.activeRatio < 0.5 ||
-        occupancy.activeCells < 8 ||
-        occupancy.edgeIsolationRatio < 0.55 ||
-        occupancy.edgeTouchRatio > 0.45 ||
-        (!repeatedCellSignatures && !isolatedObjectGrid)
-      ) {
-        continue;
-      }
-      if (boundarySeparation < 0.45) {
-        continue;
-      }
-
       const commonSizeBonus =
         (commonNativeFrameSizes.includes(frameWidth as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0) +
         (commonNativeFrameSizes.includes(frameHeight as (typeof commonNativeFrameSizes)[number]) ? 0.08 : 0);
+      const repeatedCellSignatures = occupancy.signatureRepeatRatio >= 0.3;
+      const isolatedObjectGrid =
+        occupancy.edgeIsolationRatio >= 0.8 && occupancy.meanInsetRatio >= 0.04 && boundarySeparation >= 0.55 && occupancy.activeRatio >= 0.75;
+      const commonSourceSizedAtlas =
+        commonSizeBonus >= 0.16 &&
+        occupancy.activeRatio >= 0.65 &&
+        occupancy.activeCells >= Math.max(8, Math.floor(columns * rows * 0.55)) &&
+        occupancy.consistency >= 0.25 &&
+        occupancy.edgeTouchRatio <= 0.78 &&
+        boundarySeparation >= 0.22;
+      const squareObjectAtlas =
+        columns === rows &&
+        Math.abs(cellRatio - 1) <= 0.16 &&
+        frameWidth <= 128 &&
+        frameHeight <= 128 &&
+        !commonSourceSizedAtlas;
+      if (
+        occupancy.activeRatio < 0.35 ||
+        occupancy.activeCells < 8 ||
+        (!repeatedCellSignatures && !commonSourceSizedAtlas && occupancy.edgeIsolationRatio < 0.55) ||
+        (!repeatedCellSignatures && !commonSourceSizedAtlas && occupancy.edgeTouchRatio > 0.45) ||
+        (!repeatedCellSignatures && !isolatedObjectGrid && !commonSourceSizedAtlas)
+      ) {
+        continue;
+      }
+      if (!commonSourceSizedAtlas && boundarySeparation < 0.45) {
+        continue;
+      }
 
       const dimensionBonus = Math.min(0.2, Math.log2(Math.max(2, columns * rows)) / 30);
       const frameCountBonus = Math.min(0.16, (columns * rows) / 72 * 0.16);
       const aspectBonus = 0.16 - Math.min(0.16, Math.abs(Math.log(cellRatio)) * 0.12);
       const nearDivisibilityPenalty = Math.min(0.08, (widthCandidate.delta + heightCandidate.delta) / Math.max(1, frameWidth + frameHeight));
-      const score = Math.min(
-        0.96,
+      const commonNativeCellBonus = commonSizeBonus >= 0.16 ? 0.18 : 0;
+      const squareGridBonus = columns === rows && Math.abs(cellRatio - 1) <= 0.08 ? 0.12 : 0;
+      const squareSourceGridPenalty =
+        Math.abs(sourceRatio - 1) <= 0.08
+          ? Math.min(0.16, Math.abs(columns - rows) * 0.04 + Math.abs(Math.log(cellRatio)) * 0.08)
+          : 0;
+      const oversplitPenalty = Math.min(0.18, Math.max(0, columns * rows - 96) / 96 * 0.18);
+      const rankScore =
         0.24 +
-          occupancy.activeRatio * 0.18 +
-          occupancy.consistency * 0.1 +
-          occupancy.signatureRepeatRatio * 0.16 +
-          occupancy.edgeIsolationRatio * 0.14 +
-          occupancy.meanInsetRatio * 0.08 +
-          boundarySeparation * 0.22 +
-          commonSizeBonus +
-          dimensionBonus +
-          frameCountBonus +
-          aspectBonus -
-          nearDivisibilityPenalty
-      );
+        occupancy.activeRatio * 0.18 +
+        occupancy.consistency * 0.1 +
+        occupancy.signatureRepeatRatio * 0.16 +
+        occupancy.edgeIsolationRatio * 0.14 +
+        occupancy.meanInsetRatio * 0.08 +
+        boundarySeparation * 0.22 +
+        commonSizeBonus +
+        commonNativeCellBonus +
+        squareGridBonus +
+        (commonSourceSizedAtlas ? 0.14 : 0) +
+        dimensionBonus +
+        frameCountBonus +
+        aspectBonus -
+        nearDivisibilityPenalty -
+        squareSourceGridPenalty -
+        oversplitPenalty;
+      const score = Math.min(0.96, rankScore);
 
       const cellCount = columns * rows;
       const bestCellCount = best ? best.columns * best.rows : 0;
-      if (!best || score > best.score + 0.02 || (Math.abs(score - best.score) <= 0.02 && cellCount > bestCellCount)) {
+      const cellArea = frameWidth * frameHeight;
+      const bestCellArea = best ? best.cellArea : 0;
+      const closeToBest = best ? Math.abs(rankScore - best.rankScore) <= 0.02 : false;
+      const strongerNativeCellEvidence = best ? commonSizeBonus > best.commonSizeBonus + 0.04 : false;
+      const bothStrongNativeCells = best ? commonSizeBonus >= 0.16 && best.commonSizeBonus >= 0.16 : false;
+      const equallyNativeAndBetterGranularity = best
+        ? Math.abs(commonSizeBonus - best.commonSizeBonus) <= 0.04 &&
+          (bothStrongNativeCells ? cellArea > bestCellArea : cellCount > bestCellCount)
+        : false;
+      if (!best || rankScore > best.rankScore + 0.02 || (closeToBest && (strongerNativeCellEvidence || equallyNativeAndBetterGranularity))) {
         best = {
           columns,
           rows,
           frameWidth,
           frameHeight,
           score,
+          rankScore,
           activeRatio: occupancy.activeRatio,
-          semantics: repeatedCellSignatures ? "animationRows" : "objectGrid"
+          commonSizeBonus,
+          cellArea,
+          semantics: (isolatedObjectGrid || squareObjectAtlas) && !commonSourceSizedAtlas ? "objectGrid" : "animationRows"
         };
       }
     }

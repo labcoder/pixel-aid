@@ -307,7 +307,7 @@ function detectCaptionOrBracketMarks(
   }
 
   const coverage = foreground > 0 ? brightNeutral / foreground : 0;
-  return { detected: brightNeutral >= 60 && coverage >= 0.015, coverage };
+  return { detected: brightNeutral >= 60 && coverage >= 0.015 && coverage <= 0.22, coverage };
 }
 
 function averageBlockRgb(image: RGBAImage, x: number, y: number, w: number, h: number): { r: number; g: number; b: number } {
