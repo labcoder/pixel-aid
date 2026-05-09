@@ -2,7 +2,7 @@ import type { RGBAImage } from "@pixelaid/shared";
 import { useEffect, useMemo, useRef } from "react";
 import type { FramePreviewPlacement } from "../lib/frameNormalization";
 import { tickPlayback, type PlaybackDirection, type PlaybackStepDirection } from "../lib/playbackModel";
-import { getTimelineViewportLayout, type TimelineViewportPane } from "../lib/timelineViewportLayout";
+import { getTimelineViewportLayout, type TimelineViewportCompareMode, type TimelineViewportPane } from "../lib/timelineViewportLayout";
 import type { TimelineViewportSourceMode } from "../lib/timelineViewportSources";
 import type { DiagnosticOverlayMask, DiagnosticOverlayModel } from "../lib/diagnosticOverlays";
 import { rgbaImageToCanvas } from "../lib/canvasImage";
@@ -16,6 +16,7 @@ export type TimelineViewportCanvasProps = {
   inputPlacements: readonly FramePreviewPlacement[];
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
+  compareMode?: TimelineViewportCompareMode;
   selectedTimelinePosition: number;
   isPlaying: boolean;
   fps: number;
@@ -43,6 +44,7 @@ export function TimelineViewportCanvas({
   inputPlacements,
   outputPlacements,
   sourceMode,
+  compareMode = "sideBySide",
   selectedTimelinePosition,
   isPlaying,
   fps,
@@ -126,6 +128,7 @@ export function TimelineViewportCanvas({
         inputPlacements,
         outputPlacements,
         sourceMode,
+        compareMode,
         frameIndex: liveStateRef.current.frameIndex,
         showOnionSkin,
         wrapOnion: loop && direction !== "ping-pong" && direction !== "hold"
@@ -160,6 +163,7 @@ export function TimelineViewportCanvas({
     inputPlacements,
     isPlaying,
     loop,
+    compareMode,
     onFrameCommit,
     onPlaybackStop,
     onPreviewRender,
@@ -188,6 +192,7 @@ function drawCanvas({
   inputPlacements,
   outputPlacements,
   sourceMode,
+  compareMode,
   frameIndex,
   showOnionSkin,
   wrapOnion
@@ -200,6 +205,7 @@ function drawCanvas({
   inputPlacements: readonly FramePreviewPlacement[];
   outputPlacements: readonly FramePreviewPlacement[];
   sourceMode: TimelineViewportSourceMode;
+  compareMode: TimelineViewportCompareMode;
   frameIndex: number;
   showOnionSkin: boolean;
   wrapOnion: boolean;
@@ -230,6 +236,7 @@ function drawCanvas({
   const layout = getTimelineViewportLayout({
     viewport: { width, height },
     mode: sourceMode,
+    compareMode,
     inputCanvas: inputPlacement?.canvas ?? null,
     outputCanvas: outputPlacement?.canvas ?? null
   });
@@ -239,11 +246,22 @@ function drawCanvas({
     return;
   }
 
-  for (const pane of layout.panes) {
-    const sourceCanvas = pane.id === "output" ? outputCanvas : inputCanvas;
-    const overlayCanvas = pane.id === "output" ? outputOverlayCanvas : inputOverlayCanvas;
-    const placements = pane.id === "output" ? outputPlacements : inputPlacements;
-    drawPane(context, pane, sourceCanvas, overlayCanvas, placements, frameIndex, showOnionSkin, wrapOnion);
+  if (layout.compareMode === "split" && layout.panes.length === 2 && layout.dividerX !== undefined) {
+    const inputPane = layout.panes[0]!;
+    const outputPane = layout.panes[1]!;
+    drawClipped(context, 0, layout.dividerX, () => {
+      drawPane(context, inputPane, inputCanvas, inputOverlayCanvas, inputPlacements, frameIndex, showOnionSkin, wrapOnion);
+    });
+    drawClipped(context, layout.dividerX, width - layout.dividerX, () => {
+      drawPane(context, outputPane, outputCanvas, outputOverlayCanvas, outputPlacements, frameIndex, showOnionSkin, wrapOnion);
+    });
+  } else {
+    for (const pane of layout.panes) {
+      const sourceCanvas = pane.id === "output" ? outputCanvas : inputCanvas;
+      const overlayCanvas = pane.id === "output" ? outputOverlayCanvas : inputOverlayCanvas;
+      const placements = pane.id === "output" ? outputPlacements : inputPlacements;
+      drawPane(context, pane, sourceCanvas, overlayCanvas, placements, frameIndex, showOnionSkin, wrapOnion);
+    }
   }
 
   if (layout.dividerX !== undefined) {
@@ -255,6 +273,15 @@ function drawCanvas({
     context.lineTo(layout.dividerX + 0.5, height);
     context.stroke();
   }
+}
+
+function drawClipped(context: CanvasRenderingContext2D, x: number, width: number, draw: () => void): void {
+  context.save();
+  context.beginPath();
+  context.rect(x, 0, width, context.canvas.height);
+  context.clip();
+  draw();
+  context.restore();
 }
 
 function drawPane(

@@ -1,6 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 
-export type ViewportReadoutMode = "before" | "after" | "split";
+export type ViewportReadoutMode = "before" | "after" | "sideBySide" | "split";
 
 export function getViewportNativeReadout({
   viewMode,
@@ -15,7 +15,7 @@ export function getViewportNativeReadout({
     return `Output: ${formatSize(fixedImage)}`;
   }
 
-  if (viewMode === "split") {
+  if (viewMode === "sideBySide" || viewMode === "split") {
     return `Input: ${formatSize(sourceImage)} / Output: ${formatSize(fixedImage)}`;
   }
 

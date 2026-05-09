@@ -83,4 +83,31 @@ describe("viewportRenderModel", () => {
     expect(model.layout.beforeZoom).toBe(2);
     expect(model.layout.afterZoom).toBe(2);
   });
+
+  it("builds a side-by-side compare layout without replacing it with timeline", () => {
+    const model = createViewportRenderModel({
+      viewport: { width: 400, height: 240 },
+      sourceSurface: surface(64, 64),
+      fixedSurface: surface(32, 32),
+      viewMode: "sideBySide",
+      zoom: 2,
+      showGrid: true,
+      overlaySurfaces: { sourceMask: null, fixedMask: null },
+      sourceFrames: [],
+      fixedFrames: [],
+      selectedFrameIndex: -1,
+      canEditSourceFrames: false,
+      showFrameMetadataOverlays: true,
+      pan: { x: 0, y: 0 },
+      splitRatio: 0.5
+    });
+
+    expect(model.kind).toBe("image");
+    if (model.kind !== "image" || model.layout.kind !== "sideBySide") {
+      throw new Error("Expected side-by-side image model");
+    }
+    expect(model.layout.dividerX).toBe(200);
+    expect(model.layout.before.width).toBe(128);
+    expect(model.layout.after.width).toBe(64);
+  });
 });

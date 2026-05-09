@@ -22,7 +22,7 @@ export type ComparisonLayout = {
   after: Rect;
 };
 
-export type ViewMode = "before" | "after" | "split";
+export type ViewMode = "before" | "after" | "sideBySide" | "split";
 
 export function getImageDrawRect(viewport: Size, image: Size, zoom: number, pan: Point): Rect {
   const width = image.width * zoom;
@@ -166,6 +166,14 @@ export function getAutoViewportZoom({
     const sourceFit = fitZoom(viewport, footprint, padding);
     const sourceScale = fixedSourceRect ? Math.min(fixedSourceRect.w / fixed.width, fixedSourceRect.h / fixed.height) : 1;
     return clampZoom(sourceFit * sourceScale);
+  }
+
+  if (viewMode === "sideBySide" && fixed) {
+    const paneViewport = { width: Math.max(1, Math.floor(viewport.width / 2)), height: viewport.height };
+    const sourceFit = fitZoom(paneViewport, source, padding);
+    const fixedFootprint = fixedSourceRect ? { width: fixedSourceRect.w, height: fixedSourceRect.h } : fixed;
+    const fixedFit = fitZoom(paneViewport, fixedFootprint, padding);
+    return clampZoom(Math.min(sourceFit, fixedFit));
   }
 
   return clampZoom(fitZoom(viewport, source, padding));

@@ -548,6 +548,22 @@ function getSourcePointFromViewport({
     };
   }
 
+  if (viewMode === "sideBySide" && fixedSize) {
+    const dividerX = Math.floor(viewport.width / 2);
+    if (pointer.x > dividerX) {
+      return null;
+    }
+
+    const rect = getImageDrawRect({ width: Math.max(1, dividerX), height: viewport.height }, sourceSize, zoom, pan);
+    return {
+      point: {
+        x: (pointer.x - rect.x) / zoom,
+        y: (pointer.y - rect.y) / zoom
+      },
+      sourceZoom: zoom
+    };
+  }
+
   const rect = getImageDrawRect(viewport, sourceSize, zoom, pan);
   return {
     point: {
@@ -661,6 +677,62 @@ function drawImageView(ctx: CanvasRenderingContext2D, model: Extract<ViewportRen
       drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, comparisonZoom, selectedFrameIndex, false, showFrameMetadataOverlays);
     });
     drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, comparisonZoom);
+  } else if (model.layout.kind === "sideBySide") {
+    const layout = model.layout;
+    if (!fixedCanvas) {
+      return;
+    }
+    const dividerX = layout.dividerX;
+    drawClipped(ctx, sourceCanvas, layout.before, 0, dividerX);
+    drawClipped(ctx, fixedCanvas, layout.after, dividerX, width - dividerX);
+
+    const beforeZoom = layout.beforeZoom;
+    if (sourceOverlayCanvas && diagnosticOverlay?.sourceMask) {
+      drawClippedOverlay(ctx, 0, dividerX, () => {
+        drawOverlayCanvas(ctx, sourceOverlayCanvas, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
+      });
+    }
+    const sourceGrid = diagnosticOverlay?.sourceGrid;
+    if (sourceGrid) {
+      drawClippedOverlay(ctx, 0, dividerX, () => {
+        drawSourceGridOverlay(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom, sourceGrid);
+      });
+    }
+    if (model.showGrid && beforeZoom >= 4) {
+      drawClippedOverlay(ctx, 0, dividerX, () => {
+        drawPixelGrid(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
+      });
+    }
+    drawClippedOverlay(ctx, 0, dividerX, () => {
+      drawFrameOverlays(ctx, layout.before.x, layout.before.y, sourceFrames, beforeZoom, selectedFrameIndex, canEditSourceFrames, showFrameMetadataOverlays);
+      drawRulers(ctx, layout.before.x, layout.before.y, sourceCanvas.width, sourceCanvas.height, beforeZoom);
+    });
+    drawPaneLabel(ctx, "Input", layout.before.x, layout.before.y);
+
+    ctx.fillStyle = "#101112";
+    ctx.fillRect(dividerX - 2, 0, 4, height);
+    ctx.strokeStyle = "#f1c75b";
+    ctx.beginPath();
+    ctx.moveTo(dividerX + 0.5, 0);
+    ctx.lineTo(dividerX + 0.5, height);
+    ctx.stroke();
+
+    const afterZoom = layout.afterZoom;
+    if (fixedOverlayCanvas && diagnosticOverlay?.fixedMask) {
+      drawClippedOverlay(ctx, dividerX, width - dividerX, () => {
+        drawOverlayCanvas(ctx, fixedOverlayCanvas, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, afterZoom);
+      });
+    }
+    if (model.showGrid && afterZoom >= 4) {
+      drawClippedOverlay(ctx, dividerX, width - dividerX, () => {
+        drawPixelGrid(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, afterZoom);
+      });
+    }
+    drawClippedOverlay(ctx, dividerX, width - dividerX, () => {
+      drawFrameOverlays(ctx, layout.after.x, layout.after.y, frames, afterZoom, selectedFrameIndex, false, showFrameMetadataOverlays);
+      drawRulers(ctx, layout.after.x, layout.after.y, fixedCanvas.width, fixedCanvas.height, afterZoom);
+    });
+    drawPaneLabel(ctx, "Output", layout.after.x, layout.after.y);
   } else {
     const layout = model.layout;
     const rect = layout.rect;
@@ -689,6 +761,17 @@ function drawImageView(ctx: CanvasRenderingContext2D, model: Extract<ViewportRen
     }
     drawRulers(ctx, rect.x, rect.y, layout.activeSize.width, layout.activeSize.height, zoom);
   }
+}
+
+function drawPaneLabel(ctx: CanvasRenderingContext2D, label: string, x: number, y: number): void {
+  ctx.save();
+  ctx.fillStyle = "#101414d9";
+  ctx.fillRect(x, Math.max(4, y - 22), Math.max(54, label.length * 8), 18);
+  ctx.fillStyle = "#35c6b6";
+  ctx.font = "11px Consolas, monospace";
+  ctx.textBaseline = "middle";
+  ctx.fillText(label, x + 6, Math.max(13, y - 13));
+  ctx.restore();
 }
 
 function maskToCanvas(mask: DiagnosticOverlayMask): HTMLCanvasElement {

@@ -35,6 +35,21 @@ describe("timeline viewport layout", () => {
     expect(layout.dividerX).toBe(450);
   });
 
+  test("can use a slider comparison layout for animation frames", () => {
+    const layout = getTimelineViewportLayout({
+      viewport: { width: 900, height: 420 },
+      mode: "compare",
+      compareMode: "split",
+      inputCanvas: { width: 64, height: 64 },
+      outputCanvas: { width: 64, height: 64 }
+    });
+
+    expect(layout.compareMode).toBe("split");
+    expect(layout.panes.map((pane) => pane.id)).toEqual(["input", "output"]);
+    expect(layout.panes[0]?.drawRect).toEqual(layout.panes[1]?.drawRect);
+    expect(layout.dividerX).toBe(450);
+  });
+
   test("falls back to input pane when output is unavailable", () => {
     const layout = getTimelineViewportLayout({
       viewport: { width: 500, height: 300 },

@@ -3,21 +3,26 @@ import type { ViewMode as CanvasViewMode } from "../components/ViewportCanvas";
 
 export type EditorViewMode = CanvasViewMode | "timeline";
 
-export function getEditorViewModes(mode: AssetMode): EditorViewMode[] {
+export type EditorViewModeOptions = {
+  timelineEnabled?: boolean;
+};
+
+export function getEditorViewModes(mode: AssetMode, options: EditorViewModeOptions = {}): EditorViewMode[] {
+  const canvasModes: EditorViewMode[] = ["before", "sideBySide", "split", "after"];
   if (mode === "single") {
-    return ["before", "split", "after"];
+    return canvasModes;
   }
 
-  return ["before", "after", "timeline"];
+  return options.timelineEnabled ? [...canvasModes, "timeline"] : canvasModes;
 }
 
-export function coerceEditorViewMode(mode: AssetMode, viewMode: EditorViewMode): EditorViewMode {
-  const modes = getEditorViewModes(mode);
+export function coerceEditorViewMode(mode: AssetMode, viewMode: EditorViewMode, options: EditorViewModeOptions = {}): EditorViewMode {
+  const modes = getEditorViewModes(mode, options);
   if (modes.includes(viewMode)) {
     return viewMode;
   }
 
-  return mode === "single" ? "before" : "timeline";
+  return mode === "single" ? "before" : "sideBySide";
 }
 
 export function isTimelineEditorViewMode(viewMode: EditorViewMode): viewMode is "timeline" {
@@ -33,5 +38,5 @@ export function getCanvasViewMode(viewMode: EditorViewMode, hasOutput: boolean):
 }
 
 export function getPostFixViewMode(): EditorViewMode {
-  return "after";
+  return "sideBySide";
 }

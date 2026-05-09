@@ -240,6 +240,7 @@ import { assertAutoSuggestScheduled, describeAutoSuggestTrigger } from "./lib/au
 import { startEngineAutoSuggestJob } from "./lib/engineAutoSuggestJobAdapter";
 import { createCleanupComparisonVariants } from "./lib/fixSuggestions";
 import type { CleanupComparisonVariant, FixSettingSuggestion } from "./lib/fixSuggestions";
+import { getFrameCompareViewportConfig } from "./lib/frameCompareViewport";
 import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter";
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
@@ -360,6 +361,14 @@ import {
   type SimpleOutlineChoice
 } from "./lib/simpleSpriteControls";
 import { createOperationErrorReport, createWebDiagnosticReport, type OperationErrorReport } from "./lib/diagnosticReport";
+import {
+  getAssetStructure,
+  getAssetTypeForStructure,
+  getGridAnimationIntent,
+  getSheetPlaybackModeForGridAnimationIntent,
+  type AssetStructure,
+  type GridAnimationIntent
+} from "./lib/assetStructureControls";
 import { getTimelineState, isSheetLikeMode, type SheetPlaybackMode } from "./lib/timelineState";
 import { createThumbnailSurfaceCache } from "./lib/thumbnailSurface";
 import {
@@ -370,6 +379,7 @@ import {
 } from "./lib/timelineViewportSources";
 import { createTileRepeatPreviewLayout, getTilePreviewFrame } from "./lib/tileRepeatPreview";
 import { formatSceneDiagnosticsSummary, formatTilesetDiagnosticsSummary } from "./lib/tileDiagnosticsView";
+import type { TimelineViewportCompareMode } from "./lib/timelineViewportLayout";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
 import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, getPostFixViewMode, type EditorViewMode } from "./lib/viewportModes";
@@ -1046,6 +1056,7 @@ export function App() {
   const [normalizeTimelineFrames, setNormalizeTimelineFrames] = useState(initialSettings.normalizeTimelineFrames);
   const [showOnionSkin, setShowOnionSkin] = useState(initialSettings.showOnionSkin);
   const [timelineViewportSourceMode, setTimelineViewportSourceMode] = useState<TimelineViewportSourceMode>(initialSettings.timelineViewportSourceMode);
+  const [timelineViewportCompareMode, setTimelineViewportCompareMode] = useState<TimelineViewportCompareMode>("sideBySide");
   const [sandboxSpeed, setSandboxSpeed] = useState(96);
   const [sandboxScale, setSandboxScale] = useState(3);
   const [showSandboxGuides, setShowSandboxGuides] = useState(true);
@@ -1478,6 +1489,8 @@ export function App() {
     [defaultBundleBaseName, exportBundleNameValue]
   );
   const assetTypeDefinition = getAssetTypeDefinition(assetType);
+  const assetStructure = getAssetStructure(assetType, mode);
+  const gridAnimationIntent = getGridAnimationIntent(assetType, sheetPlaybackMode);
   const isImporting = importOperation !== null;
   const isAssetActivating = assetActivationOperation !== null;
   const isAnalyzing = analysisOperation !== null;
@@ -2747,7 +2760,18 @@ export function App() {
   const canUndoFrameEdit = canUndoFrameEditHistory(frameEditHistory);
   const canRedoFrameEdit = canRedoFrameEditHistory(frameEditHistory);
   const timelineState = getTimelineState(mode, timelineFrames.length, assetType, sheetPlaybackMode);
-  const editorViewModes = useMemo(() => getEditorViewModes(mode), [mode]);
+  const frameCompareViewportConfig = useMemo(
+    () =>
+      getFrameCompareViewportConfig({
+        sheetMode,
+        timelineEnabled: timelineState.enabled,
+        viewMode,
+        hasInput: timelineViewportSourceAvailability.hasInput,
+        hasOutput: timelineViewportSourceAvailability.hasOutput
+      }),
+    [sheetMode, timelineState.enabled, timelineViewportSourceAvailability.hasInput, timelineViewportSourceAvailability.hasOutput, viewMode]
+  );
+  const editorViewModes = useMemo(() => getEditorViewModes(mode, { timelineEnabled: timelineState.enabled }), [mode, timelineState.enabled]);
   const bottomPanelSections = useMemo(
     () => getBottomPanelSections(mode, assetType, selectedAsset && sheetMode ? timelineFrames.length : 0, sheetPlaybackMode),
     [assetType, mode, selectedAsset, sheetMode, sheetPlaybackMode, timelineFrames.length]
@@ -2817,8 +2841,8 @@ export function App() {
   }, [frameHeight, frameWidth]);
 
   useEffect(() => {
-    setViewMode((current) => coerceEditorViewMode(mode, current));
-  }, [mode]);
+    setViewMode((current) => coerceEditorViewMode(mode, current, { timelineEnabled: timelineState.enabled }));
+  }, [mode, timelineState.enabled]);
 
   useEffect(() => {
     setTimelineViewportSourceMode((current) => coerceTimelineViewportSourceMode(current, timelineViewportSourceAvailability));
@@ -4043,7 +4067,7 @@ export function App() {
           editorPerformanceMonitorRef.current.mark("result committed to UI state", undefined, perfOperationId);
           publishEditorPerformanceSnapshot();
           setLastOperationError(null);
-          setViewMode(getPostFixViewMode());
+          setViewMode(sheetMode && timelineState.enabled ? "timeline" : getPostFixViewMode());
           if (sheetMode) {
             setTimelineViewportSourceMode(getPreferredTimelineViewportSourceMode({ hasInput: sourceTimelineFrames.length > 0, hasOutput: true }));
           }
@@ -4101,7 +4125,8 @@ export function App() {
     selectedAsset,
     sheetFrames.length,
     sheetMode,
-    sourceTimelineFrames.length
+    sourceTimelineFrames.length,
+    timelineState.enabled
   ]);
 
   const applyTilesetRepairs = useCallback(async () => {
@@ -6599,10 +6624,43 @@ export function App() {
         </button>
         <p className="control-hint">{suggestionReason}</p>
         <SelectField
-          label="Asset type"
+          label="Structure"
+          value={assetStructure}
+          options={[
+            ["single", "Single image"],
+            ["grid", "Grid / sheet"]
+          ]}
+          onChange={(value) => {
+            void changeAssetType(getAssetTypeForStructure(value as AssetStructure));
+          }}
+        />
+        {assetStructure === "grid" ? (
+          <SelectField
+            label="Animation"
+            value={gridAnimationIntent}
+            options={[
+              ["auto", "Auto"],
+              ["animated", "Contains animations"],
+              ["still", "No playback"]
+            ]}
+            onChange={(value) => {
+              const nextIntent = value as GridAnimationIntent;
+              setSheetPlaybackMode(getSheetPlaybackModeForGridAnimationIntent(nextIntent));
+              if (nextIntent === "animated") {
+                void changeAssetType("animationSheet");
+              } else if (nextIntent === "still" && (assetType === "animationSheet" || assetType === "characterSheet")) {
+                void changeAssetType("spriteSheet");
+              }
+            }}
+          />
+        ) : null}
+        <SelectField
+          label="Export metadata"
           value={assetType}
           options={assetTypeDefinitions.map((definition) => [definition.type, definition.label])}
-          onChange={(value) => changeAssetType(value as AssetType)}
+          onChange={(value) => {
+            void changeAssetType(value as AssetType);
+          }}
         />
         <p className="field-note">
           {assetTypeDefinition.shortLabel} classification is {assetTypeSource}; {categoryReason}
@@ -6639,16 +6697,16 @@ export function App() {
           </>
         ) : null}
         <SelectField
-          label="Processing mode"
+          label="Algorithm path"
           value={mode}
           options={[
-            ["single", "Single sprite"],
-            ["spriteSheet", "Sprite sheet"],
-            ["tileSheet", "Tile sheet"]
+            ["single", "Single image"],
+            ["spriteSheet", "Grid / sheet"],
+            ["tileSheet", "Tile grid"]
           ]}
           onChange={(value) => {
             const nextMode = value as AssetMode;
-            changeAssetType(defaultAssetTypeForMode(nextMode));
+            void changeAssetType(defaultAssetTypeForMode(nextMode));
           }}
         />
         {sheetMode ? (
@@ -7964,6 +8022,24 @@ export function App() {
                   </button>
                 ))}
               </div>
+              {timelineViewportSourceMode === "compare" ? (
+                <div className="timeline-source-controls" aria-label="Timeline compare layout">
+                  {[
+                    ["sideBySide", "Side by side"],
+                    ["split", "Slider"]
+                  ].map(([modeOption, label]) => (
+                    <button
+                      key={modeOption}
+                      type="button"
+                      className={timelineViewportCompareMode === modeOption ? "active" : ""}
+                      aria-pressed={timelineViewportCompareMode === modeOption}
+                      onClick={() => setTimelineViewportCompareMode(modeOption as TimelineViewportCompareMode)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
             <TimelineViewportCanvas
               inputImage={selectedPreviewImage}
@@ -7973,6 +8049,7 @@ export function App() {
               inputPlacements={inputTimelinePlacements}
               outputPlacements={outputTimelinePlacements}
               sourceMode={timelineViewportSourceMode}
+              compareMode={timelineViewportCompareMode}
               selectedTimelinePosition={timelinePosition}
               isPlaying={isPlaying}
               fps={playbackFps}
@@ -8041,6 +8118,27 @@ export function App() {
               />
             </div>
           </div>
+        ) : frameCompareViewportConfig ? (
+          <TimelineViewportCanvas
+            inputImage={selectedPreviewImage}
+            outputImage={fixedPreviewImage}
+            inputSurface={selectedSourceSurface}
+            outputSurface={selectedFixedSurface}
+            inputPlacements={inputTimelinePlacements}
+            outputPlacements={outputTimelinePlacements}
+            sourceMode={frameCompareViewportConfig.sourceMode}
+            compareMode={frameCompareViewportConfig.compareMode}
+            selectedTimelinePosition={timelinePosition}
+            isPlaying={false}
+            fps={playbackFps}
+            loop={false}
+            direction={playbackDirection}
+            playDirection={playbackStepDirectionRef.current}
+            showOnionSkin={false}
+            diagnosticOverlay={diagnosticOverlay}
+            onFrameCommit={commitTimelineViewportFrame}
+            onPreviewRender={markViewportPreviewRendered}
+          />
         ) : (
           <ViewportCanvas
             sourceImage={selectedPreviewImage}

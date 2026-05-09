@@ -8,7 +8,7 @@ import {
   type Size
 } from "./viewportMath";
 
-export type ViewportRenderViewMode = "before" | "after" | "split";
+export type ViewportRenderViewMode = "before" | "after" | "sideBySide" | "split";
 
 export type ViewportRenderSurface = HTMLCanvasElement;
 
@@ -43,6 +43,15 @@ export type ViewportRenderSplitLayout = {
   afterZoom: number;
 };
 
+export type ViewportRenderSideBySideLayout = {
+  kind: "sideBySide";
+  before: ViewportRect;
+  after: ViewportRect;
+  dividerX: number;
+  beforeZoom: number;
+  afterZoom: number;
+};
+
 export type ViewportRenderModel =
   | {
       kind: "empty";
@@ -62,7 +71,7 @@ export type ViewportRenderModel =
       diagnosticOverlay?: DiagnosticOverlayModel | undefined;
       overlaySurfaces: ViewportRenderOverlaySurfaces;
       frameOverlay: ViewportFrameOverlayModel;
-      layout: ViewportRenderSingleLayout | ViewportRenderSplitLayout;
+      layout: ViewportRenderSingleLayout | ViewportRenderSplitLayout | ViewportRenderSideBySideLayout;
     };
 
 export function createViewportRenderModel(input: {
@@ -128,7 +137,33 @@ function createViewportRenderLayout(input: {
   fixedSourceRect?: FrameRect | undefined;
   pan: Point;
   splitRatio: number;
-}): ViewportRenderSingleLayout | ViewportRenderSplitLayout {
+}): ViewportRenderSingleLayout | ViewportRenderSplitLayout | ViewportRenderSideBySideLayout {
+  if (input.viewMode === "sideBySide" && input.fixedSurface) {
+    const dividerX = Math.floor(input.viewport.width / 2);
+    const beforeViewport = { width: Math.max(1, dividerX), height: input.viewport.height };
+    const afterViewport = { width: Math.max(1, input.viewport.width - dividerX), height: input.viewport.height };
+    const before = getImageDrawRect(
+      beforeViewport,
+      { width: input.sourceSurface.width, height: input.sourceSurface.height },
+      input.zoom,
+      input.pan
+    );
+    const after = getImageDrawRect(
+      afterViewport,
+      { width: input.fixedSurface.width, height: input.fixedSurface.height },
+      input.zoom,
+      input.pan
+    );
+    return {
+      kind: "sideBySide",
+      before,
+      after: { ...after, x: after.x + dividerX },
+      dividerX,
+      beforeZoom: before.width / input.sourceSurface.width,
+      afterZoom: after.width / input.fixedSurface.width
+    };
+  }
+
   if (input.viewMode === "split" && input.fixedSurface) {
     const comparison = getAlignedComparisonRects({
       viewport: input.viewport,

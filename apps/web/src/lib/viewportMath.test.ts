@@ -108,6 +108,17 @@ describe("viewport math", () => {
     ).toBeCloseTo(0.72, 2);
   });
 
+  test("auto-fits side-by-side compare using half of the available viewport", () => {
+    expect(
+      getAutoViewportZoom({
+        viewport: { width: 900, height: 700 },
+        source: { width: 706, height: 878 },
+        fixed: { width: 706, height: 878 },
+        viewMode: "sideBySide"
+      })
+    ).toBeCloseTo(0.57, 2);
+  });
+
   test("uses smaller wheel zoom steps below 100 percent", () => {
     expect(getWheelZoom(0.72, -1)).toBe(0.82);
     expect(getWheelZoom(0.72, 1)).toBe(0.62);

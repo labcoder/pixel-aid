@@ -1,5 +1,7 @@
 import type { TimelineViewportSourceMode } from "./timelineViewportSources";
 
+export type TimelineViewportCompareMode = "sideBySide" | "split";
+
 export type TimelineViewportCanvasSize = {
   width: number;
   height: number;
@@ -16,16 +18,19 @@ export type TimelineViewportPane = {
 export type TimelineViewportLayout = {
   panes: TimelineViewportPane[];
   dividerX?: number;
+  compareMode?: TimelineViewportCompareMode;
 };
 
 export function getTimelineViewportLayout({
   viewport,
   mode,
+  compareMode = "sideBySide",
   inputCanvas,
   outputCanvas
 }: {
   viewport: TimelineViewportCanvasSize;
   mode: TimelineViewportSourceMode;
+  compareMode?: TimelineViewportCompareMode;
   inputCanvas: TimelineViewportCanvasSize | null;
   outputCanvas: TimelineViewportCanvasSize | null;
 }): TimelineViewportLayout {
@@ -36,8 +41,25 @@ export function getTimelineViewportLayout({
   const padding = 26;
 
   if (mode === "compare" && inputCanvas && outputCanvas) {
+    if (compareMode === "split") {
+      const referenceCanvas = {
+        width: Math.max(inputCanvas.width, outputCanvas.width),
+        height: Math.max(inputCanvas.height, outputCanvas.height)
+      };
+      const pane = createPane("input", "Input", { x: 0, y: 0, ...safeViewport }, referenceCanvas, padding);
+      return {
+        compareMode,
+        panes: [
+          { ...pane, id: "input", label: "Input", canvas: inputCanvas },
+          { ...pane, id: "output", label: "Output", canvas: outputCanvas }
+        ],
+        dividerX: Math.floor(safeViewport.width / 2)
+      };
+    }
+
     const halfWidth = Math.floor(safeViewport.width / 2);
     return {
+      compareMode,
       panes: [
         createPane("input", "Input", { x: 0, y: 0, width: halfWidth, height: safeViewport.height }, inputCanvas, padding),
         createPane(

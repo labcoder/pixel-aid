@@ -15,6 +15,9 @@ describe("viewport readout", () => {
   });
 
   test("shows both native sizes in compare view", () => {
+    expect(getViewportNativeReadout({ viewMode: "sideBySide", sourceImage: input, fixedImage: output })).toBe(
+      "Input: 1536x1024 / Output: 512x128"
+    );
     expect(getViewportNativeReadout({ viewMode: "split", sourceImage: input, fixedImage: output })).toBe(
       "Input: 1536x1024 / Output: 512x128"
     );
