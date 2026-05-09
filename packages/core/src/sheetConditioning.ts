@@ -47,7 +47,7 @@ export function analyzeSheetConditioning(
       if (a > 0 && isChromaMatteColor(image, x, y, r, g, b, a, background)) {
         if (a < 255) {
           softChromaMattePixels += 1;
-        } else {
+        } else if (shouldCountOpaqueChromaMatte(r, g, b, background)) {
           opaqueChromaMattePixels += 1;
         }
       }
@@ -440,6 +440,19 @@ function isPresentationMatteChroma(
   const green = (family & 2) !== 0 && (family & 1) === 0 && (family & 4) === 0;
   const magenta = (family & 1) !== 0 && (family & 4) !== 0 && (family & 2) === 0;
   return green || magenta;
+}
+
+function shouldCountOpaqueChromaMatte(
+  r: number,
+  g: number,
+  b: number,
+  background: SheetConditioningDiagnostics["background"]
+): boolean {
+  if (background.a >= 240) {
+    return true;
+  }
+
+  return isPresentationMatteChroma(r, g, b, background);
 }
 
 function hasWeakLocalColorSupport(

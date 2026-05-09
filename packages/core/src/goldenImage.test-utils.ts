@@ -1,7 +1,11 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { dirname } from "node:path";
+import decodeWebp, { init as initWebpDecode } from "@jsquash/webp/decode";
 import { PNG } from "pngjs";
 import type { RGBAImage } from "@pixelaid/shared";
+
+let webpDecoderReady: Promise<void> | undefined;
 
 export type GoldenCompareMode =
   | { mode: "exact" }
@@ -31,6 +35,17 @@ export function readGoldenPng(path: string): RGBAImage {
     width: png.width,
     height: png.height,
     data: new Uint8ClampedArray(png.data)
+  };
+}
+
+export async function readGoldenWebp(path: string): Promise<RGBAImage> {
+  await ensureWebpDecoder();
+  const source = Uint8Array.from(readFileSync(path)).buffer;
+  const decoded = await decodeWebp(source);
+  return {
+    width: decoded.width,
+    height: decoded.height,
+    data: new Uint8ClampedArray(decoded.data.buffer.slice(decoded.data.byteOffset, decoded.data.byteOffset + decoded.data.byteLength))
   };
 }
 
@@ -104,4 +119,15 @@ export function compareGoldenImage(actual: RGBAImage, expected: RGBAImage, compa
 
 export function shouldUpdateGoldens(): boolean {
   return process.env.PIXELAID_UPDATE_GOLDENS === "1";
+}
+
+async function ensureWebpDecoder(): Promise<void> {
+  webpDecoderReady ??= (async () => {
+    const moduleRequire = createRequire(`${process.cwd()}/package.json`);
+    const wasmPath = moduleRequire.resolve("@jsquash/webp/codec/dec/webp_dec.wasm");
+    const wasmModule = await WebAssembly.compile(readFileSync(wasmPath));
+    const initWithModule = initWebpDecode as unknown as (module: WebAssembly.Module) => Promise<void>;
+    await initWithModule(wasmModule);
+  })();
+  return webpDecoderReady;
 }

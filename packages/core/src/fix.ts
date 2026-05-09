@@ -497,11 +497,43 @@ function resolvePaletteSettings(options: FixOptions, reservedColors: readonly st
 }
 
 function refinePaletteForCleanup(palette: readonly string[], options: FixOptions): string[] {
+  const matteFiltered = shouldFilterMattePaletteColors(options) ? filterMattePaletteColors(palette) : [...palette];
   if (!shouldMergeNearbyAutoPaletteColors(options)) {
-    return [...palette];
+    return matteFiltered;
   }
 
-  return mergeNearbyPaletteColors(palette, 24 * 24);
+  return mergeNearbyPaletteColors(matteFiltered, 24 * 24);
+}
+
+function shouldFilterMattePaletteColors(options: FixOptions): boolean {
+  return (
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true &&
+    options.paletteSettings?.mode !== "fixed" &&
+    options.palette === undefined
+  );
+}
+
+function filterMattePaletteColors(palette: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const color of palette) {
+    const parsed = tryParseHexColor(color);
+    if (parsed !== null && isMattePaletteArtifactColor(parsed)) {
+      continue;
+    }
+    kept.push(color);
+  }
+
+  return kept.length >= Math.min(4, palette.length) ? kept : [...palette];
+}
+
+function isMattePaletteArtifactColor(color: number): boolean {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  const green = g >= 24 && g - r >= 18 && g - b >= 18;
+  const magenta = r >= 48 && b >= 40 && Math.min(r, b) - g >= 18;
+  return green || magenta;
 }
 
 function shouldMergeNearbyAutoPaletteColors(options: FixOptions): boolean {

@@ -483,7 +483,7 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
   const output = cloneImage(image);
   const outsideMask = buildOutsideMask(output, alphaThreshold);
   const hints = collectMatteHints(image, alphaThreshold);
-  let clearedPixels = 0;
+  let clearedPixels = clearExteriorConnectedMatte(output, outsideMask, hints, alphaThreshold);
 
   for (let pass = 0; pass < MATTE_PEEL_ITERATIONS; pass += 1) {
     const toClear = new Uint8Array(image.width * image.height);
@@ -539,6 +539,79 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
   }
 
   return { image: output, clearedPixels, hintColorCount: hints.count };
+}
+
+function clearExteriorConnectedMatte(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  hints: MatteHints,
+  alphaThreshold: number
+): number {
+  const queue = new Int32Array(image.width * image.height);
+  let read = 0;
+  let write = 0;
+  let clearedPixels = 0;
+
+  for (let index = 0; index < outsideMask.length; index += 1) {
+    if (outsideMask[index] === 1) {
+      queue[write] = index;
+      write += 1;
+    }
+  }
+
+  while (read < write) {
+    const current = queue[read]!;
+    read += 1;
+    const x = current % image.width;
+    const y = Math.floor(current / image.width);
+
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (dx === 0 && dy === 0) {
+          continue;
+        }
+
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+          continue;
+        }
+
+        const neighbor = ny * image.width + nx;
+        if (outsideMask[neighbor] === 1) {
+          continue;
+        }
+
+        const offset = neighbor * 4;
+        if (image.data[offset + 3]! < alphaThreshold) {
+          outsideMask[neighbor] = 1;
+          queue[write] = neighbor;
+          write += 1;
+          continue;
+        }
+
+        const candidate = classifyMatteCandidate(image.data, offset, hints);
+        if (candidate === "none") {
+          continue;
+        }
+
+        if (candidate === "fallback" && hasStrongLocalColorSupport(image, outsideMask, nx, ny, alphaThreshold)) {
+          continue;
+        }
+
+        image.data[offset] = 0;
+        image.data[offset + 1] = 0;
+        image.data[offset + 2] = 0;
+        image.data[offset + 3] = 0;
+        outsideMask[neighbor] = 1;
+        queue[write] = neighbor;
+        write += 1;
+        clearedPixels += 1;
+      }
+    }
+  }
+
+  return clearedPixels;
 }
 
 function buildOutsideMask(image: RGBAImage, alphaThreshold: number): Uint8Array {
@@ -639,7 +712,7 @@ function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: 
 }
 
 function matchesMatteHint(r: number, g: number, b: number, hints: MatteHints): boolean {
-  const family = chromaFamilyMask(r, g, b);
+  const family = chromaFamilyMask(r, g, b) || darkDominantMatteFamilyMask(r, g, b);
   if (family === 0) {
     return false;
   }
@@ -667,6 +740,10 @@ function matchesMatteHint(r: number, g: number, b: number, hints: MatteHints): b
     if (max >= 64 && hintMax >= 48 && min <= 96 && hintMin <= 96) {
       return true;
     }
+
+    if (isDarkDominantMatteColor(r, g, b) && hintMax >= 48) {
+      return true;
+    }
   }
 
   return false;
@@ -690,7 +767,7 @@ function isArtificialChromaMatteColor(r: number, g: number, b: number): boolean 
 function isMutedArtificialMatteColor(r: number, g: number, b: number): boolean {
   const mutedGreenMatte = g >= 64 && g - r >= 24 && g - b >= 24;
   const mutedMagentaMatte = r >= 90 && b >= 64 && g <= Math.min(r, b) - 24;
-  return mutedGreenMatte || mutedMagentaMatte;
+  return mutedGreenMatte || mutedMagentaMatte || isDarkDominantMatteColor(r, g, b);
 }
 
 function isProtectedSubjectColor(r: number, g: number, b: number): boolean {
@@ -721,6 +798,22 @@ function chromaFamilyMask(r: number, g: number, b: number): number {
     mask |= 4;
   }
   return mask;
+}
+
+function darkDominantMatteFamilyMask(r: number, g: number, b: number): number {
+  const green = g >= 24 && g - r >= 18 && g - b >= 18;
+  const magenta = r >= 32 && b >= 24 && Math.min(r, b) - g >= 18;
+  if (green) {
+    return 2;
+  }
+  if (magenta) {
+    return 1 | 4;
+  }
+  return 0;
+}
+
+function isDarkDominantMatteColor(r: number, g: number, b: number): boolean {
+  return darkDominantMatteFamilyMask(r, g, b) !== 0;
 }
 
 function colorfulness(r: number, g: number, b: number): number {

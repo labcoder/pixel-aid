@@ -170,6 +170,9 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
+  const sourceSizedSheetMaxColors = sourceSizedSheetPreservation
+    ? suggestSourceSizedSheetMaxColors(strictSourceSheetMaxColors, exactColorCount)
+    : strictSourceSheetMaxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
   const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence);
   const singleSpriteMatteCleanup =
@@ -183,7 +186,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     outputHeight = image.height;
     candidates = [candidate, ...candidates.filter((item) => item.scaleX !== 1 || item.scaleY !== 1)];
   }
-  const suggestedMaxColors = strictSourceSheetMaxColors;
+  const suggestedMaxColors = sourceSizedSheetMaxColors;
   let qualityReport = analyzeQualityReport(image, {
     assetType: classification.assetType,
     maxColors: suggestedMaxColors,
@@ -483,7 +486,15 @@ function isNearSourceSheetDimension(sourceSize: number, packedSize: number, divi
 }
 
 function suggestStrictSourceSheetMaxColors(maxColors: number): number {
-  return Math.min(maxColors, 16);
+  return Math.max(maxColors, 24);
+}
+
+function suggestSourceSizedSheetMaxColors(maxColors: number, exactColorCount: number): number {
+  if (exactColorCount <= 0 || exactColorCount > 64) {
+    return maxColors;
+  }
+
+  return Math.max(maxColors, exactColorCount);
 }
 
 function suggestStrictSourceSheetDenoiseStrength(): number {
