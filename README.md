@@ -1,6 +1,6 @@
 # PixelAid
 
-PixelAid is a Vite, React, and TypeScript editor for turning AI-generated images that only look like pixel art into real, grid-aligned, palette-limited, engine-ready pixel assets.
+PixelAid is a deterministic cleanup tool that fixes grids, palettes, alpha, sprite sheets, tiles, and export metadata for pixel-art assets.
 
 The repo currently contains the web editor, a Tauri desktop shell, deterministic image-processing packages, exporter helpers, CLI automation, MCP-ready tooling, and early optional integration packages. The core fixer works offline and does not require API keys.
 
@@ -11,7 +11,6 @@ PixelAid is under active development. The editor, core cleanup pipeline, worker 
 ## Requirements
 
 - Node.js 20 or newer.
-- npm workspaces. This repo uses npm because pnpm is not required in the current working environment.
 - Rust and Cargo only when running or packaging the desktop app.
 
 Install dependencies from the repo root:
