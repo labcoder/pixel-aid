@@ -1,6 +1,6 @@
 # Fixture Suite
 
-PixelAid fixtures are deterministic TypeScript generators. The repo avoids large PNG goldens; most tests create compact signatures and structural assertions from generated `RGBAImage` buffers. Small, high-value PNG goldens may live under package-local `src/goldens/` folders when exact pixel output needs to be locked.
+PixelAid fixtures are deterministic TypeScript generators. The repo avoids large binary goldens by default; most tests create compact signatures and structural assertions from generated `RGBAImage` buffers. Small, high-value PNG/WebP goldens may live under package-local `src/goldens/` folders when exact pixel output needs to be locked for a real-world edge case.
 
 Release-facing onboarding/demo samples are documented in `docs/onboarding-samples.md`. The canonical sample registry is `releaseOnboardingSamples` in `packages/fixtures/src/onboardingSamples.ts`; it links demo workflows to existing deterministic fixtures and records first-party provenance.
 
@@ -30,7 +30,7 @@ Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixela
 
 Do not commit private user assets, prompts, generated metadata bundles, or screenshots as fixtures. If a private source is useful during debugging, keep it outside the repo in an ignored/internal folder, then add a synthetic deterministic fixture that reproduces the failure. Safe-to-commit fixture metadata cannot use `private-do-not-commit` license provenance.
 
-`qualityFailureFixtureCatalog` is the initial M6 quality corpus index. It maps representative deterministic fixtures to their intake metadata and currently covers bright mattes/halos, noisy pseudo-pixel grids, weak or ambiguous grid detection, morphology artifacts, uneven row sheets, presentation-style sheets with labels/gutters, palette drift animations, and outline repair failures. Report-only entries are allowed when the fixture documents a known weak spot before the expected output is ready.
+`qualityFailureFixtureCatalog` is the initial M6 quality corpus index. It maps representative deterministic fixtures to their intake metadata and currently covers bright mattes/halos, noisy pseudo-pixel grids, weak or ambiguous grid detection, morphology artifacts, uneven row sheets, presentation-style sheets with labels/gutters, palette drift animations, source-sized sheet preservation, and outline repair failures. Report-only entries are allowed when the fixture documents a known weak spot before the expected output is ready.
 
 ## Visual Regression Goldens
 
@@ -51,6 +51,8 @@ The current suite covers:
 - effect-heavy sparse sprite sheets
 - detail-preserving baseline-drift sheets
 - tileset seam preservation
+
+`packages/core/src/astroSpriteSheetGoldens.test.ts` keeps a separate real-world sheet golden suite for the source-sized atlas regressions that compact synthetic fixtures did not catch. It checks that already-clean Astro and Hollow Knight sheets stay close to identity when reprocessed, and that dirty WebP sources recover toward reviewed cleaned PNG outputs without changing dimensions or rebuilding linework. The tests include focused frame comparisons for details that visual review flagged first, such as Astro's first frame and the Hollow Knight chair frame.
 
 Run the visual regression suite:
 

@@ -54,16 +54,26 @@ This is the main fake-pixel-to-real-pixel conversion path. It does not use bilin
 
 The web Auto Suggest path samples the selected grid candidate and estimates block purity by measuring how often one coarse RGB bucket owns each sampled source block. High-purity sources default to `dominant` because crisp fake-pixel art usually cleans up better when the representative source block color wins. Mixed blocks can still suggest `adaptive` or `median`, and users can override the method at any time.
 
+## Preservation-First Gates
+
+Not every import should run through pseudo-pixel recovery. PixelAid now treats clean low-color assets, confirmed tilemaps, and source-sized sheets as preservation-first candidates before it recommends destructive cleanup. The goal is identity first: if the source already has engine-sized pixels, a small palette, and no strong matte evidence, Fix should mostly preserve the image and only update metadata.
+
+Current preservation signals include exact visible color count within budget, source and output frame dimensions that already match, grid scale near 1, low soft-alpha contamination, low matte-artifact evidence, and tilemap diagnostics that indicate repeated native cells. These gates keep scene-style backgrounds and map-like images away from sprite-specific alpha, denoise, outline, and morphology passes unless the user explicitly enables them.
+
+For source-sized sprite or animation sheets, preservation does not mean ignoring all cleanup. If sheet conditioning finds soft alpha noise or outside-connected matte contamination, PixelAid can still run binary alpha, hidden RGB decontamination, matte cleanup, and shared palette locking at source resolution. It avoids native-scale inference, denoise, outline repair, contrast expansion, orphan removal, and jaggy cleanup by default because those passes can rewrite eyes, outlines, and one-pixel line details.
+
 ## Mode Suggestion
 
-Auto Suggest classifies the source as a single sprite, sprite sheet, or tile sheet before the user runs Fix.
+Auto Suggest classifies the source as a single image, sheet/grid, tile sheet, or tilemap-like asset before the user runs Fix. The user can override the asset type and the derived mode.
 
 Current signals:
 
 - Extreme source aspect ratios are treated as sprite sheets.
 - Square, evenly divisible sources can be suggested as tile sheets.
 - Large landscape sources are scanned for repeated horizontal foreground bands against a sampled corner background. Three or more separated bands bias the mode toward sprite sheet because this matches common AI-generated animation sheets with one animation per row.
-- Balanced portrait or square sources without repeated bands remain single sprites unless tile-sheet divisibility is stronger.
+- Tall or balanced images are checked for regular atlas grids before portrait/background fallback. This catches source-sized 8 x 9 character atlases and other animation sheets that do not look wide.
+- Repeated native tile signatures can classify a source as a tilemap candidate instead of treating it as one sprite.
+- Balanced portrait or square sources without repeated bands, atlas evidence, or tile identity evidence remain single images.
 
 For clear row-based sheets, the next pass runs `detectSheetLayout`. It samples the corner background, groups active horizontal row bands, finds regular frame segments inside each row, splits wide outlined grid rows by vertical cell separators, uses the left-side region before the first frame as an optional label candidate, normalizes first-pass unboxed rows whose visible sprite content is centered inside a regular pitch even when the visible gutters are uneven, and can merge nearby disconnected body/effect components when their start positions fit a mildly drifted shared pitch. Presentation-style sheets also run source conditioning heuristics that look for opaque dark poster backgrounds, baked checkerboard cell fills, bright neutral captions/brackets, and footer-like metadata bands. When those artifacts are detected, frame rectangles are expanded to the likely presentation cell while each frame's `sourceRect` is trimmed back to true sprite-colored content so captions and decorative brackets do not become sampled sprite pixels. It returns:
 
@@ -155,9 +165,11 @@ Strength is a 0-100 value. `0` clones the image unchanged. Low values remove mil
 
 `applyHaloRemoval` is an optional native-resolution edge cleanup pass that runs after alpha cleanup and before denoise, outline cleanup, and palette extraction.
 
-The pass estimates corner background color, finds visible edge pixels adjacent to transparent or background-like outside space, and treats pale neutral semi-transparent pixels, background-colored opaque edge pixels, and outside-connected gray matte haze as halos. When nearby solid subject pixels exist, halo RGB is replaced with the average color of those subject neighbors. When the source already has a transparent outside model and a pale matte pixel has no reliable subject neighbor, the pass clears it to transparent instead of inventing a subject color.
+The pass estimates corner background color, finds visible edge pixels adjacent to transparent or background-like outside space, and treats pale neutral semi-transparent pixels, background-colored opaque edge pixels, outside-connected gray matte haze, and detected outside-connected chroma matte pixels as halos. When nearby solid subject pixels exist, halo RGB is replaced with the average color of those subject neighbors. When the source already has a transparent outside model and a pale matte pixel has no reliable subject neighbor, the pass clears it to transparent instead of inventing a subject color.
 
 The pass reads from the source image and writes to a cloned output buffer, so corrected halo pixels do not cascade into later replacements during the same pass. It avoids using pale neutral matte pixels as replacement colors, preserves colored soft-alpha glow by requiring semi-transparent halo candidates to be background-like or pale/neutral, and keeps true border background pixels from being recolored.
+
+The current matte cleanup model still needs one important improvement: subject-color protection. A color should not be removed globally just because the same hue appears in background artifacts. The Aerith sheet showed this with green eyes and a green flower stem on a magenta-matte sheet. The next matte cleanup pass should learn matte colors from outside/background connectivity and protect the same colors when they appear inside foreground components.
 
 ## Alpha Cleanup
 
@@ -225,8 +237,9 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 Remaining quality targets:
 
 - Tune connected-component thresholds against more real samples.
-- Add golden image comparisons for fixture output, not only structural assertions.
+- Expand real-world golden coverage beyond the current focused single-sprite and sheet-frame comparisons.
 - Expand diagnostics so the UI can explain exact matte/halo removal counts, not only alpha cleanup counts.
+- Add subject-color protection for contrast-aware matte cleanup so legitimate foreground colors are not removed when they resemble a background artifact family.
 
 ## Sheet Slicing
 
@@ -236,7 +249,9 @@ The slicer also accepts an optional pivot. When present, that pivot is copied on
 
 Current slicing supports manual rectangular metadata and detected explicit frame metadata. The web viewport can draw manual frame rectangles on the source image by scaling frame metadata through the current grid scale. When detected frames include `sourceRect`, the viewport uses those exact source rectangles before Fix, then draws the packed native output rectangles after Fix. Detected row animation tags can be renamed in the timeline, assigned per-clip FPS and loop values, resized as per-animation cell rows, and exported as manifest animations with updated frame-name references.
 
-When Fix runs in a sheet-like mode, the core does not downsample the whole imported canvas as one image. It uses the current frame metadata as a fix plan: each frame is sampled from its own source rectangle, downsampled to its native frame rectangle, cleaned, and pasted into the output sheet. Palette extraction/remapping happens once after all frames are packed so animation colors stay stable across rows.
+When Fix runs in a sheet-like mode, the core does not downsample the whole imported canvas as one image. It uses the current frame metadata as a fix plan: each frame is sampled from its own source rectangle, cleaned or downsampled according to that frame's source/output dimensions, and pasted into the output sheet. Palette extraction/remapping happens once after all frames are packed so animation colors stay stable across rows.
+
+If a frame's source rectangle already matches the requested output rectangle, PixelAid treats it as source-sized cleanup. It copies the source frame into a working buffer and runs only the eligible source-resolution cleanup passes. That path preserves clean source-sized sheets and tilemaps, while still allowing alpha/matte cleanup and shared palette locking for dirty WebP or AI-exported atlases. If a frame must shrink from a larger pseudo-pixel source into a smaller native output, the normal block downsampling path still owns the conversion.
 
 The slicer can consume explicit detected frame metadata, including first-pass content-centered gutter normalization, mild drift fitting, conservative disconnected-component grouping, common row-label names, and presentation artifact source trims from sheet detection. It does not yet detect fully irregular gutters, arbitrary source text, or every semantic object/effect group. Those should be added as separate detection passes that produce editable frame metadata rather than mutating the source image.
 

@@ -38,7 +38,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | Single-sprite fix | Auto grid, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, `outline-repair-dual-tone`, `halo-transparent-edge`. | Output is native sized, palette-limited, transparent where expected, with no clipped outline. |
 | Sheet correction | Auto row/cell detection, manual add/remove/fill row fixes, frame drag/resize with undo. | `demo-palette-drift-walk`, `demo-uneven-labeled-sheet`, `drifted-effect-sheet`. | Detected row counts match expectations or are manually corrected; source/output timeline frames stay aligned. |
 | Palette | Auto/fixed/preset palettes, sheet lock, no dithering default, palette sidecar export. | Palette drift sample plus a high-color AI asset. | Palette count respects budget and animation does not shimmer from per-frame palette changes. |
-| Alpha | Preserve, binary, flood fill, color key, decontaminated transparent RGB. | Checkerboard matte icon and matte white sprite. | Preview looks clean on checker/light/dark/grass-style backgrounds. |
+| Alpha and matte cleanup | Preserve, binary, flood fill, color key, decontaminated transparent RGB, and chroma-matte review. | Checkerboard matte icon, matte white sprite, and a source-sized sheet with colored matte artifacts. | Preview looks clean on checker/light/dark/grass-style backgrounds, and subject colors are not removed during matte cleanup. |
 | Timeline/player | Input/output/compare sources, row animation selection, FPS, loop, direction, onion skin, normalized export toggle. | Multi-row animation sheet sample. | Playback is stable and selected row can be compared before/after after Fix. |
 | Tilesets/tilemaps | Repeat preview, seam diagnostics, conservative seam repair, tilemap grid confirmation, canonical tile ID export. | Broken tileset sample and one map-like image. | Seam warnings appear for known-bad sample, low-risk repair can be applied/undone, and tilemaps export generic metadata when ready while staying `inspectOnly` when tile identity confidence is low. |
 | Export | ZIP bundle, manifest, palette files, validation report, frame sequence, engine sidecars. | Sprite and animation sheet outputs. | Bundle opens, manifest frame rects/pivots/animations match preview, selected engine helper files exist. |
@@ -88,6 +88,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Desktop auto-update is deferred. | Public desktop builds should use signed artifacts where supported plus `SHA256SUMS.txt`; in-app updates remain future work. | Update feed/signing-key milestone. |
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
+| Subject-safe matte cleanup needs more coverage. | Current cleanup handles outside-connected green/teal and magenta/purple artifacts, but mixed subject/background hue cases need a dedicated regression. | `MIG-276` Aerith-style matte cleanup follow-up. |
 
 ## Privacy Rules
 
