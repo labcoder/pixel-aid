@@ -514,6 +514,7 @@ function restoreSubjectPixelsFromSource(image: RGBAImage, source: RGBAImage): RG
     return image;
   }
 
+  const protectedSourceDetails = buildSourceSubjectDetailMask(source);
   const output = createImage(image.width, image.height);
   output.data.set(image.data);
   for (let y = 0; y < output.height; y += 1) {
@@ -526,7 +527,8 @@ function restoreSubjectPixelsFromSource(image: RGBAImage, source: RGBAImage): RG
       const r = source.data[offset]!;
       const g = source.data[offset + 1]!;
       const b = source.data[offset + 2]!;
-      if (!isSubjectRestoreColor(r, g, b)) {
+      const pixel = offset / 4;
+      if (!isSubjectRestoreColor(r, g, b) && protectedSourceDetails[pixel] !== 1) {
         continue;
       }
 
@@ -540,7 +542,7 @@ function restoreSubjectPixelsFromSource(image: RGBAImage, source: RGBAImage): RG
       output.data[offset + 3] = 255;
     }
   }
-  return clearResidualMatteFromSource(output, source);
+  return clearResidualMatteFromSource(output, source, protectedSourceDetails);
 }
 
 function isSubjectRestoreColor(r: number, g: number, b: number): boolean {
@@ -579,7 +581,7 @@ function hasOpaqueNeighbor(image: RGBAImage, x: number, y: number): boolean {
   return false;
 }
 
-function clearResidualMatteFromSource(image: RGBAImage, source: RGBAImage): RGBAImage {
+function clearResidualMatteFromSource(image: RGBAImage, source: RGBAImage, protectedSourceDetails?: Uint8Array): RGBAImage {
   if (image.width !== source.width || image.height !== source.height) {
     return image;
   }
@@ -593,6 +595,11 @@ function clearResidualMatteFromSource(image: RGBAImage, source: RGBAImage): RGBA
     const g = image.data[offset + 1]!;
     const b = image.data[offset + 2]!;
     if (!isResidualMatteColor(r, g, b)) {
+      continue;
+    }
+
+    const pixel = offset / 4;
+    if (protectedSourceDetails?.[pixel] === 1) {
       continue;
     }
 
@@ -612,10 +619,138 @@ function clearResidualMatteFromSource(image: RGBAImage, source: RGBAImage): RGBA
 }
 
 function isResidualMatteColor(r: number, g: number, b: number): boolean {
+  return residualMatteFamilyMask(r, g, b) !== 0;
+}
+
+function residualMatteFamilyMask(r: number, g: number, b: number): number {
   const max = Math.max(r, g, b);
   const darkMagenta = max <= 120 && r >= 16 && b >= 16 && Math.min(r, b) - g >= 10;
+  if (darkMagenta) {
+    return 5;
+  }
+
   const darkGreen = max <= 140 && g >= 24 && g - r >= 18 && g - b >= 18;
-  return darkMagenta || darkGreen;
+  if (darkGreen) {
+    return 2;
+  }
+
+  return 0;
+}
+
+function buildSourceSubjectDetailMask(source: RGBAImage): Uint8Array {
+  const total = source.width * source.height;
+  const protectedDetails = new Uint8Array(total);
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+
+  for (let start = 0; start < total; start += 1) {
+    if (visited[start] === 1) {
+      continue;
+    }
+
+    const startOffset = start * 4;
+    if (source.data[startOffset + 3]! < 128) {
+      visited[start] = 1;
+      continue;
+    }
+
+    const family = sourceMatteDetailFamilyMask(source.data[startOffset]!, source.data[startOffset + 1]!, source.data[startOffset + 2]!);
+    if (family === 0) {
+      visited[start] = 1;
+      continue;
+    }
+
+    let read = 0;
+    let write = 0;
+    let touchesOutside = false;
+    let subjectSupport = 0;
+    let outsideContact = 0;
+    queue[write] = start;
+    write += 1;
+    visited[start] = 1;
+
+    while (read < write) {
+      const pixel = queue[read]!;
+      read += 1;
+      const x = pixel % source.width;
+      const y = Math.floor(pixel / source.width);
+      if (x === 0 || y === 0 || x === source.width - 1 || y === source.height - 1) {
+        touchesOutside = true;
+        outsideContact += 1;
+      }
+
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= source.width || ny >= source.height) {
+            touchesOutside = true;
+            outsideContact += 1;
+            continue;
+          }
+
+          const neighbor = ny * source.width + nx;
+          const neighborOffset = neighbor * 4;
+          if (source.data[neighborOffset + 3]! < 128) {
+            touchesOutside = true;
+            outsideContact += 1;
+            continue;
+          }
+
+          const nr = source.data[neighborOffset]!;
+          const ng = source.data[neighborOffset + 1]!;
+          const nb = source.data[neighborOffset + 2]!;
+          const neighborFamily = sourceMatteDetailFamilyMask(nr, ng, nb);
+          if (neighborFamily === family) {
+            if (visited[neighbor] !== 1) {
+              visited[neighbor] = 1;
+              queue[write] = neighbor;
+              write += 1;
+            }
+            continue;
+          }
+
+          if (neighborFamily === 0 && !isPaletteArtifactChromaColor(nr, ng, nb)) {
+            subjectSupport += 1;
+          }
+        }
+      }
+    }
+
+    const requiredSubjectSupport = touchesOutside ? 4 : 2;
+    if (subjectSupport < requiredSubjectSupport || (touchesOutside && (write > 64 || subjectSupport < outsideContact * 2))) {
+      continue;
+    }
+
+    for (let index = 0; index < write; index += 1) {
+      protectedDetails[queue[index]!] = 1;
+    }
+  }
+
+  return protectedDetails;
+}
+
+function sourceMatteDetailFamilyMask(r: number, g: number, b: number): number {
+  const residual = residualMatteFamilyMask(r, g, b);
+  if (residual !== 0) {
+    return residual;
+  }
+
+  const greenDetail = g >= 48 && g - r >= 18 && g - b >= 12;
+  if (greenDetail) {
+    return 2;
+  }
+
+  const magentaDetail = r >= 64 && b >= 48 && Math.min(r, b) - g >= 16;
+  if (magentaDetail) {
+    return 5;
+  }
+
+  return 0;
 }
 
 function inferNativeScaleFrame(image: RGBAImage): GridCandidate | undefined {
@@ -1216,6 +1351,7 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
   const bucketR = new Uint32Array(4096);
   const bucketG = new Uint32Array(4096);
   const bucketB = new Uint32Array(4096);
+  const supportedDetails = buildSourceSubjectDetailMask(image);
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
@@ -1223,12 +1359,15 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
       if (image.data[offset + 3]! < 128) {
         continue;
       }
+      if (supportedDetails[y * image.width + x] !== 1) {
+        continue;
+      }
 
       const r = image.data[offset]!;
       const g = image.data[offset + 1]!;
       const b = image.data[offset + 2]!;
-      const family = subjectDetailFamilyMask(r, g, b);
-      if (family === 0 || !hasSubjectDetailPaletteSupport(image, x, y, family)) {
+      const family = sourceMatteDetailFamilyMask(r, g, b);
+      if (family === 0) {
         continue;
       }
 
@@ -1240,8 +1379,11 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
     }
   }
 
+  const bucketScores = new Float64Array(4096);
+  const bucketFamilies = new Uint8Array(4096);
+  const selectedBuckets = new Uint8Array(4096);
   const bestBucketByFamily = new Int32Array(8);
-  const bestCountByFamily = new Uint32Array(8);
+  const bestScoreByFamily = new Float64Array(8);
   bestBucketByFamily.fill(-1);
 
   for (let bucket = 0; bucket < bucketCounts.length; bucket += 1) {
@@ -1253,13 +1395,18 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
     const r = Math.round(bucketR[bucket]! / count);
     const g = Math.round(bucketG[bucket]! / count);
     const b = Math.round(bucketB[bucket]! / count);
-    const family = subjectDetailFamilyMask(r, g, b);
-    if (family === 0 || family >= bestBucketByFamily.length || count <= bestCountByFamily[family]!) {
+    const family = sourceMatteDetailFamilyMask(r, g, b);
+    if (family === 0 || family >= bestBucketByFamily.length) {
       continue;
     }
 
-    bestBucketByFamily[family] = bucket;
-    bestCountByFamily[family] = count;
+    const score = colorfulness(r, g, b) * 256 + Math.min(count, 255);
+    bucketScores[bucket] = score;
+    bucketFamilies[bucket] = family;
+    if (score > bestScoreByFamily[family]!) {
+      bestBucketByFamily[family] = bucket;
+      bestScoreByFamily[family] = score;
+    }
   }
 
   const colors: string[] = [];
@@ -1270,17 +1417,40 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
       continue;
     }
 
-    const count = bestCountByFamily[family]!;
-    colors.push(
-      rgbToHex(
-        (Math.round(bucketR[bucket]! / count) << 16) |
-          (Math.round(bucketG[bucket]! / count) << 8) |
-          Math.round(bucketB[bucket]! / count)
-      )
-    );
+    selectedBuckets[bucket] = 1;
+    colors.push(rgbFromSubjectDetailBucket(bucketR, bucketG, bucketB, bucketCounts, bucket));
+  }
+
+  while (colors.length < limit) {
+    let bestBucket = -1;
+    let bestScore = 0;
+    for (let bucket = 0; bucket < bucketScores.length; bucket += 1) {
+      const score = bucketScores[bucket]!;
+      if (score <= bestScore || selectedBuckets[bucket] === 1 || bucketFamilies[bucket] === 0) {
+        continue;
+      }
+      bestBucket = bucket;
+      bestScore = score;
+    }
+
+    if (bestBucket < 0) {
+      break;
+    }
+
+    selectedBuckets[bestBucket] = 1;
+    colors.push(rgbFromSubjectDetailBucket(bucketR, bucketG, bucketB, bucketCounts, bestBucket));
   }
 
   return colors;
+}
+
+function rgbFromSubjectDetailBucket(bucketR: Uint32Array, bucketG: Uint32Array, bucketB: Uint32Array, bucketCounts: Uint32Array, bucket: number): string {
+  const count = bucketCounts[bucket]!;
+  return rgbToHex(
+    (Math.round(bucketR[bucket]! / count) << 16) |
+      (Math.round(bucketG[bucket]! / count) << 8) |
+      Math.round(bucketB[bucket]! / count)
+  );
 }
 
 function shouldReserveSubjectDetailPaletteColors(options: FixOptions): boolean {
@@ -1292,66 +1462,8 @@ function shouldReserveSubjectDetailPaletteColors(options: FixOptions): boolean {
   );
 }
 
-function subjectDetailFamilyMask(r: number, g: number, b: number): number {
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const spread = max - min;
-  if (max < 48 || spread < 28 || colorfulness(r, g, b) < 64) {
-    return 0;
-  }
-
-  const threshold = max - Math.max(20, Math.round(spread * 0.35));
-  let mask = 0;
-  if (r >= threshold) {
-    mask |= 1;
-  }
-  if (g >= threshold) {
-    mask |= 2;
-  }
-  if (b >= threshold) {
-    mask |= 4;
-  }
-  return mask;
-}
-
 function colorfulness(r: number, g: number, b: number): number {
   return Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
-}
-
-function hasSubjectDetailPaletteSupport(image: RGBAImage, x: number, y: number, family: number): boolean {
-  let subjectNeighbors = 0;
-  for (let dy = -1; dy <= 1; dy += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
-      if (dx === 0 && dy === 0) {
-        continue;
-      }
-
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
-        continue;
-      }
-
-      const offset = (ny * image.width + nx) * 4;
-      if (image.data[offset + 3]! < 128) {
-        continue;
-      }
-
-      const r = image.data[offset]!;
-      const g = image.data[offset + 1]!;
-      const b = image.data[offset + 2]!;
-      if (subjectDetailFamilyMask(r, g, b) === family || isPaletteArtifactChromaColor(r, g, b)) {
-        continue;
-      }
-
-      subjectNeighbors += 1;
-      if (subjectNeighbors >= 2) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 function isPaletteArtifactChromaColor(r: number, g: number, b: number): boolean {

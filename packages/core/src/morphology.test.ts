@@ -328,6 +328,60 @@ describe("matte-aware morphology cleanup", () => {
     expect(result.diagnostics?.morphology?.mattePixels).toBeGreaterThanOrEqual(1);
   });
 
+  test("fixImage keeps supported foreground greens in source-sized sheet frames", () => {
+    const { image, eye, stem } = createSubjectSafeMatteFixture();
+    const brightStem: Pixel = [79, 174, 53, 255];
+    setTestPixel(image, 5, 4, brightStem);
+
+    const result = fixImage(image, {
+      mode: "spriteSheet",
+      assetType: "animationSheet",
+      targetWidth: 9,
+      targetHeight: 7,
+      maxColors: 16,
+      grid: { detect: "manual", scale: 1 },
+      downscale: "dominant",
+      alpha: "binary",
+      alphaSettings: { threshold: 128, decontaminateRgb: true },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        inferNativeScale: true,
+        morphology: {
+          enabled: true,
+          matteCleanup: true,
+          alphaThreshold: 128
+        }
+      },
+      sheet: {
+        frameWidth: 9,
+        frameHeight: 7,
+        rows: 1,
+        columns: 1,
+        margin: 0,
+        spacing: 0,
+        extrude: 0
+      },
+      sheetFrames: [
+        {
+          name: "frame_0",
+          rect: { x: 0, y: 0, w: 9, h: 7 },
+          sourceRect: { x: 0, y: 0, w: 9, h: 7 },
+          pivot: { x: 4, y: 6 },
+          durationMs: 100
+        }
+      ]
+    });
+
+    expect(getTestPixel(result.image, 1, 3)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 4, 2)).toEqual(eye);
+    expect(getTestPixel(result.image, 4, 4)).toEqual(stem);
+    expect(getTestPixel(result.image, 5, 4)).toEqual(brightStem);
+  });
+
   test("fixImage preserves supported matte-family subject details through tight palette reduction", () => {
     const { image, eye, stem } = createSubjectSafeMatteFixture();
     const dominantColors: Pixel[] = [
