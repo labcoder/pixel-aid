@@ -15,6 +15,8 @@ npm run desktop:checksums
 
 The desktop build commands require the Rust toolchain and Cargo to be installed. `npm run desktop:check` reports missing prerequisites before packaging starts. The normal root `npm run build` command intentionally stays focused on the TypeScript workspaces so web/core verification can pass on machines that do not have Rust installed yet.
 
+On Windows, the desktop npm scripts automatically enter the Visual Studio C++ toolchain environment before running Tauri. This keeps Git Bash compatible even when `link.exe` would otherwise resolve to Git's GNU utility at `C:\Program Files\Git\usr\bin\link.exe`. If you run raw `cargo` or `tauri` commands from Git Bash, launch the shell through `VsDevCmd.bat` or ensure the MSVC linker directory is before Git's `usr\bin` on `PATH`.
+
 Unsigned local builds can use `npm run desktop:build`. Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory.
 
 ## Structure

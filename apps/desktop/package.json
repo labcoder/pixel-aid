@@ -5,12 +5,12 @@
   "type": "module",
   "description": "Tauri desktop shell for the PixelAid web editor.",
   "scripts": {
-    "dev": "tauri dev",
+    "dev": "node scripts/run-tauri.mjs dev",
     "check": "node scripts/check-desktop-prereqs.mjs",
     "release:check": "node scripts/check-desktop-release-env.mjs --platform all",
     "checksums": "node scripts/create-desktop-checksums.mjs",
-    "desktop:build": "tauri build",
-    "info": "tauri info",
+    "desktop:build": "node scripts/run-tauri.mjs build",
+    "info": "node scripts/run-tauri.mjs info",
     "test": "node --test scripts/*.test.mjs"
   },
   "dependencies": {

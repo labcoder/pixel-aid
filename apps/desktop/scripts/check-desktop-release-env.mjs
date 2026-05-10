@@ -1,5 +1,3 @@
-/* global console, process */
-
 import { pathToFileURL } from "node:url";
 
 const platformLabels = {

@@ -3,7 +3,15 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: ["**/dist/**", "**/coverage/**", "**/node_modules/**", "**/.worktrees/**", "docs/internal/**"]
+    ignores: [
+      "**/dist/**",
+      "**/coverage/**",
+      "**/node_modules/**",
+      "**/.worktrees/**",
+      "apps/desktop/src-tauri/gen/**",
+      "apps/desktop/src-tauri/target/**",
+      "docs/internal/**"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -23,7 +31,7 @@ export default [
     }
   },
   {
-    files: ["scripts/**/*.mjs"],
+    files: ["scripts/**/*.mjs", "apps/desktop/scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         console: "readonly",

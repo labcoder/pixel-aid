@@ -7,7 +7,7 @@
     "beforeDevCommand": "npm run dev -w @pixelaid/web",
     "devUrl": "http://127.0.0.1:5173",
     "beforeBuildCommand": "npm run build -w @pixelaid/web",
-    "frontendDist": "../web/dist"
+    "frontendDist": "../../web/dist"
   },
   "app": {
     "windows": [

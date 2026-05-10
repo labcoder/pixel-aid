@@ -43,6 +43,8 @@ npm run test
 
 `npm run desktop:dev` launches Tauri in development mode and uses the web dev server. `npm run desktop:build` runs the desktop prerequisite check and then calls Tauri packaging.
 
+On Windows, the desktop npm scripts run Tauri through the Visual Studio C++ toolchain environment. This avoids a common Git Bash collision where `link.exe` resolves to Git's GNU utility instead of Microsoft's MSVC linker. Prefer these npm scripts over raw `cargo` or `tauri` commands from Git Bash.
+
 ## Development Notes
 
 - The desktop shell should stay thin. Put editor behavior in `apps/web` or shared workspace packages.
