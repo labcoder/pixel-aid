@@ -2,11 +2,12 @@
 
 PixelAid automation exposes the same deterministic fix/export pipeline used by the editor without requiring the browser UI. The goal is to make AI-agent workflows boring and reliable: inspect an image, choose settings, fix it, export metadata, and hand clean assets to a game project.
 
-The automation surface is split into three packages:
+The automation surface is split into four packages:
 
 - `@pixelaid/automation`: shared Node-safe operations, PNG/JPEG/WebP input IO, PNG output encoding, option normalization, safe output planning, and JSON result envelopes.
 - `@pixelaid/cli`: the `pixelaid` command-line interface.
-- `@pixelaid/mcp`: MCP-ready tool definitions and direct handlers. A long-running MCP server process is intentionally deferred.
+- `@pixelaid/mcp`: MCP-ready tool definitions, direct handlers, JSON-RPC request handling, and a local stdio server.
+- `@pixelaid/http`: localhost-only HTTP-style handlers, a job store, cancellation, and a small Node server factory for future local API work.
 
 The core fixer remains offline-capable. No automation package calls AI providers or requires API keys.
 
@@ -19,7 +20,7 @@ npm run build
 node packages/cli/dist/bin.cjs inspect input.png --json
 ```
 
-During development, tests import `runCli` directly. Published packaging can expose the `pixelaid` binary from `packages/cli/dist/bin.js`.
+During development, tests import `runCli` directly. Published packaging can expose the `pixelaid` binary from `packages/cli/dist/bin.cjs`.
 
 Common commands:
 
@@ -231,7 +232,7 @@ Errors keep the same PixelAid automation envelope as the CLI.
 
 ## Deferred
 
-- Local HTTP API.
 - Additional codecs beyond PNG/JPEG/WebP input.
 - Direct AI-provider generation or editing calls.
 - Streaming progress events for CLI/MCP jobs.
+- Public HTTP API packaging, authentication, and remote access support.
