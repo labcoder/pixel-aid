@@ -88,7 +88,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Desktop auto-update is deferred. | Public desktop builds should use signed artifacts where supported plus `SHA256SUMS.txt`; in-app updates remain future work. | Update feed/signing-key milestone. |
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
-| Subject-safe matte cleanup needs more coverage. | Current cleanup handles outside-connected green/teal and magenta/purple artifacts, but mixed subject/background hue cases need a dedicated regression. | `MIG-276` Aerith-style matte cleanup follow-up. |
+| Subject-safe matte cleanup needs broader real-world coverage. | Current cleanup removes outside-connected matte artifacts while preserving supported foreground colors from the same hue family, but beta assets should expand the regression corpus. | Beta fixture expansion milestone. |
 
 ## Privacy Rules
 

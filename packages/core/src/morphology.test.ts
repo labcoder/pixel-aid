@@ -102,6 +102,49 @@ function countVisibleChromaMattePixels(image: RGBAImage): number {
   return count;
 }
 
+function createSubjectSafeMatteFixture(): {
+  image: RGBAImage;
+  eye: Pixel;
+  stem: Pixel;
+} {
+  const transparentMagenta: Pixel = [255, 0, 255, 0];
+  const lowAlphaGreenHint: Pixel = [0, 220, 0, 32];
+  const greenSubject: Pixel = [28, 125, 54, 255];
+  const greenArtifact: Pixel = [0, 220, 0, 255];
+  const outline: Pixel = [24, 18, 22, 255];
+  const skin: Pixel = [242, 205, 158, 255];
+  const hair: Pixel = [118, 70, 34, 255];
+  const dress: Pixel = [205, 58, 72, 255];
+  const flower: Pixel = [246, 228, 106, 255];
+  const image = createSolidImage(9, 7, transparentMagenta);
+
+  setTestPixel(image, 0, 0, lowAlphaGreenHint);
+  setTestPixel(image, 8, 6, lowAlphaGreenHint);
+  setTestPixel(image, 1, 3, greenArtifact);
+
+  setTestPixel(image, 3, 1, outline);
+  setTestPixel(image, 4, 1, hair);
+  setTestPixel(image, 5, 1, outline);
+  setTestPixel(image, 3, 2, skin);
+  setTestPixel(image, 4, 2, greenSubject);
+  setTestPixel(image, 5, 2, skin);
+  setTestPixel(image, 3, 3, outline);
+  setTestPixel(image, 4, 3, skin);
+  setTestPixel(image, 5, 3, outline);
+  setTestPixel(image, 3, 4, dress);
+  setTestPixel(image, 4, 4, greenSubject);
+  setTestPixel(image, 5, 4, flower);
+  setTestPixel(image, 3, 5, outline);
+  setTestPixel(image, 4, 5, dress);
+  setTestPixel(image, 5, 5, outline);
+
+  return {
+    image,
+    eye: greenSubject,
+    stem: greenSubject
+  };
+}
+
 describe("binary mask morphology", () => {
   test("openMask removes isolated noise without erasing a solid subject block", () => {
     const source = maskFromRows(["#.....", "..###.", "..###.", "..###.", "......"]);
@@ -234,6 +277,106 @@ describe("alpha-scoped morphology cleanup", () => {
 });
 
 describe("matte-aware morphology cleanup", () => {
+  test("preserves foreground detail colors that also appear as exterior matte hints", () => {
+    const { image, eye, stem } = createSubjectSafeMatteFixture();
+
+    const result = applyMorphologyCleanup(image, {
+      enabled: true,
+      matteCleanup: true,
+      alphaThreshold: 128
+    });
+
+    expect(getTestPixel(result.image, 1, 3)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 4, 2)).toEqual(eye);
+    expect(getTestPixel(result.image, 4, 4)).toEqual(stem);
+    expect(result.diagnostics.mattePixels).toBeGreaterThanOrEqual(1);
+    expect(result.diagnostics.matteColorCount).toBeGreaterThan(0);
+  });
+
+  test("fixImage keeps supported foreground greens while removing exterior green matte", () => {
+    const { image, eye, stem } = createSubjectSafeMatteFixture();
+    const options: FixOptions = {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 9,
+      targetHeight: 7,
+      maxColors: 16,
+      grid: { detect: "manual", scale: 1 },
+      downscale: "dominant",
+      alpha: "binary",
+      alphaSettings: { threshold: 128, decontaminateRgb: true },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        morphology: {
+          enabled: true,
+          matteCleanup: true,
+          alphaThreshold: 128
+        }
+      }
+    };
+
+    const result = fixImage(image, options);
+
+    expect(getTestPixel(result.image, 1, 3)).toEqual([0, 0, 0, 0]);
+    expect(getTestPixel(result.image, 4, 2)).toEqual(eye);
+    expect(getTestPixel(result.image, 4, 4)).toEqual(stem);
+    expect(result.palette).toContain("#1c7d36");
+    expect(result.diagnostics?.morphology?.mattePixels).toBeGreaterThanOrEqual(1);
+  });
+
+  test("fixImage preserves supported matte-family subject details through tight palette reduction", () => {
+    const { image, eye, stem } = createSubjectSafeMatteFixture();
+    const dominantColors: Pixel[] = [
+      [176, 96, 42, 255],
+      [206, 135, 74, 255],
+      [236, 164, 108, 255],
+      [248, 186, 154, 255],
+      [96, 52, 38, 255],
+      [138, 62, 82, 255],
+      [214, 84, 116, 255],
+      [246, 136, 164, 255]
+    ];
+
+    for (let y = 1; y <= 4; y += 1) {
+      for (let x = 6; x <= 7; x += 1) {
+        setTestPixel(image, x, y, dominantColors[(y - 1) * 2 + (x - 6)]!);
+      }
+    }
+
+    const result = fixImage(image, {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 9,
+      targetHeight: 7,
+      maxColors: 4,
+      grid: { detect: "manual", scale: 1 },
+      downscale: "dominant",
+      alpha: "binary",
+      alphaSettings: { threshold: 128, decontaminateRgb: true },
+      cleanup: {
+        removeOrphans: false,
+        jaggyCleanup: false,
+        preserveSinglePixelDetails: true,
+        removeHalos: false,
+        denoiseStrength: 0,
+        morphology: {
+          enabled: true,
+          matteCleanup: true,
+          alphaThreshold: 128
+        }
+      }
+    });
+
+    expect(getTestPixel(result.image, 4, 2)).toEqual(eye);
+    expect(getTestPixel(result.image, 4, 4)).toEqual(stem);
+    expect(result.palette).toContain("#1c7d36");
+    expect(result.palette.length).toBeLessThanOrEqual(4);
+  });
+
   test("clears saturated matte fringe without erasing dark outlines or pale subject pixels", () => {
     const transparentMagenta: Pixel = [255, 0, 255, 0];
     const matteMagenta: Pixel = [255, 0, 255, 255];

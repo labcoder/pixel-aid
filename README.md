@@ -153,7 +153,7 @@ Automation:
 
 - Single-sprite cleanup now includes conservative mask repair, halo removal, matte cleanup, outline padding, and focused golden tests, but broader real-image coverage is still needed.
 - Grid detection exposes candidate previews/confidence explanations and now handles more regular source-sized atlas cases, but local drift correction is still limited and fully irregular sheets still need manual correction.
-- Contrast-aware matte cleanup is still being hardened. The current pass removes green/teal and magenta/purple matte artifacts well when they are outside-connected, but it can over-remove legitimate subject colors that share the artifact hue family. `MIG-276` tracks subject-color protection for cases such as green eyes or flower stems on a magenta-background sheet.
+- Contrast-aware matte cleanup now removes outside-connected matte artifacts without globally deleting a hue family, so foreground details such as green eyes or flower stems can survive even when similar colors appear in the background matte. Broader real-world coverage is still needed for unusual matte colors and subject palettes.
 - Palette libraries and basic palette editing are implemented. Advanced palette harmonization, project-wide palette governance, and richer palette-analysis views remain future work.
 - Sheet controls are partly automatic for clear row-based, outlined-grid, regular content-centered unboxed sheets, mild disconnected-component drift cases, and common row labels such as IDLE/WALK/JUMP/SHOOT/TAKE DAMAGE/DEATH. Detected rows can use different animation cell sizes, but fully irregular per-frame cell sizes, semantic grouping of complex effects, full OCR, per-engine normalized atlas options, and imported timesheet editing are not implemented yet.
 - Export currently supports generic manifests plus Godot, Unity, Phaser, TexturePacker-compatible, Tiled, and LDtk helper files.
@@ -165,15 +165,14 @@ Automation:
 
 ## Prioritized Roadmap
 
-1. Subject-safe matte cleanup: protect foreground colors while removing connected background artifacts, then add Aerith-style regression coverage.
-2. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
-3. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
-4. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
-5. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
-6. Exporters: deepen tilemap metadata and project-specific map editor workflows when those workflows mature.
-7. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, viewport render instrumentation, and the planned Rust/WASM prototype only if benchmarks justify it.
-8. Automation hardening: add a local HTTP API, add additional codecs, and support progress events for long batch jobs.
-9. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
+1. Single-sprite cleanup quality: add stronger fixture/golden tests, denoise tuning, connected-component tuning, and crop/outline cleanup metadata in exported manifests.
+2. Sprite-sheet workflow: add stronger irregular-gutter/component/label fixtures, per-frame trim/origin controls, per-engine normalized atlas options, and editable confidence explanations.
+3. Timeline and player: add onion-skin opacity/range options, richer timesheet editing, and row-label correction controls.
+4. Palette workflow: deepen palette-library workflows with palette analysis, batch/project palette governance, palette harmonization, and safer animation-specific dither guidance.
+5. Exporters: deepen tilemap metadata and project-specific map editor workflows when those workflows mature.
+6. Performance hardening: add cooperative cancellation, progress phases, buffer reuse, large-image benchmarks, viewport render instrumentation, and the planned Rust/WASM prototype only if benchmarks justify it.
+7. Automation hardening: add a local HTTP API, add additional codecs, and support progress events for long batch jobs.
+8. AI integrations: add provider interfaces and provenance metadata later, without API keys in source and without coupling the core to network services.
 
 ## Suggested Next Step
 

@@ -169,7 +169,7 @@ The pass estimates corner background color, finds visible edge pixels adjacent t
 
 The pass reads from the source image and writes to a cloned output buffer, so corrected halo pixels do not cascade into later replacements during the same pass. It avoids using pale neutral matte pixels as replacement colors, preserves colored soft-alpha glow by requiring semi-transparent halo candidates to be background-like or pale/neutral, and keeps true border background pixels from being recolored.
 
-The current matte cleanup model still needs one important improvement: subject-color protection. A color should not be removed globally just because the same hue appears in background artifacts. The Aerith sheet showed this with green eyes and a green flower stem on a magenta-matte sheet. The next matte cleanup pass should learn matte colors from outside/background connectivity and protect the same colors when they appear inside foreground components.
+Matte cleanup is subject-safe rather than hue-family based. It learns matte candidates from outside/background connectivity, low-alpha contamination, and outside-connected chroma artifacts, then protects the same hue when it has foreground support inside a visible subject component. This prevents cases like green eyes or flower stems being deleted just because similar greens appeared in the matte. Palette refinement also follows the cleaned visible pixels instead of dropping broad green or magenta families globally.
 
 ## Alpha Cleanup
 
@@ -239,7 +239,7 @@ Remaining quality targets:
 - Tune connected-component thresholds against more real samples.
 - Expand real-world golden coverage beyond the current focused single-sprite and sheet-frame comparisons.
 - Expand diagnostics so the UI can explain exact matte/halo removal counts, not only alpha cleanup counts.
-- Add subject-color protection for contrast-aware matte cleanup so legitimate foreground colors are not removed when they resemble a background artifact family.
+- Expand subject-color preservation fixtures for contrast-aware matte cleanup so more legitimate foreground colors are protected when they resemble a background artifact family.
 
 ## Sheet Slicing
 

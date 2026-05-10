@@ -512,7 +512,9 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
         }
 
         if (
-          (candidate === "fallback" && hasStrongLocalColorSupport(output, outsideMask, x, y, alphaThreshold)) ||
+          (candidate === "fallback" &&
+            (hasStrongLocalColorSupport(output, outsideMask, x, y, alphaThreshold) ||
+              hasSubjectColorSupport(output, outsideMask, x, y, alphaThreshold, hints, 2))) ||
           (candidate === "protectedHint" && hasSubjectColorNeighbor(output, outsideMask, x, y, alphaThreshold, hints))
         ) {
           continue;
@@ -542,14 +544,24 @@ function applyMatteCleanup(image: RGBAImage, alphaThreshold: number): MatteClean
     clearedPixels += passCleared;
   }
 
-  clearedPixels += clearResidualDarkDominantMatte(output, hints, alphaThreshold);
+  clearedPixels += clearResidualDarkDominantMatte(output, outsideMask, hints, alphaThreshold);
 
   return { image: output, clearedPixels, hintColorCount: hints.count };
 }
 
-function clearResidualDarkDominantMatte(image: RGBAImage, hints: MatteHints, alphaThreshold: number): number {
+function clearResidualDarkDominantMatte(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  hints: MatteHints,
+  alphaThreshold: number
+): number {
   let clearedPixels = 0;
-  for (let offset = 0; offset < image.data.length; offset += 4) {
+  for (let index = 0; index < outsideMask.length; index += 1) {
+    if (outsideMask[index] === 1) {
+      continue;
+    }
+
+    const offset = index * 4;
     if (image.data[offset + 3]! < alphaThreshold) {
       continue;
     }
@@ -561,10 +573,17 @@ function clearResidualDarkDominantMatte(image: RGBAImage, hints: MatteHints, alp
       continue;
     }
 
+    const x = index % image.width;
+    const y = Math.floor(index / image.width);
+    if (hasSubjectColorNeighbor(image, outsideMask, x, y, alphaThreshold, hints)) {
+      continue;
+    }
+
     image.data[offset] = 0;
     image.data[offset + 1] = 0;
     image.data[offset + 2] = 0;
     image.data[offset + 3] = 0;
+    outsideMask[index] = 1;
     clearedPixels += 1;
   }
   return clearedPixels;
@@ -625,7 +644,9 @@ function clearExteriorConnectedMatte(
         }
 
         if (
-          (candidate === "fallback" && hasStrongLocalColorSupport(image, outsideMask, nx, ny, alphaThreshold)) ||
+          (candidate === "fallback" &&
+            (hasStrongLocalColorSupport(image, outsideMask, nx, ny, alphaThreshold) ||
+              hasSubjectColorSupport(image, outsideMask, nx, ny, alphaThreshold, hints, 2))) ||
           (candidate === "protectedHint" && hasSubjectColorNeighbor(image, outsideMask, nx, ny, alphaThreshold, hints))
         ) {
           continue;
@@ -911,6 +932,18 @@ function hasSubjectColorNeighbor(
   alphaThreshold: number,
   hints: MatteHints
 ): boolean {
+  return hasSubjectColorSupport(image, outsideMask, x, y, alphaThreshold, hints, 1);
+}
+
+function hasSubjectColorSupport(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  hints: MatteHints,
+  minNeighbors: number
+): boolean {
   let subjectNeighbors = 0;
   for (let dy = -1; dy <= 1; dy += 1) {
     for (let dx = -1; dx <= 1; dx += 1) {
@@ -939,7 +972,7 @@ function hasSubjectColorNeighbor(
       const b = image.data[offset + 2]!;
       if (!matchesMatteHint(r, g, b, hints) && !isArtificialChromaMatteColor(r, g, b)) {
         subjectNeighbors += 1;
-        if (subjectNeighbors >= 1) {
+        if (subjectNeighbors >= minNeighbors) {
           return true;
         }
       }

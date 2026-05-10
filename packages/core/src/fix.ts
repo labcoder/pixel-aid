@@ -113,7 +113,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 70, "Resolving palette");
   assertNotCancelled(runtime?.signal);
-  const reservedPalette = reservedOutlinePalette(options);
+  const reservedPalette = reservedPaletteForCleanup(outlineCleaned, options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = measurePhase(phaseTimer, "palette-extraction", () =>
     resolvePalette(outlineCleaned, {
@@ -245,7 +245,7 @@ function fixSheetFrames(
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 75, "Resolving sheet palette");
   assertNotCancelled(runtime?.signal);
-  const reservedPalette = reservedOutlinePalette(options);
+  const reservedPalette = reservedPaletteForCleanup(packed, options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = measurePhase(phaseTimer, "palette-extraction", () =>
     resolvePalette(packed, {
@@ -711,43 +711,12 @@ function resolvePaletteSettings(options: FixOptions, reservedColors: readonly st
 }
 
 function refinePaletteForCleanup(palette: readonly string[], options: FixOptions): string[] {
-  const matteFiltered = shouldFilterMattePaletteColors(options) ? filterMattePaletteColors(palette) : [...palette];
+  const matteFiltered = [...palette];
   if (!shouldMergeNearbyAutoPaletteColors(options)) {
     return matteFiltered;
   }
 
   return mergeNearbyPaletteColors(matteFiltered, 24 * 24);
-}
-
-function shouldFilterMattePaletteColors(options: FixOptions): boolean {
-  return (
-    options.cleanup.morphology?.enabled === true &&
-    options.cleanup.morphology.matteCleanup === true &&
-    options.paletteSettings?.mode !== "fixed" &&
-    options.palette === undefined
-  );
-}
-
-function filterMattePaletteColors(palette: readonly string[]): string[] {
-  const kept: string[] = [];
-  for (const color of palette) {
-    const parsed = tryParseHexColor(color);
-    if (parsed !== null && isMattePaletteArtifactColor(parsed)) {
-      continue;
-    }
-    kept.push(color);
-  }
-
-  return kept.length >= Math.min(4, palette.length) ? kept : [...palette];
-}
-
-function isMattePaletteArtifactColor(color: number): boolean {
-  const r = (color >> 16) & 0xff;
-  const g = (color >> 8) & 0xff;
-  const b = color & 0xff;
-  const green = g >= 24 && g - r >= 18 && g - b >= 18;
-  const magenta = r >= 48 && b >= 40 && Math.min(r, b) - g >= 18;
-  return green || magenta;
 }
 
 function shouldMergeNearbyAutoPaletteColors(options: FixOptions): boolean {
@@ -1217,6 +1186,10 @@ function estimateImageCornerColor(image: RGBAImage): [number, number, number, nu
   return [Math.round(r / count), Math.round(g / count), Math.round(b / count), Math.round(a / count)];
 }
 
+function reservedPaletteForCleanup(image: RGBAImage, options: FixOptions): string[] {
+  return [...reservedOutlinePalette(options), ...subjectDetailPaletteColors(image, options)];
+}
+
 function reservedOutlinePalette(options: FixOptions): string[] {
   if ((options.cleanup.outlineMode ?? "none") === "none") {
     return [];
@@ -1230,6 +1203,165 @@ function reservedOutlinePalette(options: FixOptions): string[] {
     colors.push(...options.cleanup.outlineSourceColors);
   }
   return colors;
+}
+
+const MAX_SUBJECT_DETAIL_PALETTE_COLORS = 6;
+
+function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): string[] {
+  if (!shouldReserveSubjectDetailPaletteColors(options)) {
+    return [];
+  }
+
+  const bucketCounts = new Uint32Array(4096);
+  const bucketR = new Uint32Array(4096);
+  const bucketG = new Uint32Array(4096);
+  const bucketB = new Uint32Array(4096);
+
+  for (let y = 0; y < image.height; y += 1) {
+    for (let x = 0; x < image.width; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      if (image.data[offset + 3]! < 128) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const family = subjectDetailFamilyMask(r, g, b);
+      if (family === 0 || !hasSubjectDetailPaletteSupport(image, x, y, family)) {
+        continue;
+      }
+
+      const bucket = ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
+      bucketCounts[bucket] = bucketCounts[bucket]! + 1;
+      bucketR[bucket] = bucketR[bucket]! + r;
+      bucketG[bucket] = bucketG[bucket]! + g;
+      bucketB[bucket] = bucketB[bucket]! + b;
+    }
+  }
+
+  const bestBucketByFamily = new Int32Array(8);
+  const bestCountByFamily = new Uint32Array(8);
+  bestBucketByFamily.fill(-1);
+
+  for (let bucket = 0; bucket < bucketCounts.length; bucket += 1) {
+    const count = bucketCounts[bucket]!;
+    if (count === 0) {
+      continue;
+    }
+
+    const r = Math.round(bucketR[bucket]! / count);
+    const g = Math.round(bucketG[bucket]! / count);
+    const b = Math.round(bucketB[bucket]! / count);
+    const family = subjectDetailFamilyMask(r, g, b);
+    if (family === 0 || family >= bestBucketByFamily.length || count <= bestCountByFamily[family]!) {
+      continue;
+    }
+
+    bestBucketByFamily[family] = bucket;
+    bestCountByFamily[family] = count;
+  }
+
+  const colors: string[] = [];
+  const limit = Math.max(0, Math.min(MAX_SUBJECT_DETAIL_PALETTE_COLORS, options.maxColors));
+  for (let family = 1; family < bestBucketByFamily.length && colors.length < limit; family += 1) {
+    const bucket = bestBucketByFamily[family]!;
+    if (bucket < 0) {
+      continue;
+    }
+
+    const count = bestCountByFamily[family]!;
+    colors.push(
+      rgbToHex(
+        (Math.round(bucketR[bucket]! / count) << 16) |
+          (Math.round(bucketG[bucket]! / count) << 8) |
+          Math.round(bucketB[bucket]! / count)
+      )
+    );
+  }
+
+  return colors;
+}
+
+function shouldReserveSubjectDetailPaletteColors(options: FixOptions): boolean {
+  return (
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true &&
+    options.paletteSettings?.mode !== "fixed" &&
+    options.palette === undefined
+  );
+}
+
+function subjectDetailFamilyMask(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  if (max < 48 || spread < 28 || colorfulness(r, g, b) < 64) {
+    return 0;
+  }
+
+  const threshold = max - Math.max(20, Math.round(spread * 0.35));
+  let mask = 0;
+  if (r >= threshold) {
+    mask |= 1;
+  }
+  if (g >= threshold) {
+    mask |= 2;
+  }
+  if (b >= threshold) {
+    mask |= 4;
+  }
+  return mask;
+}
+
+function colorfulness(r: number, g: number, b: number): number {
+  return Math.abs(r - g) + Math.abs(g - b) + Math.abs(b - r);
+}
+
+function hasSubjectDetailPaletteSupport(image: RGBAImage, x: number, y: number, family: number): boolean {
+  let subjectNeighbors = 0;
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const offset = (ny * image.width + nx) * 4;
+      if (image.data[offset + 3]! < 128) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      if (subjectDetailFamilyMask(r, g, b) === family || isPaletteArtifactChromaColor(r, g, b)) {
+        continue;
+      }
+
+      subjectNeighbors += 1;
+      if (subjectNeighbors >= 2) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+function isPaletteArtifactChromaColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  const artificialChroma = max >= 150 && spread >= 96 && colorfulness(r, g, b) >= 180;
+  const mutedGreen = g >= 64 && g - r >= 24 && g - b >= 24;
+  const mutedMagenta = r >= 90 && b >= 64 && g <= Math.min(r, b) - 24;
+  return artificialChroma || mutedGreen || mutedMagenta;
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {
