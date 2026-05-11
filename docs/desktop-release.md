@@ -12,6 +12,16 @@ The next public desktop build should target:
 
 Build each platform on its native release machine or CI runner. Do not cross-sign desktop artifacts locally.
 
+## Versioning
+
+Before tagging a release, update all package and desktop metadata from the repo root:
+
+```sh
+npm run version:set -- 0.2.0
+```
+
+You can also use `patch`, `minor`, or `major` in place of an exact version. The command keeps workspace packages, internal `@pixelaid/*` dependency versions, `package-lock.json`, `apps/desktop/src-tauri/Cargo.toml`, and `apps/desktop/src-tauri/tauri.conf.json` aligned.
+
 ## Local Developer Builds
 
 Unsigned local builds are allowed for development and smoke testing:

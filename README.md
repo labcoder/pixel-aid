@@ -114,6 +114,19 @@ npm run benchmark
 npm run license:check
 ```
 
+## Release Versioning
+
+Use the root version command before cutting a release tag so package metadata stays aligned:
+
+```sh
+npm run version:set -- 0.2.0
+npm run version:set -- patch
+npm run version:set -- minor
+npm run version:set -- major
+```
+
+The command updates the root package, every `apps/*` and `packages/*` workspace package, internal `@pixelaid/*` dependency versions, `package-lock.json`, the Tauri config, and the desktop Cargo package version. It does not run automatically during builds.
+
 Useful scoped examples:
 
 ```sh
