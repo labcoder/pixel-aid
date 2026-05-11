@@ -6,6 +6,7 @@ benchmark-results/
 .playwright-cli/
 .worktrees/
 docs/internal/
+docs/superpowers/
 packages/core/.visual-regression-diffs/
 apps/desktop/src-tauri/target/
 __pycache__/
