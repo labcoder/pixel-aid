@@ -480,7 +480,7 @@ describe("pixelaid CLI", () => {
         "fix",
         "--json",
         "--api-key",
-        "fixture-api-key-redacted",
+        "fixture-api-key-123456789",
       ], capture);
       const body = parseStdout(capture);
       const report = JSON.parse(await readFile(diagnostics, "utf8"));
@@ -496,7 +496,7 @@ describe("pixelaid CLI", () => {
         error: { code: "invalid_options", exitCode: 2 },
       });
       expect(report.metadata.argv).toEqual(["fix", "--json", "--api-key", "[REDACTED]"]);
-      expect(JSON.stringify(report)).not.toContain("fixture-api-key-redacted");
+      expect(JSON.stringify(report)).not.toContain("fixture-api-key-123456789");
     });
   });
 

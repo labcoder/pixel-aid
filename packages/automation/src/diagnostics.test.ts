@@ -9,15 +9,15 @@ import { automationError } from "./result";
 describe("diagnostic sanitization", () => {
   it("redacts likely secrets, tokens, and private prompts from nested values", () => {
     const sanitized = sanitizeDiagnosticValue({
-      apiKey: "fixture-api-key-redacted",
+      apiKey: "fixture-api-key-live",
       access_token: "token-value",
       nested: {
         authorization: "Bearer abc.def.ghi",
         prompt: "private character prompt",
         safe: "keep this",
       },
-      log: "request failed with OPENAI_API_KEY=fixture-api-key-redacted and bearer fixture-token-redacted",
-      args: ["--api-key", "fixture-api-key-redacted", "--target", "64x64"],
+      log: "request failed with OPENAI_API_KEY=fixture-api-key-123 and bearer abcdefghijklmnopqrstuvwxyz123456",
+      args: ["--api-key", "fixture-api-key-456", "--target", "64x64"],
     });
 
     expect(sanitized).toEqual({
@@ -54,8 +54,8 @@ describe("diagnostic sanitization", () => {
 
 describe("diagnostic reports", () => {
   it("creates a deterministic sanitized failure report with recovery hints", () => {
-    const failure = automationError("invalid_options", "Invalid apiKey=fixture-api-key-redacted in prompt private text.", 2, {
-      apiKey: "fixture-api-key-redacted",
+    const failure = automationError("invalid_options", "Invalid apiKey=fixture-api-key-123 in prompt private text.", 2, {
+      apiKey: "fixture-api-key-123",
       prompt: "draw a private hero",
       target: "bad",
     });
@@ -67,9 +67,9 @@ describe("diagnostic reports", () => {
       status: "failure",
       exitCode: failure.error.exitCode,
       error: failure.error,
-      options: { target: "bad", apiKey: "fixture-api-key-redacted" },
+      options: { target: "bad", apiKey: "fixture-api-key-123" },
       paths: { inputPath: "C:/assets/hero.png", outputPath: "C:/out/hero.png" },
-      metadata: { argv: ["fix", "hero.png", "--api-key", "fixture-api-key-redacted"] },
+      metadata: { argv: ["fix", "hero.png", "--api-key", "fixture-api-key-123"] },
     });
 
     expect(report).toMatchObject<DiagnosticReport>({

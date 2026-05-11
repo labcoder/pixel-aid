@@ -4,7 +4,7 @@ import { createOperationErrorReport, createWebDiagnosticReport, sanitizeDiagnost
 describe("diagnostic report", () => {
   test("redacts secret-like keys and prompt fields", () => {
     const sanitized = sanitizeDiagnosticValue({
-      apiKey: "fixture-api-key-redacted",
+      apiKey: "fixture-api-key-secret",
       provenance: {
         prompt: "private prompt",
         sourceImage: "robot.png"
@@ -31,7 +31,7 @@ describe("diagnostic report", () => {
       appVersion: "0.1.0",
       generatedAt: "2026-05-01T00:00:00.000Z",
       route: "/",
-      logs: ["OPENAI_API_KEY=fixture-api-key-redacted failed"],
+      logs: ["OPENAI_API_KEY=fixture-api-key-secret failed"],
       settings: { maxColors: 16 }
     });
 

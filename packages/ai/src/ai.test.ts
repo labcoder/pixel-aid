@@ -33,7 +33,7 @@ describe("AI provider adapters", () => {
       prompt: "tiny potion icon",
       count: 2,
       size: "1024x1024",
-      metadata: { apiKey: "fixture-api-key-redacted", style: "clean" },
+      metadata: { apiKey: "fixture-api-key-not-copied", style: "clean" },
     });
 
     expect(result.images).toHaveLength(2);
@@ -70,7 +70,7 @@ describe("AI provider adapters", () => {
   it("maps OpenAI generation requests without requiring the OpenAI SDK", async () => {
     const calls: Array<{ url: string; body: Record<string, unknown>; authorization?: string }> = [];
     const provider = createOpenAiImageProvider({
-      apiKey: "fixture-api-key-redacted",
+      apiKey: "fixture-api-key-secret",
       model: "gpt-image-1.5",
       now: () => new Date("2026-05-01T00:00:00.000Z"),
       fetch: async (url, init) => {
@@ -102,7 +102,7 @@ describe("AI provider adapters", () => {
 
     expect(calls[0]).toMatchObject({
       url: "https://api.openai.com/v1/images/generations",
-      authorization: "Bearer fixture-api-key-redacted",
+      authorization: "Bearer fixture-api-key-secret",
     });
     expect(calls[0]?.body).toMatchObject({
       model: "gpt-image-1.5",

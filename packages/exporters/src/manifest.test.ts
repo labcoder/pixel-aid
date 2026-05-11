@@ -420,7 +420,7 @@ describe("generic manifest export", () => {
       provider: "Example",
       model: "example-model",
       settings: {
-        apiKey: "fixture-api-key-redacted",
+        apiKey: "fixture-api-key-secret",
         bearerToken: "Bearer hidden",
         password: "hunter2",
         promptStrength: 0.75,
