@@ -6,7 +6,7 @@ The repo currently contains the web editor, a Tauri desktop shell, deterministic
 
 ## Status
 
-PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and publishing/install flows for CLI, MCP, and desktop artifacts still need release packaging.
+PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and MCP and desktop artifacts still need release packaging. The CLI package is prepared for npm packaging as `pixelaid`.
 
 ## Requirements
 
@@ -48,15 +48,23 @@ The desktop app wraps the same web editor and adds native open/save dialogs. See
 
 ## Use The CLI
 
-Build the CLI package, then run the compiled binary:
+The CLI package is named `pixelaid` for npm publishing. Once it is published, install it globally or run it through `npx`:
 
 ```sh
-npm run build -w @pixelaid/cli
+npm install -g pixelaid
+pixelaid inspect input.png --json
+npx pixelaid@latest fix input.png --out fixed.png --target 96x96 --json
+```
+
+For local workspace development, build the CLI package, then run the compiled binary:
+
+```sh
+npm run build -w pixelaid
 node packages/cli/dist/bin.cjs inspect input.png --json
 node packages/cli/dist/bin.cjs fix input.png --out fixed.png --auto --asset-type sprite --json
 ```
 
-The package exposes a future `pixelaid` binary for installed/package-managed use, but this repo currently documents direct local execution from `packages/cli/dist/bin.cjs`. See [packages/cli/README.md](packages/cli/README.md) and [docs/automation.md](docs/automation.md) for commands, JSON result envelopes, exit codes, and batch workflow notes.
+See [packages/cli/README.md](packages/cli/README.md) for install modes, package checks, the panda sample workflow, JSON output examples, and release notes. See [docs/automation.md](docs/automation.md) for CLI and MCP-ready workflow details.
 
 ## Use The MCP Server
 
@@ -114,12 +122,25 @@ npm run benchmark
 npm run license:check
 ```
 
+## Release Versioning
+
+Use the root version command before cutting a release tag so package metadata stays aligned:
+
+```sh
+npm run version:set -- 0.2.0
+npm run version:set -- patch
+npm run version:set -- minor
+npm run version:set -- major
+```
+
+The command updates the root package, every `apps/*` and `packages/*` workspace package, internal `@pixelaid/*` dependency versions, `package-lock.json`, the Tauri config, and the desktop Cargo package version. It does not run automatically during builds.
+
 Useful scoped examples:
 
 ```sh
 npm run test -w @pixelaid/core
 npm run test -w @pixelaid/web
-npm run test -w @pixelaid/cli
+npm run test -w pixelaid
 npm run build -w @pixelaid/mcp
 ```
 
