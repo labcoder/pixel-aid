@@ -1,30 +1,56 @@
 {
-  "name": "@pixelaid/cli",
+  "name": "pixelaid",
   "version": "0.1.0",
-  "private": true,
+  "description": "Command-line PixelAid tools for fixing fake pixel-art images into engine-ready pixel assets.",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "bin": {
-    "pixelaid": "./dist/bin.cjs"
+    "pixelaid": "dist/bin.cjs"
   },
-  "exports": {
-    ".": {
-      "types": "./src/index.ts",
-      "default": "./src/index.ts"
-    }
+  "files": [
+    "dist/bin.cjs",
+    "README.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "keywords": [
+    "pixel-art",
+    "sprites",
+    "sprite-sheet",
+    "game-dev",
+    "image-processing",
+    "cli"
+  ],
+  "homepage": "https://github.com/labcoder/pixel-aid#readme",
+  "bugs": {
+    "url": "https://github.com/labcoder/pixel-aid/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/labcoder/pixel-aid.git",
+    "directory": "packages/cli"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').rmSync('dist/bin.js',{force:true})\" && esbuild src/bin.ts --bundle --platform=node --format=cjs --target=node20 --outfile=dist/bin.cjs",
+    "prepack": "npm run build",
     "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@jsquash/webp": "^1.5.0",
-    "@pixelaid/automation": "0.1.0",
-    "@pixelaid/shared": "0.1.0",
-    "fflate": "^0.8.2"
+    "@jsquash/webp": "^1.5.0"
   },
   "devDependencies": {
+    "@pixelaid/automation": "0.1.0",
+    "@pixelaid/shared": "0.1.0",
     "@types/node": "^25.6.0",
-    "esbuild": "^0.28.0"
+    "esbuild": "^0.28.0",
+    "fflate": "^0.8.2"
   }
 }

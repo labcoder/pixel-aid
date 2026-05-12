@@ -89,7 +89,7 @@ type CliDiagnosticMetadata = {
 };
 
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
-const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "@pixelaid/cli" };
+const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "pixelaid" };
 const supportedBatchImageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {

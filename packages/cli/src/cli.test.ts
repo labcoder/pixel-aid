@@ -489,7 +489,7 @@ describe("pixelaid CLI", () => {
       expect(body).toMatchObject({ ok: false, command: "fix", error: { code: "invalid_options" } });
       expect(report).toMatchObject({
         schemaVersion: 1,
-        app: { name: "PixelAid", packageName: "@pixelaid/cli" },
+        app: { name: "PixelAid", packageName: "pixelaid" },
         command: "fix",
         status: "failure",
         exitCode: 2,

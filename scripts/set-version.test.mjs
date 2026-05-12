@@ -67,10 +67,12 @@ async function createVersionFixture(currentVersion = "0.1.0") {
     [
       "packages/cli/package.json",
       {
-        name: "@pixelaid/cli",
+        name: "pixelaid",
         version: currentVersion,
         dependencies: {
-          "@pixelaid/core": currentVersion,
+          "@jsquash/webp": "^1.5.0",
+        },
+        devDependencies: {
           "@pixelaid/shared": currentVersion,
           fflate: "^0.8.2",
         },
@@ -125,10 +127,12 @@ async function createVersionFixture(currentVersion = "0.1.0") {
         },
       },
       "packages/cli": {
-        name: "@pixelaid/cli",
+        name: "pixelaid",
         version: currentVersion,
         dependencies: {
-          "@pixelaid/core": currentVersion,
+          "@jsquash/webp": "^1.5.0",
+        },
+        devDependencies: {
           "@pixelaid/shared": currentVersion,
           fflate: "^0.8.2",
         },
@@ -188,13 +192,30 @@ test("sets every workspace, lockfile, desktop, and internal dependency version",
     assert.equal(lockfile.packages["apps/web"].version, "0.2.3");
     assert.equal(lockfile.packages["apps/web"].dependencies["@pixelaid/core"], "0.2.3");
     assert.equal(lockfile.packages["packages/core"].dependencies["@pixelaid/shared"], "0.2.3");
-    assert.equal(lockfile.packages["packages/cli"].dependencies.fflate, "^0.8.2");
+    assert.equal(lockfile.packages["packages/cli"].name, "pixelaid");
+    assert.equal(lockfile.packages["packages/cli"].dependencies["@jsquash/webp"], "^1.5.0");
+    assert.equal(lockfile.packages["packages/cli"].devDependencies["@pixelaid/shared"], "0.2.3");
+    assert.equal(lockfile.packages["packages/cli"].devDependencies.fflate, "^0.8.2");
 
     const cargoToml = await readFile(path.join(cwd, "apps/desktop/src-tauri/Cargo.toml"), "utf8");
     assert.match(cargoToml, /version = "0\.2\.3"/u);
 
     const tauriConfig = await readJson(path.join(cwd, "apps/desktop/src-tauri/tauri.conf.json"));
     assert.equal(tauriConfig.version, "0.2.3");
+  } finally {
+    await rm(cwd, { recursive: true, force: true });
+  }
+});
+
+test("leaves files unchanged when setting the current exact version", async () => {
+  const cwd = await createVersionFixture();
+
+  try {
+    const result = await setWorkspaceVersion({ cwd, target: "0.1.0" });
+
+    assert.equal(result.previousVersion, "0.1.0");
+    assert.equal(result.nextVersion, "0.1.0");
+    assert.deepEqual(result.updatedFiles, []);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

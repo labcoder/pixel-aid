@@ -156,7 +156,7 @@ function stringifyJson(json) {
 
 async function writeIfChanged(cwd, filePath, content, updatedFiles) {
   const existingContent = await readFile(filePath, "utf8");
-  if (existingContent === content) {
+  if (existingContent.replace(/\r\n/gu, "\n") === content.replace(/\r\n/gu, "\n")) {
     return;
   }
 
@@ -227,19 +227,15 @@ async function updatePackageLock(cwd, internalPackageNames, packageFiles, nextVe
 }
 
 function updateCargoPackageVersion(cargoToml, nextVersion) {
-  const updated = cargoToml.replace(
-    /(^\[package\][\s\S]*?^version\s*=\s*")[^"]+(")/mu,
-    `$1${nextVersion}$2`,
-  );
-
-  if (updated === cargoToml) {
+  const packageVersionPattern = /(^\[package\][\s\S]*?^version\s*=\s*")[^"]+(")/mu;
+  if (!packageVersionPattern.test(cargoToml)) {
     throw new VersionCommandError(
       "CARGO_VERSION_NOT_FOUND",
       "Could not find the [package] version in apps/desktop/src-tauri/Cargo.toml.",
     );
   }
 
-  return updated;
+  return cargoToml.replace(packageVersionPattern, `$1${nextVersion}$2`);
 }
 
 async function updateCargoToml(cwd, nextVersion, updatedFiles) {
