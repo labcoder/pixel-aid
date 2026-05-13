@@ -57,6 +57,24 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("passes explicit matte cleanup through for background-removal workflows", async () => {
+    await withFixture(async ({ input }) => {
+      const capture = createCapture();
+      const code = await runCli(
+        ["suggest", input, "--asset-type", "sprite", "--alpha", "backgroundFloodFill", "--matte-cleanup", "--json"],
+        capture
+      );
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.result.options.alpha).toBe("backgroundFloodFill");
+      expect(body.result.options.cleanup?.morphology).toMatchObject({
+        enabled: true,
+        matteCleanup: true
+      });
+    });
+  });
+
   it("prints core-matched source-sheet recovery suggestions for golden WebPs", async () => {
     for (const input of [astroSourceSheet, hollowKnightSourceSheet]) {
       const capture = createCapture();

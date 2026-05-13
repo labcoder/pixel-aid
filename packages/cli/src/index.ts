@@ -698,6 +698,7 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   const removeHalos = takeBooleanChoice(args, "--remove-halos", "--keep-halos");
   const denoiseStrength = readOptionalNumberFlag(args, "--denoise-strength");
   const contrastExpansion = takeBooleanChoice(args, "--contrast-expansion", "--no-contrast-expansion");
+  const matteCleanup = takeBooleanChoice(args, "--matte-cleanup", "--no-matte-cleanup");
   if (
     outlineMode ||
     outlineSourceColors ||
@@ -709,7 +710,8 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
     preserveSinglePixelDetails !== undefined ||
     removeHalos !== undefined ||
     denoiseStrength !== undefined ||
-    contrastExpansion !== undefined
+    contrastExpansion !== undefined ||
+    matteCleanup !== undefined
   ) {
     const cleanup: NonNullable<AutomationFixOptionsInput["cleanup"]> = {};
     if (outlineMode) {
@@ -744,6 +746,13 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
     }
     if (contrastExpansion !== undefined) {
       cleanup.contrastExpansion = { enabled: contrastExpansion };
+    }
+    if (matteCleanup !== undefined) {
+      cleanup.morphology = {
+        enabled: matteCleanup,
+        matteCleanup,
+        alphaThreshold: alphaThreshold ?? 128
+      };
     }
     options.cleanup = cleanup;
   }

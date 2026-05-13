@@ -246,6 +246,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import { shouldUseMatteAwareMorphology, supportsMatteCleanupAlpha } from "./lib/matteCleanup";
 import {
   createMainThreadPhaseWarningKey,
   getMainThreadPhaseWarning,
@@ -3288,7 +3289,7 @@ export function App() {
       setMorphologyCleanup(
         Boolean(profileMorphology?.enabled && (profileMorphology.close || profileMorphology.fillTinyHoles || profileMorphology.removeTinyComponents))
       );
-      setMatteCleanup(Boolean(profileMorphology?.enabled && profileMorphology.matteCleanup && profile.settings.alpha === "binary"));
+      setMatteCleanup(Boolean(profileMorphology?.enabled && profileMorphology.matteCleanup && supportsMatteCleanupAlpha(profile.settings.alpha)));
     },
     [
       applyAlphaSettings,
@@ -3318,7 +3319,7 @@ export function App() {
       setDominantThreshold(variant.cleanup.dominantThreshold ?? 0.6);
       setInferNativeScale(variant.cleanup.inferNativeScale ?? false);
       setMorphologyCleanup(Boolean(morphology?.enabled && (morphology.close || morphology.fillTinyHoles || morphology.removeTinyComponents)));
-      setMatteCleanup(Boolean(morphology?.enabled && morphology.matteCleanup && variant.alpha === "binary"));
+      setMatteCleanup(Boolean(morphology?.enabled && morphology.matteCleanup && supportsMatteCleanupAlpha(variant.alpha)));
       setOutlineMode(variant.cleanup.outlineMode ?? "none");
       setOutlineSize(variant.cleanup.outlineSize ?? 1);
       setOutlineColorEdited(false);
@@ -3450,7 +3451,7 @@ export function App() {
           (resolvedProfileMorphology.close || resolvedProfileMorphology.fillTinyHoles || resolvedProfileMorphology.removeTinyComponents)
       )
     );
-    setMatteCleanup(Boolean(resolvedProfileMorphology?.enabled && resolvedProfileMorphology.matteCleanup && resolvedAlpha === "binary"));
+    setMatteCleanup(Boolean(resolvedProfileMorphology?.enabled && resolvedProfileMorphology.matteCleanup && supportsMatteCleanupAlpha(resolvedAlpha)));
     setInferNativeScale(isSheetLikeMode(resolvedMode) && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
@@ -3881,7 +3882,7 @@ export function App() {
       candidates: outlineSourceCandidates
     });
     const autoMatteCleanup = isSheetLikeMode(mode) && alpha === "binary" && inferNativeScale && maxColors <= 16;
-    const useMatteAwareMorphology = alpha === "binary" && (matteCleanup || autoMatteCleanup);
+    const useMatteAwareMorphology = shouldUseMatteAwareMorphology({ alpha, matteCleanup, autoMatteCleanup });
     const useMorphologyCleanup = morphologyCleanup || useMatteAwareMorphology;
     const options: FixOptions = {
       mode,
@@ -7067,7 +7068,12 @@ export function App() {
           Morphological cleanup
         </label>
         <label className="toggle-row">
-          <input type="checkbox" checked={matteCleanup} disabled={alpha !== "binary"} onChange={(event) => setMatteCleanup(event.currentTarget.checked)} />
+          <input
+            type="checkbox"
+            checked={matteCleanup}
+            disabled={!supportsMatteCleanupAlpha(alpha)}
+            onChange={(event) => setMatteCleanup(event.currentTarget.checked)}
+          />
           Matte cleanup
         </label>
         <label className="toggle-row">

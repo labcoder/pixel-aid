@@ -74,6 +74,19 @@ pixelaid fix panda-test.png \
   --json
 ```
 
+For sprites on a chroma or matte background, pair background removal with matte cleanup so exterior color fringes are peeled before export:
+
+```sh
+pixelaid fix cat-source.png \
+  --out cat-fixed.png \
+  --asset-type sprite \
+  --target 128x128 \
+  --max-colors 64 \
+  --alpha backgroundFloodFill \
+  --matte-cleanup \
+  --overwrite
+```
+
 Trimmed JSON output from that run:
 
 ```json
