@@ -72,6 +72,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         ...localDriftBoundaries,
         method: options.downscale,
         alpha: options.alpha,
+        ...foregroundAlphaThresholdOption(options, sourceAlphaResult !== undefined),
         ...adaptiveCoverageOption(options)
       },
       {
@@ -86,7 +87,11 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   assertNotCancelled(runtime?.signal);
   const alphaResult = measurePhase(phaseTimer, "alpha-cleanup", () =>
-    applyAlphaMode(downsampled, options.alpha, getAlphaSettingsForPreCleanup(options))
+    applyAlphaMode(
+      downsampled,
+      getPostDownsampleAlphaMode(options, sourceAlphaResult !== undefined),
+      getAlphaSettingsForPostDownsampleCleanup(options, sourceAlphaResult !== undefined)
+    )
   );
   const alphaDiagnostics = sourceAlphaResult ? mergeAlphaDiagnostics(sourceAlphaResult.diagnostics, alphaResult.diagnostics) : alphaResult.diagnostics;
   const alphaCleaned = alphaResult.image;
@@ -828,6 +833,21 @@ function adaptiveCoverageOption(options: FixOptions): { adaptiveCoverage?: numbe
   return adaptiveCoverage === undefined ? {} : { adaptiveCoverage };
 }
 
+const BACKGROUND_REMOVAL_FOREGROUND_ALPHA_COVERAGE = 0.08;
+
+function foregroundAlphaThresholdOption(
+  options: FixOptions,
+  sourcePrecleaned: boolean
+): { foregroundAlphaThreshold?: number } {
+  if (!sourcePrecleaned || options.alpha !== "backgroundFloodFill") {
+    return {};
+  }
+
+  return {
+    foregroundAlphaThreshold: BACKGROUND_REMOVAL_FOREGROUND_ALPHA_COVERAGE
+  };
+}
+
 function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {
   if (options.paletteSettings) {
     return options.paletteSettings;
@@ -967,6 +987,22 @@ function getAlphaSettingsForPreCleanup(options: FixOptions): AlphaCleanupSetting
   return {
     ...options.alphaSettings,
     decontaminateRgb: false
+  };
+}
+
+function getPostDownsampleAlphaMode(options: FixOptions, sourcePrecleaned: boolean): FixOptions["alpha"] {
+  return sourcePrecleaned && options.alpha === "backgroundFloodFill" ? "binary" : options.alpha;
+}
+
+function getAlphaSettingsForPostDownsampleCleanup(options: FixOptions, sourcePrecleaned: boolean): AlphaCleanupSettings | undefined {
+  const settings = getAlphaSettingsForPreCleanup(options);
+  if (!sourcePrecleaned || options.alpha !== "backgroundFloodFill") {
+    return settings;
+  }
+
+  return {
+    ...(settings ?? {}),
+    threshold: settings?.threshold ?? 128
   };
 }
 

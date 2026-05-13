@@ -18,6 +18,7 @@ export type DownsampleOptions = {
   method: DownscaleMethod;
   alpha: AlphaMode;
   binaryAlphaThreshold?: number;
+  foregroundAlphaThreshold?: number;
   adaptiveCoverage?: number;
   disableFastPath?: boolean;
 };
@@ -32,6 +33,7 @@ export type LoopProgressOptions = {
 type DominantResult = {
   color: number;
   coverage: number;
+  visibleCoverage: number;
   alpha: number;
 };
 
@@ -93,26 +95,36 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
       } else {
         setBlockBounds(block, image, x, y, options);
       }
-      const pixel =
-        options.method === "median"
-          ? medianBlock(image, block, medianScratch!)
-          : options.method === "adaptive"
-            ? adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6, dominantScratch!, medianScratch!)
-            : options.method === "averageThenPalette"
-              ? averageBlock(image, block)
-              : options.method === "detailPreserving"
-                ? detailPreservingBlock(image, block)
-                : options.method === "contrast"
-                  ? contrastBlock(image, block)
-                  : options.method === "kCentroid"
-                    ? kCentroidBlock(image, block)
-                    : dominantBlock(image, block, dominantScratch!).pixel;
+      let foregroundCoverage = -1;
+      let pixel: [number, number, number, number];
+      if (options.method === "median") {
+        pixel = medianBlock(image, block, medianScratch!);
+      } else if (options.method === "adaptive") {
+        const adaptive = adaptiveBlock(image, block, options.adaptiveCoverage ?? 0.6, dominantScratch!, medianScratch!);
+        pixel = adaptive.pixel;
+        foregroundCoverage = adaptive.visibleCoverage;
+      } else if (options.method === "averageThenPalette") {
+        pixel = averageBlock(image, block);
+      } else if (options.method === "detailPreserving") {
+        pixel = detailPreservingBlock(image, block);
+      } else if (options.method === "contrast") {
+        pixel = contrastBlock(image, block);
+      } else if (options.method === "kCentroid") {
+        pixel = kCentroidBlock(image, block);
+      } else {
+        const dominant = dominantBlock(image, block, dominantScratch!);
+        pixel = dominant.pixel;
+        foregroundCoverage = dominant.dominant.visibleCoverage;
+      }
+      if (options.foregroundAlphaThreshold !== undefined && foregroundCoverage < 0) {
+        foregroundCoverage = visibleAlphaCoverage(image, block);
+      }
 
       const offset = (y * output.width + x) * 4;
       output.data[offset] = pixel[0];
       output.data[offset + 1] = pixel[1];
       output.data[offset + 2] = pixel[2];
-      output.data[offset + 3] = options.alpha === "binary" ? (pixel[3] >= (options.binaryAlphaThreshold ?? 128) ? 255 : 0) : pixel[3];
+      output.data[offset + 3] = resolveOutputAlpha(pixel[3], foregroundCoverage, options);
     }
   }
 
@@ -220,6 +232,7 @@ function dominantBlock(
   scratch: DominantScratch
 ): { pixel: [number, number, number, number]; dominant: DominantResult } {
   let total = 0;
+  let visibleTotal = 0;
   let alphaTotal = 0;
   let transparentR = 0;
   let transparentG = 0;
@@ -243,6 +256,7 @@ function dominantBlock(
         continue;
       }
 
+      visibleTotal += 1;
       const r = image.data[offset]!;
       const g = image.data[offset + 1]!;
       const b = image.data[offset + 2]!;
@@ -277,9 +291,33 @@ function dominantBlock(
     dominant: {
       color: bestColor,
       coverage: total > 0 && bestCount > 0 ? bestCount / total : 0,
+      visibleCoverage: total > 0 ? visibleTotal / total : 0,
       alpha
     }
   };
+}
+
+function visibleAlphaCoverage(image: RGBAImage, block: BlockBounds): number {
+  let total = 0;
+  let visible = 0;
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      total += 1;
+      if (image.data[offset + 3]! >= 16) {
+        visible += 1;
+      }
+    }
+  }
+  return total > 0 ? visible / total : 0;
+}
+
+function resolveOutputAlpha(alpha: number, foregroundCoverage: number, options: DownsampleOptions): number {
+  if (options.foregroundAlphaThreshold !== undefined) {
+    return foregroundCoverage >= options.foregroundAlphaThreshold ? 255 : 0;
+  }
+
+  return options.alpha === "binary" ? (alpha >= (options.binaryAlphaThreshold ?? 128) ? 255 : 0) : alpha;
 }
 
 function createDominantScratch(): DominantScratch {
@@ -391,13 +429,19 @@ function adaptiveBlock(
   coverage: number,
   dominantScratch: DominantScratch,
   medianScratch: MedianScratch
-): [number, number, number, number] {
+): { pixel: [number, number, number, number]; visibleCoverage: number } {
   const dominant = dominantBlock(image, block, dominantScratch);
   if (dominant.dominant.coverage >= coverage) {
-    return dominant.pixel;
+    return {
+      pixel: dominant.pixel,
+      visibleCoverage: dominant.dominant.visibleCoverage
+    };
   }
 
-  return medianBlock(image, block, medianScratch);
+  return {
+    pixel: medianBlock(image, block, medianScratch),
+    visibleCoverage: dominant.dominant.visibleCoverage
+  };
 }
 
 function detailPreservingBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
