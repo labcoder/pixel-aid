@@ -2,6 +2,7 @@ node_modules/
 dist/
 coverage/
 benchmark-results/
+artifacts/desktop/
 .vite/
 .playwright-cli/
 .worktrees/
