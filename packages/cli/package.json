@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Command-line PixelAid tools for fixing fake pixel-art images into engine-ready pixel assets.",
   "license": "AGPL-3.0-only",
+  "author": "Oscar Sanchez (https://oscarsanchez.com)",
   "type": "module",
   "bin": {
     "pixelaid": "dist/bin.cjs"
