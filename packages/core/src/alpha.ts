@@ -152,6 +152,7 @@ function backgroundFloodFill(
     enqueue(x, y - 1);
   }
 
+  peelExteriorChromaMatte(output, visited, queue, write, background, threshold);
   binarizeFloodFillAlpha(output, threshold);
 
   if (decontaminateRgb) {
@@ -161,6 +162,57 @@ function backgroundFloodFill(
   }
 
   return { image: output, diagnostics };
+}
+
+function peelExteriorChromaMatte(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  queue: Int32Array,
+  initialQueueLength: number,
+  background: BackgroundModel,
+  threshold: number
+): void {
+  const backgroundFamily = backgroundChromaFamilyMask(background);
+  if (backgroundFamily === 0) {
+    return;
+  }
+
+  let read = 0;
+  let write = initialQueueLength;
+  while (read < write) {
+    const current = queue[read]!;
+    read += 1;
+    const x = current % image.width;
+    const y = Math.floor(current / image.width);
+
+    for (let dy = -1; dy <= 1; dy += 1) {
+      for (let dx = -1; dx <= 1; dx += 1) {
+        if (dx === 0 && dy === 0) {
+          continue;
+        }
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+          continue;
+        }
+
+        const index = ny * image.width + nx;
+        if (outsideMask[index] === 1) {
+          continue;
+        }
+
+        const offset = index * 4;
+        if (!isExteriorChromaMattePixel(image.data, offset, backgroundFamily, threshold)) {
+          continue;
+        }
+
+        image.data[offset + 3] = 0;
+        outsideMask[index] = 1;
+        queue[write] = index;
+        write += 1;
+      }
+    }
+  }
 }
 
 type BackgroundModel = {
@@ -326,6 +378,70 @@ function matchesBackgroundModel(data: Uint8ClampedArray, offset: number, model: 
   }
 
   return false;
+}
+
+function backgroundChromaFamilyMask(model: BackgroundModel): number {
+  let mask = 0;
+  for (let index = 0; index < model.count; index += 1) {
+    const offset = index * 3;
+    mask |= chromaMatteFamilyMask(model.colors[offset]!, model.colors[offset + 1]!, model.colors[offset + 2]!);
+  }
+  return mask;
+}
+
+function isExteriorChromaMattePixel(
+  data: Uint8ClampedArray,
+  offset: number,
+  backgroundFamily: number,
+  threshold: number
+): boolean {
+  if (data[offset + 3]! < threshold || isProtectedSilhouetteColor(data[offset]!, data[offset + 1]!, data[offset + 2]!)) {
+    return false;
+  }
+
+  const family = chromaMatteFamilyMask(data[offset]!, data[offset + 1]!, data[offset + 2]!);
+  return family !== 0 && family === backgroundFamily;
+}
+
+function chromaMatteFamilyMask(r: number, g: number, b: number): number {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const spread = max - min;
+  if (max < 48 || spread < 32) {
+    return darkDominantChromaFamilyMask(r, g, b);
+  }
+
+  const threshold = max - Math.max(24, Math.round(spread * 0.35));
+  let mask = 0;
+  if (r >= threshold) {
+    mask |= 1;
+  }
+  if (g >= threshold) {
+    mask |= 2;
+  }
+  if (b >= threshold) {
+    mask |= 4;
+  }
+  return mask || darkDominantChromaFamilyMask(r, g, b);
+}
+
+function darkDominantChromaFamilyMask(r: number, g: number, b: number): number {
+  const green = g >= 24 && g - r >= 18 && g - b >= 18;
+  const magenta = r >= 32 && b >= 24 && Math.min(r, b) - g >= 18;
+  if (green) {
+    return 2;
+  }
+  if (magenta) {
+    return 1 | 4;
+  }
+  return 0;
+}
+
+function isProtectedSilhouetteColor(r: number, g: number, b: number): boolean {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const brightness = r + g + b;
+  return (brightness >= 620 && max - min <= 56) || (max <= 72 && max - min <= 56);
 }
 
 function binarizeFloodFillAlpha(image: RGBAImage, threshold: number): void {
