@@ -106,6 +106,38 @@ describe("automation operations", () => {
     }
   });
 
+  it("auto-fixes no-outline magenta sprites without eroding the silhouette", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-magenta-no-outline-"));
+    const input = path.join(dir, "cat.png");
+    const out = path.join(dir, "fixed.png");
+    try {
+      await encodePngFile(createNoOutlineMagentaMatteSprite(), input);
+
+      const result = await fixSprite({
+        inputPath: input,
+        outputPath: out,
+        autoSuggest: true,
+        options: { assetType: "sprite", maxColors: 64 },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.result.settings.alpha).toBe("backgroundFloodFill");
+      expect(result.value.result.settings.cleanup.morphology).toMatchObject({
+        enabled: true,
+        matteCleanup: true,
+      });
+
+      const decoded = await decodePngFile(out);
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) return;
+      expect(countVisibleMagentaMatte(decoded.value)).toBe(0);
+      expect(countDarkOpaquePixels(decoded.value)).toBeGreaterThanOrEqual(6);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("suggests regular Codex-style pet atlases as animation sheets before tilemap fallbacks", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-pet-atlas-"));
     const input = path.join(dir, "astro-atlas.png");
@@ -544,6 +576,53 @@ function createOutlinedMagentaMatteSprite(): RGBAImage {
   fillRect(image, 24, 27, 4, 4, [25, 193, 255, 255]);
   fillRect(image, 36, 27, 4, 4, [25, 193, 255, 255]);
   return image;
+}
+
+function createNoOutlineMagentaMatteSprite(): RGBAImage {
+  const image: RGBAImage = {
+    width: 64,
+    height: 64,
+    data: new Uint8ClampedArray(64 * 64 * 4),
+  };
+  fillRect(image, 0, 0, 64, 64, [255, 0, 245, 255]);
+  fillRect(image, 18, 13, 28, 4, [18, 18, 18, 255]);
+  fillRect(image, 17, 17, 30, 30, [18, 18, 18, 255]);
+  fillRect(image, 16, 24, 4, 20, [18, 18, 18, 255]);
+  fillRect(image, 44, 24, 4, 20, [18, 18, 18, 255]);
+  fillRect(image, 29, 24, 6, 20, [249, 248, 248, 255]);
+  fillRect(image, 24, 27, 4, 4, [25, 193, 255, 255]);
+  fillRect(image, 36, 27, 4, 4, [25, 193, 255, 255]);
+  return image;
+}
+
+function countVisibleMagentaMatte(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! === 0) {
+      continue;
+    }
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    if (r >= 160 && b >= 150 && g <= 48 && Math.min(r, b) - g >= 120) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countDarkOpaquePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const a = image.data[offset + 3]!;
+    if (a === 255 && r <= 48 && g <= 48 && b <= 48) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function fillRect(

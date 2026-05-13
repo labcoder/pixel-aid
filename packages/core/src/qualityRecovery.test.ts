@@ -149,6 +149,22 @@ function outlinedMagentaMatteSprite(): RGBAImage {
   return image;
 }
 
+function noOutlineMagentaMatteSprite(): RGBAImage {
+  const background = [255, 0, 245, 255] as const;
+  const fur = [18, 18, 18, 255] as const;
+  const image = createImage(64, 64, background);
+
+  fillRect(image, 18, 13, 28, 4, fur);
+  fillRect(image, 17, 17, 30, 30, fur);
+  fillRect(image, 16, 24, 4, 20, fur);
+  fillRect(image, 44, 24, 4, 20, fur);
+  fillRect(image, 29, 24, 6, 20, white);
+  fillRect(image, 24, 27, 4, 4, cyan);
+  fillRect(image, 36, 27, 4, 4, cyan);
+
+  return image;
+}
+
 function countVisibleMagentaMatte(image: RGBAImage): number {
   let count = 0;
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -275,6 +291,20 @@ function countTransparentPixels(image: RGBAImage): number {
   return count;
 }
 
+function countDarkOpaquePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const a = image.data[offset + 3]!;
+    if (a === 255 && r <= 48 && g <= 48 && b <= 48) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 describe("quality recovery regressions", () => {
   test("classifies packed low-color maps as preservation-first tilemaps", () => {
     const image = packedLowColorTilemap();
@@ -351,5 +381,17 @@ describe("quality recovery regressions", () => {
     expect(countVisibleMagentaMatte(result.image)).toBe(0);
     expect(readPixel(result.image, 17, 32)[3]).toBe(255);
     expect(readPixel(result.image, 29, 32)[3]).toBe(255);
+  });
+
+  test("guided cleanup preserves no-outline dark silhouettes on magenta backgrounds", () => {
+    const source = noOutlineMagentaMatteSprite();
+    const suggestion = suggestFixSettings(source);
+    const result = fixImage(source, buildFixOptions(source));
+
+    expect(suggestion.assetType).toBe("sprite");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(countVisibleMagentaMatte(result.image)).toBe(0);
+    expect(countDarkOpaquePixels(result.image)).toBeGreaterThanOrEqual(6);
   });
 });
