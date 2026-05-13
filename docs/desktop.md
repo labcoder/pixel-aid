@@ -8,6 +8,9 @@ PixelAid's desktop app is a Tauri shell around the existing Vite web editor. The
 npm run desktop:dev
 npm run desktop:check
 npm run desktop:build
+npm run desktop:package
+npm run desktop:package:windows
+npm run desktop:package:macos
 npm run desktop:info
 npm run desktop:release:check
 npm run desktop:checksums
@@ -17,7 +20,11 @@ The desktop build commands require the Rust toolchain and Cargo to be installed.
 
 On Windows, the desktop npm scripts automatically enter the Visual Studio C++ toolchain environment before running Tauri. This keeps Git Bash compatible even when `link.exe` would otherwise resolve to Git's GNU utility at `C:\Program Files\Git\usr\bin\link.exe`. If you run raw `cargo` or `tauri` commands from Git Bash, launch the shell through `VsDevCmd.bat` or ensure the MSVC linker directory is before Git's `usr\bin` on `PATH`.
 
-Unsigned local builds can use `npm run desktop:build`. Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory.
+Unsigned local builds can use `npm run desktop:build`. Unsigned portable artifacts use `npm run desktop:package` for the current platform, `npm run desktop:package:windows` on Windows, or `npm run desktop:package:macos` on macOS. The package commands write ignored zip files under `artifacts/desktop/`.
+
+Windows packages contain `PixelAid.exe`, license files, notices, and a short `README.txt`. Release Windows executables use the Windows GUI subsystem, so launching the portable app should not open an extra console window. macOS packages contain a zipped `PixelAid.app` bundle and the same release text files; opening the `.app` from Finder should not open Terminal.
+
+Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory or a copied artifact directory.
 
 ## Structure
 
@@ -25,6 +32,7 @@ Unsigned local builds can use `npm run desktop:build`. Public builds should also
 apps/desktop/package.json           Tauri CLI workspace
 apps/desktop/src-tauri/             Rust desktop shell
 apps/desktop/src-tauri/tauri.conf.json
+artifacts/desktop/                  Ignored unsigned package output
 ```
 
 The Tauri config runs the existing web dev server in development and builds `@pixelaid/web` before packaging. The packaged app loads `apps/web/dist`.

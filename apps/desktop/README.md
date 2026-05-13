@@ -23,6 +23,9 @@ From the repo root:
 npm run desktop:dev
 npm run desktop:check
 npm run desktop:build
+npm run desktop:package
+npm run desktop:package:windows
+npm run desktop:package:macos
 npm run desktop:info
 npm run desktop:release:check
 npm run desktop:checksums
@@ -43,6 +46,8 @@ npm run test
 
 `npm run desktop:dev` launches Tauri in development mode and uses the web dev server. `npm run desktop:build` runs the desktop prerequisite check and then calls Tauri packaging.
 
+`npm run desktop:package` builds an unsigned portable artifact for the current platform. On Windows, `npm run desktop:package:windows` creates `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip` with `PixelAid.exe`, license files, notices, and a short `README.txt`. On macOS, `npm run desktop:package:macos` creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip` containing `PixelAid.app` plus the same release text files. Run each platform package command on its matching operating system.
+
 On Windows, the desktop npm scripts run Tauri through the Visual Studio C++ toolchain environment. This avoids a common Git Bash collision where `link.exe` resolves to Git's GNU utility instead of Microsoft's MSVC linker. Prefer these npm scripts over raw `cargo` or `tauri` commands from Git Bash.
 
 ## Development Notes
@@ -60,6 +65,7 @@ On Windows, the desktop npm scripts run Tauri through the Visual Studio C++ tool
 - `scripts/check-desktop-prereqs.mjs`: local prerequisite check.
 - `scripts/check-desktop-release-env.mjs`: signing and notarization environment validation.
 - `scripts/create-desktop-checksums.mjs`: release artifact checksum generation.
+- `scripts/package-desktop-artifacts.mjs`: unsigned Windows portable and macOS `.app` artifact packaging.
 
 ## Release Notes
 

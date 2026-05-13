@@ -6,7 +6,7 @@ The repo currently contains the web editor, a Tauri desktop shell, deterministic
 
 ## Status
 
-PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and MCP and desktop artifacts still need release packaging. The CLI package is prepared for npm packaging as `pixelaid`.
+PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, desktop packages are unsigned, and public release publishing still needs signing and distribution automation. The CLI package is prepared for npm packaging as `pixelaid`.
 
 ## Requirements
 
@@ -44,7 +44,15 @@ npm run desktop:check
 npm run desktop:build
 ```
 
-The desktop app wraps the same web editor and adds native open/save dialogs. See [apps/desktop/README.md](apps/desktop/README.md), [docs/desktop.md](docs/desktop.md), and [docs/desktop-release.md](docs/desktop-release.md) for Rust/Tauri requirements, release checks, signing expectations, and checksums.
+Create an unsigned portable desktop artifact for the current platform:
+
+```sh
+npm run desktop:package
+```
+
+Use `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Use `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The generated `artifacts/desktop/` directory is ignored by git.
+
+The desktop app wraps the same web editor and adds native open/save dialogs. See [apps/desktop/README.md](apps/desktop/README.md), [docs/desktop.md](docs/desktop.md), and [docs/desktop-release.md](docs/desktop-release.md) for Rust/Tauri requirements, release checks, unsigned package artifacts, signing expectations, and checksums.
 
 ## Use The CLI
 
