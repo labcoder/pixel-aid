@@ -15,3 +15,15 @@ export function shouldUseMatteAwareMorphology({
 }): boolean {
   return supportsMatteCleanupAlpha(alpha) && (matteCleanup || autoMatteCleanup);
 }
+
+export function shouldEnableGuidedMatteCleanup({
+  alpha,
+  suggestedMatteCleanup,
+  profileMatteCleanup
+}: {
+  alpha: AlphaMode;
+  suggestedMatteCleanup: boolean;
+  profileMatteCleanup: boolean;
+}): boolean {
+  return supportsMatteCleanupAlpha(alpha) && (suggestedMatteCleanup || profileMatteCleanup);
+}

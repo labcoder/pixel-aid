@@ -246,7 +246,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
-import { shouldUseMatteAwareMorphology, supportsMatteCleanupAlpha } from "./lib/matteCleanup";
+import { shouldEnableGuidedMatteCleanup, shouldUseMatteAwareMorphology, supportsMatteCleanupAlpha } from "./lib/matteCleanup";
 import {
   createMainThreadPhaseWarningKey,
   getMainThreadPhaseWarning,
@@ -3451,7 +3451,13 @@ export function App() {
           (resolvedProfileMorphology.close || resolvedProfileMorphology.fillTinyHoles || resolvedProfileMorphology.removeTinyComponents)
       )
     );
-    setMatteCleanup(Boolean(resolvedProfileMorphology?.enabled && resolvedProfileMorphology.matteCleanup && supportsMatteCleanupAlpha(resolvedAlpha)));
+    setMatteCleanup(
+      shouldEnableGuidedMatteCleanup({
+        alpha: resolvedAlpha,
+        suggestedMatteCleanup: "matteCleanup" in cleanupDefaults ? cleanupDefaults.matteCleanup : false,
+        profileMatteCleanup: Boolean(resolvedProfileMorphology?.enabled && resolvedProfileMorphology.matteCleanup)
+      })
+    );
     setInferNativeScale(isSheetLikeMode(resolvedMode) && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
