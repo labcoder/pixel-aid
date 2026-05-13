@@ -85,6 +85,27 @@ describe("automation operations", () => {
     }
   });
 
+  it("suggests matte cleanup for outlined sprites on magenta backgrounds", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-magenta-outline-"));
+    const input = path.join(dir, "cat.png");
+    try {
+      await encodePngFile(createOutlinedMagentaMatteSprite(), input);
+
+      const result = await suggestFixSettings({ inputPath: input, options: { assetType: "sprite", maxColors: 64 } });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.options.alpha).toBe("backgroundFloodFill");
+      expect(result.value.options.maxColors).toBe(64);
+      expect(result.value.options.cleanup.morphology).toMatchObject({
+        enabled: true,
+        matteCleanup: true
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("suggests regular Codex-style pet atlases as animation sheets before tilemap fallbacks", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-pet-atlas-"));
     const input = path.join(dir, "astro-atlas.png");
@@ -500,6 +521,28 @@ function createLowScaleBakedCheckerboardSprite(): RGBAImage {
   fillScaledRect(image, scale, 43, 37, 5, 3, [22, 20, 31, 255]);
   fillScaledRect(image, scale, 39, 42, 13, 3, [22, 20, 31, 255]);
 
+  return image;
+}
+
+function createOutlinedMagentaMatteSprite(): RGBAImage {
+  const image: RGBAImage = {
+    width: 64,
+    height: 64,
+    data: new Uint8ClampedArray(64 * 64 * 4),
+  };
+  fillRect(image, 0, 0, 64, 64, [255, 0, 245, 255]);
+  fillRect(image, 18, 9, 28, 4, [210, 0, 205, 255]);
+  fillRect(image, 18, 51, 28, 4, [210, 0, 205, 255]);
+  fillRect(image, 13, 18, 4, 28, [210, 0, 205, 255]);
+  fillRect(image, 47, 18, 4, 28, [210, 0, 205, 255]);
+  fillRect(image, 18, 13, 28, 4, [250, 250, 246, 255]);
+  fillRect(image, 18, 47, 28, 4, [250, 250, 246, 255]);
+  fillRect(image, 17, 17, 4, 30, [250, 250, 246, 255]);
+  fillRect(image, 43, 17, 4, 30, [250, 250, 246, 255]);
+  fillRect(image, 21, 17, 22, 30, [18, 18, 18, 255]);
+  fillRect(image, 29, 24, 6, 20, [249, 248, 248, 255]);
+  fillRect(image, 24, 27, 4, 4, [25, 193, 255, 255]);
+  fillRect(image, 36, 27, 4, 4, [25, 193, 255, 255]);
   return image;
 }
 
