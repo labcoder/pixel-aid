@@ -98,7 +98,7 @@ test("packages a macOS app bundle into an app archive", async () => {
   try {
     const appBinaryPath = path.join(
       repoRoot,
-      "apps/desktop/src-tauri/target/release/bundle/macos/PixelAid.app/Contents/MacOS/PixelAid",
+      "apps/desktop/src-tauri/target/release/bundle/macos/PixelAid.app/Contents/MacOS/pixelaid-desktop",
     );
     await mkdir(path.dirname(appBinaryPath), { recursive: true });
     await writeFile(appBinaryPath, "app bytes", "utf8");
@@ -113,7 +113,7 @@ test("packages a macOS app bundle into an app archive", async () => {
 
     assert.equal(result.archivePath, path.join(repoRoot, "artifacts/desktop/PixelAid-0.1.0-macos-arm64-app.zip"));
     assert.equal(
-      await readFile(path.join(result.stageDir, "PixelAid.app/Contents/MacOS/PixelAid"), "utf8"),
+      await readFile(path.join(result.stageDir, "PixelAid.app/Contents/MacOS/pixelaid-desktop"), "utf8"),
       "app bytes",
     );
     assert.equal(await readFile(path.join(result.stageDir, "NOTICE"), "utf8"), "NOTICE text\n");

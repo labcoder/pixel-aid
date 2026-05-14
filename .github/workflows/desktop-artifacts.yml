@@ -56,18 +56,14 @@ jobs:
           New-Item -ItemType Directory -Path $extractDir | Out-Null
           tar -xf $zip.FullName -C $extractDir
 
-          $exe = Get-ChildItem $extractDir -Recurse -Filter PixelAid.exe | Select-Object -First 1
-          if (-not $exe) {
-            throw "PixelAid.exe was not found in the portable package."
-          }
-
-          node -e "const fs=require('fs'); const exe=process.argv[1]; const data=fs.readFileSync(exe); const peOffset=data.readUInt32LE(0x3c); const subsystem=data.readUInt16LE(peOffset + 0x5c); if (subsystem !== 2) throw new Error('Expected Windows GUI subsystem 2, got ' + subsystem); console.log('Windows subsystem: ' + subsystem);" $exe.FullName
+          node apps/desktop/scripts/verify-desktop-package.mjs windows $extractDir
 
       - name: Upload Windows portable package
         uses: actions/upload-artifact@v7
         with:
           name: pixelaid-windows-portable
           path: artifacts/desktop/*windows*-portable.zip
+          archive: false
           if-no-files-found: error
           retention-days: 14
 
@@ -128,29 +124,13 @@ jobs:
           mkdir -p "$extract_dir"
           ditto -x -k "$zip" "$extract_dir"
 
-          app="$(find "$extract_dir" -maxdepth 3 -type d -name 'PixelAid.app' -print -quit)"
-          if [ -z "$app" ]; then
-            echo "PixelAid.app was not found in the macOS package." >&2
-            exit 1
-          fi
-
-          binary="$app/Contents/MacOS/PixelAid"
-          if [ ! -x "$binary" ]; then
-            echo "PixelAid.app executable is missing or not executable: $binary" >&2
-            exit 1
-          fi
-
-          file "$binary"
-          if [ "${{ matrix.arch }}" = "arm64" ]; then
-            file "$binary" | grep -q "arm64"
-          else
-            file "$binary" | grep -q "x86_64"
-          fi
+          node apps/desktop/scripts/verify-desktop-package.mjs macos "$extract_dir" "${{ matrix.arch }}"
 
       - name: Upload macOS app package
         uses: actions/upload-artifact@v7
         with:
           name: pixelaid-macos-${{ matrix.arch }}-app
           path: artifacts/desktop/*macos*-${{ matrix.arch }}-app.zip
+          archive: false
           if-no-files-found: error
           retention-days: 14

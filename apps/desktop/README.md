@@ -72,6 +72,7 @@ xattr -dr com.apple.quarantine PixelAid.app
 - `scripts/check-desktop-release-env.mjs`: signing and notarization environment validation.
 - `scripts/create-desktop-checksums.mjs`: release artifact checksum generation.
 - `scripts/package-desktop-artifacts.mjs`: unsigned Windows portable and macOS `.app` artifact packaging.
+- `scripts/verify-desktop-package.mjs`: CI smoke verification for extracted Windows and macOS packages.
 
 ## Release Notes
 

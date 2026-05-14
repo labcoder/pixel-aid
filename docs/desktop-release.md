@@ -36,11 +36,11 @@ npm run desktop:package
 
 `npm run desktop:package` builds an unsigned zip for the current platform. Run `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Run `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The generated `artifacts/desktop/` directory is ignored by git.
 
-The Windows portable executable is built as a GUI app, so it should not open a console window when launched normally. The macOS artifact is a normal `.app` bundle inside a zip; opening it from Finder should not open Terminal.
+The Windows portable executable is built as a GUI app, so it should not open a console window when launched normally. The macOS artifact is a normal `.app` bundle inside a zip; opening it from Finder should not open Terminal. The bundle is named `PixelAid.app`, while the internal executable is read from `PixelAid.app/Contents/Info.plist` and may use the Cargo package name, such as `pixelaid-desktop`.
 
 ## Manual CI Artifact Builds
 
-The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
+The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
 
 The workflow currently emits:
 
