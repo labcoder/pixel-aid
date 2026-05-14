@@ -50,6 +50,12 @@ npm run test
 
 On Windows, the desktop npm scripts run Tauri through the Visual Studio C++ toolchain environment. This avoids a common Git Bash collision where `link.exe` resolves to Git's GNU utility instead of Microsoft's MSVC linker. Prefer these npm scripts over raw `cargo` or `tauri` commands from Git Bash.
 
+The manual desktop artifact workflow builds Windows x64, macOS arm64, and macOS x64 packages. Use the arm64 artifact for Apple Silicon Macs such as M-series MacBooks. Because these CI packages are unsigned and not notarized, macOS may report a downloaded app as damaged or corrupted during smoke testing. Only for trusted internal artifacts, remove quarantine after unzipping the package:
+
+```sh
+xattr -dr com.apple.quarantine PixelAid.app
+```
+
 ## Development Notes
 
 - The desktop shell should stay thin. Put editor behavior in `apps/web` or shared workspace packages.

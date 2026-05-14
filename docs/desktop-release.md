@@ -40,7 +40,15 @@ The Windows portable executable is built as a GUI app, so it should not open a c
 
 ## Manual CI Artifact Builds
 
-The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, and uploads the resulting zip files as workflow artifacts. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
+The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
+
+The workflow currently emits:
+
+- `pixelaid-windows-portable`: Windows x64 portable package.
+- `pixelaid-macos-arm64-app`: macOS package for Apple Silicon Macs, including M-series MacBooks.
+- `pixelaid-macos-x64-app`: macOS package for Intel Macs.
+
+For public repositories, standard GitHub-hosted runners are free and unlimited. For private repositories, the same workflow consumes the account's included Actions minutes and may incur usage charges after those minutes are exhausted.
 
 To test it:
 
@@ -48,8 +56,16 @@ To test it:
 2. In GitHub, open **Actions**.
 3. Choose **Desktop Artifacts**.
 4. Select **Run workflow**.
-5. Download `pixelaid-windows-portable` and `pixelaid-macos-app` from the completed run.
+5. Download `pixelaid-windows-portable`, `pixelaid-macos-arm64-app`, and `pixelaid-macos-x64-app` from the completed run as needed.
 6. Inspect each zip and smoke test the app on the matching operating system.
+
+Browser downloads from GitHub apply macOS quarantine metadata. For unsigned and unnotarized CI artifacts, Finder may report that `PixelAid.app` is damaged or corrupted even when the package built correctly. For trusted internal smoke tests only, unzip the macOS package, then remove quarantine before first launch:
+
+```sh
+xattr -dr com.apple.quarantine PixelAid.app
+```
+
+Do not ask public users to do this. Public macOS artifacts should be Developer ID signed and notarized before distribution.
 
 For a dry-run release check without secrets, use:
 

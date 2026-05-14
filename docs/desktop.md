@@ -24,6 +24,8 @@ Unsigned local builds can use `npm run desktop:build`. Unsigned portable artifac
 
 Windows packages contain `PixelAid.exe`, license files, notices, and a short `README.txt`. Release Windows executables use the Windows GUI subsystem, so launching the portable app should not open an extra console window. macOS packages contain a zipped `PixelAid.app` bundle and the same release text files; opening the `.app` from Finder should not open Terminal.
 
+The manual GitHub Actions workflow builds the Windows x64 portable zip plus separate macOS arm64 and x64 `.app` zips. Use the arm64 artifact on Apple Silicon Macs. The CI macOS packages are still unsigned and not notarized; after downloading from GitHub, Gatekeeper may call the app damaged or corrupted. For trusted smoke-test artifacts only, unzip the package and run `xattr -dr com.apple.quarantine PixelAid.app` before launching. Public macOS downloads should be signed and notarized instead of asking users to remove quarantine.
+
 Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory or a copied artifact directory.
 
 ## Structure

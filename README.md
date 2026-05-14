@@ -50,7 +50,7 @@ Create an unsigned portable desktop artifact for the current platform:
 npm run desktop:package
 ```
 
-Use `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Use `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The generated `artifacts/desktop/` directory is ignored by git.
+Use `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Use `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The manual GitHub Actions workflow uploads separate `pixelaid-macos-arm64-app` and `pixelaid-macos-x64-app` artifacts. The generated `artifacts/desktop/` directory is ignored by git.
 
 The desktop app wraps the same web editor and adds native open/save dialogs. See [apps/desktop/README.md](apps/desktop/README.md), [docs/desktop.md](docs/desktop.md), and [docs/desktop-release.md](docs/desktop-release.md) for Rust/Tauri requirements, release checks, unsigned package artifacts, signing expectations, and checksums.
 
