@@ -9,15 +9,15 @@ permissions:
 jobs:
   windows:
     name: Windows portable zip
-    runs-on: windows-latest
+    runs-on: windows-2022
     timeout-minutes: 60
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -26,6 +26,13 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
 
       - name: Install dependencies
         run: npm ci
@@ -33,8 +40,31 @@ jobs:
       - name: Build unsigned Windows portable package
         run: npm run desktop:package:windows
 
+      - name: Verify Windows package
+        run: |
+          $zip = Get-ChildItem artifacts/desktop/*windows*-portable.zip | Select-Object -First 1
+          if (-not $zip) {
+            throw "No Windows portable zip found."
+          }
+
+          tar -tf $zip.FullName
+
+          $extractDir = Join-Path $env:RUNNER_TEMP "pixelaid-windows"
+          if (Test-Path $extractDir) {
+            Remove-Item -Recurse -Force $extractDir
+          }
+          New-Item -ItemType Directory -Path $extractDir | Out-Null
+          tar -xf $zip.FullName -C $extractDir
+
+          $exe = Get-ChildItem $extractDir -Recurse -Filter PixelAid.exe | Select-Object -First 1
+          if (-not $exe) {
+            throw "PixelAid.exe was not found in the portable package."
+          }
+
+          node -e "const fs=require('fs'); const exe=process.argv[1]; const data=fs.readFileSync(exe); const peOffset=data.readUInt32LE(0x3c); const subsystem=data.readUInt16LE(peOffset + 0x5c); if (subsystem !== 2) throw new Error('Expected Windows GUI subsystem 2, got ' + subsystem); console.log('Windows subsystem: ' + subsystem);" $exe.FullName
+
       - name: Upload Windows portable package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pixelaid-windows-portable
           path: artifacts/desktop/*windows*-portable.zip
@@ -42,16 +72,24 @@ jobs:
           retention-days: 14
 
   macos:
-    name: macOS app zip
-    runs-on: macos-latest
+    name: macOS app zip (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
@@ -61,16 +99,58 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
 
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+          uname -m
+
       - name: Install dependencies
         run: npm ci
 
       - name: Build unsigned macOS app package
         run: npm run desktop:package:macos
 
+      - name: Verify macOS package
+        run: |
+          zip="$(find artifacts/desktop -name '*macos*-${{ matrix.arch }}-app.zip' -print -quit)"
+          if [ -z "$zip" ]; then
+            echo "No macOS ${{ matrix.arch }} app zip found." >&2
+            exit 1
+          fi
+
+          unzip -l "$zip"
+
+          extract_dir="$RUNNER_TEMP/pixelaid-macos-${{ matrix.arch }}"
+          rm -rf "$extract_dir"
+          mkdir -p "$extract_dir"
+          ditto -x -k "$zip" "$extract_dir"
+
+          app="$(find "$extract_dir" -maxdepth 3 -type d -name 'PixelAid.app' -print -quit)"
+          if [ -z "$app" ]; then
+            echo "PixelAid.app was not found in the macOS package." >&2
+            exit 1
+          fi
+
+          binary="$app/Contents/MacOS/PixelAid"
+          if [ ! -x "$binary" ]; then
+            echo "PixelAid.app executable is missing or not executable: $binary" >&2
+            exit 1
+          fi
+
+          file "$binary"
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            file "$binary" | grep -q "arm64"
+          else
+            file "$binary" | grep -q "x86_64"
+          fi
+
       - name: Upload macOS app package
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: pixelaid-macos-app
-          path: artifacts/desktop/*macos*-app.zip
+          name: pixelaid-macos-${{ matrix.arch }}-app
+          path: artifacts/desktop/*macos*-${{ matrix.arch }}-app.zip
           if-no-files-found: error
           retention-days: 14
