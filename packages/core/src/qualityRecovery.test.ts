@@ -165,6 +165,53 @@ function noOutlineMagentaMatteSprite(): RGBAImage {
   return image;
 }
 
+function gradientOutlinedCatSprite(): RGBAImage {
+  const image = createImage(512, 512, [0, 0, 0, 255]);
+  for (let y = 0; y < image.height; y += 1) {
+    const t = y / Math.max(1, image.height - 1);
+    const r = Math.round(112 + t * 146);
+    const g = Math.round(204 - t * 36);
+    const b = Math.round(232 - t * 108);
+    for (let x = 0; x < image.width; x += 1) {
+      writePixel(image, x, y, r, g, b, 255);
+    }
+  }
+
+  const outlineColor = [38, 36, 34, 255] as const;
+  const orange = [244, 166, 82, 255] as const;
+  const cream = [232, 222, 200, 255] as const;
+  const blush = [238, 126, 116, 255] as const;
+
+  fillRect(image, 132, 92, 28, 116, outlineColor);
+  fillRect(image, 320, 92, 28, 116, outlineColor);
+  fillRect(image, 160, 128, 164, 24, outlineColor);
+  fillRect(image, 108, 204, 40, 64, outlineColor);
+  fillRect(image, 344, 204, 40, 64, outlineColor);
+  fillRect(image, 140, 268, 216, 104, outlineColor);
+  fillRect(image, 132, 352, 236, 36, outlineColor);
+  fillRect(image, 344, 292, 48, 84, outlineColor);
+  fillRect(image, 148, 108, 24, 88, orange);
+  fillRect(image, 308, 108, 24, 88, orange);
+  fillRect(image, 160, 152, 164, 96, orange);
+  fillRect(image, 136, 212, 216, 64, orange);
+  fillRect(image, 156, 276, 172, 92, orange);
+  fillRect(image, 356, 296, 24, 68, orange);
+  fillRect(image, 224, 200, 80, 92, cream);
+  fillRect(image, 164, 268, 172, 72, cream);
+  fillRect(image, 212, 340, 80, 36, cream);
+  fillRect(image, 204, 376, 36, 40, cream);
+  fillRect(image, 272, 376, 36, 40, cream);
+  fillRect(image, 196, 196, 36, 52, outlineColor);
+  fillRect(image, 304, 196, 36, 52, outlineColor);
+  fillRect(image, 160, 244, 76, 12, outlineColor);
+  fillRect(image, 304, 244, 76, 12, outlineColor);
+  fillRect(image, 240, 252, 16, 16, outlineColor);
+  fillRect(image, 256, 268, 36, 16, outlineColor);
+  fillRect(image, 268, 236, 14, 24, blush);
+
+  return image;
+}
+
 function countVisibleMagentaMatte(image: RGBAImage): number {
   let count = 0;
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -393,5 +440,21 @@ describe("quality recovery regressions", () => {
     expect(suggestion.matteCleanup).toBe(true);
     expect(countVisibleMagentaMatte(result.image)).toBe(0);
     expect(countDarkOpaquePixels(result.image)).toBeGreaterThanOrEqual(6);
+  });
+
+  test("guided cleanup treats outlined gradient-background cats as single sprites", () => {
+    const source = gradientOutlinedCatSprite();
+    const suggestion = suggestFixSettings(source);
+    const result = fixImage(source, buildFixOptions(source));
+
+    expect(suggestion.assetType).toBe("sprite");
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).not.toBe("preserve");
+    expect(result.settings.assetType).toBe("sprite");
+    expect(result.settings.mode).toBe("single");
+    expect(result.image.width).toBeLessThan(source.width);
+    expect(result.image.height).toBeLessThan(source.height);
+    expect(result.palette.length).toBeLessThanOrEqual(suggestion.maxColors);
+    expect(countDarkOpaquePixels(result.image)).toBeGreaterThanOrEqual(12);
   });
 });
