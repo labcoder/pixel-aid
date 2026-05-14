@@ -51,6 +51,49 @@ function largeSingleSpriteWithDivisiblePortraitBounds(): RGBAImage {
   return image;
 }
 
+function gradientOutlinedCatSprite(): RGBAImage {
+  const image = blankImage(512, 512);
+  for (let y = 0; y < image.height; y += 1) {
+    const t = y / Math.max(1, image.height - 1);
+    const r = Math.round(112 + t * 146);
+    const g = Math.round(204 - t * 36);
+    const b = Math.round(232 - t * 108);
+    drawRect(image, 0, y, image.width, 1, [r, g, b, 255]);
+  }
+
+  const outline: [number, number, number, number] = [38, 36, 34, 255];
+  const orange: [number, number, number, number] = [244, 166, 82, 255];
+  const cream: [number, number, number, number] = [232, 222, 200, 255];
+
+  drawRect(image, 132, 92, 28, 116, outline);
+  drawRect(image, 320, 92, 28, 116, outline);
+  drawRect(image, 160, 128, 164, 24, outline);
+  drawRect(image, 108, 204, 40, 64, outline);
+  drawRect(image, 344, 204, 40, 64, outline);
+  drawRect(image, 140, 268, 216, 104, outline);
+  drawRect(image, 132, 352, 236, 36, outline);
+  drawRect(image, 344, 292, 48, 84, outline);
+  drawRect(image, 148, 108, 24, 88, orange);
+  drawRect(image, 308, 108, 24, 88, orange);
+  drawRect(image, 160, 152, 164, 96, orange);
+  drawRect(image, 136, 212, 216, 64, orange);
+  drawRect(image, 156, 276, 172, 92, orange);
+  drawRect(image, 356, 296, 24, 68, orange);
+  drawRect(image, 224, 200, 80, 92, cream);
+  drawRect(image, 164, 268, 172, 72, cream);
+  drawRect(image, 212, 340, 80, 36, cream);
+  drawRect(image, 204, 376, 36, 40, cream);
+  drawRect(image, 272, 376, 36, 40, cream);
+  drawRect(image, 196, 196, 36, 52, outline);
+  drawRect(image, 304, 196, 36, 52, outline);
+  drawRect(image, 160, 244, 76, 12, outline);
+  drawRect(image, 304, 244, 76, 12, outline);
+  drawRect(image, 240, 252, 16, 16, outline);
+  drawRect(image, 256, 268, 36, 16, outline);
+
+  return image;
+}
+
 function largeAnimationSheetLikeSource(): RGBAImage {
   const image = blankImage(768, 512);
   for (let offset = 0; offset < image.data.length; offset += 4) {
@@ -785,6 +828,14 @@ describe("fix setting suggestions", () => {
     expect(suggestion.mode).toBe("single");
     expect(suggestion.assetType).not.toBe("animationSheet");
     expect(suggestion.sheetLayout).toBeUndefined();
+  });
+
+  test("classifies outlined gradient-background cat imports as sprites", () => {
+    const suggestion = suggestFixSettings(gradientOutlinedCatSprite());
+
+    expect(suggestion.assetType).toBe("sprite");
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).not.toBe("preserve");
   });
 
   test("suggests background flood-fill for single sprites on bright opaque backgrounds", () => {
