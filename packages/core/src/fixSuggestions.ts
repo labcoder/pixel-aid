@@ -1345,6 +1345,7 @@ function estimateForegroundObjectEvidence(image: RGBAImage): ForegroundObjectEvi
   const background = estimateCornerColor(image);
   const step = Math.max(1, Math.floor(Math.max(image.width, image.height) / 160));
   const threshold = 64;
+  const edgeModel = createEdgeBackgroundModel(image);
   let foreground = 0;
   let total = 0;
   let edgeTouch = 0;
@@ -1357,12 +1358,14 @@ function estimateForegroundObjectEvidence(image: RGBAImage): ForegroundObjectEvi
     for (let x = 0; x < image.width; x += step) {
       const offset = (y * image.width + x) * 4;
       const alpha = image.data[offset + 3] ?? 0;
-      const distance =
+      const cornerDistance =
         Math.abs((image.data[offset] ?? 0) - background.r) +
         Math.abs((image.data[offset + 1] ?? 0) - background.g) +
         Math.abs((image.data[offset + 2] ?? 0) - background.b) +
         Math.abs(alpha - background.a);
-      const active = alpha > 16 && (background.a <= 16 ? true : distance > threshold);
+      const edgeDistance = edgeModel ? distanceFromEdgeBackground(image, offset, x, y, edgeModel) : Number.POSITIVE_INFINITY;
+      const backgroundDistance = Math.min(cornerDistance, edgeDistance);
+      const active = alpha > 16 && (background.a <= 16 ? true : backgroundDistance > threshold);
       if (active) {
         foreground += 1;
         minX = Math.min(minX, x);
@@ -1392,6 +1395,122 @@ function estimateForegroundObjectEvidence(image: RGBAImage): ForegroundObjectEvi
     boundsCoverage,
     edgeTouchRatio
   };
+}
+
+type EdgeBackgroundModel = {
+  width: number;
+  height: number;
+  left: Uint8ClampedArray;
+  right: Uint8ClampedArray;
+  top: Uint8ClampedArray;
+  bottom: Uint8ClampedArray;
+};
+
+function createEdgeBackgroundModel(image: RGBAImage): EdgeBackgroundModel | undefined {
+  if (image.width < 8 || image.height < 8) {
+    return undefined;
+  }
+  if (!hasSmoothEdgeBackground(image)) {
+    return undefined;
+  }
+
+  const left = new Uint8ClampedArray(image.height * 4);
+  const right = new Uint8ClampedArray(image.height * 4);
+  const top = new Uint8ClampedArray(image.width * 4);
+  const bottom = new Uint8ClampedArray(image.width * 4);
+
+  for (let y = 0; y < image.height; y += 1) {
+    copyPixelToEdgeBuffer(image, 0, y, left, y * 4);
+    copyPixelToEdgeBuffer(image, image.width - 1, y, right, y * 4);
+  }
+  for (let x = 0; x < image.width; x += 1) {
+    copyPixelToEdgeBuffer(image, x, 0, top, x * 4);
+    copyPixelToEdgeBuffer(image, x, image.height - 1, bottom, x * 4);
+  }
+
+  return {
+    width: image.width,
+    height: image.height,
+    left,
+    right,
+    top,
+    bottom
+  };
+}
+
+function hasSmoothEdgeBackground(image: RGBAImage): boolean {
+  let totalDelta = 0;
+  let maxDelta = 0;
+  let samples = 0;
+
+  for (let x = 1; x < image.width; x += 1) {
+    const topDelta = adjacentPixelDelta(image, x - 1, 0, x, 0);
+    const bottomDelta = adjacentPixelDelta(image, x - 1, image.height - 1, x, image.height - 1);
+    totalDelta += topDelta + bottomDelta;
+    maxDelta = Math.max(maxDelta, topDelta, bottomDelta);
+    samples += 2;
+  }
+  for (let y = 1; y < image.height; y += 1) {
+    const leftDelta = adjacentPixelDelta(image, 0, y - 1, 0, y);
+    const rightDelta = adjacentPixelDelta(image, image.width - 1, y - 1, image.width - 1, y);
+    totalDelta += leftDelta + rightDelta;
+    maxDelta = Math.max(maxDelta, leftDelta, rightDelta);
+    samples += 2;
+  }
+
+  const averageDelta = totalDelta / Math.max(1, samples);
+  return averageDelta <= 8 && maxDelta <= 36;
+}
+
+function adjacentPixelDelta(image: RGBAImage, ax: number, ay: number, bx: number, by: number): number {
+  const a = (ay * image.width + ax) * 4;
+  const b = (by * image.width + bx) * 4;
+  return (
+    Math.abs(image.data[a]! - image.data[b]!) +
+    Math.abs(image.data[a + 1]! - image.data[b + 1]!) +
+    Math.abs(image.data[a + 2]! - image.data[b + 2]!) +
+    Math.abs(image.data[a + 3]! - image.data[b + 3]!)
+  );
+}
+
+function copyPixelToEdgeBuffer(image: RGBAImage, x: number, y: number, buffer: Uint8ClampedArray, targetOffset: number): void {
+  const sourceOffset = (y * image.width + x) * 4;
+  buffer[targetOffset] = image.data[sourceOffset]!;
+  buffer[targetOffset + 1] = image.data[sourceOffset + 1]!;
+  buffer[targetOffset + 2] = image.data[sourceOffset + 2]!;
+  buffer[targetOffset + 3] = image.data[sourceOffset + 3]!;
+}
+
+function distanceFromEdgeBackground(
+  image: RGBAImage,
+  offset: number,
+  x: number,
+  y: number,
+  model: EdgeBackgroundModel
+): number {
+  const horizontalWeight = model.width <= 1 ? 0 : x / (model.width - 1);
+  const verticalWeight = model.height <= 1 ? 0 : y / (model.height - 1);
+  const rowOffset = y * 4;
+  const columnOffset = x * 4;
+  const rowR = lerp(model.left[rowOffset]!, model.right[rowOffset]!, horizontalWeight);
+  const rowG = lerp(model.left[rowOffset + 1]!, model.right[rowOffset + 1]!, horizontalWeight);
+  const rowB = lerp(model.left[rowOffset + 2]!, model.right[rowOffset + 2]!, horizontalWeight);
+  const rowA = lerp(model.left[rowOffset + 3]!, model.right[rowOffset + 3]!, horizontalWeight);
+  const columnR = lerp(model.top[columnOffset]!, model.bottom[columnOffset]!, verticalWeight);
+  const columnG = lerp(model.top[columnOffset + 1]!, model.bottom[columnOffset + 1]!, verticalWeight);
+  const columnB = lerp(model.top[columnOffset + 2]!, model.bottom[columnOffset + 2]!, verticalWeight);
+  const columnA = lerp(model.top[columnOffset + 3]!, model.bottom[columnOffset + 3]!, verticalWeight);
+  const r = image.data[offset]!;
+  const g = image.data[offset + 1]!;
+  const b = image.data[offset + 2]!;
+  const a = image.data[offset + 3]!;
+  const rowDistance = Math.abs(r - rowR) + Math.abs(g - rowG) + Math.abs(b - rowB) + Math.abs(a - rowA);
+  const columnDistance = Math.abs(r - columnR) + Math.abs(g - columnG) + Math.abs(b - columnB) + Math.abs(a - columnA);
+  return Math.min(rowDistance, columnDistance);
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t;
 }
 
 function createAssetTypeCandidate(
