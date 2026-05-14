@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateDesktopPrereqs } from "./check-desktop-prereqs.mjs";
+import { evaluateDesktopPrereqs, runVersionCheck } from "./check-desktop-prereqs.mjs";
 
 const okVersionCheck = ({ label }) => ({ ok: true, version: `${label} test-version` });
 
@@ -49,4 +49,39 @@ test("fails Windows desktop checks when Visual Studio C++ tools are missing", ()
 
   assert.equal(result.ok, false);
   assert.deepEqual(result.missing, ["Visual Studio C++ x64 build tools"]);
+});
+
+test("reports spawn errors without assuming stdout exists", () => {
+  const result = runVersionCheck({
+    command: "pixelaid-definitely-missing-command",
+    args: ["--version"],
+    label: "Missing test command",
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.version, /pixelaid-definitely-missing-command|ENOENT|not found|cannot find/i);
+});
+
+test("runs npm version checks through cmd.exe on Windows", () => {
+  const calls = [];
+  const result = runVersionCheck(
+    { command: "npm", args: ["--version"], label: "npm" },
+    {
+      platform: "win32",
+      spawnSyncImpl: (command, args, options) => {
+        calls.push({ command, args, options });
+        return { status: 0, stdout: "11.0.0\n", stderr: "" };
+      },
+    },
+  );
+
+  assert.equal(result.ok, true);
+  assert.equal(result.version, "11.0.0");
+  assert.deepEqual(calls, [
+    {
+      command: "cmd.exe",
+      args: ["/d", "/c", "npm.cmd", "--version"],
+      options: { encoding: "utf8" },
+    },
+  ]);
 });

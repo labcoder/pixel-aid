@@ -16,7 +16,7 @@ export function evaluateDesktopPrereqs({
   resolveToolchain = resolveWindowsMsvcToolchain,
 } = {}) {
   const commandResults = checks.map((check) => {
-    const result = runCommand(check);
+    const result = runCommand(check, { platform });
     return {
       ...check,
       ok: result.ok,
@@ -44,11 +44,32 @@ export function evaluateDesktopPrereqs({
   };
 }
 
-function runVersionCheck(check) {
-  const result = spawnSync(check.command, check.args, { encoding: "utf8" });
+function resolveVersionCheckCommand(check, platform) {
+  let command = check.command;
+  if (platform === "win32" && command === "npm") {
+    command = "npm.cmd";
+  }
+
+  if (platform === "win32" && /\.(?:cmd|bat)$/iu.test(command)) {
+    return {
+      command: "cmd.exe",
+      args: ["/d", "/c", command, ...check.args],
+    };
+  }
+
+  return { command, args: check.args };
+}
+
+export function runVersionCheck(check, { platform = process.platform, spawnSyncImpl = spawnSync } = {}) {
+  const command = resolveVersionCheckCommand(check, platform);
+  const result = spawnSyncImpl(command.command, command.args, { encoding: "utf8" });
+  const stdout = typeof result.stdout === "string" ? result.stdout : "";
+  const stderr = typeof result.stderr === "string" ? result.stderr : "";
+  const errorMessage = result.error instanceof Error ? result.error.message : "";
+
   return {
-    ok: result.status === 0,
-    version: result.stdout.trim() || result.stderr.trim(),
+    ok: !result.error && result.status === 0,
+    version: stdout.trim() || stderr.trim() || errorMessage || `failed to run ${check.command}`,
   };
 }
 
