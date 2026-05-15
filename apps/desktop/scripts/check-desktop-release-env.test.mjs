@@ -22,9 +22,9 @@ test("accepts macOS notarization with app store connect API credentials", () => 
     platform: "darwin",
     allowUnsigned: false,
     env: {
-      APPLE_SIGNING_IDENTITY: "Developer ID Application: Oscar Sanchez",
+      APPLE_SIGNING_IDENTITY: "Developer ID Application: Example",
       APPLE_API_KEY: "AuthKey_1234567890",
-      APPLE_API_ISSUER: "11111111-1111-4111-8111-111111111111",
+      APPLE_API_ISSUER: "f0e1d2c3-b4a5-6789-cdef-0123456789ab",
       APPLE_API_KEY_PATH: "/secure/AuthKey_1234567890.p8",
     },
   });
@@ -40,7 +40,7 @@ test("rejects macOS API notarization when issuer is not UUID-only", () => {
     env: {
       APPLE_SIGNING_IDENTITY: "Developer ID Application: Example",
       APPLE_API_KEY: "AuthKey_1234567890",
-      APPLE_API_ISSUER: "ISSUER_UUID-not-a-uuid",
+      APPLE_API_ISSUER: "NOT_A_UUID_VALUE",
       APPLE_API_KEY_PATH: "/secure/AuthKey_1234567890.p8",
     },
   });

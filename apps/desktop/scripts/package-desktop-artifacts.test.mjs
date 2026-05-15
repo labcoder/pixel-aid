@@ -112,7 +112,7 @@ test("resolves macOS signing configuration from env values", () => {
       env: {
         APPLE_SIGNING_IDENTITY: " Developer ID Application: Example ",
         APPLE_API_KEY: " KEYID ",
-        APPLE_API_ISSUER: " 11111111-1111-4111-8111-111111111111 ",
+        APPLE_API_ISSUER: " f0e1d2c3-b4a5-6789-cdef-0123456789ab ",
         APPLE_API_KEY_PATH: "$HOME/private/AuthKey_KEYID.p8",
       },
       homeDir: "/Users/example",
@@ -120,7 +120,7 @@ test("resolves macOS signing configuration from env values", () => {
     {
       identity: "Developer ID Application: Example",
       notarization: {
-        issuer: "11111111-1111-4111-8111-111111111111",
+        issuer: "f0e1d2c3-b4a5-6789-cdef-0123456789ab",
         keyId: "KEYID",
         keyPath: "/Users/example/private/AuthKey_KEYID.p8",
       },
@@ -220,7 +220,7 @@ test("packages a signed macOS app bundle with signing, notarization, and staplin
       [
         "APPLE_SIGNING_IDENTITY=\"Developer ID Application: Example\"",
         "APPLE_API_KEY=KEYID",
-        "APPLE_API_ISSUER=11111111-1111-4111-8111-111111111111",
+        "APPLE_API_ISSUER=f0e1d2c3-b4a5-6789-cdef-0123456789ab",
         "APPLE_API_KEY_PATH=~/private/AuthKey_KEYID.p8",
         "",
       ].join("\n"),
