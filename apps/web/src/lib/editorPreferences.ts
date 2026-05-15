@@ -88,6 +88,7 @@ export type EditorPreferenceSettings = {
   contrastExpansionEnabled: boolean;
   engineExportTargets: EngineExportTarget[];
   showAdvancedControls: boolean;
+  telemetryConsent: boolean;
   inspectorGroupOrder: InspectorGroupId[];
 };
 
@@ -163,6 +164,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   contrastExpansionEnabled: engineFixDefaults.contrastExpansionEnabled,
   engineExportTargets: ["godot", "unity", "phaser"],
   showAdvancedControls: false,
+  telemetryConsent: false,
   inspectorGroupOrder: defaultInspectorGroupOrder
 };
 
@@ -283,6 +285,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       contrastExpansionEnabled: booleanSetting(settings.contrastExpansionEnabled, defaults.settings.contrastExpansionEnabled),
       engineExportTargets: engineTargetsSetting(settings.engineExportTargets, defaults.settings.engineExportTargets),
       showAdvancedControls: booleanSetting(settings.showAdvancedControls, defaults.settings.showAdvancedControls),
+      telemetryConsent: booleanSetting(settings.telemetryConsent, defaults.settings.telemetryConsent),
       inspectorGroupOrder: inspectorOrderSetting(settings.inspectorGroupOrder, defaults.settings.inspectorGroupOrder)
     },
     savedPresets: savedPresetsSetting(value.savedPresets),

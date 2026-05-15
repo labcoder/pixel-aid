@@ -109,6 +109,16 @@ describe("editor preferences", () => {
     expect(enabled.settings.contrastExpansionEnabled).toBe(true);
   });
 
+  test("defaults telemetry consent off and preserves explicit opt-in", () => {
+    const defaults = createDefaultEditorPreferences();
+    const enabled = normalizeEditorPreferences({ settings: { telemetryConsent: true } });
+    const invalid = normalizeEditorPreferences({ settings: { telemetryConsent: "yes" } });
+
+    expect(defaults.settings.telemetryConsent).toBe(false);
+    expect(enabled.settings.telemetryConsent).toBe(true);
+    expect(invalid.settings.telemetryConsent).toBe(false);
+  });
+
   test("preserves advanced quality cleanup preferences", () => {
     const preferences = normalizeEditorPreferences({
       settings: {

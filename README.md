@@ -73,6 +73,10 @@ npm run web:package:standalone
 
 The itch package creates `artifacts/web/PixelAid-<version>-web-itch.zip` with `index.html` at the zip root for HTML5 uploads. The standalone package creates `artifacts/web/PixelAid-<version>-web-standalone.zip` for static hosting. The generated `artifacts/web/` directory is ignored by git. See [apps/web/README.md](apps/web/README.md) and [docs/web-release.md](docs/web-release.md) for package details.
 
+## Telemetry
+
+PixelAid telemetry is opt-in and disabled by default. When enabled for a build and by the user in the app, the editor sends curated anonymous usage and reliability events only. It does not send filenames, file paths, image data, prompts, personal identifiers, autocapture events, or session replay. See [docs/telemetry.md](docs/telemetry.md) for event scope and local `.env` configuration.
+
 ## Use The CLI
 
 The CLI package is named `pixelaid` for npm publishing. Once it is published, install it globally or run it through `npx`:
@@ -178,6 +182,7 @@ npm run build -w @pixelaid/mcp
 - [docs/algorithms.md](docs/algorithms.md) describes the cleanup algorithms.
 - [docs/editor.md](docs/editor.md) covers editor workflows.
 - [docs/web-release.md](docs/web-release.md) covers browser release artifacts.
+- [docs/telemetry.md](docs/telemetry.md) covers opt-in anonymous telemetry.
 - [docs/automation.md](docs/automation.md) covers CLI and MCP-ready workflows.
 - [docs/fixtures.md](docs/fixtures.md) covers generated fixtures and benchmarks.
 - [docs/performance.md](docs/performance.md) tracks performance expectations.

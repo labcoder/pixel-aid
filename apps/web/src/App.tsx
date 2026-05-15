@@ -16,6 +16,7 @@ import {
   Redo2,
   SlidersHorizontal,
   Sparkles,
+  ShieldCheck,
   SkipBack,
   SkipForward,
   Terminal,
@@ -161,6 +162,8 @@ import {
 } from "./lib/editorPreferences";
 import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
 import { createAppMetadata } from "./lib/appMetadata";
+import { createTelemetryClient } from "./lib/telemetryClient";
+import { getTelemetryConfig } from "./lib/telemetryConfig";
 import { createReactSafeRgbaImage } from "./lib/reactSafeImage";
 import {
   createEditorPerformanceMonitor,
@@ -409,6 +412,7 @@ type WindowWithEyeDropper = Window & {
 };
 
 const defaultLogLines = ["Workspace initialized", "Worker pipeline ready", "Waiting for image import"];
+const appScriptStartedAtMs = typeof performance === "undefined" ? 0 : performance.now();
 const sourceAnalysisTransferMemoryKey = "source analysis transfer clone";
 const qualityAnalysisTransferMemoryKey = "quality analysis transfer clone";
 const fixTransferMemoryKey = "fix transfer clone";
@@ -1119,6 +1123,8 @@ export function App() {
   const [pendingAssetDeletionId, setPendingAssetDeletionId] = useState<string | null>(null);
   const [samplePickerOpen, setSamplePickerOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
+  const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  const [telemetryConsent, setTelemetryConsent] = useState(initialSettings.telemetryConsent);
   const [palettesExpanded, setPalettesExpanded] = useState(false);
   const [paletteModal, setPaletteModal] = useState<PaletteModalState | null>(null);
   const [paletteModalPage, setPaletteModalPage] = useState(0);
@@ -1144,6 +1150,8 @@ export function App() {
   const suppressNextExportValidationResetRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
   const qualityReportSwitchFallbackRef = useRef<{ assetId: string; cacheKey?: string } | null>(null);
+  const startupTelemetrySentRef = useRef(false);
+  const appReadyTelemetrySentRef = useRef(false);
   const selectedFrameIndexRef = useRef(selectedFrameIndex);
   const selectedAnimationNameRef = useRef(selectedAnimationName);
   const detectedSheetFramesRef = useRef<SpriteFrame[]>(detectedSheetFrames);
@@ -1299,6 +1307,7 @@ export function App() {
       setContrastExpansionEnabled(settings.contrastExpansionEnabled);
       setEngineExportTargets(settings.engineExportTargets);
       setShowAdvancedControls(settings.showAdvancedControls);
+      setTelemetryConsent(settings.telemetryConsent);
       setInspectorGroupOrder(settings.inspectorGroupOrder);
     },
     [setPaletteBudget]
@@ -1381,6 +1390,7 @@ export function App() {
         contrastExpansionEnabled,
         engineExportTargets,
         showAdvancedControls,
+        telemetryConsent,
         inspectorGroupOrder
       },
       savedPresets: savedEditorPresets,
@@ -1451,6 +1461,7 @@ export function App() {
     showOnionSkin,
     targetHeight,
     targetWidth,
+    telemetryConsent,
     timelineViewportSourceMode,
     zoom
   ]);
@@ -1513,6 +1524,11 @@ export function App() {
   const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
   const latestAssetSwitchTimingReport = assetSwitchTimingReports[0] ?? null;
   const appMetadata = useMemo(() => createAppMetadata(), []);
+  const telemetryConfig = useMemo(() => getTelemetryConfig(), []);
+  const telemetryClient = useMemo(
+    () => createTelemetryClient({ appMetadata, config: telemetryConfig, consent: telemetryConsent }),
+    [appMetadata, telemetryConfig]
+  );
   const assetSwitchMetricRows = useMemo<Array<[string, string]>>(() => {
     const rows = formatAssetSwitchMetricRows(latestAssetSwitchTimingReport);
     if (!latestAssetSwitchTimingReport) {
@@ -1520,6 +1536,49 @@ export function App() {
     }
     return [...rows, ["Marks", formatAssetSwitchMarks(latestAssetSwitchTimingReport)]];
   }, [latestAssetSwitchTimingReport]);
+  const telemetryAvailable = telemetryClient.isAvailable();
+
+  const captureAppReadyTelemetry = useCallback(() => {
+    if (appReadyTelemetrySentRef.current || !telemetryClient.isAvailable() || !telemetryClient.hasConsent()) {
+      return;
+    }
+
+    appReadyTelemetrySentRef.current = true;
+    const appReadyMs = typeof performance === "undefined" ? 0 : Math.max(0, Math.round(performance.now() - appScriptStartedAtMs));
+    void telemetryClient.capture("app_ready", {
+      app_ready_ms: appReadyMs,
+      desktop_runtime_detected: isDesktopRuntime()
+    });
+  }, [telemetryClient]);
+
+  useEffect(() => {
+    telemetryClient.setConsent(telemetryConsent);
+  }, [telemetryClient, telemetryConsent]);
+
+  useEffect(() => {
+    if (startupTelemetrySentRef.current) {
+      return undefined;
+    }
+
+    startupTelemetrySentRef.current = true;
+    void telemetryClient.capture("app_startup", {
+      desktop_runtime_detected: isDesktopRuntime()
+    });
+
+    let cancelled = false;
+    const readyFrame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) {
+          captureAppReadyTelemetry();
+        }
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(readyFrame);
+    };
+  }, [captureAppReadyTelemetry, telemetryClient]);
   useEffect(() => {
     const activeReport = activeAssetSwitchTimingRef.current;
     if (!activeReport) {
@@ -3857,11 +3916,33 @@ export function App() {
   const openAboutDialog = useCallback(() => {
     setActiveAppMenu(null);
     setAboutDialogOpen(true);
-  }, []);
+    void telemetryClient.capture("about_opened");
+  }, [telemetryClient]);
 
   const closeAboutDialog = useCallback(() => {
     setAboutDialogOpen(false);
   }, []);
+
+  const openPrivacyDialog = useCallback(() => {
+    setActiveAppMenu(null);
+    setPrivacyDialogOpen(true);
+  }, []);
+
+  const closePrivacyDialog = useCallback(() => {
+    setPrivacyDialogOpen(false);
+  }, []);
+
+  const updateTelemetryConsent = useCallback(
+    (nextConsent: boolean) => {
+      setTelemetryConsent(nextConsent);
+      telemetryClient.setConsent(nextConsent);
+      if (nextConsent) {
+        void telemetryClient.capture("telemetry_opt_in_changed", { enabled: true });
+        captureAppReadyTelemetry();
+      }
+    },
+    [captureAppReadyTelemetry, telemetryClient]
+  );
 
   const importSampleFromPicker = useCallback(
     async (sampleId: string) => {
@@ -7630,6 +7711,10 @@ export function App() {
               <Sparkles size={14} />
               <span>Add sample asset</span>
             </button>
+            <button type="button" role="menuitem" onClick={openPrivacyDialog}>
+              <ShieldCheck size={14} />
+              <span>Privacy &amp; Telemetry</span>
+            </button>
             <button type="button" role="menuitem" onClick={openAboutDialog}>
               <CircleHelp size={14} />
               <span>About PixelAid</span>
@@ -9038,6 +9123,51 @@ export function App() {
                 </button>
               ))}
             </div>
+          </section>
+        </div>
+      ) : null}
+      {privacyDialogOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            closePrivacyDialog();
+          }
+        }}>
+          <section className="privacy-modal" role="dialog" aria-modal="true" aria-labelledby="privacy-modal-title">
+            <div className="privacy-modal-heading">
+              <div>
+                <h2 id="privacy-modal-title">Privacy &amp; Telemetry</h2>
+                <p>Anonymous usage and reliability events help prioritize fixes and release decisions.</p>
+              </div>
+              <button type="button" onClick={closePrivacyDialog} aria-label="Close privacy and telemetry dialog">
+                Close
+              </button>
+            </div>
+            <label className={telemetryAvailable ? "privacy-toggle-row" : "privacy-toggle-row is-disabled"}>
+              <input
+                type="checkbox"
+                checked={telemetryConsent && telemetryAvailable}
+                disabled={!telemetryAvailable}
+                onChange={(event) => updateTelemetryConsent(event.currentTarget.checked)}
+              />
+              <span>
+                <strong>Send anonymous usage and reliability telemetry</strong>
+                <small>No filenames, image data, prompts, paths, personal identifiers, autocapture, or session replay.</small>
+              </span>
+            </label>
+            <dl className="privacy-modal-details" aria-label="Telemetry configuration">
+              <div>
+                <dt>Status</dt>
+                <dd>{telemetryAvailable ? (telemetryConsent ? "Enabled" : "Off") : "Unavailable in this build"}</dd>
+              </div>
+              <div>
+                <dt>Provider</dt>
+                <dd>{telemetryAvailable ? "PostHog" : "None"}</dd>
+              </div>
+              <div>
+                <dt>Distribution</dt>
+                <dd>{telemetryConfig.distribution}</dd>
+              </div>
+            </dl>
           </section>
         </div>
       ) : null}

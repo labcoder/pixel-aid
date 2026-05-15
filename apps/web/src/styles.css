@@ -926,6 +926,18 @@ button:focus-visible {
   box-shadow: 0 22px 60px #00000090;
 }
 
+.privacy-modal {
+  width: min(520px, 100%);
+  display: grid;
+  gap: 0.9rem;
+  padding: 16px;
+  color: var(--text);
+  background: #111616;
+  border: 1px solid #38504e;
+  border-radius: 8px;
+  box-shadow: 0 22px 60px #00000090;
+}
+
 .palette-modal {
   width: min(760px, 100%);
   max-height: min(720px, calc(100vh - 48px));
@@ -942,6 +954,7 @@ button:focus-visible {
 
 .sample-picker-heading,
 .about-modal-heading,
+.privacy-modal-heading,
 .palette-modal-heading {
   display: flex;
   align-items: start;
@@ -953,6 +966,8 @@ button:focus-visible {
 .sample-picker-heading p,
 .about-modal-heading h2,
 .about-modal-heading p,
+.privacy-modal-heading h2,
+.privacy-modal-heading p,
 .palette-modal-heading h2,
 .palette-modal-heading p {
   margin: 0;
@@ -960,12 +975,14 @@ button:focus-visible {
 
 .sample-picker-heading h2,
 .about-modal-heading h2,
+.privacy-modal-heading h2,
 .palette-modal-heading h2 {
   font-size: 1rem;
 }
 
 .sample-picker-heading p,
 .about-modal-heading p,
+.privacy-modal-heading p,
 .palette-modal-heading p {
   margin-top: 0.2rem;
   color: var(--muted);
@@ -974,12 +991,56 @@ button:focus-visible {
 
 .sample-picker-heading button,
 .about-modal-heading button,
+.privacy-modal-heading button,
 .palette-modal-heading button {
   min-height: 30px;
   padding: 0 0.6rem;
 }
 
+.privacy-toggle-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+  padding: 0.75rem;
+  background: #131918;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.privacy-toggle-row.is-disabled {
+  opacity: 0.68;
+}
+
+.privacy-toggle-row input {
+  width: 16px;
+  height: 16px;
+  margin-top: 0.15rem;
+}
+
+.privacy-toggle-row span {
+  min-width: 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.privacy-toggle-row strong {
+  font-size: 0.8rem;
+}
+
+.privacy-toggle-row small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
 .about-modal-details {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.privacy-modal-details {
   display: grid;
   gap: 0.45rem;
   margin: 0;
@@ -994,18 +1055,31 @@ button:focus-visible {
   border-bottom: 1px solid var(--line);
 }
 
+.privacy-modal-details div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 0.65rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
 .about-modal-details dt,
-.about-modal-details dd {
+.about-modal-details dd,
+.privacy-modal-details dt,
+.privacy-modal-details dd {
   margin: 0;
   min-width: 0;
   font-size: 0.76rem;
 }
 
-.about-modal-details dt {
+.about-modal-details dt,
+.privacy-modal-details dt {
   color: var(--muted);
 }
 
-.about-modal-details dd {
+.about-modal-details dd,
+.privacy-modal-details dd {
   overflow-wrap: anywhere;
   font-weight: 800;
 }
