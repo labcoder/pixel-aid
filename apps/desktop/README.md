@@ -26,6 +26,7 @@ npm run desktop:build
 npm run desktop:package
 npm run desktop:package:windows
 npm run desktop:package:macos
+npm run desktop:package:macos:signed
 npm run desktop:info
 npm run desktop:release:check
 npm run desktop:checksums
@@ -47,6 +48,8 @@ npm run test
 `npm run desktop:dev` launches Tauri in development mode and uses the web dev server. `npm run desktop:build` runs the desktop prerequisite check and then calls Tauri packaging.
 
 `npm run desktop:package` builds an unsigned portable artifact for the current platform. On Windows, `npm run desktop:package:windows` creates `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip` with `PixelAid.exe`, license files, notices, and a short `README.txt`. On macOS, `npm run desktop:package:macos` creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip` containing `PixelAid.app` plus the same release text files. Run each platform package command on its matching operating system.
+
+`npm run desktop:package:macos:signed` is the local opt-in signing path. It reads Apple signing and notarization values from the repo-root `.env`, signs a staged copy of `PixelAid.app` with Developer ID and hardened runtime, notarizes it, staples the ticket, verifies the result, and writes `artifacts/desktop/PixelAid-<version>-macos-<arch>-signed-app.zip`. The unsigned macOS package command remains the default and strips Apple signing variables from its build environment.
 
 On Windows, the desktop npm scripts run Tauri through the Visual Studio C++ toolchain environment. This avoids a common Git Bash collision where `link.exe` resolves to Git's GNU utility instead of Microsoft's MSVC linker. Prefer these npm scripts over raw `cargo` or `tauri` commands from Git Bash.
 
@@ -71,8 +74,8 @@ xattr -dr com.apple.quarantine PixelAid.app
 - `scripts/check-desktop-prereqs.mjs`: local prerequisite check.
 - `scripts/check-desktop-release-env.mjs`: signing and notarization environment validation.
 - `scripts/create-desktop-checksums.mjs`: release artifact checksum generation.
-- `scripts/package-desktop-artifacts.mjs`: unsigned Windows portable and macOS `.app` artifact packaging.
-- `scripts/verify-desktop-package.mjs`: CI smoke verification for extracted Windows and macOS packages.
+- `scripts/package-desktop-artifacts.mjs`: unsigned Windows portable, unsigned macOS `.app`, and opt-in signed macOS `.app` artifact packaging.
+- `scripts/verify-desktop-package.mjs`: smoke verification for extracted Windows, unsigned macOS, and signed/notarized macOS packages.
 
 ## Release Notes
 

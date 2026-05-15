@@ -38,6 +38,35 @@ npm run desktop:package
 
 The Windows portable executable is built as a GUI app, so it should not open a console window when launched normally. The macOS artifact is a normal `.app` bundle inside a zip; opening it from Finder should not open Terminal. The bundle is named `PixelAid.app`, while the internal executable is read from `PixelAid.app/Contents/Info.plist` and may use the Cargo package name, such as `pixelaid-desktop`.
 
+## Local Signed macOS Builds
+
+Unsigned desktop packages remain the default. Signed macOS packaging is opt-in:
+
+```sh
+npm run desktop:package:macos:signed
+```
+
+The signed command reads local Apple signing and notarization values from `.env` in the repo root, then merges the current shell environment over those values. The `.env` file is ignored by git. Do not commit certificates, private keys, API keys, app-specific passwords, or generated notarization archives.
+
+Use `.env.example` as the shape for local setup:
+
+```sh
+APPLE_SIGNING_IDENTITY="Developer ID Application: Your Name (TEAMID)"
+APPLE_API_KEY="YOUR_KEY_ID"
+APPLE_API_ISSUER="YOUR_ISSUER_ID"
+APPLE_API_KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_YOUR_KEY_ID.p8"
+```
+
+The signed macOS command builds the Tauri `.app` without Apple signing variables in the build environment, copies the app into `artifacts/desktop/staging/`, signs the staged copy with Developer ID and hardened runtime, submits it to Apple notarization with `notarytool`, staples the notarization ticket, runs local signature/Gatekeeper checks, and finally creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-signed-app.zip`.
+
+Verify a signed package after extracting it:
+
+```sh
+node apps/desktop/scripts/verify-desktop-package.mjs macos /path/to/extracted/package arm64 --signed
+```
+
+Use `x64` instead of `arm64` for Intel builds.
+
 ## Manual CI Artifact Builds
 
 The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
@@ -73,7 +102,7 @@ For a dry-run release check without secrets, use:
 npm run desktop:release:check -- --allow-unsigned
 ```
 
-The `--allow-unsigned` flag is for local dry runs only. Public builds should run the same check without that flag.
+The `--allow-unsigned` flag is for local dry runs only. Public builds should run the same check without that flag. Local release checks read `.env` by default; use `--no-env-file` to validate only the current shell environment.
 
 ## Signed Public Builds
 
@@ -87,8 +116,7 @@ npm run lint
 npm run build
 npm run desktop:check
 npm run desktop:release:check
-npm run desktop:build
-npm run desktop:package
+npm run desktop:package:macos:signed
 npm run desktop:checksums
 ```
 
@@ -110,11 +138,12 @@ Provide:
 And one notarization credential set:
 
 - App Store Connect API: `APPLE_API_KEY`, `APPLE_API_ISSUER`, and `APPLE_API_KEY_PATH`.
-- Apple ID fallback: `APPLE_ID`, `APPLE_PASSWORD`, and `APPLE_TEAM_ID`.
+
+The current local signed package command uses App Store Connect API credentials. Apple ID password fallback remains deferred so secrets do not need to be passed through command-line arguments.
 
 ### Deferred Artifact Types
 
-Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, and itch.io publication flows are deferred until the unsigned Windows portable zip and macOS `.app` zip are stable in CI. Add those paths as separate release phases so signing, notarization, store review, and external publishing can be verified independently.
+Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, GitHub Release automation, and itch.io publication flows are deferred until the unsigned Windows portable zip and local signed macOS `.app` zip are stable. Add those paths as separate release phases so signing, notarization, store review, and external publishing can be verified independently.
 
 ## Checksums
 

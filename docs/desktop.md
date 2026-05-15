@@ -11,6 +11,7 @@ npm run desktop:build
 npm run desktop:package
 npm run desktop:package:windows
 npm run desktop:package:macos
+npm run desktop:package:macos:signed
 npm run desktop:info
 npm run desktop:release:check
 npm run desktop:checksums
@@ -22,11 +23,13 @@ On Windows, the desktop npm scripts automatically enter the Visual Studio C++ to
 
 Unsigned local builds can use `npm run desktop:build`. Unsigned portable artifacts use `npm run desktop:package` for the current platform, `npm run desktop:package:windows` on Windows, or `npm run desktop:package:macos` on macOS. The package commands write ignored zip files under `artifacts/desktop/`.
 
+Signed macOS packages are opt-in with `npm run desktop:package:macos:signed`. The signed command reads Apple Developer ID and App Store Connect notarization settings from the repo-root `.env` file, signs a staged copy of `PixelAid.app`, notarizes and staples it, verifies the signature, and creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-signed-app.zip`. Unsigned packaging remains the default even when signing variables exist in `.env` or the shell environment.
+
 Windows packages contain `PixelAid.exe`, license files, notices, and a short `README.txt`. Release Windows executables use the Windows GUI subsystem, so launching the portable app should not open an extra console window. macOS packages contain a zipped `PixelAid.app` bundle and the same release text files; opening the `.app` from Finder should not open Terminal. The `.app` bundle name and internal executable name are separate; CI verification reads `CFBundleExecutable` from `Info.plist` instead of assuming the binary is named `PixelAid`.
 
 The manual GitHub Actions workflow builds the Windows x64 portable zip plus separate macOS arm64 and x64 `.app` zips. Use the arm64 artifact on Apple Silicon Macs. The CI macOS packages are still unsigned and not notarized; after downloading from GitHub, Gatekeeper may call the app damaged or corrupted. For trusted smoke-test artifacts only, unzip the package and run `xattr -dr com.apple.quarantine PixelAid.app` before launching. Public macOS downloads should be signed and notarized instead of asking users to remove quarantine.
 
-Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory or a copied artifact directory.
+Public builds should also run `npm run desktop:release:check` without `--allow-unsigned` so missing signing/notarization secrets fail before artifacts are published. Local release checks read `.env` by default and never print secret values. After packaging, `npm run desktop:checksums` writes a sorted `SHA256SUMS.txt` for the generated bundle directory or a copied artifact directory.
 
 ## Structure
 
@@ -46,6 +49,8 @@ See `docs/desktop-release.md` for the release packaging checklist, artifact note
 The desktop shell wraps the web editor and enables native image import plus ZIP bundle export through the operating system's open/save dialogs. Drag/drop and paste still use the browser path, and the browser build still uses the web file picker and download behavior.
 
 Editor settings and user presets persist through the same local preference store used by the web app. App icons are generated from the first-party PixelAid brand source and referenced by the Tauri bundle config. Signing, notarization, checksum generation, and installer artifact publication are release-owner steps documented in `docs/desktop-release.md`.
+
+GitHub Release automation for signed desktop artifacts is deferred until the local signed macOS flow has been verified end to end.
 
 ## Filesystem Permissions
 
