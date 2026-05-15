@@ -16,7 +16,7 @@ export function resolveWindowsMsvcToolchain({
   const msvcBinPath = installationPath
     ? findLatestMsvcBinPath(installationPath, { existsSyncImpl, readdirSyncImpl })
     : undefined;
-  const msvcLinkPath = msvcBinPath ? path.join(msvcBinPath, "link.exe") : undefined;
+  const msvcLinkPath = msvcBinPath ? path.win32.join(msvcBinPath, "link.exe") : undefined;
   const linkPath = findCommandOnPath("link.exe", { env, existsSyncImpl, platform: "win32" });
   const linkCollision = isGitBashLinkPath(linkPath);
   const missing = [];
@@ -57,7 +57,7 @@ export function resolveWindowsMsvcToolchain({
 export function findVsWherePath({ env = process.env, existsSyncImpl = existsSync } = {}) {
   const roots = [env["ProgramFiles(x86)"], env.ProgramFiles].filter(Boolean);
   for (const root of roots) {
-    const candidate = path.join(root, "Microsoft Visual Studio", "Installer", "vswhere.exe");
+    const candidate = path.win32.join(root, "Microsoft Visual Studio", "Installer", "vswhere.exe");
     if (existsSyncImpl(candidate)) {
       return candidate;
     }
@@ -89,7 +89,7 @@ export function findVisualStudioInstallation({ vsWherePath, spawnSyncImpl = spaw
 }
 
 export function findVsDevCmdPath(installationPath, { existsSyncImpl = existsSync } = {}) {
-  const candidate = path.join(installationPath, "Common7", "Tools", "VsDevCmd.bat");
+  const candidate = path.win32.join(installationPath, "Common7", "Tools", "VsDevCmd.bat");
   return existsSyncImpl(candidate) ? candidate : undefined;
 }
 
@@ -97,7 +97,7 @@ export function findLatestMsvcBinPath(
   installationPath,
   { existsSyncImpl = existsSync, readdirSyncImpl = readdirSync } = {}
 ) {
-  const toolsRoot = path.join(installationPath, "VC", "Tools", "MSVC");
+  const toolsRoot = path.win32.join(installationPath, "VC", "Tools", "MSVC");
   if (!existsSyncImpl(toolsRoot)) {
     return undefined;
   }
@@ -109,8 +109,8 @@ export function findLatestMsvcBinPath(
     .reverse();
 
   for (const version of versions) {
-    const binPath = path.join(toolsRoot, version, "bin", "Hostx64", "x64");
-    if (existsSyncImpl(path.join(binPath, "link.exe"))) {
+    const binPath = path.win32.join(toolsRoot, version, "bin", "Hostx64", "x64");
+    if (existsSyncImpl(path.win32.join(binPath, "link.exe"))) {
       return binPath;
     }
   }
@@ -124,7 +124,8 @@ export function findCommandOnPath(command, { env = process.env, existsSyncImpl =
     return undefined;
   }
 
-  const extensions = platform === "win32" && path.extname(command) === ""
+  const pathApi = platform === "win32" ? path.win32 : path;
+  const extensions = platform === "win32" && pathApi.extname(command) === ""
     ? getPathExtensions(env)
     : [""];
 
@@ -133,7 +134,7 @@ export function findCommandOnPath(command, { env = process.env, existsSyncImpl =
       continue;
     }
     for (const extension of extensions) {
-      const candidate = path.join(directory, `${command}${extension}`);
+      const candidate = pathApi.join(directory, `${command}${extension}`);
       if (existsSyncImpl(candidate)) {
         return candidate;
       }

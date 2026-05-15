@@ -15,8 +15,8 @@ test("detects Git Bash GNU link.exe as an MSVC linker collision", () => {
 
 test("finds the newest MSVC x64 linker bin directory", () => {
   const installationPath = "C:\\VS";
-  const toolsRoot = path.join(installationPath, "VC", "Tools", "MSVC");
-  const latestBin = path.join(toolsRoot, "14.42.34433", "bin", "Hostx64", "x64");
+  const toolsRoot = path.win32.join(installationPath, "VC", "Tools", "MSVC");
+  const latestBin = path.win32.join(toolsRoot, "14.42.34433", "bin", "Hostx64", "x64");
   const directories = new Map([
     [
       toolsRoot,
@@ -27,7 +27,7 @@ test("finds the newest MSVC x64 linker bin directory", () => {
       ],
     ],
   ]);
-  const files = new Set([path.join(latestBin, "link.exe")]);
+  const files = new Set([path.win32.join(latestBin, "link.exe")]);
 
   const result = findLatestMsvcBinPath(installationPath, {
     existsSyncImpl: (candidate) => directories.has(candidate) || files.has(candidate),
@@ -53,12 +53,12 @@ test("builds a cmd command that prepends the MSVC linker path before Tauri", () 
 test("resolves a usable Windows toolchain while warning about Git Bash link.exe", () => {
   const vsWherePath = "C:\\Program Files (x86)\\Microsoft Visual Studio\\Installer\\vswhere.exe";
   const installationPath = "C:\\VS";
-  const vsDevCmdPath = path.join(installationPath, "Common7", "Tools", "VsDevCmd.bat");
-  const toolsRoot = path.join(installationPath, "VC", "Tools", "MSVC");
-  const msvcBinPath = path.join(toolsRoot, "14.42.34433", "bin", "Hostx64", "x64");
+  const vsDevCmdPath = path.win32.join(installationPath, "Common7", "Tools", "VsDevCmd.bat");
+  const toolsRoot = path.win32.join(installationPath, "VC", "Tools", "MSVC");
+  const msvcBinPath = path.win32.join(toolsRoot, "14.42.34433", "bin", "Hostx64", "x64");
   const gitLinkPath = "C:\\Program Files\\Git\\usr\\bin\\link.exe";
   const directories = new Map([[toolsRoot, [{ name: "14.42.34433", isDirectory: () => true }]]]);
-  const files = new Set([vsWherePath, vsDevCmdPath, path.join(msvcBinPath, "link.exe"), gitLinkPath]);
+  const files = new Set([vsWherePath, vsDevCmdPath, path.win32.join(msvcBinPath, "link.exe"), gitLinkPath]);
 
   const result = resolveWindowsMsvcToolchain({
     env: {
