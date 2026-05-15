@@ -3,6 +3,7 @@ dist/
 coverage/
 benchmark-results/
 artifacts/desktop/
+artifacts/
 .vite/
 .playwright-cli/
 .worktrees/
@@ -16,5 +17,6 @@ apps/desktop/src-tauri/gen/
 apps/desktop/src-tauri/Cargo.lock
 *.local
 *.log
+.DS_Store
 
 .env
