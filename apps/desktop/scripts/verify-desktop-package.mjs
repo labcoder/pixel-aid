@@ -80,13 +80,13 @@ async function assertExecutable(filePath) {
   }
 }
 
-function verifyMacosBinaryArchitecture(executablePath, expectedArch) {
+function verifyMacosBinaryArchitecture(executablePath, expectedArch, runCommand = spawnSync) {
   if (!expectedArch) {
     return undefined;
   }
 
   const token = expectedMacosArchitectureToken(expectedArch);
-  const result = spawnSync("file", [executablePath], { encoding: "utf8" });
+  const result = runCommand("file", [executablePath], { encoding: "utf8" });
   const output = `${result.stdout ?? ""}${result.stderr ?? ""}`.trim();
 
   if (result.status !== 0) {
@@ -99,7 +99,44 @@ function verifyMacosBinaryArchitecture(executablePath, expectedArch) {
   return output;
 }
 
-export async function verifyMacosPackageDirectory({ packageRoot, expectedArch } = {}) {
+function runQuietVerificationCommand({ command, args, label, runCommand = spawnSync }) {
+  const result = runCommand(command, args, { encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new DesktopPackageVerificationError(`${label} failed with exit code ${result.status ?? 1}.`);
+  }
+}
+
+function verifySignedMacosApp(appPath, runCommand = spawnSync) {
+  const checks = [
+    {
+      command: "codesign",
+      args: ["--verify", "--deep", "--strict", "--verbose=2", appPath],
+      label: "codesign verification",
+    },
+    {
+      command: "xcrun",
+      args: ["stapler", "validate", appPath],
+      label: "stapled notarization ticket validation",
+    },
+    {
+      command: "spctl",
+      args: ["-a", "-vv", "--type", "execute", appPath],
+      label: "Gatekeeper assessment",
+    },
+  ];
+
+  for (const check of checks) {
+    runQuietVerificationCommand({ ...check, runCommand });
+  }
+
+  return {
+    gatekeeper: true,
+    notarized: true,
+    signature: true,
+  };
+}
+
+export async function verifyMacosPackageDirectory({ packageRoot, expectedArch, signed = false, runCommand = spawnSync } = {}) {
   if (!packageRoot) {
     throw new DesktopPackageVerificationError("A macOS package extraction directory is required.");
   }
@@ -113,13 +150,15 @@ export async function verifyMacosPackageDirectory({ packageRoot, expectedArch } 
   const executableName = parseBundleExecutable(await readFile(infoPlistPath, "utf8"));
   const executablePath = path.join(appPath, "Contents", "MacOS", executableName);
   await assertExecutable(executablePath);
-  const architecture = verifyMacosBinaryArchitecture(executablePath, expectedArch);
+  const architecture = verifyMacosBinaryArchitecture(executablePath, expectedArch, runCommand);
+  const signing = signed ? verifySignedMacosApp(appPath, runCommand) : undefined;
 
   return {
     appPath,
     architecture,
     executableName,
     executablePath,
+    signing,
   };
 }
 
@@ -146,12 +185,27 @@ export async function verifyWindowsPackageDirectory({ packageRoot } = {}) {
   };
 }
 
-async function main([target, packageRoot, expectedArch] = process.argv.slice(2)) {
+function parseArgs(argv) {
+  const signed = argv.includes("--signed");
+  const positional = argv.filter((arg) => arg !== "--signed");
+  return {
+    expectedArch: positional[2],
+    packageRoot: positional[1],
+    signed,
+    target: positional[0],
+  };
+}
+
+async function main(argv = process.argv.slice(2)) {
+  const { target, packageRoot, expectedArch, signed } = parseArgs(argv);
   if (target === "macos") {
-    const result = await verifyMacosPackageDirectory({ packageRoot, expectedArch });
+    const result = await verifyMacosPackageDirectory({ packageRoot, expectedArch, signed });
     console.log(`ok macOS app executable: ${result.executablePath}`);
     if (result.architecture) {
       console.log(result.architecture);
+    }
+    if (result.signing) {
+      console.log("ok macOS Developer ID signature, notarization ticket, and Gatekeeper assessment");
     }
     return;
   }
@@ -163,7 +217,7 @@ async function main([target, packageRoot, expectedArch] = process.argv.slice(2))
     return;
   }
 
-  throw new DesktopPackageVerificationError("Usage: node apps/desktop/scripts/verify-desktop-package.mjs [windows|macos] <extracted-package-dir> [arch]");
+  throw new DesktopPackageVerificationError("Usage: node apps/desktop/scripts/verify-desktop-package.mjs [windows|macos] <extracted-package-dir> [arch] [--signed]");
 }
 
 function isMainModule() {
