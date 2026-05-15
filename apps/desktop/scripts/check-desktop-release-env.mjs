@@ -39,6 +39,9 @@ export function evaluateDesktopReleaseEnv({ platform, env = process.env, allowUn
     if (!hasApiNotarization && !hasAppleIdNotarization) {
       missing.push("APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_PATH or APPLE_ID + APPLE_PASSWORD + APPLE_TEAM_ID");
     }
+    if (hasApiNotarization && !isUuid(env.APPLE_API_ISSUER.trim())) {
+      missing.push("APPLE_API_ISSUER must be a UUID-only App Store Connect issuer ID");
+    }
   } else if (platform === "linux") {
     warnings.push("Linux desktop artifacts are unsigned; publish checksums and package-manager metadata with each release.");
   } else {
@@ -111,6 +114,10 @@ function takeBoolean(args, flag) {
 
 function hasValue(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
 }
 
 function isMainModule() {

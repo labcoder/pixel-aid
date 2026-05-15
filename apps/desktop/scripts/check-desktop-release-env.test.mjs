@@ -24,13 +24,29 @@ test("accepts macOS notarization with app store connect API credentials", () => 
     env: {
       APPLE_SIGNING_IDENTITY: "Developer ID Application: Oscar Sanchez",
       APPLE_API_KEY: "AuthKey_1234567890",
-      APPLE_API_ISSUER: "issuer-id",
+      APPLE_API_ISSUER: "11111111-1111-4111-8111-111111111111",
       APPLE_API_KEY_PATH: "/secure/AuthKey_1234567890.p8",
     },
   });
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.missing, []);
+});
+
+test("rejects macOS API notarization when issuer is not UUID-only", () => {
+  const result = evaluateDesktopReleaseEnv({
+    platform: "darwin",
+    allowUnsigned: false,
+    env: {
+      APPLE_SIGNING_IDENTITY: "Developer ID Application: Example",
+      APPLE_API_KEY: "AuthKey_1234567890",
+      APPLE_API_ISSUER: "ISSUER_UUID-not-a-uuid",
+      APPLE_API_KEY_PATH: "/secure/AuthKey_1234567890.p8",
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.missing, ["APPLE_API_ISSUER must be a UUID-only App Store Connect issuer ID"]);
 });
 
 test("parses release check env-file options", () => {
