@@ -6,6 +6,7 @@ export default [
     ignores: [
       "**/dist/**",
       "**/coverage/**",
+      "**/artifacts/**",
       "**/node_modules/**",
       "**/.worktrees/**",
       "apps/desktop/src-tauri/gen/**",

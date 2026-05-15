@@ -62,6 +62,17 @@ The signed command reads signing and notarization settings from the ignored repo
 
 The desktop app wraps the same web editor and adds native open/save dialogs. See [apps/desktop/README.md](apps/desktop/README.md), [docs/desktop.md](docs/desktop.md), and [docs/desktop-release.md](docs/desktop-release.md) for Rust/Tauri requirements, release checks, unsigned package artifacts, signing expectations, and checksums.
 
+## Package Web Releases
+
+Create static web release artifacts from the Vite editor build:
+
+```sh
+npm run web:package:itch
+npm run web:package:standalone
+```
+
+The itch package creates `artifacts/web/PixelAid-<version>-web-itch.zip` with `index.html` at the zip root for HTML5 uploads. The standalone package creates `artifacts/web/PixelAid-<version>-web-standalone.zip` for static hosting. The generated `artifacts/web/` directory is ignored by git. See [apps/web/README.md](apps/web/README.md) and [docs/web-release.md](docs/web-release.md) for package details.
+
 ## Use The CLI
 
 The CLI package is named `pixelaid` for npm publishing. Once it is published, install it globally or run it through `npx`:
@@ -129,6 +140,7 @@ packages/fixtures     Generated fixtures, goldens, and benchmark sources
 ```sh
 npm run dev
 npm run desktop:dev
+npm run web:package:standalone
 npm run mcp:serve
 npm run test
 npm run lint
@@ -165,6 +177,7 @@ npm run build -w @pixelaid/mcp
 - [docs/architecture.md](docs/architecture.md) explains the current architecture.
 - [docs/algorithms.md](docs/algorithms.md) describes the cleanup algorithms.
 - [docs/editor.md](docs/editor.md) covers editor workflows.
+- [docs/web-release.md](docs/web-release.md) covers browser release artifacts.
 - [docs/automation.md](docs/automation.md) covers CLI and MCP-ready workflows.
 - [docs/fixtures.md](docs/fixtures.md) covers generated fixtures and benchmarks.
 - [docs/performance.md](docs/performance.md) tracks performance expectations.

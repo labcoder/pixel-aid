@@ -15,6 +15,8 @@ From the repo root:
 ```sh
 npm run dev
 npm run build -w @pixelaid/web
+npm run web:package:itch
+npm run web:package:standalone
 npm run test -w @pixelaid/web
 npm run typecheck -w @pixelaid/web
 npm run preview -w @pixelaid/web
@@ -31,6 +33,8 @@ npm run preview
 ```
 
 `npm run dev` starts Vite. `npm run build` runs TypeScript first, then builds the production web bundle. `npm run preview` serves the built bundle after `npm run build`.
+
+`npm run web:package:itch` and `npm run web:package:standalone` run from the repo root. Both commands build the app with relative asset paths, stage the files under `artifacts/web/staging/`, copy repo notice files, and write a zip under `artifacts/web/`. The itch package keeps `index.html` at the zip root for HTML5 uploads. The standalone package uses the same static build shape for normal static hosting.
 
 ## Development Notes
 

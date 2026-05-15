@@ -5,6 +5,7 @@ import { fileURLToPath, URL } from "node:url";
 const workspacePackage = (path: string) => fileURLToPath(new URL(`../../packages/${path}`, import.meta.url));
 
 export default defineConfig({
+  base: process.env.PIXELAID_WEB_BASE ?? "/",
   plugins: [react()],
   resolve: {
     alias: [
