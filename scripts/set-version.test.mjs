@@ -154,6 +154,12 @@ async function createVersionFixture(currentVersion = "0.1.0") {
     productName: "PixelAid",
     version: currentVersion,
   });
+  await mkdir(path.join(cwd, "packages/shared/src"), { recursive: true });
+  await writeFile(
+    path.join(cwd, "packages/shared/src/index.ts"),
+    `export const PIXELAID_APP_NAME = "PixelAid";\nexport const PIXELAID_VERSION = "${currentVersion}";\n`,
+    "utf8",
+  );
 
   return cwd;
 }
@@ -202,6 +208,9 @@ test("sets every workspace, lockfile, desktop, and internal dependency version",
 
     const tauriConfig = await readJson(path.join(cwd, "apps/desktop/src-tauri/tauri.conf.json"));
     assert.equal(tauriConfig.version, "0.2.3");
+
+    const sharedIndex = await readFile(path.join(cwd, "packages/shared/src/index.ts"), "utf8");
+    assert.match(sharedIndex, /PIXELAID_VERSION = "0\.2\.3"/u);
   } finally {
     await rm(cwd, { recursive: true, force: true });
   }

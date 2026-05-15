@@ -914,6 +914,18 @@ button:focus-visible {
   box-shadow: 0 22px 60px #00000090;
 }
 
+.about-modal {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 0.9rem;
+  padding: 16px;
+  color: var(--text);
+  background: #111616;
+  border: 1px solid #38504e;
+  border-radius: 8px;
+  box-shadow: 0 22px 60px #00000090;
+}
+
 .palette-modal {
   width: min(760px, 100%);
   max-height: min(720px, calc(100vh - 48px));
@@ -929,6 +941,7 @@ button:focus-visible {
 }
 
 .sample-picker-heading,
+.about-modal-heading,
 .palette-modal-heading {
   display: flex;
   align-items: start;
@@ -938,17 +951,21 @@ button:focus-visible {
 
 .sample-picker-heading h2,
 .sample-picker-heading p,
+.about-modal-heading h2,
+.about-modal-heading p,
 .palette-modal-heading h2,
 .palette-modal-heading p {
   margin: 0;
 }
 
 .sample-picker-heading h2,
+.about-modal-heading h2,
 .palette-modal-heading h2 {
   font-size: 1rem;
 }
 
 .sample-picker-heading p,
+.about-modal-heading p,
 .palette-modal-heading p {
   margin-top: 0.2rem;
   color: var(--muted);
@@ -956,9 +973,61 @@ button:focus-visible {
 }
 
 .sample-picker-heading button,
+.about-modal-heading button,
 .palette-modal-heading button {
   min-height: 30px;
   padding: 0 0.6rem;
+}
+
+.about-modal-details {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.about-modal-details div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 0.65rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.about-modal-details dt,
+.about-modal-details dd {
+  margin: 0;
+  min-width: 0;
+  font-size: 0.76rem;
+}
+
+.about-modal-details dt {
+  color: var(--muted);
+}
+
+.about-modal-details dd {
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.about-modal-link {
+  min-height: 32px;
+  width: max-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 0.65rem;
+  color: var(--text);
+  background: #162221;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.about-modal-link:hover {
+  border-color: var(--cyan);
 }
 
 .palette-modal-grid {

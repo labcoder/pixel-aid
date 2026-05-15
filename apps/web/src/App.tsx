@@ -8,6 +8,7 @@ import {
   Download,
   Eye,
   EyeOff,
+  ExternalLink,
   FileImage,
   Layers,
   Plus,
@@ -159,6 +160,7 @@ import {
   type EditorPreferences
 } from "./lib/editorPreferences";
 import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcutTarget } from "./lib/editorShortcuts";
+import { createAppMetadata } from "./lib/appMetadata";
 import { createReactSafeRgbaImage } from "./lib/reactSafeImage";
 import {
   createEditorPerformanceMonitor,
@@ -1116,6 +1118,7 @@ export function App() {
   const [activeAppMenu, setActiveAppMenu] = useState<AppMenuId | null>(null);
   const [pendingAssetDeletionId, setPendingAssetDeletionId] = useState<string | null>(null);
   const [samplePickerOpen, setSamplePickerOpen] = useState(false);
+  const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [palettesExpanded, setPalettesExpanded] = useState(false);
   const [paletteModal, setPaletteModal] = useState<PaletteModalState | null>(null);
   const [paletteModalPage, setPaletteModalPage] = useState(0);
@@ -1509,6 +1512,7 @@ export function App() {
   const busyStatus = formatBusyOperationLabel(visibleBusyOperation);
   const assetPanelStatus = formatBusyOperationLabel(selectVisibleBusyOperation({ importOperation, activationOperation: assetActivationOperation, analysisOperation }));
   const latestAssetSwitchTimingReport = assetSwitchTimingReports[0] ?? null;
+  const appMetadata = useMemo(() => createAppMetadata(), []);
   const assetSwitchMetricRows = useMemo<Array<[string, string]>>(() => {
     const rows = formatAssetSwitchMetricRows(latestAssetSwitchTimingReport);
     if (!latestAssetSwitchTimingReport) {
@@ -3848,6 +3852,15 @@ export function App() {
 
   const closeSamplePicker = useCallback(() => {
     setSamplePickerOpen(false);
+  }, []);
+
+  const openAboutDialog = useCallback(() => {
+    setActiveAppMenu(null);
+    setAboutDialogOpen(true);
+  }, []);
+
+  const closeAboutDialog = useCallback(() => {
+    setAboutDialogOpen(false);
   }, []);
 
   const importSampleFromPicker = useCallback(
@@ -7617,6 +7630,10 @@ export function App() {
               <Sparkles size={14} />
               <span>Add sample asset</span>
             </button>
+            <button type="button" role="menuitem" onClick={openAboutDialog}>
+              <CircleHelp size={14} />
+              <span>About PixelAid</span>
+            </button>
           </ToolbarMenu>
           <ToolbarMenu id="view" label="View" icon={<Eye size={15} />} activeMenu={activeAppMenu} onToggle={toggleAppMenu}>
             {editorPanelMenuItems.map((item) => (
@@ -9021,6 +9038,43 @@ export function App() {
                 </button>
               ))}
             </div>
+          </section>
+        </div>
+      ) : null}
+      {aboutDialogOpen ? (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
+          if (event.currentTarget === event.target) {
+            closeAboutDialog();
+          }
+        }}>
+          <section className="about-modal" role="dialog" aria-modal="true" aria-labelledby="about-modal-title">
+            <div className="about-modal-heading">
+              <div>
+                <h2 id="about-modal-title">About PixelAid</h2>
+                <p>Grid-aligned pixel-art asset preparation.</p>
+              </div>
+              <button type="button" onClick={closeAboutDialog} aria-label="Close about dialog">
+                Close
+              </button>
+            </div>
+            <dl className="about-modal-details" aria-label="Application details">
+              <div>
+                <dt>Version</dt>
+                <dd>{appMetadata.version}</dd>
+              </div>
+              <div>
+                <dt>Runtime</dt>
+                <dd>{appMetadata.runtimeLabel}</dd>
+              </div>
+              <div>
+                <dt>Platform</dt>
+                <dd>{appMetadata.platform}</dd>
+              </div>
+            </dl>
+            <a className="about-modal-link" href={appMetadata.websiteUrl} target="_blank" rel="noreferrer">
+              <ExternalLink size={14} />
+              <span>Website</span>
+            </a>
           </section>
         </div>
       ) : null}

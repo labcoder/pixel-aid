@@ -259,6 +259,28 @@ async function updateTauriConfig(cwd, nextVersion, updatedFiles) {
   await writeIfChanged(cwd, tauriConfigPath, stringifyJson(tauriConfig), updatedFiles);
 }
 
+function updateSharedVersionConstant(source, nextVersion) {
+  const sharedVersionPattern = /(^export\s+const\s+PIXELAID_VERSION\s*=\s*")[^"]+(";?)/mu;
+  if (!sharedVersionPattern.test(source)) {
+    throw new VersionCommandError(
+      "SHARED_VERSION_NOT_FOUND",
+      "Could not find PIXELAID_VERSION in packages/shared/src/index.ts.",
+    );
+  }
+
+  return source.replace(sharedVersionPattern, `$1${nextVersion}$2`);
+}
+
+async function updateSharedIndexVersion(cwd, nextVersion, updatedFiles) {
+  const sharedIndexPath = path.join(cwd, "packages/shared/src/index.ts");
+  if (!(await fileExists(sharedIndexPath))) {
+    return;
+  }
+
+  const sharedIndex = await readFile(sharedIndexPath, "utf8");
+  await writeIfChanged(cwd, sharedIndexPath, updateSharedVersionConstant(sharedIndex, nextVersion), updatedFiles);
+}
+
 export async function setWorkspaceVersion({ cwd = process.cwd(), target }) {
   const rootPackagePath = path.join(cwd, "package.json");
   const rootPackage = await readJson(rootPackagePath);
@@ -304,6 +326,7 @@ export async function setWorkspaceVersion({ cwd = process.cwd(), target }) {
   await updatePackageLock(cwd, internalPackageNames, packageFiles, nextVersion, updatedFiles);
   await updateCargoToml(cwd, nextVersion, updatedFiles);
   await updateTauriConfig(cwd, nextVersion, updatedFiles);
+  await updateSharedIndexVersion(cwd, nextVersion, updatedFiles);
 
   return {
     previousVersion: currentVersion,
