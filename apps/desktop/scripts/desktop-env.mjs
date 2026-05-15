@@ -91,7 +91,7 @@ export async function loadRepoEnv({ repoRoot, env = process.env, envFile = path.
 
 export function resolveUserPath(value, { homeDir = os.homedir() } = {}) {
   if (value.startsWith("~/")) {
-    return path.join(homeDir, value.slice(2));
+    return joinHomeRelativePath(homeDir, value.slice(2));
   }
 
   if (value === "~") {
@@ -99,7 +99,7 @@ export function resolveUserPath(value, { homeDir = os.homedir() } = {}) {
   }
 
   if (value.startsWith("$HOME/")) {
-    return path.join(homeDir, value.slice("$HOME/".length));
+    return joinHomeRelativePath(homeDir, value.slice("$HOME/".length));
   }
 
   if (value === "$HOME") {
@@ -107,4 +107,10 @@ export function resolveUserPath(value, { homeDir = os.homedir() } = {}) {
   }
 
   return value;
+}
+
+function joinHomeRelativePath(homeDir, relativePath) {
+  const separator = homeDir.includes("\\") && !homeDir.includes("/") ? "\\" : "/";
+  const normalizedRelativePath = separator === "\\" ? relativePath.replace(/\//gu, "\\") : relativePath.replace(/\\/gu, "/");
+  return `${homeDir.replace(/[\\/]+$/u, "")}${separator}${normalizedRelativePath}`;
 }

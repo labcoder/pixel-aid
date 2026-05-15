@@ -14,7 +14,24 @@ test("fails Windows release checks when signing configuration is absent", () => 
   const result = evaluateDesktopReleaseEnv({ platform: "win32", env: {}, allowUnsigned: false });
 
   assert.equal(result.ok, false);
-  assert.deepEqual(result.missing, ["WINDOWS_SIGNING_CERT_PATH or WINDOWS_SIGNING_COMMAND"]);
+  assert.deepEqual(result.missing, [
+    "WINDOWS_SIGNING_ENDPOINT + WINDOWS_SIGNING_ACCOUNT_NAME + WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME or WINDOWS_SIGNING_CERT_PATH or WINDOWS_SIGNING_COMMAND",
+  ]);
+});
+
+test("accepts Windows Artifact Signing configuration", () => {
+  const result = evaluateDesktopReleaseEnv({
+    platform: "win32",
+    allowUnsigned: false,
+    env: {
+      WINDOWS_SIGNING_ENDPOINT: "https://wus2.codesigning.azure.net",
+      WINDOWS_SIGNING_ACCOUNT_NAME: "examplecodesign",
+      WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: "examplepublic",
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.missing, []);
 });
 
 test("accepts macOS notarization with app store connect API credentials", () => {

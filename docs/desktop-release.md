@@ -38,6 +38,56 @@ npm run desktop:package
 
 The Windows portable executable is built as a GUI app, so it should not open a console window when launched normally. The macOS artifact is a normal `.app` bundle inside a zip; opening it from Finder should not open Terminal. The bundle is named `PixelAid.app`, while the internal executable is read from `PixelAid.app/Contents/Info.plist` and may use the Cargo package name, such as `pixelaid-desktop`.
 
+## Local Signed Windows Builds
+
+Unsigned desktop packages remain the default. Signed Windows packaging is opt-in:
+
+```sh
+npm run desktop:package:windows:signed
+```
+
+The signed command reads local Azure Artifact Signing values from `.env` in the repo root, then merges the current shell environment over those values. The `.env` file is ignored by git. Do not commit signing metadata that identifies a real account, private keys, credentials, or generated release artifacts.
+
+Use `.env.example` as the shape for local setup:
+
+```sh
+WINDOWS_SIGNING_ENDPOINT="https://REGION.codesigning.azure.net"
+WINDOWS_SIGNING_ACCOUNT_NAME="YOUR_ARTIFACT_SIGNING_ACCOUNT"
+WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME="YOUR_CERTIFICATE_PROFILE"
+```
+
+The signed Windows command builds the Tauri executable, copies it into `artifacts/desktop/staging/`, signs the staged `PixelAid.exe` with SignTool and the Azure Artifact Signing dlib, verifies the Authenticode signature, and finally creates `artifacts/desktop/PixelAid-<version>-windows-x64-signed-portable.zip`.
+
+Local prerequisites:
+
+- Windows SDK SignTool `10.0.2261.755` or newer.
+- .NET 8 runtime for the Artifact Signing dlib.
+- `Microsoft.ArtifactSigning.Client` NuGet package available under the user NuGet package cache or `artifacts/tools/`.
+- An Azure login method supported by `DefaultAzureCredential`; Azure CLI is the simplest local path.
+- `Artifact Signing Certificate Profile Signer` permission for the certificate profile.
+
+Example local Azure CLI setup:
+
+```powershell
+winget install -e --id Microsoft.AzureCLI
+az login
+```
+
+The package script auto-discovers `signtool.exe` from the Windows SDK and `Azure.CodeSigning.Dlib.dll` from common NuGet package locations. If auto-discovery fails, set:
+
+```sh
+WINDOWS_SIGNING_SIGNTOOL_PATH="C:\\path\\to\\signtool.exe"
+WINDOWS_SIGNING_DLIB_PATH="C:\\path\\to\\Azure.CodeSigning.Dlib.dll"
+```
+
+The generated metadata excludes `InteractiveBrowserCredential` by default so local and CI signing cannot hang on a hidden browser prompt. Use Azure CLI, Azure PowerShell, Visual Studio, or another non-interactive `DefaultAzureCredential` source before running the signed package command. If an interactive browser flow is intentionally needed for a local test, set `WINDOWS_SIGNING_ALLOW_INTERACTIVE_BROWSER=1`.
+
+Verify a signed package after extracting it:
+
+```sh
+node apps/desktop/scripts/verify-desktop-package.mjs windows C:\path\to\extracted\package --signed
+```
+
 ## Local Signed macOS Builds
 
 Unsigned desktop packages remain the default. Signed macOS packaging is opt-in:
@@ -116,6 +166,7 @@ npm run lint
 npm run build
 npm run desktop:check
 npm run desktop:release:check
+npm run desktop:package:windows:signed
 npm run desktop:package:macos:signed
 npm run desktop:checksums
 ```
@@ -124,8 +175,9 @@ npm run desktop:checksums
 
 ### Windows Signing
 
-Provide one of these signing paths:
+Provide one of these signing paths. Azure Artifact Signing is the preferred local and CI path:
 
+- `WINDOWS_SIGNING_ENDPOINT`, `WINDOWS_SIGNING_ACCOUNT_NAME`, and `WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME` for Azure Artifact Signing.
 - `WINDOWS_SIGNING_CERT_PATH` and `WINDOWS_SIGNING_CERT_PASSWORD` for a certificate file managed outside git.
 - `WINDOWS_SIGNING_COMMAND` for an external signing command supplied by the release environment.
 

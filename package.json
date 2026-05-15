@@ -19,6 +19,7 @@
     "desktop:checksums": "node apps/desktop/scripts/create-desktop-checksums.mjs",
     "desktop:package": "node apps/desktop/scripts/package-desktop-artifacts.mjs",
     "desktop:package:windows": "node apps/desktop/scripts/package-desktop-artifacts.mjs windows",
+    "desktop:package:windows:signed": "node apps/desktop/scripts/package-desktop-artifacts.mjs windows --signed",
     "desktop:package:macos": "node apps/desktop/scripts/package-desktop-artifacts.mjs macos",
     "desktop:package:macos:signed": "node apps/desktop/scripts/package-desktop-artifacts.mjs macos --signed",
     "brand:sync": "node scripts/sync-brand-assets.mjs",

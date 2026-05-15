@@ -7,6 +7,7 @@ import {
   packageDesktopArtifact,
   parseDesktopPackageArgs,
   resolveMacosSigningConfig,
+  resolveWindowsSigningConfig,
   resolveSubprocessCommand,
   resolveDesktopPackageTarget,
   stripMacosSigningEnv,
@@ -50,7 +51,7 @@ function createRecordingCommandRunner() {
   return {
     calls,
     runCommand: async (command, options = {}) => {
-      calls.push({ command, env: options.env, label: options.label });
+      calls.push({ command, env: options.env, label: options.label, timeoutMs: options.timeoutMs });
       if (options.archivePath) {
         await mkdir(path.dirname(options.archivePath), { recursive: true });
         await writeFile(options.archivePath, "zip bytes", "utf8");
@@ -94,6 +95,15 @@ test("parses signed macOS package arguments", () => {
   });
 });
 
+test("parses signed Windows package arguments", () => {
+  assert.deepEqual(parseDesktopPackageArgs(["windows", "--signed"]), {
+    arch: process.arch === "x64" || process.arch === "arm64" ? process.arch : process.arch.replace(/[^a-z0-9._-]+/giu, "-"),
+    signed: true,
+    skipBuild: false,
+    target: "windows",
+  });
+});
+
 test("strips Apple signing env from unsigned macOS builds", () => {
   assert.deepEqual(stripMacosSigningEnv({
     APPLE_SIGNING_IDENTITY: "Developer ID Application: Example",
@@ -125,6 +135,44 @@ test("resolves macOS signing configuration from env values", () => {
         keyPath: "/Users/example/private/AuthKey_KEYID.p8",
       },
     },
+  );
+});
+
+test("resolves Windows Artifact Signing configuration from env values", () => {
+  assert.deepEqual(
+    resolveWindowsSigningConfig({
+      env: {
+        WINDOWS_SIGNING_ENDPOINT: " usw2 ",
+        WINDOWS_SIGNING_ACCOUNT_NAME: " examplecodesign ",
+        WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: " examplepublic ",
+        WINDOWS_SIGNING_SIGNTOOL_PATH: "$HOME/tools/signtool.exe",
+        WINDOWS_SIGNING_DLIB_PATH: "~/tools/Azure.CodeSigning.Dlib.dll",
+      },
+      homeDir: "C:\\Users\\Example",
+    }),
+    {
+      accountName: "examplecodesign",
+      certificateProfileName: "examplepublic",
+      dlibPath: "C:\\Users\\Example\\tools\\Azure.CodeSigning.Dlib.dll",
+      endpoint: "https://wus2.codesigning.azure.net",
+      excludeCredentials: ["InteractiveBrowserCredential"],
+      signtoolPath: "C:\\Users\\Example\\tools\\signtool.exe",
+    },
+  );
+});
+
+test("rejects incomplete Windows Artifact Signing configuration", () => {
+  assert.throws(
+    () =>
+      resolveWindowsSigningConfig({
+        env: {
+          WINDOWS_SIGNING_ENDPOINT: "https://wus2.codesigning.azure.net",
+          WINDOWS_SIGNING_ACCOUNT_NAME: "examplecodesign",
+        },
+      }),
+    (error) =>
+      error.code === "WINDOWS_SIGNING_ENV_MISSING" &&
+      /WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME/u.test(error.message),
   );
 });
 
@@ -265,22 +313,64 @@ test("packages a signed macOS app bundle with signing, notarization, and staplin
   }
 });
 
-test("rejects signed packaging for non-macOS targets", async () => {
+test("packages a signed Windows executable into a signed portable archive", async () => {
   const repoRoot = await createPackageFixture();
 
   try {
-    await assert.rejects(
-      () =>
-        packageDesktopArtifact({
-          repoRoot,
-          target: "windows",
-          arch: "x64",
-          skipBuild: true,
-          signed: true,
-          runCommand: fakeArchiveCommand,
-        }),
-      (error) => error.code === "SIGNED_TARGET_UNSUPPORTED",
+    const exePath = path.join(repoRoot, "apps/desktop/src-tauri/target/release/pixelaid-desktop.exe");
+    const signtoolPath = path.join(repoRoot, "tools/signtool.exe");
+    const dlibPath = path.join(repoRoot, "tools/Azure.CodeSigning.Dlib.dll");
+    await mkdir(path.dirname(exePath), { recursive: true });
+    await mkdir(path.dirname(signtoolPath), { recursive: true });
+    await writeFile(exePath, "exe bytes", "utf8");
+    await writeFile(signtoolPath, "signtool", "utf8");
+    await writeFile(dlibPath, "dlib", "utf8");
+    await writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "WINDOWS_SIGNING_ENDPOINT=wus2",
+        "WINDOWS_SIGNING_ACCOUNT_NAME=examplecodesign",
+        "WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME=examplepublic",
+        `WINDOWS_SIGNING_SIGNTOOL_PATH=${signtoolPath}`,
+        `WINDOWS_SIGNING_DLIB_PATH=${dlibPath}`,
+        "",
+      ].join("\n"),
+      "utf8",
     );
+
+    const commandRunner = createRecordingCommandRunner();
+    const result = await packageDesktopArtifact({
+      repoRoot,
+      target: "windows",
+      arch: "x64",
+      skipBuild: true,
+      signed: true,
+      env: {
+        PATH: "C:\\Windows\\System32",
+      },
+      runCommand: commandRunner.runCommand,
+    });
+
+    assert.equal(result.signed, true);
+    assert.equal(result.archivePath, path.join(repoRoot, "artifacts/desktop/PixelAid-0.1.0-windows-x64-signed-portable.zip"));
+    assert.match(
+      await readFile(path.join(result.stageDir, "README.txt"), "utf8"),
+      /Authenticode signed/u,
+    );
+    assert.deepEqual(
+      commandRunner.calls.map((call) => call.label).filter(Boolean),
+      ["SignTool sign PixelAid.exe", "SignTool verify PixelAid.exe"],
+    );
+    const signCommand = commandRunner.calls.find((call) => call.label === "SignTool sign PixelAid.exe").command;
+    const metadataPath = signCommand[signCommand.indexOf("/dmdf") + 1];
+    assert.deepEqual(JSON.parse(await readFile(metadataPath, "utf8")), {
+      CertificateProfileName: "examplepublic",
+      CodeSigningAccountName: "examplecodesign",
+      Endpoint: "https://wus2.codesigning.azure.net",
+      ExcludeCredentials: ["InteractiveBrowserCredential"],
+    });
+    assert.equal(commandRunner.calls.find((call) => call.label === "SignTool sign PixelAid.exe").timeoutMs, 300000);
+    assert.equal(commandRunner.calls.at(-1).command[0], "powershell.exe");
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

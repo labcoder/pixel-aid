@@ -1,6 +1,7 @@
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { clearTimeout, setTimeout } from "node:timers";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadRepoEnv, resolveUserPath } from "./desktop-env.mjs";
 
@@ -18,6 +19,40 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(desktopRoot, "..", "..");
 const noticeFiles = ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md"];
+const windowsArtifactSigningEndpoints = {
+  brs: "https://brs.codesigning.azure.net",
+  brazilsouth: "https://brs.codesigning.azure.net",
+  centralus: "https://cus.codesigning.azure.net",
+  cus: "https://cus.codesigning.azure.net",
+  eastus: "https://eus.codesigning.azure.net",
+  eus: "https://eus.codesigning.azure.net",
+  japaneast: "https://jpe.codesigning.azure.net",
+  jpe: "https://jpe.codesigning.azure.net",
+  koreacentral: "https://krc.codesigning.azure.net",
+  krc: "https://krc.codesigning.azure.net",
+  ncus: "https://ncus.codesigning.azure.net",
+  northcentralus: "https://ncus.codesigning.azure.net",
+  northeurope: "https://neu.codesigning.azure.net",
+  neu: "https://neu.codesigning.azure.net",
+  plc: "https://plc.codesigning.azure.net",
+  polandcentral: "https://plc.codesigning.azure.net",
+  scus: "https://scus.codesigning.azure.net",
+  southcentralus: "https://scus.codesigning.azure.net",
+  switzerlandnorth: "https://swn.codesigning.azure.net",
+  swn: "https://swn.codesigning.azure.net",
+  usc2: "https://wus2.codesigning.azure.net",
+  usw2: "https://wus2.codesigning.azure.net",
+  wcus: "https://wcus.codesigning.azure.net",
+  westcentralus: "https://wcus.codesigning.azure.net",
+  westeurope: "https://weu.codesigning.azure.net",
+  westus: "https://wus.codesigning.azure.net",
+  westus2: "https://wus2.codesigning.azure.net",
+  westus3: "https://wus3.codesigning.azure.net",
+  weu: "https://weu.codesigning.azure.net",
+  wus: "https://wus.codesigning.azure.net",
+  wus2: "https://wus2.codesigning.azure.net",
+  wus3: "https://wus3.codesigning.azure.net",
+};
 
 class DesktopPackageError extends Error {
   constructor(code, message, exitCode = 1) {
@@ -63,6 +98,16 @@ function npmExecutable(platform) {
 
 function hasValue(value) {
   return typeof value === "string" && value.trim().length > 0;
+}
+
+function normalizeWindowsSigningEndpoint(value) {
+  const trimmed = value.trim();
+  const normalizedKey = trimmed.toLowerCase().replace(/[^a-z0-9]+/gu, "");
+  if (windowsArtifactSigningEndpoints[normalizedKey]) {
+    return windowsArtifactSigningEndpoints[normalizedKey];
+  }
+
+  return trimmed.replace(/\/+$/u, "");
 }
 
 function isUuid(value) {
@@ -166,7 +211,7 @@ function archiveCommandForTarget({ target, stageDir, archivePath }) {
   return ["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", stageDir, archivePath];
 }
 
-async function runCommand(command, { cwd = repoRoot, env = process.env, label } = {}) {
+async function runCommand(command, { cwd = repoRoot, env = process.env, label, timeoutMs } = {}) {
   const subprocess = resolveSubprocessCommand(command);
   const displayCommand = label ?? command.join(" ");
   await new Promise((resolve, reject) => {
@@ -175,9 +220,23 @@ async function runCommand(command, { cwd = repoRoot, env = process.env, label } 
       env,
       stdio: "inherit",
     });
+    let timedOut = false;
+    const timeout = Number.isFinite(timeoutMs)
+      ? setTimeout(() => {
+          timedOut = true;
+          child.kill();
+        }, timeoutMs)
+      : undefined;
 
     child.on("error", reject);
     child.on("exit", (code, signal) => {
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      if (timedOut) {
+        reject(new DesktopPackageError("COMMAND_TIMEOUT", `Command "${displayCommand}" timed out after ${timeoutMs}ms.`));
+        return;
+      }
       if (signal) {
         reject(new DesktopPackageError("COMMAND_SIGNAL", `Command "${displayCommand}" exited with ${signal}.`));
         return;
@@ -221,7 +280,7 @@ function packagePlan({ root, artifactRoot, target, arch, metadata, signed }) {
   const productName = metadata.productName;
   const safeProductName = sanitizeName(productName);
   const suffix = target === "windows" ? "windows" : "macos";
-  const kind = target === "windows" ? "portable" : signed ? "signed-app" : "app";
+  const kind = target === "windows" ? (signed ? "signed-portable" : "portable") : signed ? "signed-app" : "app";
   const packageName = `${safeProductName}-${metadata.version}-${suffix}-${arch}-${kind}`;
   const stageDir = path.join(artifactRoot, "staging", packageName);
   const archivePath = path.join(artifactRoot, `${packageName}.zip`);
@@ -263,7 +322,9 @@ async function writePackageReadme({ stageDir, target, productName, version, sign
   const signingLine =
     signed && target === "macos"
       ? "This package is Developer ID signed, notarized, and intended for public macOS distribution."
-      : "This package is unsigned and intended for local smoke testing or CI artifact review.";
+      : signed && target === "windows"
+        ? "This package is Authenticode signed and intended for public Windows distribution."
+        : "This package is unsigned and intended for local smoke testing or CI artifact review.";
   const readme = [
     `${productName} ${version}`,
     "",
@@ -337,6 +398,54 @@ export function resolveMacosSigningConfig({ env = process.env, homeDir } = {}) {
   };
 }
 
+export function resolveWindowsSigningConfig({ env = process.env, homeDir } = {}) {
+  const missing = [];
+  if (!hasValue(env.WINDOWS_SIGNING_ENDPOINT)) {
+    missing.push("WINDOWS_SIGNING_ENDPOINT");
+  }
+  if (!hasValue(env.WINDOWS_SIGNING_ACCOUNT_NAME)) {
+    missing.push("WINDOWS_SIGNING_ACCOUNT_NAME");
+  }
+  if (!hasValue(env.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME)) {
+    missing.push("WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME");
+  }
+
+  if (missing.length > 0) {
+    throw new DesktopPackageError(
+      "WINDOWS_SIGNING_ENV_MISSING",
+      `Missing Windows signing configuration: ${missing.join(", ")}. Add the values to .env or export them before running signed packaging.`,
+      2,
+    );
+  }
+
+  return {
+    accountName: env.WINDOWS_SIGNING_ACCOUNT_NAME.trim(),
+    certificateProfileName: env.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME.trim(),
+    dlibPath: hasValue(env.WINDOWS_SIGNING_DLIB_PATH)
+      ? resolveUserPath(env.WINDOWS_SIGNING_DLIB_PATH.trim(), { homeDir })
+      : undefined,
+    endpoint: normalizeWindowsSigningEndpoint(env.WINDOWS_SIGNING_ENDPOINT),
+    excludeCredentials: resolveWindowsSigningExcludedCredentials(env),
+    signtoolPath: hasValue(env.WINDOWS_SIGNING_SIGNTOOL_PATH)
+      ? resolveUserPath(env.WINDOWS_SIGNING_SIGNTOOL_PATH.trim(), { homeDir })
+      : undefined,
+  };
+}
+
+function resolveWindowsSigningExcludedCredentials(env) {
+  if (hasValue(env.WINDOWS_SIGNING_EXCLUDE_CREDENTIALS)) {
+    return env.WINDOWS_SIGNING_EXCLUDE_CREDENTIALS.split(",")
+      .map((credential) => credential.trim())
+      .filter(Boolean);
+  }
+
+  if (/^(1|true|yes)$/iu.test(env.WINDOWS_SIGNING_ALLOW_INTERACTIVE_BROWSER ?? "")) {
+    return undefined;
+  }
+
+  return ["InteractiveBrowserCredential"];
+}
+
 function macosNotarizationAuthArgs(config) {
   return [
     "--key",
@@ -346,6 +455,155 @@ function macosNotarizationAuthArgs(config) {
     "--issuer",
     config.notarization.issuer,
   ];
+}
+
+async function collectExistingFiles(candidates) {
+  const existing = [];
+  for (const candidate of candidates.filter(Boolean)) {
+    if (await pathExists(candidate)) {
+      existing.push(candidate);
+    }
+  }
+  return existing;
+}
+
+async function listDirectories(root) {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(root, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+async function findNewestWindowsSignTool(env) {
+  const windowsKitsRoot = path.join(env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Windows Kits", "10", "bin");
+  const versionDirs = await listDirectories(windowsKitsRoot);
+  const candidates = versionDirs
+    .map((dir) => path.join(dir, "x64", "signtool.exe"))
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  const [candidate] = await collectExistingFiles(candidates);
+  return candidate;
+}
+
+async function findNewestArtifactSigningDlib({ root, env }) {
+  const packageRoots = [
+    path.join(root, "artifacts", "tools"),
+    path.join(env.USERPROFILE ?? "", ".nuget", "packages"),
+  ];
+  const candidates = [];
+
+  for (const packageRoot of packageRoots) {
+    const vendorDirs = [
+      path.join(packageRoot, "microsoft.artifactsigning.client"),
+      path.join(packageRoot, "microsoft.trusted.signing.client"),
+    ];
+    for (const vendorDir of vendorDirs) {
+      const versionDirs = await listDirectories(vendorDir);
+      candidates.push(
+        ...versionDirs
+          .map((dir) => path.join(dir, "bin", "x64", "Azure.CodeSigning.Dlib.dll"))
+          .sort((a, b) => b.localeCompare(a, undefined, { numeric: true })),
+      );
+    }
+  }
+
+  const [candidate] = await collectExistingFiles(candidates);
+  return candidate;
+}
+
+async function resolveWindowsSigningTools({ config, env, root }) {
+  const signtoolPath = config.signtoolPath ?? (await findNewestWindowsSignTool(env));
+  const dlibPath = config.dlibPath ?? (await findNewestArtifactSigningDlib({ root, env }));
+  const missing = [];
+
+  if (!signtoolPath || !(await pathExists(signtoolPath))) {
+    missing.push("signtool.exe");
+  }
+  if (!dlibPath || !(await pathExists(dlibPath))) {
+    missing.push("Azure.CodeSigning.Dlib.dll");
+  }
+  if (missing.length > 0) {
+    throw new DesktopPackageError(
+      "WINDOWS_SIGNING_TOOLS_MISSING",
+      [
+        `Missing Windows signing tool(s): ${missing.join(", ")}.`,
+        "Install Windows SDK SignTool 10.0.2261.755 or newer and the Microsoft.ArtifactSigning.Client NuGet package, or set WINDOWS_SIGNING_SIGNTOOL_PATH and WINDOWS_SIGNING_DLIB_PATH.",
+      ].join(" "),
+      2,
+    );
+  }
+
+  return { dlibPath, signtoolPath };
+}
+
+async function writeWindowsSigningMetadata({ config, metadataPath }) {
+  await mkdir(path.dirname(metadataPath), { recursive: true });
+  await writeFile(
+    metadataPath,
+    `${JSON.stringify(
+      {
+        Endpoint: config.endpoint,
+        CodeSigningAccountName: config.accountName,
+        CertificateProfileName: config.certificateProfileName,
+        ...(config.excludeCredentials?.length ? { ExcludeCredentials: config.excludeCredentials } : {}),
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
+}
+
+async function signWindowsExecutable({ exePath, artifactRoot, env, packageName, productName, root, run }) {
+  const signingConfig = resolveWindowsSigningConfig({ env });
+  const signingTools = await resolveWindowsSigningTools({ config: signingConfig, env, root });
+  const timeoutMs = resolveWindowsSigningTimeoutMs(env);
+  const signingDir = path.join(artifactRoot, "signing", packageName);
+  const metadataPath = path.join(signingDir, "metadata.json");
+
+  await rm(signingDir, { recursive: true, force: true });
+  await writeWindowsSigningMetadata({ config: signingConfig, metadataPath });
+
+  const commands = [
+    {
+      command: [
+        signingTools.signtoolPath,
+        "sign",
+        "/fd",
+        "SHA256",
+        "/tr",
+        "http://timestamp.acs.microsoft.com",
+        "/td",
+        "SHA256",
+        "/d",
+        productName,
+        "/dlib",
+        signingTools.dlibPath,
+        "/dmdf",
+        metadataPath,
+        exePath,
+      ],
+      label: "SignTool sign PixelAid.exe",
+    },
+    {
+      command: [signingTools.signtoolPath, "verify", "/pa", exePath],
+      label: "SignTool verify PixelAid.exe",
+    },
+  ];
+
+  for (const { command, label } of commands) {
+    await run(command, { cwd: root, env, label, timeoutMs });
+  }
+}
+
+function resolveWindowsSigningTimeoutMs(env) {
+  if (!hasValue(env.WINDOWS_SIGNING_TIMEOUT_MS)) {
+    return 300000;
+  }
+
+  const timeoutMs = Number.parseInt(env.WINDOWS_SIGNING_TIMEOUT_MS, 10);
+  return Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 300000;
 }
 
 async function signAndNotarizeMacosApp({ appPath, artifactRoot, env, packageName, root, run }) {
@@ -425,9 +683,6 @@ export async function packageDesktopArtifact({
   runCommand: run = runCommand,
 } = {}) {
   const target = resolveDesktopPackageTarget(requestedTarget, platform);
-  if (signed && target !== "macos") {
-    throw new DesktopPackageError("SIGNED_TARGET_UNSUPPORTED", "Signed packaging is currently supported for macOS only.", 2);
-  }
   assertBuildPlatform({ target, platform, skipBuild });
   const metadata = await resolvePackageMetadata(root);
   const normalizedArch = normalizeArch(arch);
@@ -453,14 +708,26 @@ export async function packageDesktopArtifact({
   await prepareStageDirectory({ plan, root, target, metadata, signed });
 
   if (signed) {
-    await signAndNotarizeMacosApp({
-      appPath: plan.stagedAppPath,
-      artifactRoot,
-      env: signingEnv,
-      packageName: plan.packageName,
-      root,
-      run,
-    });
+    if (target === "macos") {
+      await signAndNotarizeMacosApp({
+        appPath: plan.stagedAppPath,
+        artifactRoot,
+        env: signingEnv,
+        packageName: plan.packageName,
+        root,
+        run,
+      });
+    } else if (target === "windows") {
+      await signWindowsExecutable({
+        exePath: plan.stagedAppPath,
+        artifactRoot,
+        env: signingEnv,
+        packageName: plan.packageName,
+        productName: metadata.productName,
+        root,
+        run,
+      });
+    }
   }
 
   const archiveCommand = archiveCommandForTarget({
@@ -532,6 +799,7 @@ function printUsage() {
   console.log("Examples:");
   console.log("  npm run desktop:package");
   console.log("  npm run desktop:package:windows");
+  console.log("  npm run desktop:package:windows:signed");
   console.log("  npm run desktop:package:macos");
   console.log("  npm run desktop:package:macos:signed");
 }

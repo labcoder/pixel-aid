@@ -10,6 +10,7 @@ npm run desktop:check
 npm run desktop:build
 npm run desktop:package
 npm run desktop:package:windows
+npm run desktop:package:windows:signed
 npm run desktop:package:macos
 npm run desktop:package:macos:signed
 npm run desktop:info
@@ -23,7 +24,7 @@ On Windows, the desktop npm scripts automatically enter the Visual Studio C++ to
 
 Unsigned local builds can use `npm run desktop:build`. Unsigned portable artifacts use `npm run desktop:package` for the current platform, `npm run desktop:package:windows` on Windows, or `npm run desktop:package:macos` on macOS. The package commands write ignored zip files under `artifacts/desktop/`.
 
-Signed macOS packages are opt-in with `npm run desktop:package:macos:signed`. The signed command reads Apple Developer ID and App Store Connect notarization settings from the repo-root `.env` file, signs a staged copy of `PixelAid.app`, notarizes and staples it, verifies the signature, and creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-signed-app.zip`. Unsigned packaging remains the default even when signing variables exist in `.env` or the shell environment.
+Signed packages are opt-in. `npm run desktop:package:windows:signed` reads Azure Artifact Signing settings from the repo-root `.env` file, signs a staged `PixelAid.exe`, verifies the Authenticode signature, and creates `artifacts/desktop/PixelAid-<version>-windows-x64-signed-portable.zip`. `npm run desktop:package:macos:signed` reads Apple Developer ID and App Store Connect notarization settings from `.env`, signs a staged copy of `PixelAid.app`, notarizes and staples it, verifies the signature, and creates `artifacts/desktop/PixelAid-<version>-macos-<arch>-signed-app.zip`. Unsigned packaging remains the default even when signing variables exist in `.env` or the shell environment.
 
 Windows packages contain `PixelAid.exe`, license files, notices, and a short `README.txt`. Release Windows executables use the Windows GUI subsystem, so launching the portable app should not open an extra console window. macOS packages contain a zipped `PixelAid.app` bundle and the same release text files; opening the `.app` from Finder should not open Terminal. The `.app` bundle name and internal executable name are separate; CI verification reads `CFBundleExecutable` from `Info.plist` instead of assuming the binary is named `PixelAid`.
 

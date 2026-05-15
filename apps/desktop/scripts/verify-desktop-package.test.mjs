@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
 import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { verifyMacosPackageDirectory } from "./verify-desktop-package.mjs";
+import { verifyMacosPackageDirectory, verifyWindowsPackageDirectory } from "./verify-desktop-package.mjs";
 
 test("verifies macOS app executable from CFBundleExecutable", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "pixelaid-macos-verify-"));
@@ -86,4 +87,28 @@ test("verifies signed macOS app checks without exposing command output", async (
     commands.map((command) => command[0]),
     ["file", "codesign", "xcrun", "spctl"],
   );
+});
+
+test("verifies signed Windows executable checks", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "pixelaid-windows-signed-verify-"));
+  const exePath = path.join(root, "PixelAid.exe");
+  const commands = [];
+  const peHeaderOffset = 0x80;
+  const data = Buffer.alloc(256);
+  data.writeUInt32LE(peHeaderOffset, 0x3c);
+  data.writeUInt16LE(2, peHeaderOffset + 0x5c);
+  await writeFile(exePath, data);
+
+  const result = await verifyWindowsPackageDirectory({
+    packageRoot: root,
+    signed: true,
+    runCommand: (command, args) => {
+      commands.push([command, ...args]);
+      return { status: 0, stdout: "Valid" };
+    },
+  });
+
+  assert.equal(result.subsystem, 2);
+  assert.deepEqual(result.signing, { signature: true });
+  assert.deepEqual(commands.map((command) => command[0]), ["powershell.exe"]);
 });

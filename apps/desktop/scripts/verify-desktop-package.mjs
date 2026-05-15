@@ -136,6 +136,29 @@ function verifySignedMacosApp(appPath, runCommand = spawnSync) {
   };
 }
 
+function verifySignedWindowsExecutable(executablePath, runCommand = spawnSync) {
+  runQuietVerificationCommand({
+    command: "powershell.exe",
+    args: [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      [
+        "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]",
+        "if ($signature.Status -ne 'Valid') { Write-Error \"Authenticode signature status: $($signature.Status)\"; exit 1 }",
+      ].join("; "),
+      executablePath,
+    ],
+    label: "Authenticode signature verification",
+    runCommand,
+  });
+
+  return {
+    signature: true,
+  };
+}
+
 export async function verifyMacosPackageDirectory({ packageRoot, expectedArch, signed = false, runCommand = spawnSync } = {}) {
   if (!packageRoot) {
     throw new DesktopPackageVerificationError("A macOS package extraction directory is required.");
@@ -162,7 +185,7 @@ export async function verifyMacosPackageDirectory({ packageRoot, expectedArch, s
   };
 }
 
-export async function verifyWindowsPackageDirectory({ packageRoot } = {}) {
+export async function verifyWindowsPackageDirectory({ packageRoot, signed = false, runCommand = spawnSync } = {}) {
   if (!packageRoot) {
     throw new DesktopPackageVerificationError("A Windows package extraction directory is required.");
   }
@@ -178,9 +201,11 @@ export async function verifyWindowsPackageDirectory({ packageRoot } = {}) {
   if (subsystem !== 2) {
     throw new DesktopPackageVerificationError(`Expected Windows GUI subsystem 2, got ${subsystem}.`);
   }
+  const signing = signed ? verifySignedWindowsExecutable(executablePath, runCommand) : undefined;
 
   return {
     executablePath,
+    signing,
     subsystem,
   };
 }
@@ -211,9 +236,12 @@ async function main(argv = process.argv.slice(2)) {
   }
 
   if (target === "windows") {
-    const result = await verifyWindowsPackageDirectory({ packageRoot });
+    const result = await verifyWindowsPackageDirectory({ packageRoot, signed });
     console.log(`ok Windows app executable: ${result.executablePath}`);
     console.log(`Windows subsystem: ${result.subsystem}`);
+    if (result.signing) {
+      console.log("ok Windows Authenticode signature");
+    }
     return;
   }
 

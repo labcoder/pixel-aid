@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { loadEnvFile, loadRepoEnv, parseEnvFile, resolveUserPath } from "./desktop-env.mjs";
+import { loadRepoEnv, parseEnvFile, resolveUserPath } from "./desktop-env.mjs";
 
 test("parses local .env values without shelling out", () => {
   assert.deepEqual(

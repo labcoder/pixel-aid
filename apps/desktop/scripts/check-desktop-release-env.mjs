@@ -24,8 +24,14 @@ export function evaluateDesktopReleaseEnv({ platform, env = process.env, allowUn
   if (platform === "win32") {
     const hasSigningCommand = hasValue(env.WINDOWS_SIGNING_COMMAND);
     const hasCertificate = hasValue(env.WINDOWS_SIGNING_CERT_PATH);
-    if (!hasSigningCommand && !hasCertificate) {
-      missing.push("WINDOWS_SIGNING_CERT_PATH or WINDOWS_SIGNING_COMMAND");
+    const hasArtifactSigning =
+      hasValue(env.WINDOWS_SIGNING_ENDPOINT) &&
+      hasValue(env.WINDOWS_SIGNING_ACCOUNT_NAME) &&
+      hasValue(env.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME);
+    if (!hasArtifactSigning && !hasSigningCommand && !hasCertificate) {
+      missing.push(
+        "WINDOWS_SIGNING_ENDPOINT + WINDOWS_SIGNING_ACCOUNT_NAME + WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME or WINDOWS_SIGNING_CERT_PATH or WINDOWS_SIGNING_COMMAND",
+      );
     }
     if (hasCertificate && !hasValue(env.WINDOWS_SIGNING_CERT_PASSWORD)) {
       missing.push("WINDOWS_SIGNING_CERT_PASSWORD");
