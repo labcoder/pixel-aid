@@ -65,6 +65,10 @@ function hasValue(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(value);
+}
+
 export function stripMacosSigningEnv(env = process.env) {
   const stripped = { ...env };
   for (const key of macosSigningEnvKeys) {
@@ -311,6 +315,14 @@ export function resolveMacosSigningConfig({ env = process.env, homeDir } = {}) {
     throw new DesktopPackageError(
       "MACOS_SIGNING_ENV_MISSING",
       `Missing macOS signing configuration: ${missing.join(", ")}. Add the values to .env or export them before running signed packaging.`,
+      2,
+    );
+  }
+
+  if (!isUuid(env.APPLE_API_ISSUER.trim())) {
+    throw new DesktopPackageError(
+      "MACOS_SIGNING_ENV_INVALID",
+      "APPLE_API_ISSUER must be the App Store Connect issuer UUID only. Do not include labels, prefixes, or surrounding text.",
       2,
     );
   }
