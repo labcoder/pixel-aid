@@ -48,6 +48,10 @@ test("parses release check env-file options", () => {
   });
 });
 
+test("uses the last repeated release check value flag", () => {
+  assert.equal(parseDesktopReleaseCheckArgs(["--platform", "all", "--platform", "darwin"]).platform, "darwin");
+});
+
 test("rejects conflicting release check env-file options", () => {
   assert.throws(
     () => parseDesktopReleaseCheckArgs(["--env-file", ".env", "--no-env-file"]),

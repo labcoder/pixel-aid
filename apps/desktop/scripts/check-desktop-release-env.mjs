@@ -85,16 +85,19 @@ function printResult(result) {
 }
 
 function takeValue(args, flag) {
-  const index = args.indexOf(flag);
-  if (index === -1) {
-    return undefined;
+  let value;
+  while (true) {
+    const index = args.indexOf(flag);
+    if (index === -1) {
+      return value;
+    }
+
+    value = args[index + 1];
+    if (!value) {
+      throw new Error(`${flag} requires a value.`);
+    }
+    args.splice(index, 2);
   }
-  const value = args[index + 1];
-  if (!value) {
-    throw new Error(`${flag} requires a value.`);
-  }
-  args.splice(index, 2);
-  return value;
 }
 
 function takeBoolean(args, flag) {
