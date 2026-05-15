@@ -20,6 +20,7 @@
     "desktop:package": "node apps/desktop/scripts/package-desktop-artifacts.mjs",
     "desktop:package:windows": "node apps/desktop/scripts/package-desktop-artifacts.mjs windows",
     "desktop:package:macos": "node apps/desktop/scripts/package-desktop-artifacts.mjs macos",
+    "desktop:package:macos:signed": "node apps/desktop/scripts/package-desktop-artifacts.mjs macos --signed",
     "brand:sync": "node scripts/sync-brand-assets.mjs",
     "bundle:budget": "node scripts/check-web-bundle-budget.mjs",
     "version:set": "node scripts/set-version.mjs",

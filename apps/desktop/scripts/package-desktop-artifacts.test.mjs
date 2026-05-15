@@ -5,8 +5,11 @@ import path from "node:path";
 import test from "node:test";
 import {
   packageDesktopArtifact,
+  parseDesktopPackageArgs,
+  resolveMacosSigningConfig,
   resolveSubprocessCommand,
   resolveDesktopPackageTarget,
+  stripMacosSigningEnv,
 } from "./package-desktop-artifacts.mjs";
 
 async function writeJson(filePath, value) {
@@ -42,6 +45,25 @@ async function fakeArchiveCommand(_command, { archivePath }) {
   await writeFile(archivePath, "zip bytes", "utf8");
 }
 
+function createRecordingCommandRunner() {
+  const calls = [];
+  return {
+    calls,
+    runCommand: async (command, options = {}) => {
+      calls.push({ command, env: options.env, label: options.label });
+      if (options.archivePath) {
+        await mkdir(path.dirname(options.archivePath), { recursive: true });
+        await writeFile(options.archivePath, "zip bytes", "utf8");
+      }
+      if (command[0] === "ditto") {
+        const outputPath = command.at(-1);
+        await mkdir(path.dirname(outputPath), { recursive: true });
+        await writeFile(outputPath, "zip bytes", "utf8");
+      }
+    },
+  };
+}
+
 test("resolves the current platform package target", () => {
   assert.equal(resolveDesktopPackageTarget(undefined, "win32"), "windows");
   assert.equal(resolveDesktopPackageTarget(undefined, "darwin"), "macos");
@@ -61,6 +83,49 @@ test("wraps Windows command files through cmd.exe for spawning", () => {
     executable: "ditto",
     args: ["--help"],
   });
+});
+
+test("parses signed macOS package arguments", () => {
+  assert.deepEqual(parseDesktopPackageArgs(["macos", "--signed", "--arch", "arm64"]), {
+    arch: "arm64",
+    signed: true,
+    skipBuild: false,
+    target: "macos",
+  });
+});
+
+test("strips Apple signing env from unsigned macOS builds", () => {
+  assert.deepEqual(stripMacosSigningEnv({
+    APPLE_SIGNING_IDENTITY: "Developer ID Application: Example",
+    APPLE_API_KEY: "key-id",
+    APPLE_API_ISSUER: "issuer",
+    APPLE_API_KEY_PATH: "/secure/key.p8",
+    PATH: "/bin",
+  }), {
+    PATH: "/bin",
+  });
+});
+
+test("resolves macOS signing configuration from env values", () => {
+  assert.deepEqual(
+    resolveMacosSigningConfig({
+      env: {
+        APPLE_SIGNING_IDENTITY: " Developer ID Application: Example ",
+        APPLE_API_KEY: " KEYID ",
+        APPLE_API_ISSUER: " ISSUER ",
+        APPLE_API_KEY_PATH: "$HOME/private/AuthKey_KEYID.p8",
+      },
+      homeDir: "/Users/example",
+    }),
+    {
+      identity: "Developer ID Application: Example",
+      notarization: {
+        issuer: "ISSUER",
+        keyId: "KEYID",
+        keyPath: "/Users/example/private/AuthKey_KEYID.p8",
+      },
+    },
+  );
 });
 
 test("packages a Windows release executable into a portable archive", async () => {
@@ -118,6 +183,87 @@ test("packages a macOS app bundle into an app archive", async () => {
     );
     assert.equal(await readFile(path.join(result.stageDir, "NOTICE"), "utf8"), "NOTICE text\n");
     assert.equal(await readFile(result.archivePath, "utf8"), "zip bytes");
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("packages a signed macOS app bundle with signing, notarization, and stapling", async () => {
+  const repoRoot = await createPackageFixture();
+
+  try {
+    const appBinaryPath = path.join(
+      repoRoot,
+      "apps/desktop/src-tauri/target/release/bundle/macos/PixelAid.app/Contents/MacOS/pixelaid-desktop",
+    );
+    await mkdir(path.dirname(appBinaryPath), { recursive: true });
+    await writeFile(appBinaryPath, "app bytes", "utf8");
+    await writeFile(
+      path.join(repoRoot, ".env"),
+      [
+        "APPLE_SIGNING_IDENTITY=\"Developer ID Application: Example\"",
+        "APPLE_API_KEY=KEYID",
+        "APPLE_API_ISSUER=ISSUER",
+        "APPLE_API_KEY_PATH=~/private/AuthKey_KEYID.p8",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const commandRunner = createRecordingCommandRunner();
+    const result = await packageDesktopArtifact({
+      repoRoot,
+      target: "macos",
+      arch: "arm64",
+      skipBuild: true,
+      signed: true,
+      env: {
+        HOME: "/Users/example",
+        PATH: "/bin",
+      },
+      runCommand: commandRunner.runCommand,
+    });
+
+    assert.equal(result.signed, true);
+    assert.equal(result.archivePath, path.join(repoRoot, "artifacts/desktop/PixelAid-0.1.0-macos-arm64-signed-app.zip"));
+    assert.match(
+      await readFile(path.join(result.stageDir, "README.txt"), "utf8"),
+      /Developer ID signed, notarized/u,
+    );
+    assert.deepEqual(
+      commandRunner.calls.map((call) => call.label).filter(Boolean),
+      [
+        "codesign PixelAid.app",
+        "codesign verify PixelAid.app",
+        "create notarization zip",
+        "xcrun notarytool submit PixelAid.app",
+        "xcrun stapler staple PixelAid.app",
+        "xcrun stapler validate PixelAid.app",
+        "spctl assess PixelAid.app",
+      ],
+    );
+    assert.equal(commandRunner.calls.at(-1).command[0], "ditto");
+  } finally {
+    await rm(repoRoot, { recursive: true, force: true });
+  }
+});
+
+test("rejects signed packaging for non-macOS targets", async () => {
+  const repoRoot = await createPackageFixture();
+
+  try {
+    await assert.rejects(
+      () =>
+        packageDesktopArtifact({
+          repoRoot,
+          target: "windows",
+          arch: "x64",
+          skipBuild: true,
+          signed: true,
+          runCommand: fakeArchiveCommand,
+        }),
+      (error) => error.code === "SIGNED_TARGET_UNSUPPORTED",
+    );
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

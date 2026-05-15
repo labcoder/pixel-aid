@@ -2,6 +2,17 @@ import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { loadRepoEnv, resolveUserPath } from "./desktop-env.mjs";
+
+const macosSigningEnvKeys = [
+  "APPLE_SIGNING_IDENTITY",
+  "APPLE_API_KEY",
+  "APPLE_API_ISSUER",
+  "APPLE_API_KEY_PATH",
+  "APPLE_ID",
+  "APPLE_PASSWORD",
+  "APPLE_TEAM_ID",
+];
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(scriptDir, "..");
@@ -48,6 +59,18 @@ function escapePowerShellSingleQuoted(value) {
 
 function npmExecutable(platform) {
   return platform === "win32" ? "npm.cmd" : "npm";
+}
+
+function hasValue(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+export function stripMacosSigningEnv(env = process.env) {
+  const stripped = { ...env };
+  for (const key of macosSigningEnvKeys) {
+    delete stripped[key];
+  }
+  return stripped;
 }
 
 function parseCargoPackageName(cargoToml) {
@@ -139,8 +162,9 @@ function archiveCommandForTarget({ target, stageDir, archivePath }) {
   return ["ditto", "-c", "-k", "--sequesterRsrc", "--keepParent", stageDir, archivePath];
 }
 
-async function runCommand(command, { cwd = repoRoot, env = process.env } = {}) {
+async function runCommand(command, { cwd = repoRoot, env = process.env, label } = {}) {
   const subprocess = resolveSubprocessCommand(command);
+  const displayCommand = label ?? command.join(" ");
   await new Promise((resolve, reject) => {
     const child = spawn(subprocess.executable, subprocess.args, {
       cwd,
@@ -151,12 +175,12 @@ async function runCommand(command, { cwd = repoRoot, env = process.env } = {}) {
     child.on("error", reject);
     child.on("exit", (code, signal) => {
       if (signal) {
-        reject(new DesktopPackageError("COMMAND_SIGNAL", `Command "${command.join(" ")}" exited with ${signal}.`));
+        reject(new DesktopPackageError("COMMAND_SIGNAL", `Command "${displayCommand}" exited with ${signal}.`));
         return;
       }
 
       if (code !== 0) {
-        reject(new DesktopPackageError("COMMAND_FAILED", `Command "${command.join(" ")}" failed with exit code ${code}.`));
+        reject(new DesktopPackageError("COMMAND_FAILED", `Command "${displayCommand}" failed with exit code ${code}.`));
         return;
       }
 
@@ -189,11 +213,11 @@ async function resolvePackageMetadata(root) {
   };
 }
 
-function packagePlan({ root, artifactRoot, target, arch, metadata }) {
+function packagePlan({ root, artifactRoot, target, arch, metadata, signed }) {
   const productName = metadata.productName;
   const safeProductName = sanitizeName(productName);
   const suffix = target === "windows" ? "windows" : "macos";
-  const kind = target === "windows" ? "portable" : "app";
+  const kind = target === "windows" ? "portable" : signed ? "signed-app" : "app";
   const packageName = `${safeProductName}-${metadata.version}-${suffix}-${arch}-${kind}`;
   const stageDir = path.join(artifactRoot, "staging", packageName);
   const archivePath = path.join(artifactRoot, `${packageName}.zip`);
@@ -226,26 +250,30 @@ async function copyNoticeFiles(root, stageDir) {
   }
 }
 
-async function writePackageReadme({ stageDir, target, productName, version }) {
+async function writePackageReadme({ stageDir, target, productName, version, signed }) {
   const platformLabel = target === "windows" ? "Windows portable app" : "macOS .app bundle";
   const launchLine =
     target === "windows"
       ? `Run ${productName}.exe to launch the app.`
       : `Open ${productName}.app to launch the app.`;
+  const signingLine =
+    signed && target === "macos"
+      ? "This package is Developer ID signed, notarized, and intended for public macOS distribution."
+      : "This package is unsigned and intended for local smoke testing or CI artifact review.";
   const readme = [
     `${productName} ${version}`,
     "",
     platformLabel,
     "",
     launchLine,
-    "This package is unsigned and intended for local smoke testing or CI artifact review.",
+    signingLine,
     "",
   ].join("\n");
 
   await writeFile(path.join(stageDir, "README.txt"), readme, "utf8");
 }
 
-async function prepareStageDirectory({ plan, root, target, metadata }) {
+async function prepareStageDirectory({ plan, root, target, metadata, signed }) {
   if (!(await pathExists(plan.sourcePath))) {
     throw new DesktopPackageError(
       "SOURCE_ARTIFACT_NOT_FOUND",
@@ -263,7 +291,114 @@ async function prepareStageDirectory({ plan, root, target, metadata }) {
     target,
     productName: metadata.productName,
     version: metadata.version,
+    signed,
   });
+}
+
+export function resolveMacosSigningConfig({ env = process.env, homeDir } = {}) {
+  const missing = [];
+  if (!hasValue(env.APPLE_SIGNING_IDENTITY)) {
+    missing.push("APPLE_SIGNING_IDENTITY");
+  }
+
+  const hasApiNotarization =
+    hasValue(env.APPLE_API_KEY) && hasValue(env.APPLE_API_ISSUER) && hasValue(env.APPLE_API_KEY_PATH);
+  if (!hasApiNotarization) {
+    missing.push("APPLE_API_KEY + APPLE_API_ISSUER + APPLE_API_KEY_PATH");
+  }
+
+  if (missing.length > 0) {
+    throw new DesktopPackageError(
+      "MACOS_SIGNING_ENV_MISSING",
+      `Missing macOS signing configuration: ${missing.join(", ")}. Add the values to .env or export them before running signed packaging.`,
+      2,
+    );
+  }
+
+  return {
+    identity: env.APPLE_SIGNING_IDENTITY.trim(),
+    notarization: {
+      issuer: env.APPLE_API_ISSUER.trim(),
+      keyId: env.APPLE_API_KEY.trim(),
+      keyPath: resolveUserPath(env.APPLE_API_KEY_PATH.trim(), { homeDir }),
+    },
+  };
+}
+
+function macosNotarizationAuthArgs(config) {
+  return [
+    "--key",
+    config.notarization.keyPath,
+    "--key-id",
+    config.notarization.keyId,
+    "--issuer",
+    config.notarization.issuer,
+  ];
+}
+
+async function signAndNotarizeMacosApp({ appPath, artifactRoot, env, packageName, root, run }) {
+  const signingConfig = resolveMacosSigningConfig({ env });
+  const notarizationDir = path.join(artifactRoot, "notarization", packageName);
+  const notarizationArchive = path.join(notarizationDir, `${packageName}-notary.zip`);
+
+  await rm(notarizationDir, { recursive: true, force: true });
+  await mkdir(notarizationDir, { recursive: true });
+
+  try {
+    const commands = [
+      {
+        command: [
+          "codesign",
+          "--force",
+          "--deep",
+          "--options",
+          "runtime",
+          "--timestamp",
+          "--sign",
+          signingConfig.identity,
+          appPath,
+        ],
+        label: "codesign PixelAid.app",
+      },
+      {
+        command: ["codesign", "--verify", "--deep", "--strict", "--verbose=2", appPath],
+        label: "codesign verify PixelAid.app",
+      },
+      {
+        command: ["ditto", "-c", "-k", "--keepParent", appPath, notarizationArchive],
+        label: "create notarization zip",
+      },
+      {
+        command: [
+          "xcrun",
+          "notarytool",
+          "submit",
+          notarizationArchive,
+          ...macosNotarizationAuthArgs(signingConfig),
+          "--wait",
+        ],
+        label: "xcrun notarytool submit PixelAid.app",
+      },
+      {
+        command: ["xcrun", "stapler", "staple", appPath],
+        label: "xcrun stapler staple PixelAid.app",
+      },
+      {
+        command: ["xcrun", "stapler", "validate", appPath],
+        label: "xcrun stapler validate PixelAid.app",
+      },
+      {
+        command: ["spctl", "-a", "-vv", "--type", "execute", appPath],
+        label: "spctl assess PixelAid.app",
+      },
+    ];
+
+    for (const { command, label } of commands) {
+      await run(command, { cwd: root, env, label });
+    }
+  } finally {
+    await rm(notarizationDir, { recursive: true, force: true });
+  }
 }
 
 export async function packageDesktopArtifact({
@@ -273,16 +408,23 @@ export async function packageDesktopArtifact({
   arch = normalizeArch(process.arch),
   platform = process.platform,
   skipBuild = false,
+  signed = false,
+  env = process.env,
   runCommand: run = runCommand,
 } = {}) {
   const target = resolveDesktopPackageTarget(requestedTarget, platform);
+  if (signed && target !== "macos") {
+    throw new DesktopPackageError("SIGNED_TARGET_UNSUPPORTED", "Signed packaging is currently supported for macOS only.", 2);
+  }
   assertBuildPlatform({ target, platform, skipBuild });
   const metadata = await resolvePackageMetadata(root);
   const normalizedArch = normalizeArch(arch);
+  const buildEnv = target === "macos" ? stripMacosSigningEnv(env) : env;
+  const signingEnv = signed ? (await loadRepoEnv({ repoRoot: root, env })).env : undefined;
 
   if (!skipBuild) {
     for (const command of buildCommandsForTarget({ target, platform })) {
-      await run(command, { cwd: root });
+      await run(command, { cwd: root, env: buildEnv });
     }
   }
 
@@ -292,10 +434,22 @@ export async function packageDesktopArtifact({
     target,
     arch: normalizedArch,
     metadata,
+    signed,
   });
 
   await rm(plan.archivePath, { force: true });
-  await prepareStageDirectory({ plan, root, target, metadata });
+  await prepareStageDirectory({ plan, root, target, metadata, signed });
+
+  if (signed) {
+    await signAndNotarizeMacosApp({
+      appPath: plan.stagedAppPath,
+      artifactRoot,
+      env: signingEnv,
+      packageName: plan.packageName,
+      root,
+      run,
+    });
+  }
 
   const archiveCommand = archiveCommandForTarget({
     target,
@@ -309,21 +463,28 @@ export async function packageDesktopArtifact({
     packageName: plan.packageName,
     sourcePath: plan.sourcePath,
     stageDir: plan.stageDir,
+    signed,
     target,
   };
 }
 
-function parseArgs(argv) {
+export function parseDesktopPackageArgs(argv) {
   const options = {
     target: undefined,
     skipBuild: false,
     arch: normalizeArch(process.arch),
+    signed: false,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--skip-build") {
       options.skipBuild = true;
+      continue;
+    }
+
+    if (arg === "--signed") {
+      options.signed = true;
       continue;
     }
 
@@ -355,16 +516,17 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log("Usage: npm run desktop:package -- [windows|macos] [--skip-build] [--arch x64|arm64]");
+  console.log("Usage: npm run desktop:package -- [windows|macos] [--skip-build] [--signed] [--arch x64|arm64]");
   console.log("Examples:");
   console.log("  npm run desktop:package");
   console.log("  npm run desktop:package:windows");
   console.log("  npm run desktop:package:macos");
+  console.log("  npm run desktop:package:macos:signed");
 }
 
 async function main(argv = process.argv.slice(2)) {
   try {
-    const options = parseArgs(argv);
+    const options = parseDesktopPackageArgs(argv);
     if (options.help) {
       printUsage();
       return;
