@@ -1,4 +1,10 @@
 import { pathToFileURL } from "node:url";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { loadRepoEnv } from "./desktop-env.mjs";
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, "..", "..", "..");
 
 const platformLabels = {
   win32: "Windows",
@@ -47,14 +53,19 @@ export function evaluateDesktopReleaseEnv({ platform, env = process.env, allowUn
   };
 }
 
-function parseArgs(argv) {
+export function parseDesktopReleaseCheckArgs(argv) {
   const args = [...argv];
   const platform = takeValue(args, "--platform") ?? process.platform;
   const allowUnsigned = takeBoolean(args, "--allow-unsigned");
+  const envFile = takeValue(args, "--env-file");
+  const noEnvFile = takeBoolean(args, "--no-env-file");
   if (args.length > 0) {
     throw new Error(`Unknown release check argument "${args[0]}".`);
   }
-  return { platform, allowUnsigned };
+  if (envFile && noEnvFile) {
+    throw new Error("Use either --env-file or --no-env-file, not both.");
+  }
+  return { platform, allowUnsigned, envFile, noEnvFile };
 }
 
 function platformList(platform) {
@@ -106,9 +117,16 @@ function isMainModule() {
 
 if (isMainModule()) {
   try {
-    const options = parseArgs(process.argv.slice(2));
+    const options = parseDesktopReleaseCheckArgs(process.argv.slice(2));
+    const envResult = options.noEnvFile
+      ? { env: process.env }
+      : await loadRepoEnv({
+          repoRoot,
+          env: process.env,
+          envFile: options.envFile ? path.resolve(options.envFile) : undefined,
+        });
     const results = platformList(options.platform).map((platform) =>
-      evaluateDesktopReleaseEnv({ platform, env: process.env, allowUnsigned: options.allowUnsigned })
+      evaluateDesktopReleaseEnv({ platform, env: envResult.env, allowUnsigned: options.allowUnsigned })
     );
     for (const result of results) {
       printResult(result);

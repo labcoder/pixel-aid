@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateDesktopReleaseEnv } from "./check-desktop-release-env.mjs";
+import { evaluateDesktopReleaseEnv, parseDesktopReleaseCheckArgs } from "./check-desktop-release-env.mjs";
 
 test("allows explicit unsigned desktop release checks for local dry runs", () => {
   const result = evaluateDesktopReleaseEnv({ platform: "win32", env: {}, allowUnsigned: true });
@@ -31,4 +31,26 @@ test("accepts macOS notarization with app store connect API credentials", () => 
 
   assert.equal(result.ok, true);
   assert.deepEqual(result.missing, []);
+});
+
+test("parses release check env-file options", () => {
+  assert.deepEqual(parseDesktopReleaseCheckArgs(["--platform", "darwin", "--env-file", ".env.local"]), {
+    allowUnsigned: false,
+    envFile: ".env.local",
+    noEnvFile: false,
+    platform: "darwin",
+  });
+  assert.deepEqual(parseDesktopReleaseCheckArgs(["--no-env-file"]), {
+    allowUnsigned: false,
+    envFile: undefined,
+    noEnvFile: true,
+    platform: process.platform,
+  });
+});
+
+test("rejects conflicting release check env-file options", () => {
+  assert.throws(
+    () => parseDesktopReleaseCheckArgs(["--env-file", ".env", "--no-env-file"]),
+    /Use either --env-file or --no-env-file/u,
+  );
 });
