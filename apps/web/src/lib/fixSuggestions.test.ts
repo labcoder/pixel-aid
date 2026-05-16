@@ -504,7 +504,7 @@ function buildSuggestedFixOptions(image: RGBAImage, cleanupOverride: Partial<Fix
     maxColors: suggestion.maxColors,
     paletteSettings: {
       mode: "auto",
-      strategy: "medianCut",
+      strategy: suggestion.paletteStrategy,
       maxColors: suggestion.maxColors,
       lockScope: "sheet",
       dithering: "none"
@@ -560,7 +560,7 @@ function buildSuggestedSingleFixOptions(image: RGBAImage): FixOptions {
     maxColors: suggestion.maxColors,
     paletteSettings: {
       mode: "auto",
-      strategy: "medianCut",
+      strategy: suggestion.paletteStrategy,
       maxColors: suggestion.maxColors,
       lockScope: "single",
       dithering: "none"
@@ -850,6 +850,7 @@ describe("fix setting suggestions", () => {
       transparentRgb: "#000000"
     });
     expect(suggestion.downscale).toBe("adaptive");
+    expect(suggestion.paletteStrategy).toBe("perceptual");
   });
 
   test("suggests crisp sprite cleanup for baked checkerboard panda backgrounds", () => {

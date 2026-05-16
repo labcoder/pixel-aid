@@ -3497,6 +3497,7 @@ export function App() {
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
     setPaletteBudget(targetAssetSource === "manual" && !useSuggestedStrictSheetCleanup ? preset.maxColors : suggestion.maxColors);
+    setPaletteStrategy(suggestion.paletteStrategy);
     if (paletteMode === "fixed" && fixedPaletteColors.length === 0) {
       setPaletteMode("auto");
       setCustomPaletteText("");
