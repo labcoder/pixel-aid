@@ -376,6 +376,7 @@ describe("astro sprite sheet golden regressions", () => {
     expect(suggestion.outlineMode).toBe("none");
     expect(suggestion.outlineSourceColors).toEqual([]);
     expect(countTransparentPixels(result.image)).toBeGreaterThan(500_000);
+    expect(result.image.width * result.image.height - countTransparentPixels(result.image)).toBeGreaterThan(320_000);
     expect(countStrongVisibleMagentaMattePixels(result.image)).toBe(0);
   }, 10_000);
 });

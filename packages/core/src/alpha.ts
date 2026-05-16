@@ -441,7 +441,11 @@ function isProtectedSilhouetteColor(r: number, g: number, b: number): boolean {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const brightness = r + g + b;
-  return (brightness >= 620 && max - min <= 56) || (max <= 72 && max - min <= 56);
+  const spread = max - min;
+  const brightNeutral = brightness >= 620 && spread <= 56;
+  const darkNeutral = max <= 72 && spread <= 56;
+  const mutedDarkSubject = max <= 128 && min >= 24 && brightness <= 300 && spread <= 96;
+  return brightNeutral || darkNeutral || mutedDarkSubject;
 }
 
 function binarizeFloodFillAlpha(image: RGBAImage, threshold: number): void {

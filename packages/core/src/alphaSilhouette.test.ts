@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { applyAlphaMode, createImage, fixImage, readPixel, writePixel } from "./index";
+import { applyAlphaMode, applyMorphologyCleanup, createImage, fixImage, readPixel, writePixel } from "./index";
 import type { RGBAImage, RgbaTuple } from "./index";
 
 const BASE_MAGENTA: RgbaTuple = [255, 0, 245, 255];
@@ -62,6 +62,14 @@ function fillRect(image: RGBAImage, startX: number, startY: number, width: numbe
       writePixel(image, x, y, ...color);
     }
   }
+}
+
+function createChromaEdgeSilhouetteFixture(background: RgbaTuple, edge: RgbaTuple): RGBAImage {
+  const image = createImage(12, 12, background);
+  fillRect(image, 4, 3, 4, 6, edge);
+  fillRect(image, 5, 4, 2, 4, [236, 204, 156, 255]);
+  fillRect(image, 5, 8, 2, 2, edge);
+  return image;
 }
 
 function countVisibleMagentaMattePixels(image: RGBAImage): number {
@@ -133,5 +141,28 @@ describe("outline-guided background cleanup", () => {
     expect(readPixel(result.image, 4, 2)[3]).toBe(255);
     expect(readPixel(result.image, 2, 1)[3]).toBe(255);
     expect(readPixel(result.image, 3, 3)[3]).toBe(255);
+  });
+
+  test.each([
+    { name: "magenta", background: [255, 0, 245, 255] as RgbaTuple, edge: [72, 42, 92, 255] as RgbaTuple },
+    { name: "green", background: [0, 255, 0, 255] as RgbaTuple, edge: [42, 92, 42, 255] as RgbaTuple },
+    { name: "cyan", background: [0, 240, 255, 255] as RgbaTuple, edge: [34, 96, 104, 255] as RgbaTuple },
+    { name: "white", background: [255, 255, 255, 255] as RgbaTuple, edge: [76, 58, 92, 255] as RgbaTuple }
+  ])("preserves dark silhouette colors on $name backgrounds", ({ background, edge }) => {
+    const source = createChromaEdgeSilhouetteFixture(background, edge);
+    const { image: alphaCleaned } = applyAlphaMode(source, "backgroundFloodFill", {
+      tolerance: 18,
+      decontaminateRgb: false
+    });
+    const cleaned = applyMorphologyCleanup(alphaCleaned, {
+      enabled: true,
+      matteCleanup: true,
+      alphaThreshold: 128
+    }).image;
+
+    expect(readPixel(cleaned, 0, 0)[3]).toBe(0);
+    expect(readPixel(cleaned, 4, 4)).toEqual(edge);
+    expect(readPixel(cleaned, 7, 4)).toEqual(edge);
+    expect(readPixel(cleaned, 5, 9)).toEqual(edge);
   });
 });

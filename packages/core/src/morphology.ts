@@ -569,6 +569,9 @@ function clearResidualDarkDominantMatte(
     const r = image.data[offset]!;
     const g = image.data[offset + 1]!;
     const b = image.data[offset + 2]!;
+    if (isProtectedSubjectColor(r, g, b)) {
+      continue;
+    }
     if (!isDarkDominantMatteColor(r, g, b) || !matchesMatteHint(r, g, b, hints)) {
       continue;
     }
@@ -751,15 +754,15 @@ function classifyMatteCandidate(data: Uint8ClampedArray, offset: number, hints: 
   const g = data[offset + 1]!;
   const b = data[offset + 2]!;
 
+  if (isProtectedSubjectColor(r, g, b)) {
+    return "none";
+  }
+
   if (hints.count > 0 && matchesMatteHint(r, g, b, hints)) {
     if (isDarkDominantMatteColor(r, g, b)) {
       return "hint";
     }
-    return isProtectedSubjectColor(r, g, b) ? "protectedHint" : "hint";
-  }
-
-  if (isProtectedSubjectColor(r, g, b)) {
-    return "none";
+    return "hint";
   }
 
   if (isMutedArtificialMatteColor(r, g, b)) {
@@ -869,7 +872,10 @@ function isProtectedSubjectColor(r: number, g: number, b: number): boolean {
   const min = Math.min(r, g, b);
   const spread = max - min;
   const brightness = r + g + b;
-  return (max <= 72 && spread <= 56) || (brightness >= 620 && spread <= 56);
+  const darkNeutral = max <= 72 && spread <= 56;
+  const brightNeutral = brightness >= 620 && spread <= 56;
+  const mutedDarkSubject = max <= 128 && min >= 24 && brightness <= 300 && spread <= 96;
+  return darkNeutral || brightNeutral || mutedDarkSubject;
 }
 
 function chromaFamilyMask(r: number, g: number, b: number): number {
