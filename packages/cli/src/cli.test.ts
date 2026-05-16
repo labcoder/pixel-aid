@@ -249,6 +249,9 @@ describe("pixelaid CLI", () => {
       expect(body.ok).toBe(true);
       expect(body.result.result?.settings).toMatchObject({
         alpha: "backgroundFloodFill",
+        paletteSettings: {
+          strategy: "perceptual",
+        },
         cleanup: {
           morphology: {
             enabled: true,
@@ -633,6 +636,9 @@ type SuggestedOptionsJson = {
   targetHeight?: number;
   maxColors?: number;
   alpha?: string;
+  paletteSettings?: {
+    strategy?: string;
+  };
   cleanup?: {
     removeHalos?: boolean;
     denoiseStrength?: number;

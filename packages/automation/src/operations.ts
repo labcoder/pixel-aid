@@ -768,7 +768,7 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
     targetHeight: suggestion.targetHeight,
     maxColors: suggestion.maxColors,
     paletteMode: "auto",
-    paletteStrategy: "medianCut",
+    paletteStrategy: suggestion.paletteStrategy,
     paletteLockScope: suggestion.mode === "single" ? "single" : "sheet",
     paletteDithering: "none",
     downscale: suggestion.downscale,
