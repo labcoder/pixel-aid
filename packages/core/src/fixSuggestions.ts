@@ -15,6 +15,7 @@ import type {
   DownscaleMethod,
   GridCandidate,
   OutlineMode,
+  PaletteStrategy,
   Rect,
   RGBAImage,
   SheetConditioningDiagnostics,
@@ -76,6 +77,7 @@ export type FixSettingSuggestion = {
   gridPhaseY: number;
   localCorrection: boolean;
   downscale: DownscaleMethod;
+  paletteStrategy: PaletteStrategy;
   alpha: AlphaMode;
   alphaSettings: AlphaCleanupSettings;
   removeOrphans: boolean;
@@ -259,6 +261,12 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     candidate
   );
   const outline = suggestOutlineRepair(qualityReport, cleanupEligibility, bakedTransparencyDetected);
+  const paletteStrategy = suggestPaletteStrategy({
+    mode,
+    assetType: classification.assetType,
+    alpha: suggestedAlpha,
+    matteCleanup: cleanup.matteCleanup
+  });
   const sheetLayout =
     mode === "spriteSheet" && shouldSurfaceDetectedSheetLayout(detectedSheetLayout)
       ? scaleSheetLayoutDetection(
@@ -294,6 +302,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       (candidate?.scaleX ?? 1) >= 4 &&
       (candidate?.confidence ?? 0) >= 0.55,
     downscale,
+    paletteStrategy,
     alpha: suggestedAlpha,
     alphaSettings: strictSourceSheetCleanup ? { ...preset.alphaSettings, decontaminateRgb: true } : { ...preset.alphaSettings },
     removeOrphans: cleanup.removeOrphans,
@@ -368,6 +377,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     sourceSizedSheetPreservation
   });
   const preserveSuggestedSingleCleanup = assetType === "sprite" || assetType === "icon";
+  const alpha = strictSourceSheetCleanup ? "binary" : assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha;
+  const matteCleanup = strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup;
 
   return {
     ...suggestion,
@@ -382,7 +393,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     targetWidth: targetSize.width,
     targetHeight: targetSize.height,
     maxColors: strictSourceSheetMaxColors,
-    alpha: strictSourceSheetCleanup ? "binary" : assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha,
+    paletteStrategy: suggestPaletteStrategy({ mode, assetType, alpha, matteCleanup }),
+    alpha,
     alphaSettings:
       strictSourceSheetCleanup || assetType === "sprite" || assetType === "icon"
         ? { ...suggestion.alphaSettings, decontaminateRgb: true }
@@ -391,7 +403,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     jaggyCleanup: preserveSuggestedSingleCleanup ? suggestion.jaggyCleanup : sourceSizedSheetPreservation ? false : preset.jaggyCleanup,
     preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
     removeHalos: preserveSuggestedSingleCleanup ? suggestion.removeHalos : strictSourceSheetCleanup ? false : sourceSizedSheetPreservation ? false : preset.removeHalos,
-    matteCleanup: strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup,
+    matteCleanup,
     denoiseStrength: preserveSuggestedSingleCleanup ? suggestion.denoiseStrength : strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     nativeScaleInference,
@@ -416,6 +428,24 @@ function shouldUseBackgroundCleanedGrid(
   alpha: AlphaMode
 ): boolean {
   return mode === "single" && (assetType === "sprite" || assetType === "icon") && bakedTransparencyDetected && alpha === "backgroundFloodFill";
+}
+
+function suggestPaletteStrategy({
+  mode,
+  assetType,
+  alpha,
+  matteCleanup
+}: {
+  mode: AssetMode;
+  assetType: AssetType;
+  alpha: AlphaMode;
+  matteCleanup: boolean;
+}): PaletteStrategy {
+  if (mode === "single" && (assetType === "sprite" || assetType === "icon") && (alpha === "backgroundFloodFill" || matteCleanup)) {
+    return "perceptual";
+  }
+
+  return "medianCut";
 }
 
 function isCellGridMode(mode: AssetMode): boolean {

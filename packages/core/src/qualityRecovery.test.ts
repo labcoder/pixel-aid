@@ -239,7 +239,7 @@ function buildFixOptions(image: RGBAImage): FixOptions {
     maxColors: suggestion.maxColors,
     paletteSettings: {
       mode: "auto",
-      strategy: "medianCut",
+      strategy: suggestion.paletteStrategy,
       maxColors: suggestion.maxColors,
       lockScope: suggestion.mode === "single" ? "single" : "sheet",
       dithering: "none"
@@ -407,6 +407,7 @@ describe("quality recovery regressions", () => {
     expect(suggestion.assetType).toBe("sprite");
     expect(suggestion.mode).toBe("single");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.paletteStrategy).toBe("perceptual");
     expect(suggestion.matteCleanup).toBe(true);
     expect(countTransparentPixels(result.image)).toBeGreaterThan(500);
     expect(countVisibleGreenMattePixels(result.image)).toBe(0);
@@ -420,6 +421,7 @@ describe("quality recovery regressions", () => {
 
     expect(suggestion.assetType).toBe("sprite");
     expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.paletteStrategy).toBe("perceptual");
     expect(suggestion.matteCleanup).toBe(true);
     expect(result.settings.cleanup.morphology).toMatchObject({
       enabled: true,
