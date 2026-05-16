@@ -866,12 +866,42 @@ function resolvePaletteSettings(options: FixOptions, reservedColors: readonly st
 }
 
 function refinePaletteForCleanup(palette: readonly string[], options: FixOptions): string[] {
-  const matteFiltered = [...palette];
+  const matteFiltered = shouldFilterMattePaletteColors(options) ? filterMattePaletteColors(palette) : [...palette];
   if (!shouldMergeNearbyAutoPaletteColors(options)) {
     return matteFiltered;
   }
 
   return mergeNearbyPaletteColors(matteFiltered, 24 * 24);
+}
+
+function shouldFilterMattePaletteColors(options: FixOptions): boolean {
+  return (
+    options.mode !== "single" &&
+    options.cleanup.morphology?.enabled === true &&
+    options.cleanup.morphology.matteCleanup === true &&
+    options.paletteSettings?.mode !== "fixed" &&
+    options.palette === undefined
+  );
+}
+
+function filterMattePaletteColors(palette: readonly string[]): string[] {
+  const kept: string[] = [];
+  for (const color of palette) {
+    const parsed = tryParseHexColor(color);
+    if (parsed !== null && isMagentaMattePaletteArtifactColor(parsed)) {
+      continue;
+    }
+    kept.push(color);
+  }
+
+  return kept.length >= Math.min(4, palette.length) ? kept : [...palette];
+}
+
+function isMagentaMattePaletteArtifactColor(color: number): boolean {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  return r >= 48 && b >= 40 && Math.min(r, b) - g >= 18;
 }
 
 function shouldMergeNearbyAutoPaletteColors(options: FixOptions): boolean {
@@ -1403,7 +1433,7 @@ function subjectDetailPaletteColors(image: RGBAImage, options: FixOptions): stri
       const g = image.data[offset + 1]!;
       const b = image.data[offset + 2]!;
       const family = sourceMatteDetailFamilyMask(r, g, b);
-      if (family === 0) {
+      if (family === 0 || !hasSubjectDetailPaletteSupport(image, x, y, family)) {
         continue;
       }
 
@@ -1491,11 +1521,48 @@ function rgbFromSubjectDetailBucket(bucketR: Uint32Array, bucketG: Uint32Array, 
 
 function shouldReserveSubjectDetailPaletteColors(options: FixOptions): boolean {
   return (
+    options.mode === "single" &&
     options.cleanup.morphology?.enabled === true &&
     options.cleanup.morphology.matteCleanup === true &&
     options.paletteSettings?.mode !== "fixed" &&
     options.palette === undefined
   );
+}
+
+function hasSubjectDetailPaletteSupport(image: RGBAImage, x: number, y: number, family: number): boolean {
+  let subjectNeighbors = 0;
+  for (let dy = -1; dy <= 1; dy += 1) {
+    for (let dx = -1; dx <= 1; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+
+      const offset = (ny * image.width + nx) * 4;
+      if (image.data[offset + 3]! < 128) {
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      if (sourceMatteDetailFamilyMask(r, g, b) === family || isPaletteArtifactChromaColor(r, g, b)) {
+        continue;
+      }
+
+      subjectNeighbors += 1;
+      if (subjectNeighbors >= 2) {
+        return true;
+      }
+    }
+  }
+
+  return false;
 }
 
 function colorfulness(r: number, g: number, b: number): number {

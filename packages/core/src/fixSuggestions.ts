@@ -169,6 +169,13 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     sheetConditioning,
     strictSourceSheetCleanup
   );
+  const sheetChromaMatteCleanup = shouldUseSheetChromaMatteCleanup(
+    image,
+    mode,
+    classification.assetType,
+    sheetConditioning,
+    sourceSizedSheetPreservation
+  );
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
@@ -176,7 +183,11 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     ? suggestSourceSizedSheetMaxColors(strictSourceSheetMaxColors, exactColorCount)
     : strictSourceSheetMaxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
-  const suggestedAlpha = strictSourceSheetCleanup ? "binary" : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence);
+  const suggestedAlpha = strictSourceSheetCleanup
+    ? "binary"
+    : sheetChromaMatteCleanup
+      ? "backgroundFloodFill"
+      : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence);
   const singleSpriteMatteCleanup =
     suggestedAlpha === "backgroundFloodFill" &&
     mode === "single" &&
@@ -224,7 +235,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     strictSourceSheetCleanup,
     strictSourceSheetDenoiseStrength,
     sourceSizedSheetPreservation,
-    singleSpriteMatteCleanup
+    singleSpriteMatteCleanup,
+    sheetChromaMatteCleanup
   );
   const nativeScaleInference = describeNativeScaleInference({
     enabled: strictSourceSheetCleanup,
@@ -242,7 +254,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     candidate,
     strictSourceSheetCleanup,
     sourceSizedSheetPreservation,
-    singleSpriteMatteCleanup
+    singleSpriteMatteCleanup,
+    sheetChromaMatteCleanup
   });
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
@@ -304,7 +317,10 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     downscale,
     paletteStrategy,
     alpha: suggestedAlpha,
-    alphaSettings: strictSourceSheetCleanup ? { ...preset.alphaSettings, decontaminateRgb: true } : { ...preset.alphaSettings },
+    alphaSettings:
+      strictSourceSheetCleanup || sheetChromaMatteCleanup || singleSpriteMatteCleanup
+        ? { ...preset.alphaSettings, decontaminateRgb: true }
+        : { ...preset.alphaSettings },
     removeOrphans: cleanup.removeOrphans,
     jaggyCleanup: cleanup.jaggyCleanup,
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
@@ -349,6 +365,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     isCellGridMode(mode) && detectedSheetLayout
       ? shouldUseSourceSizedSheetPreservation(mode, image, detectedSheetLayout, sheetConditioning, strictSourceSheetCleanup)
       : false;
+  const sheetChromaMatteCleanup = shouldUseSheetChromaMatteCleanup(image, mode, assetType, sheetConditioning, sourceSizedSheetPreservation);
   const strictSourceSheetMaxColors = strictSourceSheetCleanup
     ? suggestStrictSourceSheetMaxColors(preset.maxColors)
     : preset.maxColors;
@@ -362,7 +379,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     candidate: suggestion.gridCandidates[0],
     strictSourceSheetCleanup,
     sourceSizedSheetPreservation,
-    singleSpriteMatteCleanup: false
+    singleSpriteMatteCleanup: false,
+    sheetChromaMatteCleanup
   });
   const sheetLayout =
     isCellGridMode(mode) && detectedSheetLayout && detectedSheetLayout.frames.length > 0
@@ -377,7 +395,13 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     sourceSizedSheetPreservation
   });
   const preserveSuggestedSingleCleanup = assetType === "sprite" || assetType === "icon";
-  const alpha = strictSourceSheetCleanup ? "binary" : assetType === "sprite" || assetType === "icon" ? suggestion.alpha : preset.alpha;
+  const alpha = strictSourceSheetCleanup
+    ? "binary"
+    : sheetChromaMatteCleanup
+      ? "backgroundFloodFill"
+      : assetType === "sprite" || assetType === "icon"
+        ? suggestion.alpha
+        : preset.alpha;
   const matteCleanup = strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup;
 
   return {
@@ -396,7 +420,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     paletteStrategy: suggestPaletteStrategy({ mode, assetType, alpha, matteCleanup }),
     alpha,
     alphaSettings:
-      strictSourceSheetCleanup || assetType === "sprite" || assetType === "icon"
+      strictSourceSheetCleanup || sheetChromaMatteCleanup || assetType === "sprite" || assetType === "icon"
         ? { ...suggestion.alphaSettings, decontaminateRgb: true }
         : { ...preset.alphaSettings },
     removeOrphans: preserveSuggestedSingleCleanup ? suggestion.removeOrphans : sourceSizedSheetPreservation ? false : preset.removeOrphans,
@@ -481,6 +505,24 @@ function shouldUseSourceSizedSheetPreservation(
   }
 
   return !sheetConditioning.issues.some((issue) => issue.severity === "warning" || isStrictSourceSheetCleanupIssue(issue.code));
+}
+
+function shouldUseSheetChromaMatteCleanup(
+  image: RGBAImage,
+  mode: AssetMode,
+  assetType: AssetType,
+  sheetConditioning: SheetConditioningDiagnostics,
+  sourceSizedSheetPreservation: boolean
+): boolean {
+  if (mode !== "spriteSheet" || assetType === "background" || assetType === "tilemap" || sourceSizedSheetPreservation) {
+    return false;
+  }
+
+  return (
+    sheetConditioning.issues.some((issue) => issue.code === "chroma-matte-artifacts") &&
+    hasArtificialChromaCornerBackground(image) &&
+    hasVisibleChromaMatteAgainstBackground(image)
+  );
 }
 
 function isStrictSourceSheetCleanupIssue(code: SheetConditioningDiagnostics["issues"][number]["code"]): boolean {
@@ -638,6 +680,7 @@ function suggestCleanupEligibility(input: {
   strictSourceSheetCleanup: boolean;
   sourceSizedSheetPreservation: boolean;
   singleSpriteMatteCleanup: boolean;
+  sheetChromaMatteCleanup: boolean;
 }): CleanupEligibilityDecision[] {
   const matteIssue = input.sheetConditioning.issues.some((issue) => isStrictSourceSheetCleanupIssue(issue.code));
   const preservesScene = input.assetType === "background" || input.assetType === "tilemap";
@@ -646,7 +689,7 @@ function suggestCleanupEligibility(input: {
   const sheetLike = input.mode === "spriteSheet" || input.mode === "tileSheet";
   const selectedScale = Math.min(input.candidate?.scaleX ?? 1, input.candidate?.scaleY ?? input.candidate?.scaleX ?? 1);
   const outlineEvidence = input.bakedTransparencyDetected || input.qualityReport.metrics.outline.candidateCount > 0;
-  const matteCleanupEvidence = input.strictSourceSheetCleanup || matteIssue || input.singleSpriteMatteCleanup;
+  const matteCleanupEvidence = input.strictSourceSheetCleanup || matteIssue || input.singleSpriteMatteCleanup || input.sheetChromaMatteCleanup;
   const sourceSizedSheetCleanup = input.strictSourceSheetCleanup && sheetLike && selectedScale <= 1.25;
 
   return [
@@ -674,13 +717,27 @@ function suggestCleanupEligibility(input: {
     },
     {
       pass: "outlineRepair",
-      enabled: cleanupAllowed && !sourceSizedSheetCleanup && outlineEvidence && selectedScale >= 1 && !input.singleSpriteMatteCleanup,
-      reasonCode: sourceSizedSheetCleanup ? "source-sized-line-preservation" : outlineEvidence ? "outline-candidate-evidence" : "no-outline-evidence",
+      enabled:
+        cleanupAllowed &&
+        !sourceSizedSheetCleanup &&
+        outlineEvidence &&
+        selectedScale >= 1 &&
+        !input.singleSpriteMatteCleanup &&
+        !input.sheetChromaMatteCleanup,
+      reasonCode: sourceSizedSheetCleanup
+        ? "source-sized-line-preservation"
+        : input.sheetChromaMatteCleanup
+          ? "matte-background-outline-suppressed"
+          : outlineEvidence
+            ? "outline-candidate-evidence"
+            : "no-outline-evidence",
       reason: sourceSizedSheetCleanup
         ? "Source-sized sheet cleanup preserves existing linework instead of rebuilding outlines."
-        : outlineEvidence
-          ? "Outline-colored edge evidence was detected."
-          : "No outline repair candidates were detected."
+        : input.sheetChromaMatteCleanup
+          ? "Chroma matte sheet cleanup suppresses outline repair so the background color is not preserved as an outline."
+          : outlineEvidence
+            ? "Outline-colored edge evidence was detected."
+            : "No outline repair candidates were detected."
     },
     {
       pass: "jaggyCleanup",
@@ -719,7 +776,8 @@ function suggestCleanupSettings(
   strictSourceSheetCleanup = false,
   strictSourceSheetDenoiseStrength?: number,
   sourceSizedSheetPreservation = false,
-  singleSpriteMatteCleanup = false
+  singleSpriteMatteCleanup = false,
+  sheetChromaMatteCleanup = false
 ): Pick<FixSettingSuggestion, "removeOrphans" | "jaggyCleanup" | "preserveSinglePixelDetails" | "removeHalos" | "matteCleanup" | "denoiseStrength"> {
   if (strictSourceSheetCleanup) {
     return {
@@ -739,6 +797,17 @@ function suggestCleanupSettings(
       preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
       removeHalos: false,
       matteCleanup: false,
+      denoiseStrength: 0
+    };
+  }
+
+  if (sheetChromaMatteCleanup) {
+    return {
+      removeOrphans: false,
+      jaggyCleanup: false,
+      preserveSinglePixelDetails: preset.preserveSinglePixelDetails,
+      removeHalos: false,
+      matteCleanup: true,
       denoiseStrength: 0
     };
   }
@@ -1310,6 +1379,11 @@ function hasVisibleChromaMatteAgainstBackground(image: RGBAImage): boolean {
   }
 
   return candidates >= Math.max(4, Math.floor(visible * 0.003));
+}
+
+function hasArtificialChromaCornerBackground(image: RGBAImage): boolean {
+  const background = estimateCornerColor(image);
+  return background.a >= 240 && looksLikeArtificialMatteColor(background.r, background.g, background.b);
 }
 
 function looksLikeArtificialMatteColor(r: number, g: number, b: number): boolean {

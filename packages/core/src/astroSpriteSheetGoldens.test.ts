@@ -10,6 +10,7 @@ const cleanAstroSheetPath = path.join(goldenDir, "astro-spritesheet-normalized-f
 const noisyAstroSheetPath = path.join(goldenDir, "astro-spritesheet-source.webp");
 const hollowKnightSheetPath = path.join(goldenDir, "hollowknight-source.webp");
 const cleanHollowKnightSheetPath = path.join(goldenDir, "hollowknight-unfake-pixel-art-scaled.png");
+const samuraiMagentaSheetPath = path.join(goldenDir, "samurai-magenta.png");
 
 type AlphaMaskDiff = {
   falseOpaque: number;
@@ -28,7 +29,7 @@ function buildFixOptions(image: RGBAImage): FixOptions {
     maxColors: suggestion.maxColors,
     paletteSettings: {
       mode: "auto",
-      strategy: "medianCut",
+      strategy: suggestion.paletteStrategy,
       maxColors: suggestion.maxColors,
       lockScope: suggestion.mode === "single" ? "single" : "sheet",
       dithering: "none"
@@ -115,6 +116,30 @@ function countVisibleMagentaMattePixels(image: RGBAImage): number {
     const b = image.data[offset + 2]!;
     const a = image.data[offset + 3]!;
     if (a > 0 && r > 90 && b > 64 && g < Math.min(r, b) - 20) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countStrongVisibleMagentaMattePixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const r = image.data[offset]!;
+    const g = image.data[offset + 1]!;
+    const b = image.data[offset + 2]!;
+    const a = image.data[offset + 3]!;
+    if (a > 0 && r >= 170 && b >= 150 && g <= 90 && Math.min(r, b) - g >= 80) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+function countTransparentPixels(image: RGBAImage): number {
+  let count = 0;
+  for (let offset = 3; offset < image.data.length; offset += 4) {
+    if (image.data[offset]! === 0) {
       count += 1;
     }
   }
@@ -224,7 +249,7 @@ describe("astro sprite sheet golden regressions", () => {
     expect(suggestion.denoiseStrength).toBe(0);
     expect(comparison.message).toBe("Golden matched 1536x1872; changed pixels 0, max channel delta 0.");
     expect(comparison.matches).toBe(true);
-  });
+  }, 10_000);
 
   test("recovers the noisy astro WebP toward the normalized sheet golden", async () => {
     const source = await readGoldenWebp(noisyAstroSheetPath);
@@ -308,7 +333,7 @@ describe("astro sprite sheet golden regressions", () => {
     expect(result.image.width).toBe(source.width);
     expect(result.image.height).toBe(source.height);
     expect(countExactRgbaColors(result.image)).toBeLessThanOrEqual(32);
-    expect(countVisibleMagentaMattePixels(result.image)).toBeLessThan(1_000);
+    expect(countVisibleMagentaMattePixels(result.image)).toBeLessThan(20);
     expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(45_000);
     expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(80_000);
     expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(110_000);
@@ -330,11 +355,27 @@ describe("astro sprite sheet golden regressions", () => {
     });
     const alphaDiff = compareAlphaMasks(actualFrame, goldenFrame);
 
-    expect(countVisibleMagentaMattePixels(actualFrame)).toBeLessThan(80);
+    expect(countVisibleMagentaMattePixels(cropRect(result.image, sheetFrameRect(6, 1)))).toBe(0);
+    expect(countVisibleMagentaMattePixels(actualFrame)).toBe(0);
     expect(alphaDiff.falseOpaque).toBeLessThanOrEqual(1_800);
     expect(alphaDiff.falseTransparent).toBeLessThanOrEqual(2_200);
     expect(alphaDiff.bothOpaqueChanged).toBeLessThanOrEqual(3_600);
     expect(comparison.message).toContain("Golden matched");
     expect(comparison.matches).toBe(true);
+  }, 10_000);
+
+  test("removes magenta matte from Samurai animation sheets instead of repairing it as outline", () => {
+    const source = readGoldenPng(samuraiMagentaSheetPath);
+    const suggestion = suggestFixSettings(source);
+    const result = fixImage(source, buildFixOptions(source));
+
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(suggestion.outlineMode).toBe("none");
+    expect(suggestion.outlineSourceColors).toEqual([]);
+    expect(countTransparentPixels(result.image)).toBeGreaterThan(500_000);
+    expect(countStrongVisibleMagentaMattePixels(result.image)).toBe(0);
   }, 10_000);
 });
