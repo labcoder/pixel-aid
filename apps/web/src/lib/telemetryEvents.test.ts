@@ -4,6 +4,7 @@ import {
   createAssetImportedTelemetry,
   createExportCompletedTelemetry,
   createFixCompletedTelemetry,
+  createFixStartedTelemetry,
   createOperationErrorTelemetry,
   getTelemetryControlMode
 } from "./telemetryEvents";
@@ -76,6 +77,7 @@ describe("telemetry events", () => {
 
     expect(
       createFixCompletedTelemetry({
+        fixTrigger: "guided_panel",
         controlMode: getTelemetryControlMode(true),
         result,
         options: result.settings,
@@ -85,6 +87,7 @@ describe("telemetry events", () => {
       })
     ).toMatchObject({
       control_mode: "advanced",
+      fix_trigger: "guided_panel",
       asset_type: "icon",
       mode: "single",
       frame_count: 1,
@@ -100,6 +103,40 @@ describe("telemetry events", () => {
       cached_grid: true,
       quality_profile: "sprite",
       duration_ms: 12
+    });
+  });
+
+  test("summarizes started fixes with trigger and control mode", () => {
+    expect(
+      createFixStartedTelemetry({
+        fixTrigger: "top_toolbar",
+        controlMode: getTelemetryControlMode(false),
+        assetType: "sprite",
+        mode: "single",
+        sourceWidth: 512,
+        sourceHeight: 384,
+        targetWidth: 64,
+        targetHeight: 48,
+        frameCount: 1,
+        maxColors: 16,
+        gridDetect: "auto",
+        paletteMode: "auto",
+        cachedGrid: false
+      })
+    ).toEqual({
+      fix_trigger: "top_toolbar",
+      control_mode: "guided",
+      asset_type: "sprite",
+      mode: "single",
+      source_width: 512,
+      source_height: 384,
+      target_width: 64,
+      target_height: 48,
+      frame_count: 1,
+      max_colors: 16,
+      grid_detect: "auto",
+      palette_mode: "auto",
+      cached_grid: false
     });
   });
 

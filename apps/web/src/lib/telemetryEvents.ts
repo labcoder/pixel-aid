@@ -1,4 +1,4 @@
-import type { AssetMode, AssetType, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, PaletteMode, PixelFixResult } from "@pixelaid/shared";
 import type { EngineExportTarget } from "@pixelaid/exporters";
 
 export type TelemetryEventName =
@@ -8,6 +8,7 @@ export type TelemetryEventName =
   | "telemetry_opt_in_changed"
   | "asset_imported"
   | "auto_suggest_completed"
+  | "fix_started"
   | "fix_completed"
   | "export_completed"
   | "operation_error";
@@ -21,6 +22,8 @@ export type TelemetryImportSource = "file_picker" | "desktop_picker" | "drag_dro
 export type TelemetryImportKind = "image" | "pixelaid_document" | "sample";
 
 export type TelemetryControlMode = "guided" | "advanced";
+
+export type TelemetryFixTrigger = "guided_panel" | "top_toolbar" | "keyboard_shortcut";
 
 export type TelemetryErrorKind =
   | "cancelled"
@@ -101,7 +104,40 @@ export function createAutoSuggestCompletedTelemetry(input: {
   };
 }
 
+export function createFixStartedTelemetry(input: {
+  fixTrigger: TelemetryFixTrigger;
+  controlMode: TelemetryControlMode;
+  assetType: AssetType;
+  mode: AssetMode;
+  sourceWidth: number;
+  sourceHeight: number;
+  targetWidth: number;
+  targetHeight: number;
+  frameCount: number;
+  maxColors: number;
+  gridDetect: FixOptions["grid"]["detect"];
+  paletteMode: PaletteMode;
+  cachedGrid: boolean;
+}): TelemetryProperties {
+  return {
+    fix_trigger: input.fixTrigger,
+    control_mode: input.controlMode,
+    asset_type: input.assetType,
+    mode: input.mode,
+    source_width: positiveInteger(input.sourceWidth),
+    source_height: positiveInteger(input.sourceHeight),
+    target_width: positiveInteger(input.targetWidth),
+    target_height: positiveInteger(input.targetHeight),
+    frame_count: positiveInteger(input.frameCount),
+    max_colors: positiveInteger(input.maxColors),
+    grid_detect: input.gridDetect,
+    palette_mode: input.paletteMode,
+    cached_grid: input.cachedGrid
+  };
+}
+
 export function createFixCompletedTelemetry(input: {
+  fixTrigger: TelemetryFixTrigger;
   controlMode: TelemetryControlMode;
   result: PixelFixResult;
   options: FixOptions;
@@ -111,6 +147,7 @@ export function createFixCompletedTelemetry(input: {
 }): TelemetryProperties {
   const { result, options } = input;
   return {
+    fix_trigger: input.fixTrigger,
     control_mode: input.controlMode,
     asset_type: options.assetType ?? "sprite",
     mode: options.mode,

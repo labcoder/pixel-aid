@@ -169,8 +169,10 @@ import {
   createAutoSuggestCompletedTelemetry,
   createExportCompletedTelemetry,
   createFixCompletedTelemetry,
+  createFixStartedTelemetry,
   createOperationErrorTelemetry,
   getTelemetryControlMode,
+  type TelemetryFixTrigger,
   type TelemetryImportSource
 } from "./lib/telemetryEvents";
 import { createReactSafeRgbaImage } from "./lib/reactSafeImage";
@@ -4209,7 +4211,7 @@ export function App() {
     targetWidth
   ]);
 
-  const runFix = useCallback(async () => {
+  const runFix = useCallback(async (fixTrigger: TelemetryFixTrigger = "top_toolbar") => {
     if (!selectedAsset || isEditorBusy) {
       return;
     }
@@ -4239,9 +4241,10 @@ export function App() {
     try {
       const options = buildFixOptions();
       const cachedGridCandidates = reusableGridCandidatesForFix(options, gridCandidates);
+      const telemetryFrameCount = options.sheetFrames?.length ?? frameCount;
       editorPerformanceMonitorRef.current.mark("fix preparation end", `${options.mode} / ${options.maxColors} colors`, perfOperationId);
       setFixOperation((current) =>
-        current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${options.sheetFrames?.length ?? frameCount} frames...` : "Fixing image...") : current
+        current?.id === operation.id ? updateBusyOperation(current, sheetMode ? `Fixing ${telemetryFrameCount} frames...` : "Fixing image...") : current
       );
       await waitForNextPaint();
 
@@ -4272,6 +4275,24 @@ export function App() {
       editorPerformanceMonitorRef.current.mark("worker job postMessage", job.requestId, perfOperationId);
       publishEditorPerformanceSnapshot();
       appendLog(`Fix started (${options.grid.detect} grid, ${options.maxColors} colors${cachedGridCandidates ? ", cached grid" : ""})`);
+      void telemetryClient.capture(
+        "fix_started",
+        createFixStartedTelemetry({
+          fixTrigger,
+          controlMode: fixControlMode,
+          assetType: options.assetType,
+          mode: options.mode,
+          sourceWidth: selectedAsset.image.width,
+          sourceHeight: selectedAsset.image.height,
+          targetWidth: options.targetWidth ?? selectedAsset.image.width,
+          targetHeight: options.targetHeight ?? selectedAsset.image.height,
+          frameCount: telemetryFrameCount,
+          maxColors: options.maxColors,
+          gridDetect: options.grid.detect,
+          paletteMode: options.paletteSettings?.mode ?? "auto",
+          cachedGrid: Boolean(cachedGridCandidates)
+        })
+      );
 
       void job.promise
         .then((result) => {
@@ -4297,10 +4318,11 @@ export function App() {
           void telemetryClient.capture(
             "fix_completed",
             createFixCompletedTelemetry({
+              fixTrigger,
               controlMode: fixControlMode,
               result,
               options,
-              frameCount: options.sheetFrames?.length ?? frameCount,
+              frameCount: telemetryFrameCount,
               cachedGrid: Boolean(cachedGridCandidates),
               qualityProfile
             })
@@ -6730,7 +6752,7 @@ export function App() {
       }
       if (action === "fix") {
         if (selectedAsset && !isEditorBusy) {
-          void runFix();
+          void runFix("keyboard_shortcut");
         }
         return;
       }
@@ -7983,7 +8005,9 @@ export function App() {
             type="button"
             className="fix-action"
             disabled={!selectedAsset || isEditorBusy}
-            onClick={runFix}
+            onClick={() => {
+              void runFix("top_toolbar");
+            }}
             aria-keyshortcuts="Control+Enter Meta+Enter"
             title="Run fix (Ctrl/Cmd+Enter)"
           >
@@ -8536,7 +8560,7 @@ export function App() {
           canFix={selectedAsset !== null && !isEditorBusy}
           advancedOpen={showAdvancedControls}
           onAutoSuggest={autoSuggest}
-          onRunFix={runFix}
+          onRunFix={() => runFix("guided_panel")}
           onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
         />
         {showAdvancedControls ? (

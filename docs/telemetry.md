@@ -48,6 +48,7 @@ about_opened
 telemetry_opt_in_changed
 asset_imported
 auto_suggest_completed
+fix_started
 fix_completed
 export_completed
 operation_error
@@ -61,7 +62,8 @@ Current workflow scope:
 
 - `asset_imported`: import source, import kind, MIME type, bucketed file size, source dimensions, detected asset type/mode, target size, palette budget, and grid confidence/count.
 - `auto_suggest_completed`: trigger, source dimensions, suggested asset type/mode, target size, palette budget, confidence/counts, warnings, and duration.
-- `fix_completed`: guided/advanced control mode, mode/type, frame count, source/output dimensions, palette/grid settings, selected cleanup profile, cached-grid usage, and fix duration.
+- `fix_started`: fix trigger (`guided_panel`, `top_toolbar`, or `keyboard_shortcut`), guided/advanced control mode, mode/type, source/target dimensions, frame count, palette budget, grid mode, palette mode, and cached-grid usage.
+- `fix_completed`: fix trigger, guided/advanced control mode, mode/type, frame count, source/output dimensions, palette/grid settings, selected cleanup profile, cached-grid usage, and fix duration.
 - `export_completed`: mode/type, frame/animation counts, engine target labels, normalized-sheet flag, validation summary, bundle size bucket, bundle file count, destination, and duration.
 - `operation_error`: operation, coarse error kind, fatal/recoverable flags, optional stage, and current mode/type.
 
