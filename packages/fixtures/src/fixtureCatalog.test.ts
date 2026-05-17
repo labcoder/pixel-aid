@@ -122,6 +122,7 @@ describe("cleanup fixture catalog", () => {
         "uneven-gutter-labeled-sheet",
         "drifted-effect-sheet",
         "baseline-drift-animation-sheet",
+        "compact-nine-row-animation-sheet",
         "presentation-mockup-2x6-sheet",
         "tileset-seams-4x4-16",
         "tileset-broken-seams-2x2-16",
@@ -187,6 +188,21 @@ describe("cleanup fixture catalog", () => {
     expect(new Set(frames.map((frame) => `${frame.rect.w}x${frame.rect.h}`))).toEqual(new Set(["32x32"]));
     expect(new Set(frames.map((frame) => frame.pivot.y)).size).toBeGreaterThan(1);
     expect(new Set(frames.map((frame) => `${frame.sourceRect?.x},${frame.sourceRect?.y}`)).size).toBeGreaterThan(1);
+  });
+
+  test("includes compact nine-row animation sheet metadata", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "compact-nine-row-animation-sheet");
+
+    expect(fixture).toBeDefined();
+    expect(fixture?.category).toBe("unevenSpriteSheet");
+    expect(fixture?.expected.sheet?.options).toMatchObject({ frameWidth: 55, frameHeight: 46, rows: 9, columns: 9, margin: 8, spacing: 0 });
+    expect(fixture?.expected.sheet?.rowFrameCounts).toEqual([1, 8, 9, 5, 5, 8, 7, 4, 4]);
+    expect(fixture?.expected.sheet?.animationNames).toEqual(["row_1", "row_2", "row_3", "row_4", "row_5", "row_6", "row_7", "row_8", "row_9"]);
+    expect(fixture?.expected.sheet?.expectedWarnings).toEqual([
+      "Rows contain different frame counts; rectangular sheet controls will include empty cells unless explicit frames are used.",
+      "Detected variable-size compact animation frames; normalized export should use explicit source rectangles and bottom-middle pivots."
+    ]);
+    expect(fixture?.createImage()).toMatchObject({ width: 510, height: 510 });
   });
 
   test("includes presentation-style sheet fixture metadata", () => {
