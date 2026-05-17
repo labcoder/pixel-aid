@@ -1,4 +1,4 @@
-name: Desktop Artifacts
+name: Release Artifacts
 
 on:
   workflow_dispatch:
@@ -14,10 +14,88 @@ env:
   TELEMETRY_BUILD_CHANNEL: ${{ vars.TELEMETRY_BUILD_CHANNEL }}
 
 jobs:
+  checks:
+    name: Release gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check licenses
+        run: npm run license:check
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Lint
+        run: npm run lint
+
+  web:
+    name: Web release packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: checks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build standalone web package
+        run: npm run web:package:standalone
+        env:
+          TELEMETRY_DISTRIBUTION: web_standalone
+
+      - name: Build itch.io web package
+        run: npm run web:package:itch
+        env:
+          TELEMETRY_DISTRIBUTION: web_itch
+
+      - name: Upload standalone web package
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixelaid-web-standalone
+          path: artifacts/web/*web-standalone.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload itch.io web package
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixelaid-web-itch
+          path: artifacts/web/*web-itch.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
   windows:
-    name: Windows portable zip
+    name: Windows portable release package
     runs-on: windows-2022
     timeout-minutes: 60
+    needs: checks
 
     steps:
       - name: Checkout
@@ -74,12 +152,13 @@ jobs:
           path: artifacts/desktop/*windows*-portable.zip
           archive: false
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
 
   macos:
-    name: macOS app zip (${{ matrix.arch }})
+    name: macOS app release package (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    needs: checks
     strategy:
       fail-fast: false
       matrix:
@@ -144,4 +223,4 @@ jobs:
           path: artifacts/desktop/*macos*-${{ matrix.arch }}-app.zip
           archive: false
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30

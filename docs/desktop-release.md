@@ -117,9 +117,41 @@ node apps/desktop/scripts/verify-desktop-package.mjs macos /path/to/extracted/pa
 
 Use `x64` instead of `arm64` for Intel builds.
 
+## GitHub Actions Telemetry Setup
+
+Release and artifact workflows read opt-in telemetry build settings from GitHub Actions secrets and variables. Add these under **Settings -> Secrets and variables -> Actions** before running release-candidate workflows.
+
+Secrets:
+
+```txt
+TELEMETRY_POSTHOG_PROJECT_KEY
+```
+
+Variables:
+
+```txt
+TELEMETRY_PROVIDER=posthog
+TELEMETRY_POSTHOG_HOST=https://us.i.posthog.com
+TELEMETRY_ENABLED=1
+TELEMETRY_BUILD_CHANNEL=release
+```
+
+The workflow YAML sets per-artifact distribution labels. Do not add those in the GitHub UI. The current labels are:
+
+```txt
+desktop_windows_portable
+desktop_macos_app
+web_standalone
+web_itch
+```
+
+The PostHog project key is shipped in client-side web and desktop bundles by design. Treat it as public client configuration, but keep it in GitHub Secrets so workflow logs do not casually print it. Users still need to opt in from `File -> Privacy & Telemetry` before telemetry events are sent.
+
 ## Manual CI Artifact Builds
 
 The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
+
+This workflow is intentionally kept as the quick unsigned desktop smoke-test path. It can be triggered on any branch from **Actions -> Desktop Artifacts -> Run workflow**.
 
 The workflow currently emits:
 
@@ -145,6 +177,27 @@ xattr -dr com.apple.quarantine PixelAid.app
 ```
 
 Do not ask public users to do this. Public macOS artifacts should be Developer ID signed and notarized before distribution.
+
+## Manual Release-Candidate Artifacts
+
+The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` is the broader release-candidate artifact path. It runs on `workflow_dispatch`, gates the build with license, typecheck, test, and lint checks, then creates unsigned release-candidate artifacts for:
+
+- Standalone web hosting: `pixelaid-web-standalone`.
+- itch.io HTML5 upload: `pixelaid-web-itch`.
+- Windows x64 portable package: `pixelaid-windows-portable`.
+- macOS Apple Silicon app package: `pixelaid-macos-arm64-app`.
+- macOS Intel app package: `pixelaid-macos-x64-app`.
+
+Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, sign binaries, notarize macOS builds, or upload anything outside GitHub Actions artifacts yet.
+
+To test it:
+
+1. Push the branch containing the workflow.
+2. In GitHub, open **Actions**.
+3. Choose **Release Artifacts**.
+4. Select **Run workflow**.
+5. Download and inspect the web and desktop artifacts from the completed run.
+6. Smoke test each desktop artifact on the matching operating system.
 
 For a dry-run release check without secrets, use:
 
