@@ -1,4 +1,4 @@
-import type { AlphaMode, AssetMode, AssetType, DownscaleMethod, FixOptions, PixelFixResult } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, PixelFixResult } from "@pixelaid/shared";
 import type { EngineExportTarget } from "@pixelaid/exporters";
 
 export type TelemetryEventName =
