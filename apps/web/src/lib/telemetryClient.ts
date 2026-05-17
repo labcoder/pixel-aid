@@ -1,9 +1,6 @@
 import type { AppMetadata } from "./appMetadata";
 import type { TelemetryConfig } from "./telemetryConfig";
-
-export type TelemetryEventName = "app_startup" | "app_ready" | "about_opened" | "telemetry_opt_in_changed";
-
-export type TelemetryProperties = Record<string, boolean | number | string | null | undefined>;
+import type { TelemetryEventName, TelemetryProperties } from "./telemetryEvents";
 
 type TelemetryFetcher = (input: string, init?: RequestInit) => Promise<Response>;
 
