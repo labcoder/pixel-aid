@@ -1395,12 +1395,14 @@ function createComponentMergeCandidate(
   const componentWidths = segments.map((segment) => segment.w);
   const typicalComponentWidth = Math.max(1, medianInteger(componentWidths));
   const groups: Segment[] = [];
+  const componentGroups: Segment[][] = [];
   const withinGaps: number[] = [];
 
   for (let index = 0; index < segments.length; index += groupSize) {
     const group = segments.slice(index, index + groupSize);
     const first = group[0]!;
     const last = group[group.length - 1]!;
+    componentGroups.push(group);
     groups.push({ x: first.x, w: last.x + last.w - first.x });
     withinGaps.push(...gapsBetween(group));
   }
@@ -1427,7 +1429,13 @@ function createComponentMergeCandidate(
   if (pitch < typicalComponentWidth * 1.8 || typicalGroupWidth < typicalComponentWidth * 1.7 || typicalGroupWidth > pitch * 1.05) {
     return undefined;
   }
-  if (typicalBetweenGap < Math.max(largestWithinGap * 1.8, typicalComponentWidth * 0.6)) {
+  const similarWidthGroupRatio =
+    componentGroups.filter((group) => {
+      const widths = group.map((segment) => segment.w);
+      return Math.min(...widths) / Math.max(1, Math.max(...widths)) >= 0.72;
+    }).length / Math.max(1, componentGroups.length);
+  const looksLikePairedFrames = similarWidthGroupRatio >= 0.65;
+  if (looksLikePairedFrames && typicalBetweenGap < Math.max(largestWithinGap * 1.8, typicalComponentWidth * 0.6)) {
     return undefined;
   }
 
