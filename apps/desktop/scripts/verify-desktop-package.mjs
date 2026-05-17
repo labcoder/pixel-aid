@@ -3,12 +3,45 @@ import { constants } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import { resolveUserPath } from "./desktop-env.mjs";
 
 class DesktopPackageVerificationError extends Error {
   constructor(message) {
     super(message);
     this.name = "DesktopPackageVerificationError";
   }
+}
+
+function hasValue(value) {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+async function pathExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function listDirectories(root) {
+  try {
+    const entries = await readdir(root, { withFileTypes: true });
+    return entries.filter((entry) => entry.isDirectory()).map((entry) => path.join(root, entry.name));
+  } catch {
+    return [];
+  }
+}
+
+async function collectExistingFiles(candidates) {
+  const existing = [];
+  for (const candidate of candidates.filter(Boolean)) {
+    if (await pathExists(candidate)) {
+      existing.push(candidate);
+    }
+  }
+  return existing;
 }
 
 async function findFirstDirectory(root, predicate) {
@@ -46,6 +79,29 @@ async function findFirstFile(root, predicate) {
   }
 
   return undefined;
+}
+
+async function findNewestWindowsSignTool(env) {
+  const windowsKitsRoot = path.join(env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Windows Kits", "10", "bin");
+  const versionDirs = await listDirectories(windowsKitsRoot);
+  const candidates = versionDirs
+    .map((dir) => path.join(dir, "x64", "signtool.exe"))
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  const [candidate] = await collectExistingFiles(candidates);
+  return candidate;
+}
+
+async function resolveWindowsSignToolPath(env) {
+  if (hasValue(env.WINDOWS_SIGNING_SIGNTOOL_PATH)) {
+    const signtoolPath = resolveUserPath(env.WINDOWS_SIGNING_SIGNTOOL_PATH.trim());
+    if (await pathExists(signtoolPath)) {
+      return signtoolPath;
+    }
+
+    throw new DesktopPackageVerificationError(`Configured signtool.exe was not found: ${signtoolPath}`);
+  }
+
+  return findNewestWindowsSignTool(env);
 }
 
 function parseBundleExecutable(infoPlist) {
@@ -99,10 +155,27 @@ function verifyMacosBinaryArchitecture(executablePath, expectedArch, runCommand 
   return output;
 }
 
+function formatVerificationOutput(result) {
+  const output = [result.error?.message, result.stdout, result.stderr]
+    .filter(Boolean)
+    .map((value) => String(value).trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (output.length <= 4000) {
+    return output;
+  }
+
+  return `${output.slice(0, 4000)}\n... output truncated ...`;
+}
+
 function runQuietVerificationCommand({ command, args, label, runCommand = spawnSync }) {
   const result = runCommand(command, args, { encoding: "utf8" });
   if (result.status !== 0) {
-    throw new DesktopPackageVerificationError(`${label} failed with exit code ${result.status ?? 1}.`);
+    const output = formatVerificationOutput(result);
+    throw new DesktopPackageVerificationError(
+      [`${label} failed with exit code ${result.status ?? 1}.`, output].filter(Boolean).join("\n"),
+    );
   }
 }
 
@@ -136,7 +209,21 @@ function verifySignedMacosApp(appPath, runCommand = spawnSync) {
   };
 }
 
-function verifySignedWindowsExecutable(executablePath, runCommand = spawnSync) {
+async function verifySignedWindowsExecutable(executablePath, { env = process.env, runCommand = spawnSync } = {}) {
+  const signtoolPath = await resolveWindowsSignToolPath(env);
+  if (signtoolPath) {
+    runQuietVerificationCommand({
+      command: signtoolPath,
+      args: ["verify", "/pa", executablePath],
+      label: "SignTool Authenticode signature verification",
+      runCommand,
+    });
+
+    return {
+      signature: true,
+    };
+  }
+
   runQuietVerificationCommand({
     command: "powershell.exe",
     args: [
@@ -146,7 +233,7 @@ function verifySignedWindowsExecutable(executablePath, runCommand = spawnSync) {
       "-Command",
       [
         "$signature = Get-AuthenticodeSignature -LiteralPath $args[0]",
-        "if ($signature.Status -ne 'Valid') { Write-Error \"Authenticode signature status: $($signature.Status)\"; exit 1 }",
+        "if ($signature.Status -ne 'Valid') { Write-Error \"Authenticode signature status: $($signature.Status)\"; Write-Error \"Authenticode status message: $($signature.StatusMessage)\"; exit 1 }",
       ].join("; "),
       executablePath,
     ],
@@ -185,7 +272,7 @@ export async function verifyMacosPackageDirectory({ packageRoot, expectedArch, s
   };
 }
 
-export async function verifyWindowsPackageDirectory({ packageRoot, signed = false, runCommand = spawnSync } = {}) {
+export async function verifyWindowsPackageDirectory({ env = process.env, packageRoot, signed = false, runCommand = spawnSync } = {}) {
   if (!packageRoot) {
     throw new DesktopPackageVerificationError("A Windows package extraction directory is required.");
   }
@@ -201,7 +288,7 @@ export async function verifyWindowsPackageDirectory({ packageRoot, signed = fals
   if (subsystem !== 2) {
     throw new DesktopPackageVerificationError(`Expected Windows GUI subsystem 2, got ${subsystem}.`);
   }
-  const signing = signed ? verifySignedWindowsExecutable(executablePath, runCommand) : undefined;
+  const signing = signed ? await verifySignedWindowsExecutable(executablePath, { env, runCommand }) : undefined;
 
   return {
     executablePath,

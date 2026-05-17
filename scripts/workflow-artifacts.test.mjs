@@ -64,7 +64,7 @@ test("release artifact workflow can build signed Windows packages through releas
   assertIncludes(workflow, "if: ${{ inputs.windows_signed }}");
   assertIncludes(workflow, "environment: release-signing");
   assertIncludes(workflow, "id-token: write");
-  assertIncludes(workflow, "uses: azure/login@v2");
+  assertIncludes(workflow, "uses: azure/login@v3");
   assertIncludes(workflow, "client-id: ${{ secrets.AZURE_CLIENT_ID }}");
   assertIncludes(workflow, "tenant-id: ${{ secrets.AZURE_TENANT_ID }}");
   assertIncludes(workflow, "subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}");
