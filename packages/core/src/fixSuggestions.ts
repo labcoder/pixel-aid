@@ -1652,7 +1652,9 @@ function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number,
   const safeScaleY = Math.max(1, scaleY);
   const frameWidth = safeScaleX === 1 ? layout.frameWidth : snapNativeFrameSize(layout.frameWidth / safeScaleX);
   const frameHeight = safeScaleY === 1 ? layout.frameHeight : snapNativeFrameSize(layout.frameHeight / safeScaleY);
-  const frames = packDetectedFrames(layout, frameWidth, frameHeight);
+  const frames = isCompactVariableAnimationLayout(layout)
+    ? packCompactVariableFrames(layout, frameWidth, frameHeight, safeScaleX, safeScaleY)
+    : packDetectedFrames(layout, frameWidth, frameHeight);
   const rowRects: Rect[] = layout.rowFrameCounts.map((frameCount, rowIndex) => ({
     x: 0,
     y: rowIndex * frameHeight,
@@ -1675,6 +1677,57 @@ function scaleSheetLayoutDetection(layout: SheetLayoutDetection, scaleX: number,
     })),
     warnings: [...layout.warnings]
   };
+}
+
+function isCompactVariableAnimationLayout(layout: SheetLayoutDetection): boolean {
+  return layout.warnings.some((warning) => warning.includes("Detected variable-size compact animation frames"));
+}
+
+function packCompactVariableFrames(
+  layout: SheetLayoutDetection,
+  frameWidth: number,
+  frameHeight: number,
+  scaleX: number,
+  scaleY: number
+): SpriteFrame[] {
+  const frames: SpriteFrame[] = [];
+  const cellPivot = { x: Math.floor(frameWidth / 2), y: frameHeight };
+  let frameIndex = 0;
+
+  for (let rowIndex = 0; rowIndex < layout.rowFrameCounts.length; rowIndex += 1) {
+    const rowFrameCount = layout.rowFrameCounts[rowIndex] ?? 0;
+    for (let column = 0; column < rowFrameCount; column += 1) {
+      const frame = layout.frames[frameIndex];
+      if (!frame) {
+        break;
+      }
+
+      const sourceRect = frame.sourceRect ?? frame.rect;
+      const rectSize = {
+        w: scaleX === 1 ? sourceRect.w : Math.max(1, Math.round(sourceRect.w / scaleX)),
+        h: scaleY === 1 ? sourceRect.h : Math.max(1, Math.round(sourceRect.h / scaleY))
+      };
+      const pivot = {
+        x: scaleX === 1 ? frame.pivot.x : Math.max(0, Math.round(frame.pivot.x / scaleX)),
+        y: scaleY === 1 ? frame.pivot.y : Math.max(0, Math.round(frame.pivot.y / scaleY))
+      };
+
+      frames.push({
+        ...frame,
+        rect: {
+          x: column * frameWidth + cellPivot.x - pivot.x,
+          y: rowIndex * frameHeight + cellPivot.y - pivot.y,
+          w: rectSize.w,
+          h: rectSize.h
+        },
+        sourceRect,
+        pivot
+      });
+      frameIndex += 1;
+    }
+  }
+
+  return frames;
 }
 
 function packDetectedFrames(layout: SheetLayoutDetection, frameWidth: number, frameHeight: number): SpriteFrame[] {
@@ -1924,6 +1977,10 @@ function shouldSuppressAtlasForStrongNativeGrid(
 
 function chooseSheetLayoutDetection(detected: SheetLayoutDetection, atlas: SheetLayoutDetection | undefined): SheetLayoutDetection {
   if (!atlas || atlas.confidence < 0.7) {
+    return detected;
+  }
+
+  if (isCompactVariableAnimationLayout(detected) && detected.frames.length >= atlas.frames.length * 0.45) {
     return detected;
   }
 

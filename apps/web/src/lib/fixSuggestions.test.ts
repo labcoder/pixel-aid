@@ -1177,6 +1177,31 @@ describe("fix setting suggestions", () => {
     expect(suggestion.targetHeight).toBe((layout?.rows ?? 0) * (layout?.frameHeight ?? 0));
   });
 
+  test("surfaces compact variable animation sheet frames through autosuggest", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "compact-nine-row-animation-sheet");
+    if (!fixture) {
+      throw new Error("Missing compact nine-row animation sheet fixture");
+    }
+
+    const suggestion = suggestFixSettings(fixture.createImage());
+    const layout = suggestion.sheetLayout;
+
+    expect(suggestion.mode).toBe("spriteSheet");
+    expect(suggestion.assetType).toBe("animationSheet");
+    expect(layout).toBeDefined();
+    expect(layout?.rowFrameCounts).toEqual([1, 8, 9, 5, 5, 8, 7, 4, 4]);
+    expect(layout?.frames).toHaveLength(51);
+    expect(new Set(layout?.frames.map((frame) => frame.sourceRect?.w ?? frame.rect.w)).size).toBeGreaterThan(1);
+    expect(new Set(layout?.frames.map((frame) => frame.sourceRect?.h ?? frame.rect.h)).size).toBeGreaterThan(1);
+    expect(
+      layout?.frames.every((frame) => {
+        const sourceRect = frame.sourceRect ?? frame.rect;
+        return frame.pivot.x === Math.floor(sourceRect.w / 2) && frame.pivot.y === sourceRect.h;
+      })
+    ).toBe(true);
+    expect(layout?.warnings).toContain("Detected variable-size compact animation frames; normalized export should use explicit source rectangles and bottom-middle pivots.");
+  });
+
   test("prefers plausible single-sprite native sizes over tiny high-confidence scales", () => {
     const tinyScale: GridCandidate = {
       outputWidth: 353,
