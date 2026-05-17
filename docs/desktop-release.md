@@ -147,6 +147,39 @@ web_itch
 
 The PostHog project key is shipped in client-side web and desktop bundles by design. Treat it as public client configuration, but keep it in GitHub Secrets so workflow logs do not casually print it. Users still need to opt in from `File -> Privacy & Telemetry` before telemetry events are sent.
 
+## GitHub Actions Windows Signing Setup
+
+Signed Windows release-candidate artifacts use the `release-signing` GitHub Environment and Azure Artifact Signing with OpenID Connect. Do not store Azure client secrets for this workflow.
+
+Create a GitHub Environment named:
+
+```txt
+release-signing
+```
+
+Add these **environment secrets** under **Settings -> Environments -> release-signing**:
+
+```txt
+AZURE_CLIENT_ID
+AZURE_TENANT_ID
+AZURE_SUBSCRIPTION_ID
+WINDOWS_SIGNING_ENDPOINT
+WINDOWS_SIGNING_ACCOUNT_NAME
+WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME
+```
+
+In Azure, create or reuse a Microsoft Entra app registration for GitHub Actions, then add a federated credential for this repository using:
+
+```txt
+Entity type: Environment
+Environment name: release-signing
+Audience: api://AzureADTokenExchange
+```
+
+Grant that app registration/service principal the `Artifact Signing Certificate Profile Signer` role, or the equivalent `Trusted Signing Certificate Profile Signer` role if that is the name shown in the Azure portal. Prefer assigning the role at the certificate profile scope. If the portal does not expose IAM at the profile scope, assign it at the signing account scope.
+
+The workflow installs the Microsoft Artifact Signing client into the GitHub runner's NuGet cache, logs into Azure through OIDC, signs the staged Windows executable, verifies the Authenticode signature, and uploads only the signed portable zip.
+
 ## Manual CI Artifact Builds
 
 The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
@@ -180,16 +213,16 @@ Do not ask public users to do this. Public macOS artifacts should be Developer I
 
 ## Manual Release-Candidate Artifacts
 
-The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` is the broader release-candidate artifact path. It runs on `workflow_dispatch`, gates the build with license, typecheck, test, and lint checks, then creates unsigned release-candidate artifacts for:
+The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` is the broader release-candidate artifact path. It runs on `workflow_dispatch`, gates the build with license, typecheck, test, and lint checks, then creates release-candidate artifacts for:
 
 - itch.io HTML5 upload: `pixelaid-web-itch`.
-- Windows x64 portable package: `pixelaid-windows-portable`.
+- Windows x64 portable package: `pixelaid-windows-portable`, or `pixelaid-windows-signed-portable` when `windows_signed` is enabled.
 - macOS Apple Silicon app package: `pixelaid-macos-arm64-app`.
 - macOS Intel app package: `pixelaid-macos-x64-app`.
 
 Standalone web packaging remains available locally through `npm run web:package:standalone`, but it is intentionally not part of release-candidate artifacts yet.
 
-Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, sign binaries, notarize macOS builds, or upload anything outside GitHub Actions artifacts yet.
+Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, sign or notarize macOS builds, or upload anything outside GitHub Actions artifacts yet.
 
 To test it:
 
@@ -197,8 +230,9 @@ To test it:
 2. In GitHub, open **Actions**.
 3. Choose **Release Artifacts**.
 4. Select **Run workflow**.
-5. Download and inspect the web and desktop artifacts from the completed run.
-6. Smoke test each desktop artifact on the matching operating system.
+5. Leave `windows_signed` off for a normal unsigned release-candidate run, or enable it to replace the unsigned Windows portable artifact with a signed Windows portable artifact.
+6. Download and inspect the web and desktop artifacts from the completed run.
+7. Smoke test each desktop artifact on the matching operating system.
 
 For a dry-run release check without secrets, use:
 

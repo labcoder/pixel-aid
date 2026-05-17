@@ -2,6 +2,12 @@ name: Release Artifacts
 
 on:
   workflow_dispatch:
+    inputs:
+      windows_signed:
+        description: Build signed Windows portable package through the release-signing environment
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -82,6 +88,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     needs: checks
+    if: ${{ !inputs.windows_signed }}
 
     steps:
       - name: Checkout
@@ -136,6 +143,99 @@ jobs:
         with:
           name: pixelaid-windows-portable
           path: artifacts/desktop/*windows*-portable.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+  windows-signed:
+    name: Windows signed portable release package
+    runs-on: windows-2022
+    timeout-minutes: 75
+    needs: checks
+    if: ${{ inputs.windows_signed }}
+    environment: release-signing
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Restore Microsoft Artifact Signing client
+        shell: pwsh
+        run: |
+          $projectDir = Join-Path $env:RUNNER_TEMP "artifact-signing-client"
+          New-Item -ItemType Directory -Path $projectDir -Force | Out-Null
+          dotnet new classlib --framework net8.0 --output $projectDir
+          $project = Join-Path $projectDir "artifact-signing-client.csproj"
+          dotnet add $project package Microsoft.ArtifactSigning.Client
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          dotnet --version
+          rustc --version
+          cargo --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build signed Windows portable package
+        run: npm run desktop:package:windows:signed
+        env:
+          TELEMETRY_DISTRIBUTION: desktop_windows_portable
+          WINDOWS_SIGNING_ENDPOINT: ${{ secrets.WINDOWS_SIGNING_ENDPOINT }}
+          WINDOWS_SIGNING_ACCOUNT_NAME: ${{ secrets.WINDOWS_SIGNING_ACCOUNT_NAME }}
+          WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}
+
+      - name: Verify signed Windows package
+        run: |
+          $zip = Get-ChildItem artifacts/desktop/*windows*-signed-portable.zip | Select-Object -First 1
+          if (-not $zip) {
+            throw "No signed Windows portable zip found."
+          }
+
+          tar -tf $zip.FullName
+
+          $extractDir = Join-Path $env:RUNNER_TEMP "pixelaid-windows-signed"
+          if (Test-Path $extractDir) {
+            Remove-Item -Recurse -Force $extractDir
+          }
+          New-Item -ItemType Directory -Path $extractDir | Out-Null
+          tar -xf $zip.FullName -C $extractDir
+
+          node apps/desktop/scripts/verify-desktop-package.mjs windows $extractDir --signed
+
+      - name: Upload signed Windows portable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixelaid-windows-signed-portable
+          path: artifacts/desktop/*windows*-signed-portable.zip
           archive: false
           if-no-files-found: error
           retention-days: 30

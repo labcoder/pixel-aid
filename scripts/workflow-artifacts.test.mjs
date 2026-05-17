@@ -37,12 +37,14 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertTelemetryEnv(workflow);
   assertIncludes(workflow, "name: Release Artifacts");
   assertIncludes(workflow, "workflow_dispatch:");
+  assertIncludes(workflow, "windows_signed:");
   assertIncludes(workflow, "run: npm run license:check");
   assertIncludes(workflow, "run: npm run typecheck");
   assertIncludes(workflow, "run: npm test");
   assertIncludes(workflow, "run: npm run lint");
   assertIncludes(workflow, "run: npm run web:package:itch");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: web_itch");
+  assertIncludes(workflow, "if: ${{ !inputs.windows_signed }}");
   assertIncludes(workflow, "run: npm run desktop:package:windows");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_windows_portable");
   assertIncludes(workflow, "run: npm run desktop:package:macos");
@@ -53,5 +55,27 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assert.equal(workflow.includes("run: npm run web:package:standalone"), false);
   assert.equal(workflow.includes("TELEMETRY_DISTRIBUTION: web_standalone"), false);
   assert.equal(workflow.includes("name: pixelaid-web-standalone"), false);
-  assert.equal(workflow.includes(":signed"), false);
+  assert.equal(workflow.includes("desktop:package:macos:signed"), false);
+});
+
+test("release artifact workflow can build signed Windows packages through release environment", async () => {
+  const workflow = await readWorkflow("release-artifacts.yml");
+
+  assertIncludes(workflow, "if: ${{ inputs.windows_signed }}");
+  assertIncludes(workflow, "environment: release-signing");
+  assertIncludes(workflow, "id-token: write");
+  assertIncludes(workflow, "uses: azure/login@v2");
+  assertIncludes(workflow, "client-id: ${{ secrets.AZURE_CLIENT_ID }}");
+  assertIncludes(workflow, "tenant-id: ${{ secrets.AZURE_TENANT_ID }}");
+  assertIncludes(workflow, "subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}");
+  assertIncludes(workflow, "uses: actions/setup-dotnet@v5");
+  assertIncludes(workflow, "dotnet-version: 8.0.x");
+  assertIncludes(workflow, "dotnet add $project package Microsoft.ArtifactSigning.Client");
+  assertIncludes(workflow, "run: npm run desktop:package:windows:signed");
+  assertIncludes(workflow, "WINDOWS_SIGNING_ENDPOINT: ${{ secrets.WINDOWS_SIGNING_ENDPOINT }}");
+  assertIncludes(workflow, "WINDOWS_SIGNING_ACCOUNT_NAME: ${{ secrets.WINDOWS_SIGNING_ACCOUNT_NAME }}");
+  assertIncludes(workflow, "WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PROFILE_NAME }}");
+  assertIncludes(workflow, "node apps/desktop/scripts/verify-desktop-package.mjs windows $extractDir --signed");
+  assertIncludes(workflow, "name: pixelaid-windows-signed-portable");
+  assertIncludes(workflow, "path: artifacts/desktop/*windows*-signed-portable.zip");
 });
