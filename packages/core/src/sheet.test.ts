@@ -68,6 +68,37 @@ describe("sheet layout detection", () => {
     expect(layout.frames).toHaveLength(51);
   });
 
+  test("keeps compact animation frames tight with bottom-middle pivots", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "compact-nine-row-animation-sheet");
+    if (!fixture) {
+      throw new Error("Missing compact nine-row animation sheet fixture");
+    }
+
+    const source = fixture.createImage();
+    const layout = detectSheetLayout(source);
+    const widths = new Set(layout.frames.map((frame) => frame.rect.w));
+    const heights = new Set(layout.frames.map((frame) => frame.rect.h));
+
+    expect(widths.size).toBeGreaterThan(1);
+    expect(heights.size).toBeGreaterThan(1);
+    expect(layout.frameWidth).toBe(Math.max(...layout.frames.map((frame) => frame.rect.w)));
+    expect(layout.frameHeight).toBe(Math.max(...layout.frames.map((frame) => frame.rect.h)));
+    expect(layout.warnings).toContain("Detected variable-size compact animation frames; normalized export should use explicit source rectangles and bottom-middle pivots.");
+    expect(
+      layout.frames.every(
+        (frame) =>
+          frame.sourceRect &&
+          frame.sourceRect.x === frame.rect.x &&
+          frame.sourceRect.y === frame.rect.y &&
+          frame.sourceRect.w === frame.rect.w &&
+          frame.sourceRect.h === frame.rect.h &&
+          frame.pivot.x === Math.floor(frame.rect.w / 2) &&
+          frame.pivot.y === frame.rect.h &&
+          isInBounds(frame.rect, source)
+      )
+    ).toBe(true);
+  });
+
   test("explains row band, column pitch, label, gutter, and merge confidence", () => {
     const image = createLabeledOrbPresentationSheet();
     const layout = detectSheetLayout(image);

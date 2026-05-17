@@ -174,13 +174,19 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
 
   const frameSizeRows = selectFrameSizeReferenceRows(rawRows);
-  const frameWidths = frameSizeRows.flatMap((row) => {
-    const referenceWidth = rowReferenceCellWidth(row);
-    return row.segments.map((segment) => Math.max(segment.w, referenceWidth));
-  });
-  const frameHeights = frameSizeRows.map((row) => row.band.end - row.band.start + 1);
-  const frameWidth = Math.max(1, medianInteger(frameWidths));
-  const frameHeight = Math.max(1, medianInteger(frameHeights));
+  const useCompactVariableFrameBounds = shouldUseCompactVariableFrameBounds(rawRows, hasPresentationArtifacts);
+  const compactSourceRects = useCompactVariableFrameBounds ? sourceRectsForCompactRows(image, rawRows, background) : undefined;
+  const compactFrameRects = compactSourceRects?.flat() ?? [];
+  const frameWidths =
+    compactFrameRects.length > 0
+      ? compactFrameRects.map((rect) => rect.w)
+      : frameSizeRows.flatMap((row) => {
+          const referenceWidth = rowReferenceCellWidth(row);
+          return row.segments.map((segment) => Math.max(segment.w, referenceWidth));
+        });
+  const frameHeights = compactFrameRects.length > 0 ? compactFrameRects.map((rect) => rect.h) : frameSizeRows.map((row) => row.band.end - row.band.start + 1);
+  const frameWidth = Math.max(1, compactFrameRects.length > 0 ? Math.max(...frameWidths) : medianInteger(frameWidths));
+  const frameHeight = Math.max(1, compactFrameRects.length > 0 ? Math.max(...frameHeights) : medianInteger(frameHeights));
   const rowFrameCounts = rawRows.map((row) => row.segments.length);
   const rows = rawRows.length;
   const columns = Math.max(...rowFrameCounts);
@@ -216,13 +222,16 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
 
     for (let column = 0; column < row.segments.length; column += 1) {
       const segment = row.segments[column]!;
-      const rect = clampRectInside({ x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight }, image.width, image.height);
-      const sourceRect = hasPresentationArtifacts ? detectPresentationContentBounds(image, rect, background) : rect;
+      const compactSourceRect = compactSourceRects?.[rowIndex]?.[column];
+      const rect = compactSourceRect
+        ? { ...compactSourceRect }
+        : clampRectInside({ x: segment.x, y: row.band.start, w: frameWidth, h: frameHeight }, image.width, image.height);
+      const sourceRect = compactSourceRect ? { ...compactSourceRect } : hasPresentationArtifacts ? detectPresentationContentBounds(image, rect, background) : rect;
       frames.push({
         name: `${rowName}_${column.toString().padStart(3, "0")}`,
         rect,
         sourceRect,
-        pivot: { x: Math.floor(frameWidth / 2), y: frameHeight },
+        pivot: compactSourceRect ? { x: Math.floor(rect.w / 2), y: rect.h } : { x: Math.floor(frameWidth / 2), y: frameHeight },
         durationMs: 120,
         tags: [rowName]
       });
@@ -253,6 +262,9 @@ export function detectSheetLayout(image: RGBAImage): SheetLayoutDetection {
   }
   if (rawRows.some((row) => row.usedDriftFitting)) {
     warnings.push("Tolerated mild frame-center drift while fitting sheet columns; inspect frame boxes before export.");
+  }
+  if (useCompactVariableFrameBounds) {
+    warnings.push("Detected variable-size compact animation frames; normalized export should use explicit source rectangles and bottom-middle pivots.");
   }
   if (rows < 2 || columns < 2) {
     warnings.push("Detected layout has too few repeated frames for high confidence.");
@@ -1500,6 +1512,43 @@ function rowReferenceCellWidth(row: DetectedRow): number {
 
   const pitch = Math.max(1, medianInteger(startGaps));
   return pitch >= segmentWidth * 1.65 ? pitch : segmentWidth;
+}
+
+function shouldUseCompactVariableFrameBounds(rows: DetectedRow[], hasPresentationArtifacts: boolean): boolean {
+  if (hasPresentationArtifacts || rows.length < 6) {
+    return false;
+  }
+
+  const rowFrameCounts = rows.map((row) => row.segments.length);
+  const maxFrames = Math.max(0, ...rowFrameCounts);
+  const hasSingleFrameRow = rowFrameCounts.some((count) => count === 1);
+  const hasMixedFrameCounts = new Set(rowFrameCounts).size > 1;
+  const hasDenseAnimationRows = rowFrameCounts.filter((count) => count >= 4).length >= 4;
+  if (maxFrames < 7 || !hasSingleFrameRow || !hasMixedFrameCounts || !hasDenseAnimationRows) {
+    return false;
+  }
+
+  const frameLikeRows = rows.filter((row) => row.segments.length >= 2);
+  const widthSpreads = frameLikeRows.map((row) => {
+    const widths = row.segments.map((segment) => segment.w);
+    const medianWidth = Math.max(1, medianInteger(widths));
+    return (Math.max(...widths) - Math.min(...widths)) / medianWidth;
+  });
+  return widthSpreads.some((spread) => spread >= 0.18);
+}
+
+function sourceRectsForCompactRows(
+  image: RGBAImage,
+  rows: DetectedRow[],
+  background: [number, number, number, number]
+): Rect[][] {
+  return rows.map((row) =>
+    row.segments.map(
+      (segment) =>
+        foregroundBoundsInRegion(image, segment.x, row.band.start, segment.x + segment.w, row.band.end + 1, background) ??
+        clampRectInside({ x: segment.x, y: row.band.start, w: segment.w, h: row.band.end - row.band.start + 1 }, image.width, image.height)
+    )
+  );
 }
 
 function normalizePresentationRows(rows: DetectedRow[], imageWidth: number, imageHeight: number): DetectedRow[] {
