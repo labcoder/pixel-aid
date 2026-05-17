@@ -50,7 +50,7 @@ describe("telemetry events", () => {
     const result: PixelFixResult = {
       image: { width: 16, height: 16, data: new Uint8ClampedArray(16 * 16 * 4) },
       palette: ["#000000", "#ffffff"],
-      grid: { scale: 8, scaleX: 8, scaleY: 8, phaseX: 0, phaseY: 0, outputWidth: 16, outputHeight: 16, confidence: 0.9 },
+      grid: { scaleX: 8, scaleY: 8, phaseX: 0, phaseY: 0, outputWidth: 16, outputHeight: 16, confidence: 0.9, reason: "test" },
       metrics: {
         durationMs: 12.4,
         sourceWidth: 128,

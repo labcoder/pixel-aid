@@ -164,6 +164,15 @@ import { getEditorShortcutAction, isEditableShortcutTarget, isInteractiveShortcu
 import { createAppMetadata } from "./lib/appMetadata";
 import { createTelemetryClient } from "./lib/telemetryClient";
 import { getTelemetryConfig } from "./lib/telemetryConfig";
+import {
+  createAssetImportedTelemetry,
+  createAutoSuggestCompletedTelemetry,
+  createExportCompletedTelemetry,
+  createFixCompletedTelemetry,
+  createOperationErrorTelemetry,
+  getTelemetryControlMode,
+  type TelemetryImportSource
+} from "./lib/telemetryEvents";
 import { createReactSafeRgbaImage } from "./lib/reactSafeImage";
 import {
   createEditorPerformanceMonitor,
@@ -3016,8 +3025,9 @@ export function App() {
       const report = createOperationErrorReport(operation, error, recovery, new Date().toISOString(), details);
       setLastOperationError(report);
       appendLog(`${operation} failed: ${report.message}`);
+      void telemetryClient.capture("operation_error", createOperationErrorTelemetry({ operation, error, assetType, mode }));
     },
-    [appendLog]
+    [appendLog, assetType, mode, telemetryClient]
   );
 
   const exportDiagnosticReport = useCallback(() => {
@@ -3545,7 +3555,7 @@ export function App() {
   }, [applyAlphaSettings, fixedPaletteColors.length, paletteMode, selectedAsset, setPaletteBudget]);
 
   const importPixelAidDocumentFile = useCallback(
-    async (file: File, operation: BusyOperation) => {
+    async (file: File, operation: BusyOperation, importSource: TelemetryImportSource) => {
       setImportOperation((current) => (current?.id === operation.id ? updateBusyOperation(current, `Opening ${file.name}...`) : current));
       await waitForNextPaint();
 
@@ -3598,12 +3608,32 @@ export function App() {
       setShowAdvancedControls(session.settings.showAdvancedControls);
       setLastOperationError(null);
       appendLog(`Opened PixelAid document ${file.name}`);
+      void telemetryClient.capture(
+        "asset_imported",
+        createAssetImportedTelemetry({
+          importSource,
+          importKind: "pixelaid_document",
+          fileType: file.type || "application/octet-stream",
+          fileSizeBytes: file.size,
+          sourceWidth: asset.image.width,
+          sourceHeight: asset.image.height,
+          assetType: asset.assetType,
+          assetTypeSource: asset.assetTypeSource,
+          mode: session.settings.mode,
+          targetWidth: session.settings.targetWidth,
+          targetHeight: session.settings.targetHeight,
+          maxColors: session.settings.maxColors,
+          gridCandidateCount: archive.gridCandidates?.length ?? 0,
+          gridConfidence: archive.gridCandidates?.[0]?.confidence,
+          documentHadFixedOutput: fixedImage !== null
+        })
+      );
     },
-    [appendLog, markAssetSessionClean, restoreAssetSession, selectAssetThroughEngine]
+    [appendLog, markAssetSessionClean, restoreAssetSession, selectAssetThroughEngine, telemetryClient]
   );
 
   const importFiles = useCallback(
-    async (files: FileList | File[]) => {
+    async (files: FileList | File[], importSource: TelemetryImportSource = "file_picker") => {
       if (isEditorBusy) {
         return;
       }
@@ -3630,7 +3660,7 @@ export function App() {
         for (const file of importableFiles) {
           try {
             if (isPixelAidDocumentFile(file)) {
-              await importPixelAidDocumentFile(file, operation);
+              await importPixelAidDocumentFile(file, operation, importSource);
               continue;
             }
 
@@ -3692,6 +3722,7 @@ export function App() {
             });
             editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
             const suggestion = await autoSuggestJob.promise;
+            const autoSuggestDurationMs = performance.now() - autoSuggestStartedAt;
             editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
             setGridCandidateCache((current) =>
               cacheGridCandidatesForAsset(current, asset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
@@ -3701,6 +3732,43 @@ export function App() {
             pendingCleanSnapshotAssetIdRef.current = asset.id;
             setLastOperationError(null);
             appendLog(`Imported ${asset.name} (${asset.image.width}x${asset.image.height})`);
+            void telemetryClient.capture(
+              "asset_imported",
+              createAssetImportedTelemetry({
+                importSource,
+                importKind: "image",
+                fileType: file.type || "unknown",
+                fileSizeBytes: file.size,
+                sourceWidth: asset.image.width,
+                sourceHeight: asset.image.height,
+                assetType: suggestion.assetType,
+                assetTypeSource: asset.assetTypeSource,
+                mode: suggestion.mode,
+                targetWidth: suggestion.targetWidth,
+                targetHeight: suggestion.targetHeight,
+                maxColors: suggestion.maxColors,
+                gridCandidateCount: suggestion.gridCandidates.length,
+                gridConfidence: suggestion.gridCandidates[0]?.confidence
+              })
+            );
+            void telemetryClient.capture(
+              "auto_suggest_completed",
+              createAutoSuggestCompletedTelemetry({
+                trigger: autoSuggestTrigger,
+                sourceWidth: asset.image.width,
+                sourceHeight: asset.image.height,
+                assetType: suggestion.assetType,
+                mode: suggestion.mode,
+                targetWidth: suggestion.targetWidth,
+                targetHeight: suggestion.targetHeight,
+                maxColors: suggestion.maxColors,
+                gridCandidateCount: suggestion.gridCandidates.length,
+                gridConfidence: suggestion.gridCandidates[0]?.confidence,
+                categoryConfidence: suggestion.categoryConfidence,
+                warningCount: suggestion.categoryWarnings.length,
+                durationMs: autoSuggestDurationMs
+              })
+            );
           } catch (error) {
             recordOperationError("import", error, "Check that the source file is a readable PNG, JPEG, or WebP image and try importing again.", {
               fileName: file.name,
@@ -3726,7 +3794,8 @@ export function App() {
       recordOperationError,
       recordMainThreadPhaseWarning,
       saveCurrentAssetSession,
-      selectAssetThroughEngine
+      selectAssetThroughEngine,
+      telemetryClient
     ]
   );
 
@@ -3864,6 +3933,7 @@ export function App() {
           details: `${describeAutoSuggestTrigger(autoSuggestTrigger)} schedule`
         });
         const suggestion = await autoSuggestJob.promise;
+        const autoSuggestDurationMs = performance.now() - autoSuggestStartedAt;
         delete assetSessionsRef.current[sampleImport.asset.id];
         previewSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
         thumbnailSurfaceCacheRef.current.disposeAsset(sampleImport.asset.id);
@@ -3885,6 +3955,41 @@ export function App() {
         pendingCleanSnapshotAssetIdRef.current = sampleImport.asset.id;
         setLastOperationError(null);
         appendLog(`Loaded sample ${sampleImport.sample.title} (${sampleImport.asset.image.width}x${sampleImport.asset.image.height})`);
+        void telemetryClient.capture(
+          "asset_imported",
+          createAssetImportedTelemetry({
+            importSource: "sample",
+            importKind: "sample",
+            sourceWidth: sampleImport.asset.image.width,
+            sourceHeight: sampleImport.asset.image.height,
+            assetType: sampleImport.settings.assetType,
+            assetTypeSource: sampleImport.asset.assetTypeSource,
+            mode: sampleImport.settings.mode,
+            targetWidth: sampleImport.settings.targetWidth,
+            targetHeight: sampleImport.settings.targetHeight,
+            maxColors: sampleImport.settings.maxColors,
+            gridCandidateCount: suggestion.gridCandidates.length,
+            gridConfidence: suggestion.gridCandidates[0]?.confidence
+          })
+        );
+        void telemetryClient.capture(
+          "auto_suggest_completed",
+          createAutoSuggestCompletedTelemetry({
+            trigger: autoSuggestTrigger,
+            sourceWidth: sampleImport.asset.image.width,
+            sourceHeight: sampleImport.asset.image.height,
+            assetType: suggestion.assetType,
+            mode: suggestion.mode,
+            targetWidth: suggestion.targetWidth,
+            targetHeight: suggestion.targetHeight,
+            maxColors: suggestion.maxColors,
+            gridCandidateCount: suggestion.gridCandidates.length,
+            gridConfidence: suggestion.gridCandidates[0]?.confidence,
+            categoryConfidence: suggestion.categoryConfidence,
+            warningCount: suggestion.categoryWarnings.length,
+            durationMs: autoSuggestDurationMs
+          })
+        );
       } catch (error) {
         recordOperationError("sample", error, "Reload PixelAid and try the sample again. Sample assets are deterministic and can be regenerated.", {
           sampleId
@@ -3901,7 +4006,8 @@ export function App() {
       nextBusyOperation,
       recordOperationError,
       saveCurrentAssetSession,
-      selectAssetThroughEngine
+      selectAssetThroughEngine,
+      telemetryClient
     ]
   );
 
@@ -3967,7 +4073,7 @@ export function App() {
           return;
         }
 
-        await importFiles(files);
+        await importFiles(files, "desktop_picker");
       } catch (error) {
         recordOperationError("desktop import", error, "Check desktop file permissions and try importing again.");
       }
@@ -4109,6 +4215,7 @@ export function App() {
     }
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
+    const fixControlMode = getTelemetryControlMode(showAdvancedControls);
     const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("fix", sheetMode ? `Fix ${frameCount} frames` : "Fix image");
     editorPerformanceMonitorRef.current.mark("fix preparation start", selectedAsset.name, perfOperationId);
     editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
@@ -4187,6 +4294,17 @@ export function App() {
           appendLog(
             `Fix complete: ${result.image.width}x${result.image.height}, ${result.palette.length} colors, ${result.metrics.durationMs.toFixed(1)}ms`
           );
+          void telemetryClient.capture(
+            "fix_completed",
+            createFixCompletedTelemetry({
+              controlMode: fixControlMode,
+              result,
+              options,
+              frameCount: options.sheetFrames?.length ?? frameCount,
+              cachedGrid: Boolean(cachedGridCandidates),
+              qualityProfile
+            })
+          );
         })
         .catch((error) => {
           editorPerformanceMonitorRef.current.endOperation(perfOperationId, "fix failed");
@@ -4234,11 +4352,14 @@ export function App() {
     mode,
     nextBusyOperation,
     publishEditorPerformanceSnapshot,
+    qualityProfile,
     recordOperationError,
     selectedAsset,
     sheetFrames.length,
     sheetMode,
+    showAdvancedControls,
     sourceTimelineFrames.length,
+    telemetryClient,
     timelineState.enabled
   ]);
 
@@ -4354,6 +4475,7 @@ export function App() {
       });
       editorPerformanceMonitorRef.current.mark("auto suggest worker posted", autoSuggestJob.requestId, perfOperationId);
       const suggestion = await autoSuggestJob.promise;
+      const autoSuggestDurationMs = performance.now() - autoSuggestStartedAt;
       editorPerformanceMonitorRef.current.mark("auto suggest end", `${suggestion.targetWidth}x${suggestion.targetHeight}`, perfOperationId);
       setGridCandidateCache((current) =>
         cacheGridCandidatesForAsset(current, selectedAsset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
@@ -4362,6 +4484,24 @@ export function App() {
       applyFixSuggestion(suggestion, selectedAsset);
       setLastOperationError(null);
       appendLog(`Auto suggested ${getAssetTypeDefinition(suggestion.assetType).label} at ${suggestion.targetWidth}x${suggestion.targetHeight}`);
+      void telemetryClient.capture(
+        "auto_suggest_completed",
+        createAutoSuggestCompletedTelemetry({
+          trigger: autoSuggestTrigger,
+          sourceWidth: selectedAsset.image.width,
+          sourceHeight: selectedAsset.image.height,
+          assetType: suggestion.assetType,
+          mode: suggestion.mode,
+          targetWidth: suggestion.targetWidth,
+          targetHeight: suggestion.targetHeight,
+          maxColors: suggestion.maxColors,
+          gridCandidateCount: suggestion.gridCandidates.length,
+          gridConfidence: suggestion.gridCandidates[0]?.confidence,
+          categoryConfidence: suggestion.categoryConfidence,
+          warningCount: suggestion.categoryWarnings.length,
+          durationMs: autoSuggestDurationMs
+        })
+      );
     } catch (error) {
       recordOperationError("analysis", error, "Select the asset again or re-import it, then rerun Auto Suggest.", {
         asset: selectedAsset.name,
@@ -4382,7 +4522,8 @@ export function App() {
     publishEditorPerformanceSnapshot,
     recordMainThreadPhaseWarning,
     recordOperationError,
-    selectedAsset
+    selectedAsset,
+    telemetryClient
   ]);
 
   const applyPreset = useCallback(
@@ -4532,12 +4673,31 @@ export function App() {
         });
 
         const suggestion = await autoSuggestJob.promise;
+        const autoSuggestDurationMs = performance.now() - autoSuggestStartedAt;
         setGridCandidateCache((current) =>
           cacheGridCandidatesForAsset(current, selectedAsset, suggestion.gridCandidates, gridCandidatePreprocessingForAlpha(suggestion.alpha))
         );
         cacheFixSuggestionAnalysis(manualAsset, suggestion);
         applyFixSuggestion(suggestion, manualAsset);
         appendLog(`Asset type set: ${definition.label}`);
+        void telemetryClient.capture(
+          "auto_suggest_completed",
+          createAutoSuggestCompletedTelemetry({
+            trigger: autoSuggestTrigger,
+            sourceWidth: selectedAsset.image.width,
+            sourceHeight: selectedAsset.image.height,
+            assetType: nextAssetType,
+            mode: assetTypeToMode(nextAssetType),
+            targetWidth: suggestion.targetWidth,
+            targetHeight: suggestion.targetHeight,
+            maxColors: suggestion.maxColors,
+            gridCandidateCount: suggestion.gridCandidates.length,
+            gridConfidence: suggestion.gridCandidates[0]?.confidence,
+            categoryConfidence: 1,
+            warningCount: manualAsset.assetTypeWarnings.length,
+            durationMs: autoSuggestDurationMs
+          })
+        );
       } catch (error) {
         recordOperationError("analysis", error, "Select the asset again or re-import it, then retry the asset type change.", {
           asset: selectedAsset.name,
@@ -4556,7 +4716,8 @@ export function App() {
       isEditorBusy,
       recordMainThreadPhaseWarning,
       recordOperationError,
-      selectedAsset
+      selectedAsset,
+      telemetryClient
     ]
   );
 
@@ -6342,6 +6503,7 @@ export function App() {
     }
 
     const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("export", `Export ${selectedAsset.name}`);
+    const exportStartedAt = performance.now();
     editorPerformanceMonitorRef.current.mark("export start", selectedAsset.name, perfOperationId);
     editorPerformanceMonitorRef.current.recordImageMemory("fixed output buffer", fixResult.image, perfOperationId);
     publishEditorPerformanceSnapshot();
@@ -6486,6 +6648,24 @@ export function App() {
         `Exported ${exportPath ?? bundleName}${shouldNormalizeExport ? " with normalized sheet" : ""}: ${validation.summary.warningCount} warning(s), ${validation.summary.errorCount} error(s)`
       );
       setLastOperationError(null);
+      void telemetryClient.capture(
+        "export_completed",
+        createExportCompletedTelemetry({
+          assetType,
+          mode,
+          frameCount: sheetMode ? exportFrames.length : 1,
+          animationCount: animations ? Object.keys(animations).length : 0,
+          engineTargets: engineExportTargets,
+          normalizedSheet: shouldNormalizeExport,
+          validationOk: validation.ok,
+          warningCount: validation.summary.warningCount,
+          errorCount: validation.summary.errorCount,
+          bundleSizeBytes: bundle.byteLength,
+          bundleFileCount: bundleFiles.length,
+          destination: isDesktopRuntime() ? "desktop" : "browser",
+          durationMs: performance.now() - exportStartedAt
+        })
+      );
     })().catch((error) => {
       editorPerformanceMonitorRef.current.endOperation(perfOperationId, "export failed");
       publishEditorPerformanceSnapshot();
@@ -6502,6 +6682,7 @@ export function App() {
     exportBundleName,
     fixResult,
     normalizeTimelineFrames,
+    mode,
     playbackDirection,
     playbackFps,
     playbackLoop,
@@ -6516,6 +6697,7 @@ export function App() {
     sheetOptions,
     sheetRowAnimations,
     sheetSpacing,
+    telemetryClient,
     timelineState.enabled,
     tilemapIdentityThreshold,
     tilemapOffsetX,
@@ -6601,7 +6783,7 @@ export function App() {
     const closeAssetMenu = () => setAssetMenu(null);
     const onPaste = (event: ClipboardEvent) => {
       if (event.clipboardData?.files.length) {
-        void importFiles(event.clipboardData.files);
+        void importFiles(event.clipboardData.files, "paste");
       }
     };
 
@@ -6616,7 +6798,7 @@ export function App() {
   const onDrop = (event: DragEvent<HTMLElement>) => {
     event.preventDefault();
     setIsDropActive(false);
-    void importFiles(event.dataTransfer.files);
+    void importFiles(event.dataTransfer.files, "drag_drop");
   };
 
   const onBottomResizePointerDown = (event: PointerEvent<HTMLDivElement>) => {
@@ -7671,7 +7853,7 @@ export function App() {
         aria-label="Import image or PixelAid document files"
         onChange={(event) => {
           if (event.currentTarget.files) {
-            void importFiles(event.currentTarget.files);
+            void importFiles(event.currentTarget.files, "file_picker");
           }
           event.currentTarget.value = "";
         }}

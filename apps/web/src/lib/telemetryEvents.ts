@@ -36,19 +36,19 @@ const telemetryStringLimit = 96;
 export function createAssetImportedTelemetry(input: {
   importSource: TelemetryImportSource;
   importKind: TelemetryImportKind;
-  fileType?: string;
-  fileSizeBytes?: number;
+  fileType?: string | undefined;
+  fileSizeBytes?: number | undefined;
   sourceWidth: number;
   sourceHeight: number;
   assetType: AssetType;
   assetTypeSource: "auto" | "manual";
   mode: AssetMode;
-  targetWidth?: number;
-  targetHeight?: number;
-  maxColors?: number;
-  gridConfidence?: number;
-  gridCandidateCount?: number;
-  documentHadFixedOutput?: boolean;
+  targetWidth?: number | undefined;
+  targetHeight?: number | undefined;
+  maxColors?: number | undefined;
+  gridConfidence?: number | undefined;
+  gridCandidateCount?: number | undefined;
+  documentHadFixedOutput?: boolean | undefined;
 }): TelemetryProperties {
   return {
     import_source: input.importSource,
@@ -78,7 +78,7 @@ export function createAutoSuggestCompletedTelemetry(input: {
   targetWidth: number;
   targetHeight: number;
   maxColors: number;
-  gridConfidence?: number;
+  gridConfidence?: number | undefined;
   gridCandidateCount: number;
   categoryConfidence: number;
   warningCount: number;
