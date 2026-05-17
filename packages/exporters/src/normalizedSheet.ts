@@ -66,15 +66,16 @@ export function createNormalizedSheetPacking({
         w: frameWidth,
         h: frameHeight
       };
+      const sourceRect = frame.sourceRect ?? frame.rect;
       const offset = {
-        x: pivot.x - frame.pivot.x,
-        y: pivot.y - frame.pivot.y
+        x: pivot.x - frame.pivot.x + (sourceRect.x - frame.rect.x),
+        y: pivot.y - frame.pivot.y + (sourceRect.y - frame.rect.y)
       };
 
       packedFrames.push(copyFrameWithRect(frame, targetRect, pivot, offset));
       placements.push({
         frameName: frame.name,
-        sourceRect: { ...frame.rect },
+        sourceRect: { ...sourceRect },
         targetRect,
         offset
       });

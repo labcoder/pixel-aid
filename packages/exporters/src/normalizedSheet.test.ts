@@ -140,4 +140,34 @@ describe("normalized sheet packing", () => {
       offsetY: 3
     });
   });
+
+  test("uses trimmed source rectangles while preserving pivot-relative placement", () => {
+    const packing = createNormalizedSheetPacking({
+      frames: [
+        {
+          name: "attack_000",
+          rect: { x: 10, y: 20, w: 32, h: 32 },
+          sourceRect: { x: 14, y: 25, w: 12, h: 20 },
+          pivot: { x: 16, y: 30 },
+          durationMs: 120,
+          tags: ["attack"]
+        }
+      ],
+      rowFrameCounts: [1],
+      margin: 0,
+      spacing: 0,
+      extrude: 0
+    });
+
+    expect(packing.placements).toEqual([
+      {
+        frameName: "attack_000",
+        sourceRect: { x: 14, y: 25, w: 12, h: 20 },
+        targetRect: { x: 0, y: 0, w: 32, h: 32 },
+        offset: { x: 4, y: 5 }
+      }
+    ]);
+    expect(packing.frames[0]?.sourceRect).toEqual({ x: 14, y: 25, w: 12, h: 20 });
+    expect(packing.frames[0]?.pivot).toEqual({ x: 16, y: 30 });
+  });
 });
