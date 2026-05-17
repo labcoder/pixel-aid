@@ -1407,10 +1407,15 @@ function createComponentMergeCandidate(
   if (startGaps.length === 0) {
     return undefined;
   }
+  const betweenGaps = gapsBetween(groups);
+  const typicalBetweenGap = betweenGaps.length > 0 ? Math.max(0, medianInteger(betweenGaps)) : Number.POSITIVE_INFINITY;
 
   const pitch = Math.max(1, medianInteger(startGaps));
   const typicalGroupWidth = Math.max(1, medianInteger(groups.map((group) => group.w)));
   if (pitch < typicalComponentWidth * 1.8 || typicalGroupWidth < typicalComponentWidth * 1.7 || typicalGroupWidth > pitch * 1.05) {
+    return undefined;
+  }
+  if (typicalBetweenGap < Math.max(largestWithinGap * 1.8, typicalComponentWidth * 0.6)) {
     return undefined;
   }
 

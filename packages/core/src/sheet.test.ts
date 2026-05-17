@@ -55,6 +55,19 @@ describe("sheet layout detection", () => {
     expect(layout.frames.every((frame) => !frame.sourceRect || isInBounds(frame.sourceRect, source))).toBe(true);
   });
 
+  test("detects compact nine-row animation sheet variable frame counts", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "compact-nine-row-animation-sheet");
+    if (!fixture) {
+      throw new Error("Missing compact nine-row animation sheet fixture");
+    }
+
+    const layout = detectSheetLayout(fixture.createImage());
+
+    expect(layout.columns).toBe(9);
+    expect(layout.rowFrameCounts).toEqual([1, 8, 9, 5, 5, 8, 7, 4, 4]);
+    expect(layout.frames).toHaveLength(51);
+  });
+
   test("explains row band, column pitch, label, gutter, and merge confidence", () => {
     const image = createLabeledOrbPresentationSheet();
     const layout = detectSheetLayout(image);
