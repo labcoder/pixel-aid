@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
+import { cleanupFixtureCatalog } from "@pixelaid/fixtures";
 import { detectSheetLayout } from "./sheet";
 
 const background = [62, 62, 61, 255] as const;
@@ -35,6 +36,23 @@ describe("sheet layout detection", () => {
     const precedingCount = layout.rowFrameCounts.slice(0, orbRowIndex).reduce((sum, count) => sum + count, 0);
     const orbFrames = layout.frames.slice(precedingCount, precedingCount + 4);
     expect(orbFrames.map((frame) => frame.rect.x)).toEqual([...orbFrames.map((frame) => frame.rect.x)].sort((a, b) => a - b));
+  });
+
+  test("detects compact nine-row animation sheet rows", () => {
+    const fixture = cleanupFixtureCatalog.find((candidate) => candidate.id === "compact-nine-row-animation-sheet");
+    if (!fixture) {
+      throw new Error("Missing compact nine-row animation sheet fixture");
+    }
+
+    const source = fixture.createImage();
+    const layout = detectSheetLayout(source);
+
+    expect(layout.rows).toBe(9);
+    expect(layout.rowRects).toHaveLength(9);
+    expect(layout.rowFrameCounts).toHaveLength(9);
+    expect(layout.rowRects.map((rect) => rect.y)).toEqual([...layout.rowRects.map((rect) => rect.y)].sort((a, b) => a - b));
+    expect(layout.frames.every((frame) => isInBounds(frame.rect, source))).toBe(true);
+    expect(layout.frames.every((frame) => !frame.sourceRect || isInBounds(frame.sourceRect, source))).toBe(true);
   });
 
   test("explains row band, column pitch, label, gutter, and merge confidence", () => {
