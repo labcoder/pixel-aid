@@ -182,11 +182,12 @@ Do not ask public users to do this. Public macOS artifacts should be Developer I
 
 The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` is the broader release-candidate artifact path. It runs on `workflow_dispatch`, gates the build with license, typecheck, test, and lint checks, then creates unsigned release-candidate artifacts for:
 
-- Standalone web hosting: `pixelaid-web-standalone`.
 - itch.io HTML5 upload: `pixelaid-web-itch`.
 - Windows x64 portable package: `pixelaid-windows-portable`.
 - macOS Apple Silicon app package: `pixelaid-macos-arm64-app`.
 - macOS Intel app package: `pixelaid-macos-x64-app`.
+
+Standalone web packaging remains available locally through `npm run web:package:standalone`, but it is intentionally not part of release-candidate artifacts yet.
 
 Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, sign binaries, notarize macOS builds, or upload anything outside GitHub Actions artifacts yet.
 

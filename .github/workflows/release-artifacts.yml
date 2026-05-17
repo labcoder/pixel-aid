@@ -45,7 +45,7 @@ jobs:
         run: npm run lint
 
   web:
-    name: Web release packages
+    name: itch.io web release package
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs: checks
@@ -63,24 +63,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build standalone web package
-        run: npm run web:package:standalone
-        env:
-          TELEMETRY_DISTRIBUTION: web_standalone
-
       - name: Build itch.io web package
         run: npm run web:package:itch
         env:
           TELEMETRY_DISTRIBUTION: web_itch
-
-      - name: Upload standalone web package
-        uses: actions/upload-artifact@v7
-        with:
-          name: pixelaid-web-standalone
-          path: artifacts/web/*web-standalone.zip
-          archive: false
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Upload itch.io web package
         uses: actions/upload-artifact@v7
