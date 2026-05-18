@@ -8,6 +8,16 @@ on:
         required: false
         default: false
         type: boolean
+      macos_signed:
+        description: Build signed and notarized macOS app packages through the release-signing environment
+        required: false
+        default: false
+        type: boolean
+      macos_x64:
+        description: Also build the Intel x64 macOS app package
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -245,14 +255,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: checks
+    if: ${{ !inputs.macos_signed }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
+        include: ${{ fromJSON(inputs.macos_x64 && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
 
     steps:
       - name: Checkout
@@ -281,7 +288,7 @@ jobs:
         run: npm ci
 
       - name: Build unsigned macOS app package
-        run: npm run desktop:package:macos
+        run: npm run desktop:package:macos -- --arch ${{ matrix.arch }}
         env:
           TELEMETRY_DISTRIBUTION: desktop_macos_app
 
@@ -310,3 +317,123 @@ jobs:
           archive: false
           if-no-files-found: error
           retention-days: 30
+
+  macos-signed:
+    name: macOS signed app release package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    needs: checks
+    if: ${{ inputs.macos_signed }}
+    environment: release-signing
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.macos_x64 && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+
+      - name: Show tool versions
+        run: |
+          node --version
+          npm --version
+          rustc --version
+          cargo --version
+          uname -m
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Import Apple signing assets
+        shell: bash
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+        run: |
+          for required in MACOS_CERTIFICATE_P12_BASE64 MACOS_CERTIFICATE_PASSWORD MACOS_KEYCHAIN_PASSWORD APPLE_API_KEY APPLE_API_KEY_P8_BASE64; do
+            if [ -z "${!required}" ]; then
+              echo "$required is required for signed macOS release artifacts." >&2
+              exit 1
+            fi
+          done
+
+          certificate_path="$RUNNER_TEMP/pixelaid-certificate.p12"
+          api_key_dir="$RUNNER_TEMP/appstoreconnect/private_keys"
+          api_key_path="$api_key_dir/AuthKey_${APPLE_API_KEY}.p8"
+          keychain_path="$RUNNER_TEMP/pixelaid-signing.keychain-db"
+
+          mkdir -p "$api_key_dir"
+          printf '%s' "$MACOS_CERTIFICATE_P12_BASE64" | base64 -D > "$certificate_path"
+          printf '%s' "$APPLE_API_KEY_P8_BASE64" | base64 -D > "$api_key_path"
+
+          security create-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+          security import "$certificate_path" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain_path"
+          security list-keychains -d user -s "$keychain_path" $(security list-keychains -d user | sed 's/"//g')
+          security default-keychain -s "$keychain_path"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$MACOS_KEYCHAIN_PASSWORD" "$keychain_path"
+
+          echo "APPLE_API_KEY_PATH=$api_key_path" >> "$GITHUB_ENV"
+          echo "MACOS_SIGNING_KEYCHAIN=$keychain_path" >> "$GITHUB_ENV"
+
+      - name: Build signed macOS app package
+        run: npm run desktop:package:macos:signed -- --arch ${{ matrix.arch }}
+        env:
+          TELEMETRY_DISTRIBUTION: desktop_macos_app
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+
+      - name: Verify signed macOS package
+        run: |
+          zip="$(find artifacts/desktop -name '*macos*-${{ matrix.arch }}-signed-app.zip' -print -quit)"
+          if [ -z "$zip" ]; then
+            echo "No signed macOS ${{ matrix.arch }} app zip found." >&2
+            exit 1
+          fi
+
+          unzip -l "$zip"
+
+          extract_dir="$RUNNER_TEMP/pixelaid-macos-${{ matrix.arch }}-signed"
+          rm -rf "$extract_dir"
+          mkdir -p "$extract_dir"
+          ditto -x -k "$zip" "$extract_dir"
+
+          node apps/desktop/scripts/verify-desktop-package.mjs macos "$extract_dir" "${{ matrix.arch }}" --signed
+
+      - name: Upload signed macOS app package
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixelaid-macos-${{ matrix.arch }}-signed-app
+          path: artifacts/desktop/*macos*-${{ matrix.arch }}-signed-app.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Cleanup Apple signing assets
+        if: ${{ always() }}
+        run: |
+          keychain_path="${MACOS_SIGNING_KEYCHAIN:-$RUNNER_TEMP/pixelaid-signing.keychain-db}"
+          if [ -f "$keychain_path" ]; then
+            security delete-keychain "$keychain_path" || true
+          fi
+          rm -f "$RUNNER_TEMP/pixelaid-certificate.p12"
+          rm -rf "$RUNNER_TEMP/appstoreconnect"

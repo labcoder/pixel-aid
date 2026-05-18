@@ -658,7 +658,7 @@ async function signAndNotarizeMacosApp({ appPath, artifactRoot, env, packageName
         label: "xcrun stapler validate PixelAid.app",
       },
       {
-        command: ["spctl", "-a", "-vv", "--type", "execute", appPath],
+        command: ["spctl", "-a", "--type", "execute", appPath],
         label: "spctl assess PixelAid.app",
       },
     ];

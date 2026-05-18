@@ -6,7 +6,7 @@ The repo currently contains the web editor, a Tauri desktop shell, deterministic
 
 ## Status
 
-PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, desktop packages are unsigned, and public release publishing still needs signing and distribution automation. The CLI package is prepared for npm packaging as `pixelaid`.
+PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and public release publishing still needs final distribution automation. The CLI package is prepared for npm packaging as `pixelaid`.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ Create an unsigned portable desktop artifact for the current platform:
 npm run desktop:package
 ```
 
-Use `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Use `npm run desktop:package:windows:signed` for the opt-in local Authenticode-signed Windows package. Use `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The manual GitHub Actions workflow uploads separate `pixelaid-macos-arm64-app` and `pixelaid-macos-x64-app` artifacts. The generated `artifacts/desktop/` directory is ignored by git.
+Use `npm run desktop:package:windows` on Windows to create `artifacts/desktop/PixelAid-<version>-windows-x64-portable.zip`. Use `npm run desktop:package:windows:signed` for the opt-in local Authenticode-signed Windows package. Use `npm run desktop:package:macos` on macOS to create `artifacts/desktop/PixelAid-<version>-macos-<arch>-app.zip`. The manual desktop GitHub Actions workflow uploads Windows and macOS arm64 artifacts by default; release-candidate builds can optionally add Intel macOS artifacts. The generated `artifacts/desktop/` directory is ignored by git.
 
 Signed macOS packages are opt-in after local Apple Developer ID setup:
 

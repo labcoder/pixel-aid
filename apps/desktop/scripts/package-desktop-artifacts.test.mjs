@@ -307,6 +307,8 @@ test("packages a signed macOS app bundle with signing, notarization, and staplin
         "spctl assess PixelAid.app",
       ],
     );
+    const spctlCall = commandRunner.calls.find((call) => call.label === "spctl assess PixelAid.app");
+    assert.equal(spctlCall.command.includes("-vv"), false);
     assert.equal(commandRunner.calls.at(-1).command[0], "ditto");
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

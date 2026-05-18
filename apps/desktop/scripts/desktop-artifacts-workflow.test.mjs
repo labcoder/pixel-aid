@@ -18,6 +18,15 @@ test("desktop artifact uploads preserve package zips directly", async () => {
   }
 });
 
+test("desktop artifact workflow only builds arm64 macOS package", async () => {
+  const workflow = await readFile(workflowPath, "utf8");
+
+  assert.match(workflow, /runs-on: macos-15/u);
+  assert.match(workflow, /pixelaid-macos-arm64-app/u);
+  assert.doesNotMatch(workflow, /macos-15-intel/u);
+  assert.doesNotMatch(workflow, /pixelaid-macos-x64-app/u);
+});
+
 test("macOS workflow verification reads the bundle executable name dynamically", async () => {
   const workflow = await readFile(workflowPath, "utf8");
 

@@ -77,17 +77,9 @@ jobs:
           retention-days: 14
 
   macos:
-    name: macOS app zip (${{ matrix.arch }})
-    runs-on: ${{ matrix.runner }}
+    name: macOS app zip (arm64)
+    runs-on: macos-15
     timeout-minutes: 60
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15
-            arch: arm64
-          - runner: macos-15-intel
-            arch: x64
 
     steps:
       - name: Checkout
@@ -116,32 +108,32 @@ jobs:
         run: npm ci
 
       - name: Build unsigned macOS app package
-        run: npm run desktop:package:macos
+        run: npm run desktop:package:macos -- --arch arm64
         env:
           TELEMETRY_DISTRIBUTION: desktop_macos_app
 
       - name: Verify macOS package
         run: |
-          zip="$(find artifacts/desktop -name '*macos*-${{ matrix.arch }}-app.zip' -print -quit)"
+          zip="$(find artifacts/desktop -name '*macos*-arm64-app.zip' -print -quit)"
           if [ -z "$zip" ]; then
-            echo "No macOS ${{ matrix.arch }} app zip found." >&2
+            echo "No macOS arm64 app zip found." >&2
             exit 1
           fi
 
           unzip -l "$zip"
 
-          extract_dir="$RUNNER_TEMP/pixelaid-macos-${{ matrix.arch }}"
+          extract_dir="$RUNNER_TEMP/pixelaid-macos-arm64"
           rm -rf "$extract_dir"
           mkdir -p "$extract_dir"
           ditto -x -k "$zip" "$extract_dir"
 
-          node apps/desktop/scripts/verify-desktop-package.mjs macos "$extract_dir" "${{ matrix.arch }}"
+          node apps/desktop/scripts/verify-desktop-package.mjs macos "$extract_dir" arm64
 
       - name: Upload macOS app package
         uses: actions/upload-artifact@v7
         with:
-          name: pixelaid-macos-${{ matrix.arch }}-app
-          path: artifacts/desktop/*macos*-${{ matrix.arch }}-app.zip
+          name: pixelaid-macos-arm64-app
+          path: artifacts/desktop/*macos*-arm64-app.zip
           archive: false
           if-no-files-found: error
           retention-days: 14

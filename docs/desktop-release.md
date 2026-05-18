@@ -180,9 +180,25 @@ Grant that app registration/service principal the `Artifact Signing Certificate 
 
 The workflow installs the Microsoft Artifact Signing client into the GitHub runner's NuGet cache, logs into Azure through OIDC, signs the staged Windows executable, verifies the Authenticode signature, and uploads only the signed portable zip.
 
+## GitHub Actions macOS Signing Setup
+
+Signed macOS release-candidate artifacts use the same `release-signing` GitHub Environment. Add these **environment secrets** under **Settings -> Environments -> release-signing**:
+
+```txt
+MACOS_CERTIFICATE_P12_BASE64
+MACOS_CERTIFICATE_PASSWORD
+MACOS_KEYCHAIN_PASSWORD
+APPLE_SIGNING_IDENTITY
+APPLE_API_KEY
+APPLE_API_ISSUER
+APPLE_API_KEY_P8_BASE64
+```
+
+The workflow imports the certificate into a temporary runner keychain, writes the App Store Connect API key to a temporary file, signs and notarizes the staged `.app`, verifies the signed package, uploads the zip artifact, and removes temporary signing files.
+
 ## Manual CI Artifact Builds
 
-The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
+The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS arm64 packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
 
 This workflow is intentionally kept as the quick unsigned desktop smoke-test path. It can be triggered on any branch from **Actions -> Desktop Artifacts -> Run workflow**.
 
@@ -190,7 +206,6 @@ The workflow currently emits:
 
 - `pixelaid-windows-portable`: Windows x64 portable package.
 - `pixelaid-macos-arm64-app`: macOS package for Apple Silicon Macs, including M-series MacBooks.
-- `pixelaid-macos-x64-app`: macOS package for Intel Macs.
 
 For public repositories, standard GitHub-hosted runners are free and unlimited. For private repositories, the same workflow consumes the account's included Actions minutes and may incur usage charges after those minutes are exhausted.
 
@@ -200,7 +215,7 @@ To test it:
 2. In GitHub, open **Actions**.
 3. Choose **Desktop Artifacts**.
 4. Select **Run workflow**.
-5. Download `pixelaid-windows-portable`, `pixelaid-macos-arm64-app`, and `pixelaid-macos-x64-app` from the completed run as needed.
+5. Download `pixelaid-windows-portable` and `pixelaid-macos-arm64-app` from the completed run as needed.
 6. Inspect each zip and smoke test the app on the matching operating system.
 
 Browser downloads from GitHub apply macOS quarantine metadata. For unsigned and unnotarized CI artifacts, Finder may report that `PixelAid.app` is damaged or corrupted even when the package built correctly. For trusted internal smoke tests only, unzip the macOS package, then remove quarantine before first launch:
@@ -217,12 +232,12 @@ The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` 
 
 - itch.io HTML5 upload: `pixelaid-web-itch`.
 - Windows x64 portable package: `pixelaid-windows-portable`, or `pixelaid-windows-signed-portable` when `windows_signed` is enabled.
-- macOS Apple Silicon app package: `pixelaid-macos-arm64-app`.
-- macOS Intel app package: `pixelaid-macos-x64-app`.
+- macOS Apple Silicon app package: `pixelaid-macos-arm64-app`, or `pixelaid-macos-arm64-signed-app` when `macos_signed` is enabled.
+- Optional macOS Intel app package: `pixelaid-macos-x64-app`, or `pixelaid-macos-x64-signed-app` when `macos_x64` and `macos_signed` are both enabled.
 
 Standalone web packaging remains available locally through `npm run web:package:standalone`, but it is intentionally not part of release-candidate artifacts yet.
 
-Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, sign or notarize macOS builds, or upload anything outside GitHub Actions artifacts yet.
+Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, or upload anything outside GitHub Actions artifacts yet.
 
 To test it:
 
@@ -230,9 +245,10 @@ To test it:
 2. In GitHub, open **Actions**.
 3. Choose **Release Artifacts**.
 4. Select **Run workflow**.
-5. Leave `windows_signed` off for a normal unsigned release-candidate run, or enable it to replace the unsigned Windows portable artifact with a signed Windows portable artifact.
-6. Download and inspect the web and desktop artifacts from the completed run.
-7. Smoke test each desktop artifact on the matching operating system.
+5. Leave signing checkboxes off for a normal unsigned release-candidate run, or enable `windows_signed` and `macos_signed` for signed desktop artifacts.
+6. Leave `macos_x64` off for the default Apple Silicon macOS package only, or enable it to also build the Intel package.
+7. Download and inspect the web and desktop artifacts from the completed run.
+8. Smoke test each desktop artifact on the matching operating system.
 
 For a dry-run release check without secrets, use:
 
@@ -283,7 +299,7 @@ The current local signed package command uses App Store Connect API credentials.
 
 ### Deferred Artifact Types
 
-Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, GitHub Release automation, and itch.io publication flows are deferred until the unsigned Windows portable zip and local signed macOS `.app` zip are stable. Add those paths as separate release phases so signing, notarization, store review, and external publishing can be verified independently.
+Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, GitHub Release automation, and itch.io publication flows are deferred until the portable zip and `.app` release-candidate artifacts are stable. Add those paths as separate release phases so signing, notarization, store review, and external publishing can be verified independently.
 
 ## Checksums
 

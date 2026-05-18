@@ -19,14 +19,20 @@ function assertTelemetryEnv(text) {
   assertIncludes(text, "TELEMETRY_BUILD_CHANNEL: ${{ vars.TELEMETRY_BUILD_CHANNEL }}");
 }
 
-test("desktop artifact workflow keeps unsigned packages but injects telemetry distributions", async () => {
+test("desktop artifact workflow keeps unsigned Windows and arm64 macOS packages", async () => {
   const workflow = await readWorkflow("desktop-artifacts.yml");
 
   assertTelemetryEnv(workflow);
   assertIncludes(workflow, "run: npm run desktop:package:windows");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_windows_portable");
+  assertIncludes(workflow, "runs-on: macos-15");
+  assertIncludes(workflow, "name: macOS app zip (arm64)");
   assertIncludes(workflow, "run: npm run desktop:package:macos");
+  assertIncludes(workflow, "node apps/desktop/scripts/verify-desktop-package.mjs macos \"$extract_dir\" arm64");
+  assertIncludes(workflow, "name: pixelaid-macos-arm64-app");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_macos_app");
+  assert.equal(workflow.includes("macos-15-intel"), false);
+  assert.equal(workflow.includes("pixelaid-macos-x64-app"), false);
   assert.equal(workflow.includes("desktop:package:windows:signed"), false);
   assert.equal(workflow.includes("desktop:package:macos:signed"), false);
 });
@@ -38,6 +44,8 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertIncludes(workflow, "name: Release Artifacts");
   assertIncludes(workflow, "workflow_dispatch:");
   assertIncludes(workflow, "windows_signed:");
+  assertIncludes(workflow, "macos_signed:");
+  assertIncludes(workflow, "macos_x64:");
   assertIncludes(workflow, "run: npm run license:check");
   assertIncludes(workflow, "run: npm run typecheck");
   assertIncludes(workflow, "run: npm test");
@@ -49,13 +57,16 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_windows_portable");
   assertIncludes(workflow, "run: npm run desktop:package:macos");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_macos_app");
+  assertIncludes(workflow, "if: ${{ !inputs.macos_signed }}");
+  assertIncludes(workflow, "fromJSON(inputs.macos_x64");
+  assertIncludes(workflow, "\"runner\":\"macos-15\",\"arch\":\"arm64\"");
+  assertIncludes(workflow, "\"runner\":\"macos-15-intel\",\"arch\":\"x64\"");
   assertIncludes(workflow, "name: pixelaid-web-itch");
   assertIncludes(workflow, "name: pixelaid-windows-portable");
   assertIncludes(workflow, "name: pixelaid-macos-${{ matrix.arch }}-app");
   assert.equal(workflow.includes("run: npm run web:package:standalone"), false);
   assert.equal(workflow.includes("TELEMETRY_DISTRIBUTION: web_standalone"), false);
   assert.equal(workflow.includes("name: pixelaid-web-standalone"), false);
-  assert.equal(workflow.includes("desktop:package:macos:signed"), false);
 });
 
 test("release artifact workflow can build signed Windows packages through release environment", async () => {
@@ -78,4 +89,24 @@ test("release artifact workflow can build signed Windows packages through releas
   assertIncludes(workflow, "node apps/desktop/scripts/verify-desktop-package.mjs windows $extractDir --signed");
   assertIncludes(workflow, "name: pixelaid-windows-signed-portable");
   assertIncludes(workflow, "path: artifacts/desktop/*windows*-signed-portable.zip");
+});
+
+test("release artifact workflow can build signed macOS packages through release environment", async () => {
+  const workflow = await readWorkflow("release-artifacts.yml");
+
+  assertIncludes(workflow, "if: ${{ inputs.macos_signed }}");
+  assertIncludes(workflow, "environment: release-signing");
+  assertIncludes(workflow, "MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}");
+  assertIncludes(workflow, "MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}");
+  assertIncludes(workflow, "MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}");
+  assertIncludes(workflow, "APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}");
+  assertIncludes(workflow, "APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}");
+  assertIncludes(workflow, "APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}");
+  assertIncludes(workflow, "APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}");
+  assertIncludes(workflow, "security create-keychain");
+  assertIncludes(workflow, "security import \"$certificate_path\"");
+  assertIncludes(workflow, "run: npm run desktop:package:macos:signed -- --arch ${{ matrix.arch }}");
+  assertIncludes(workflow, "node apps/desktop/scripts/verify-desktop-package.mjs macos \"$extract_dir\" \"${{ matrix.arch }}\" --signed");
+  assertIncludes(workflow, "name: pixelaid-macos-${{ matrix.arch }}-signed-app");
+  assertIncludes(workflow, "path: artifacts/desktop/*macos*-${{ matrix.arch }}-signed-app.zip");
 });
