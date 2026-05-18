@@ -1,6 +1,6 @@
 {
   "name": "@pixelaid/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "exports": {
@@ -17,10 +17,10 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@pixelaid/shared": "0.1.0"
+    "@pixelaid/shared": "0.1.1"
   },
   "devDependencies": {
     "@jsquash/webp": "^1.5.0",
-    "@pixelaid/fixtures": "0.1.0"
+    "@pixelaid/fixtures": "0.1.1"
   }
 }
