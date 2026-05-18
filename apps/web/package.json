@@ -1,6 +1,6 @@
 {
   "name": "@pixelaid/web",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,12 +11,12 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@pixelaid/core": "0.1.0",
-    "@pixelaid/engine": "0.1.0",
-    "@pixelaid/exporters": "0.1.0",
-    "@pixelaid/fixtures": "0.1.0",
-    "@pixelaid/shared": "0.1.0",
-    "@pixelaid/worker": "0.1.0",
+    "@pixelaid/core": "0.1.1",
+    "@pixelaid/engine": "0.1.1",
+    "@pixelaid/exporters": "0.1.1",
+    "@pixelaid/fixtures": "0.1.1",
+    "@pixelaid/shared": "0.1.1",
+    "@pixelaid/worker": "0.1.1",
     "@tauri-apps/plugin-dialog": "^2.7.0",
     "@tauri-apps/plugin-fs": "^2.5.0",
     "fflate": "^0.8.2",

@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { PIXELAID_VERSION } from "@pixelaid/shared";
 import {
   GODOT_IMPORT_GUIDANCE,
   UNITY_IMPORT_GUIDANCE,
@@ -78,7 +79,7 @@ describe("generic manifest export", () => {
 
     expect(manifest.meta).toMatchObject({
       app: "PixelAid",
-      version: "0.1.0",
+      version: PIXELAID_VERSION,
       image: "hero_sheet.png",
       assetType: "animationSheet",
       generatedAt: "2026-04-24T16:00:00.000Z",
