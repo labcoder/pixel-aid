@@ -50,7 +50,7 @@ jobs:
           fi
 
       - name: Download release artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           run-id: ${{ inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}

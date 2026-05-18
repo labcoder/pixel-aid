@@ -214,7 +214,7 @@ When `publish_itch` is enabled, the release workflow publishes:
 
 Publishing requires `windows_signed` and `macos_signed` to be enabled so public desktop channels receive signed artifacts.
 
-If publishing fails after a release artifact run already built successfully, use the separate `.github/workflows/publish-itch.yml` workflow with the previous run ID. It downloads the existing artifacts and republishes the itch.io channels without rebuilding or resigning the desktop apps.
+If publishing fails after a release artifact run already built successfully, use the separate `.github/workflows/publish-itch.yml` workflow with the previous run ID. It downloads the existing artifacts and republishes the itch.io channels without rebuilding or resigning the desktop apps. After workflow file changes, start a new manual **Publish itch.io** run instead of rerunning an older failed job, because GitHub reruns use the original workflow commit.
 
 ## Manual CI Artifact Builds
 
