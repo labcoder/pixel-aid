@@ -1,6 +1,6 @@
 {
   "name": "@pixelaid/automation",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "type": "module",
   "exports": {
@@ -16,9 +16,9 @@
   },
   "dependencies": {
     "@jsquash/webp": "^1.5.0",
-    "@pixelaid/core": "0.1.0",
-    "@pixelaid/exporters": "0.1.0",
-    "@pixelaid/shared": "0.1.0",
+    "@pixelaid/core": "0.1.1",
+    "@pixelaid/exporters": "0.1.1",
+    "@pixelaid/shared": "0.1.1",
     "jpeg-js": "^0.4.4",
     "pngjs": "^7.0.0"
   },

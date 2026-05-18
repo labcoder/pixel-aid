@@ -1,6 +1,6 @@
 {
   "name": "pixelaid",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command-line PixelAid tools for fixing fake pixel-art images into engine-ready pixel assets.",
   "license": "AGPL-3.0-only",
   "author": "Oscar Sanchez (https://oscarsanchez.com)",
@@ -48,8 +48,8 @@
     "@jsquash/webp": "^1.5.0"
   },
   "devDependencies": {
-    "@pixelaid/automation": "0.1.0",
-    "@pixelaid/shared": "0.1.0",
+    "@pixelaid/automation": "0.1.1",
+    "@pixelaid/shared": "0.1.1",
     "@types/node": "^25.6.0",
     "esbuild": "^0.28.0",
     "fflate": "^0.8.2"
