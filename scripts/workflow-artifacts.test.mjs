@@ -47,23 +47,28 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertTelemetryEnv(workflow);
   assertIncludes(workflow, "name: Release Artifacts");
   assertIncludes(workflow, "workflow_dispatch:");
+  assertIncludes(workflow, "push:");
+  assertIncludes(workflow, "tags:");
+  assertIncludes(workflow, '- "v*.*.*"');
   assertIncludes(workflow, "windows_signed:");
   assertIncludes(workflow, "macos_signed:");
   assertIncludes(workflow, "macos_x64:");
   assertIncludes(workflow, "publish_itch:");
+  assertIncludes(workflow, "Validate release tag");
+  assertIncludes(workflow, "Release tag ${tag} does not match package version ${pkg.version}. Expected ${expected}.");
   assertIncludes(workflow, "run: npm run license:check");
   assertIncludes(workflow, "run: npm run typecheck");
   assertIncludes(workflow, "run: npm test");
   assertIncludes(workflow, "run: npm run lint");
   assertIncludes(workflow, "run: npm run web:package:itch");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: web_itch");
-  assertIncludes(workflow, "if: ${{ !inputs.windows_signed }}");
+  assertIncludes(workflow, "if: ${{ github.ref_type != 'tag' && github.event.inputs.windows_signed != 'true' }}");
   assertIncludes(workflow, "run: npm run desktop:package:windows");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_windows_portable");
   assertIncludes(workflow, "run: npm run desktop:package:macos");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: desktop_macos_app");
-  assertIncludes(workflow, "if: ${{ !inputs.macos_signed }}");
-  assertIncludes(workflow, "fromJSON(inputs.macos_x64");
+  assertIncludes(workflow, "if: ${{ github.ref_type != 'tag' && github.event.inputs.macos_signed != 'true' }}");
+  assertIncludes(workflow, "fromJSON((github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true')");
   assertIncludes(workflow, "\"runner\":\"macos-15\",\"arch\":\"arm64\"");
   assertIncludes(workflow, "\"runner\":\"macos-15-intel\",\"arch\":\"x64\"");
   assertIncludes(workflow, "name: pixelaid-web-itch");
@@ -77,7 +82,7 @@ test("release artifact workflow builds web and unsigned desktop packages with te
 test("release artifact workflow can build signed Windows packages through release environment", async () => {
   const workflow = await readWorkflow("release-artifacts.yml");
 
-  assertIncludes(workflow, "if: ${{ inputs.windows_signed }}");
+  assertIncludes(workflow, "if: ${{ github.ref_type == 'tag' || github.event.inputs.windows_signed == 'true' }}");
   assertIncludes(workflow, "environment: release-signing");
   assertIncludes(workflow, "id-token: write");
   assertIncludes(workflow, "uses: azure/login@v3");
@@ -99,7 +104,7 @@ test("release artifact workflow can build signed Windows packages through releas
 test("release artifact workflow can build signed macOS packages through release environment", async () => {
   const workflow = await readWorkflow("release-artifacts.yml");
 
-  assertIncludes(workflow, "if: ${{ inputs.macos_signed }}");
+  assertIncludes(workflow, "if: ${{ github.ref_type == 'tag' || github.event.inputs.macos_signed == 'true' }}");
   assertIncludes(workflow, "environment: release-signing");
   assertIncludes(workflow, "MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}");
   assertIncludes(workflow, "MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}");
@@ -120,10 +125,12 @@ test("release artifact workflow can publish release artifacts to itch.io", async
   const workflow = await readWorkflow("release-artifacts.yml");
   const publishScript = await readScript("publish-itch-artifacts.sh");
 
-  assertIncludes(workflow, "if: ${{ always() && inputs.publish_itch }}");
+  assertIncludes(workflow, "if: ${{ always() && (github.ref_type == 'tag' || github.event.inputs.publish_itch == 'true') }}");
   assertIncludes(workflow, "environment: release-publishing");
+  assertIncludes(workflow, "RELEASE_TAG: ${{ github.ref_type == 'tag' }}");
   assertIncludes(workflow, "BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}");
   assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
+  assertIncludes(workflow, 'if [ "$RELEASE_TAG" != "true" ] && { [ "$WINDOWS_SIGNED" != "true" ] || [ "$MACOS_SIGNED" != "true" ]; }; then');
   assertIncludes(workflow, "uses: actions/download-artifact@v8");
   assertIncludes(workflow, "skip-decompress: true");
   assertIncludes(workflow, "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default");
@@ -138,6 +145,7 @@ test("release artifact workflow can publish release artifacts to itch.io", async
   assertIncludes(publishScript, "butler push \"$macos_arm64_dir\" \"$ITCH_TARGET:macos-arm64\" --userversion \"$version\"");
   assertIncludes(publishScript, "butler push \"$macos_x64_dir\" \"$ITCH_TARGET:macos-x64\" --userversion \"$version\"");
   assertIncludes(workflow, "Itch publishing requires windows_signed and macos_signed.");
+  assertIncludes(workflow, "PUBLISH_MACOS_X64: ${{ github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true' }}");
   assert.equal(workflow.includes("release-artifacts/pixelaid-web-itch"), false);
 });
 

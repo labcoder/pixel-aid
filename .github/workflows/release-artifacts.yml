@@ -23,6 +23,9 @@ on:
         required: false
         default: false
         type: boolean
+  push:
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: read
@@ -49,6 +52,11 @@ jobs:
         with:
           node-version: 24
           cache: npm
+
+      - name: Validate release tag
+        if: ${{ github.ref_type == 'tag' }}
+        run: |
+          node -e 'const pkg = require("./package.json"); const tag = process.env.GITHUB_REF_NAME; const expected = "v" + pkg.version; if (tag !== expected) { console.error(`Release tag ${tag} does not match package version ${pkg.version}. Expected ${expected}.`); process.exit(1); }'
 
       - name: Install dependencies
         run: npm ci
@@ -103,7 +111,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 60
     needs: checks
-    if: ${{ !inputs.windows_signed }}
+    if: ${{ github.ref_type != 'tag' && github.event.inputs.windows_signed != 'true' }}
 
     steps:
       - name: Checkout
@@ -167,7 +175,7 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 75
     needs: checks
-    if: ${{ inputs.windows_signed }}
+    if: ${{ github.ref_type == 'tag' || github.event.inputs.windows_signed == 'true' }}
     environment: release-signing
     permissions:
       contents: read
@@ -260,11 +268,11 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     needs: checks
-    if: ${{ !inputs.macos_signed }}
+    if: ${{ github.ref_type != 'tag' && github.event.inputs.macos_signed != 'true' }}
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.macos_x64 && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
+        include: ${{ fromJSON((github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true') && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
 
     steps:
       - name: Checkout
@@ -328,14 +336,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 90
     needs: checks
-    if: ${{ inputs.macos_signed }}
+    if: ${{ github.ref_type == 'tag' || github.event.inputs.macos_signed == 'true' }}
     environment: release-signing
     permissions:
       contents: read
     strategy:
       fail-fast: false
       matrix:
-        include: ${{ fromJSON(inputs.macos_x64 && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
+        include: ${{ fromJSON((github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true') && '[{"runner":"macos-15","arch":"arm64"},{"runner":"macos-15-intel","arch":"x64"}]' || '[{"runner":"macos-15","arch":"arm64"}]') }}
 
     steps:
       - name: Checkout
@@ -453,7 +461,7 @@ jobs:
       - windows-signed
       - macos
       - macos-signed
-    if: ${{ always() && inputs.publish_itch }}
+    if: ${{ always() && (github.ref_type == 'tag' || github.event.inputs.publish_itch == 'true') }}
     environment: release-publishing
 
     steps:
@@ -463,12 +471,13 @@ jobs:
       - name: Validate publish inputs
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          WINDOWS_SIGNED: ${{ inputs.windows_signed }}
-          MACOS_SIGNED: ${{ inputs.macos_signed }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' }}
+          WINDOWS_SIGNED: ${{ github.event.inputs.windows_signed }}
+          MACOS_SIGNED: ${{ github.event.inputs.macos_signed }}
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
         run: |
-          if [ "$WINDOWS_SIGNED" != "true" ] || [ "$MACOS_SIGNED" != "true" ]; then
+          if [ "$RELEASE_TAG" != "true" ] && { [ "$WINDOWS_SIGNED" != "true" ] || [ "$MACOS_SIGNED" != "true" ]; }; then
             echo "Itch publishing requires windows_signed and macos_signed." >&2
             exit 1
           fi
@@ -515,5 +524,5 @@ jobs:
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
-          PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}
+          PUBLISH_MACOS_X64: ${{ github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true' }}
         run: bash scripts/publish-itch-artifacts.sh

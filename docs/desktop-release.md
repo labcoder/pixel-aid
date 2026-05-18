@@ -280,6 +280,21 @@ npm run desktop:release:check -- --allow-unsigned
 
 The `--allow-unsigned` flag is for local dry runs only. Public builds should run the same check without that flag. Local release checks read `.env` by default; use `--no-env-file` to validate only the current shell environment.
 
+## Tagged Release Publishing
+
+Pushing a tag that matches `v*.*.*` runs `.github/workflows/release-artifacts.yml` automatically. Tag runs force signed Windows, signed macOS arm64, signed macOS x64, and itch.io publishing. Manual checkbox behavior remains unchanged for `workflow_dispatch` runs.
+
+The workflow checks that the tag matches the root package version, so `v0.1.1` requires `package.json` to contain `0.1.1`.
+
+Recommended release flow:
+
+1. Create a `releases/<version>` branch.
+2. Run `npm run version:set <version>`.
+3. Commit the version changes and open a PR.
+4. Push the matching tag, for example `v0.1.1`, from the same commit.
+5. Wait for the Release Artifacts workflow to finish and smoke test the published packages.
+6. Merge the release branch after the tag build succeeds.
+
 ## Signed Public Builds
 
 Before producing public desktop artifacts:
