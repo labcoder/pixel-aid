@@ -1,3 +1,5 @@
+<img src="docs/brand/pixelaid-c-assets/header/header-logo-dark.png" alt="PixelAid" width="520">
+
 # PixelAid
 
 PixelAid is a deterministic cleanup tool that fixes grids, palettes, alpha, sprite sheets, tiles, and export metadata for pixel-art assets.
