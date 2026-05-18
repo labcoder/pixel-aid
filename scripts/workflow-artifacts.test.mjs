@@ -125,6 +125,7 @@ test("release artifact workflow can publish release artifacts to itch.io", async
   assertIncludes(workflow, "BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}");
   assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
   assertIncludes(workflow, "uses: actions/download-artifact@v7");
+  assertIncludes(workflow, "skip-decompress: true");
   assertIncludes(workflow, "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default");
   assertIncludes(workflow, "bash scripts/publish-itch-artifacts.sh");
   assertIncludes(publishScript, "Downloaded artifact files:");
@@ -151,6 +152,7 @@ test("publish itch workflow can reuse artifacts from an existing release run", a
   assertIncludes(workflow, "uses: actions/download-artifact@v7");
   assertIncludes(workflow, "run-id: ${{ inputs.run_id }}");
   assertIncludes(workflow, "github-token: ${{ secrets.GITHUB_TOKEN }}");
+  assertIncludes(workflow, "skip-decompress: true");
   assertIncludes(workflow, "BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}");
   assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
   assertIncludes(workflow, "PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}");

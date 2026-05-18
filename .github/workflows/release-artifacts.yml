@@ -501,6 +501,7 @@ jobs:
         uses: actions/download-artifact@v7
         with:
           path: release-artifacts
+          skip-decompress: true
 
       - name: Install butler
         run: |
