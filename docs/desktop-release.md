@@ -214,6 +214,8 @@ When `publish_itch` is enabled, the release workflow publishes:
 
 Publishing requires `windows_signed` and `macos_signed` to be enabled so public desktop channels receive signed artifacts.
 
+If publishing fails after a release artifact run already built successfully, use the separate `.github/workflows/publish-itch.yml` workflow with the previous run ID. It downloads the existing artifacts and republishes the itch.io channels without rebuilding or resigning the desktop apps.
+
 ## Manual CI Artifact Builds
 
 The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS arm64 packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
@@ -266,8 +268,9 @@ To test it:
 5. Leave signing checkboxes off for a normal unsigned release-candidate run, or enable `windows_signed` and `macos_signed` for signed desktop artifacts.
 6. Leave `macos_x64` off for the default Apple Silicon macOS package only, or enable it to also build the Intel package.
 7. Leave `publish_itch` off for artifact review only, or enable it to publish the web and signed desktop channels to itch.io after the artifacts build.
-8. Download and inspect the web and desktop artifacts from the completed run.
-9. Smoke test each desktop artifact on the matching operating system.
+8. If publishing needs to be retried without rebuilding, run **Publish itch.io** with the release workflow run ID.
+9. Download and inspect the web and desktop artifacts from the completed run.
+10. Smoke test each desktop artifact on the matching operating system.
 
 For a dry-run release check without secrets, use:
 

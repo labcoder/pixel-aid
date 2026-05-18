@@ -515,42 +515,4 @@ jobs:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
           PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}
-        run: |
-          version="$(node -p "require('./package.json').version")"
-
-          web_zip="$(find release-artifacts/pixelaid-web-itch -name '*web-itch.zip' -print -quit)"
-          windows_zip="$(find release-artifacts/pixelaid-windows-signed-portable -name '*windows*-signed-portable.zip' -print -quit)"
-          macos_arm64_zip="$(find release-artifacts/pixelaid-macos-arm64-signed-app -name '*macos*-arm64-signed-app.zip' -print -quit)"
-
-          for artifact in "$web_zip" "$windows_zip" "$macos_arm64_zip"; do
-            if [ -z "$artifact" ] || [ ! -f "$artifact" ]; then
-              echo "Expected release artifact was not found." >&2
-              exit 1
-            fi
-          done
-
-          macos_arm64_dir="$RUNNER_TEMP/itch-macos-arm64"
-          rm -rf "$macos_arm64_dir"
-          mkdir -p "$macos_arm64_dir"
-          unzip -q "$macos_arm64_zip" -d "$macos_arm64_dir"
-          macos_arm64_dir="$(find "$macos_arm64_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-
-          butler push "$web_zip" "$ITCH_TARGET:html5" --userversion "$version"
-          butler push "$windows_zip" "$ITCH_TARGET:windows" --userversion "$version"
-          butler push "$macos_arm64_dir" "$ITCH_TARGET:macos-arm64" --userversion "$version"
-
-          if [ "$PUBLISH_MACOS_X64" = "true" ]; then
-            macos_x64_zip="$(find release-artifacts/pixelaid-macos-x64-signed-app -name '*macos*-x64-signed-app.zip' -print -quit)"
-            if [ -z "$macos_x64_zip" ] || [ ! -f "$macos_x64_zip" ]; then
-              echo "Expected signed macOS x64 release artifact was not found." >&2
-              exit 1
-            fi
-
-            macos_x64_dir="$RUNNER_TEMP/itch-macos-x64"
-            rm -rf "$macos_x64_dir"
-            mkdir -p "$macos_x64_dir"
-            unzip -q "$macos_x64_zip" -d "$macos_x64_dir"
-            macos_x64_dir="$(find "$macos_x64_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
-
-            butler push "$macos_x64_dir" "$ITCH_TARGET:macos-x64" --userversion "$version"
-          fi
+        run: bash scripts/publish-itch-artifacts.sh

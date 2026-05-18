@@ -1,0 +1,72 @@
+name: Publish itch.io
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Release Artifacts workflow run ID to publish
+        required: true
+        type: string
+      macos_x64:
+        description: Also publish the Intel x64 macOS channel from the run
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  TELEMETRY_PROVIDER: ${{ vars.TELEMETRY_PROVIDER }}
+  TELEMETRY_POSTHOG_PROJECT_KEY: ${{ secrets.TELEMETRY_POSTHOG_PROJECT_KEY }}
+  TELEMETRY_POSTHOG_HOST: ${{ vars.TELEMETRY_POSTHOG_HOST }}
+  TELEMETRY_ENABLED: ${{ vars.TELEMETRY_ENABLED }}
+  TELEMETRY_BUILD_CHANNEL: ${{ vars.TELEMETRY_BUILD_CHANNEL }}
+
+jobs:
+  publish:
+    name: Publish itch.io channels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: release-publishing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate publish settings
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "BUTLER_API_KEY is required for itch.io publishing." >&2
+            exit 1
+          fi
+          if [ -z "$ITCH_TARGET" ]; then
+            echo "ITCH_TARGET is required for itch.io publishing." >&2
+            exit 1
+          fi
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release-artifacts
+
+      - name: Install butler
+        run: |
+          curl -L -o "$RUNNER_TEMP/butler.zip" https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q "$RUNNER_TEMP/butler.zip" -d "$RUNNER_TEMP/butler"
+          chmod +x "$RUNNER_TEMP/butler/butler"
+          echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/butler/butler" version
+
+      - name: Publish itch.io channels
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}
+        run: bash scripts/publish-itch-artifacts.sh

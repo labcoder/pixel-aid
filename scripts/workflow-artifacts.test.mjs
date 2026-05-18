@@ -7,6 +7,10 @@ async function readWorkflow(name) {
   return readFile(new URL(`../.github/workflows/${name}`, import.meta.url), "utf8");
 }
 
+async function readScript(name) {
+  return readFile(new URL(name, import.meta.url), "utf8");
+}
+
 function assertIncludes(text, expected) {
   assert.ok(text.includes(expected), `Expected workflow to include: ${expected}`);
 }
@@ -114,6 +118,7 @@ test("release artifact workflow can build signed macOS packages through release 
 
 test("release artifact workflow can publish release artifacts to itch.io", async () => {
   const workflow = await readWorkflow("release-artifacts.yml");
+  const publishScript = await readScript("publish-itch-artifacts.sh");
 
   assertIncludes(workflow, "if: ${{ always() && inputs.publish_itch }}");
   assertIncludes(workflow, "environment: release-publishing");
@@ -121,9 +126,33 @@ test("release artifact workflow can publish release artifacts to itch.io", async
   assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
   assertIncludes(workflow, "uses: actions/download-artifact@v7");
   assertIncludes(workflow, "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default");
-  assertIncludes(workflow, "butler push \"$web_zip\" \"$ITCH_TARGET:html5\" --userversion \"$version\"");
-  assertIncludes(workflow, "butler push \"$windows_zip\" \"$ITCH_TARGET:windows\" --userversion \"$version\"");
-  assertIncludes(workflow, "butler push \"$macos_arm64_dir\" \"$ITCH_TARGET:macos-arm64\" --userversion \"$version\"");
-  assertIncludes(workflow, "butler push \"$macos_x64_dir\" \"$ITCH_TARGET:macos-x64\" --userversion \"$version\"");
+  assertIncludes(workflow, "bash scripts/publish-itch-artifacts.sh");
+  assertIncludes(publishScript, "Downloaded artifact files:");
+  assertIncludes(publishScript, "find \"$artifact_root\" -name \"$pattern\"");
+  assertIncludes(publishScript, "find_artifact '*web-itch.zip'");
+  assertIncludes(publishScript, "find_artifact '*windows*-signed-portable.zip'");
+  assertIncludes(publishScript, "find_artifact '*macos*-arm64-signed-app.zip'");
+  assertIncludes(publishScript, "butler push \"$web_zip\" \"$ITCH_TARGET:html5\" --userversion \"$version\"");
+  assertIncludes(publishScript, "butler push \"$windows_zip\" \"$ITCH_TARGET:windows\" --userversion \"$version\"");
+  assertIncludes(publishScript, "butler push \"$macos_arm64_dir\" \"$ITCH_TARGET:macos-arm64\" --userversion \"$version\"");
+  assertIncludes(publishScript, "butler push \"$macos_x64_dir\" \"$ITCH_TARGET:macos-x64\" --userversion \"$version\"");
   assertIncludes(workflow, "Itch publishing requires windows_signed and macos_signed.");
+  assert.equal(workflow.includes("release-artifacts/pixelaid-web-itch"), false);
+});
+
+test("publish itch workflow can reuse artifacts from an existing release run", async () => {
+  const workflow = await readWorkflow("publish-itch.yml");
+
+  assertIncludes(workflow, "name: Publish itch.io");
+  assertIncludes(workflow, "run_id:");
+  assertIncludes(workflow, "macos_x64:");
+  assertIncludes(workflow, "actions: read");
+  assertIncludes(workflow, "environment: release-publishing");
+  assertIncludes(workflow, "uses: actions/download-artifact@v7");
+  assertIncludes(workflow, "run-id: ${{ inputs.run_id }}");
+  assertIncludes(workflow, "github-token: ${{ secrets.GITHUB_TOKEN }}");
+  assertIncludes(workflow, "BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}");
+  assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
+  assertIncludes(workflow, "PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}");
+  assertIncludes(workflow, "bash scripts/publish-itch-artifacts.sh");
 });
