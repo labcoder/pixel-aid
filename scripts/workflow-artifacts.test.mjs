@@ -46,6 +46,7 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertIncludes(workflow, "windows_signed:");
   assertIncludes(workflow, "macos_signed:");
   assertIncludes(workflow, "macos_x64:");
+  assertIncludes(workflow, "publish_itch:");
   assertIncludes(workflow, "run: npm run license:check");
   assertIncludes(workflow, "run: npm run typecheck");
   assertIncludes(workflow, "run: npm test");
@@ -109,4 +110,20 @@ test("release artifact workflow can build signed macOS packages through release 
   assertIncludes(workflow, "node apps/desktop/scripts/verify-desktop-package.mjs macos \"$extract_dir\" \"${{ matrix.arch }}\" --signed");
   assertIncludes(workflow, "name: pixelaid-macos-${{ matrix.arch }}-signed-app");
   assertIncludes(workflow, "path: artifacts/desktop/*macos*-${{ matrix.arch }}-signed-app.zip");
+});
+
+test("release artifact workflow can publish release artifacts to itch.io", async () => {
+  const workflow = await readWorkflow("release-artifacts.yml");
+
+  assertIncludes(workflow, "if: ${{ always() && inputs.publish_itch }}");
+  assertIncludes(workflow, "environment: release-publishing");
+  assertIncludes(workflow, "BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}");
+  assertIncludes(workflow, "ITCH_TARGET: ${{ vars.ITCH_TARGET }}");
+  assertIncludes(workflow, "uses: actions/download-artifact@v7");
+  assertIncludes(workflow, "https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default");
+  assertIncludes(workflow, "butler push \"$web_zip\" \"$ITCH_TARGET:html5\" --userversion \"$version\"");
+  assertIncludes(workflow, "butler push \"$windows_zip\" \"$ITCH_TARGET:windows\" --userversion \"$version\"");
+  assertIncludes(workflow, "butler push \"$macos_arm64_dir\" \"$ITCH_TARGET:macos-arm64\" --userversion \"$version\"");
+  assertIncludes(workflow, "butler push \"$macos_x64_dir\" \"$ITCH_TARGET:macos-x64\" --userversion \"$version\"");
+  assertIncludes(workflow, "Itch publishing requires windows_signed and macos_signed.");
 });

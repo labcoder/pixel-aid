@@ -196,6 +196,24 @@ APPLE_API_KEY_P8_BASE64
 
 The workflow imports the certificate into a temporary runner keychain, writes the App Store Connect API key to a temporary file, signs and notarizes the staged `.app`, verifies the signed package, uploads the zip artifact, and removes temporary signing files.
 
+## GitHub Actions itch.io Publishing Setup
+
+itch.io publishing uses the `release-publishing` GitHub Environment. Add:
+
+```txt
+Secret: BUTLER_API_KEY
+Variable: ITCH_TARGET
+```
+
+When `publish_itch` is enabled, the release workflow publishes:
+
+- `html5`: itch.io browser build.
+- `windows`: signed Windows portable package.
+- `macos-arm64`: signed Apple Silicon macOS package.
+- `macos-x64`: signed Intel macOS package when `macos_x64` is enabled.
+
+Publishing requires `windows_signed` and `macos_signed` to be enabled so public desktop channels receive signed artifacts.
+
 ## Manual CI Artifact Builds
 
 The manual GitHub Actions workflow at `.github/workflows/desktop-artifacts.yml` is artifact-only. It runs on `workflow_dispatch`, builds unsigned Windows and macOS arm64 packages, verifies the package contents, and uploads the resulting zip files as workflow artifacts without wrapping each package in another artifact zip. It does not create a GitHub Release, sign binaries, notarize macOS builds, push to itch.io, or publish anything externally.
@@ -237,7 +255,7 @@ The manual GitHub Actions workflow at `.github/workflows/release-artifacts.yml` 
 
 Standalone web packaging remains available locally through `npm run web:package:standalone`, but it is intentionally not part of release-candidate artifacts yet.
 
-Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release, publish to itch.io, or upload anything outside GitHub Actions artifacts yet.
+Use this workflow when preparing a versioned release candidate after running `npm run version:set` and pushing the release branch or tag. It does not publish a GitHub Release or upload anything outside GitHub Actions artifacts unless `publish_itch` is enabled.
 
 To test it:
 
@@ -247,8 +265,9 @@ To test it:
 4. Select **Run workflow**.
 5. Leave signing checkboxes off for a normal unsigned release-candidate run, or enable `windows_signed` and `macos_signed` for signed desktop artifacts.
 6. Leave `macos_x64` off for the default Apple Silicon macOS package only, or enable it to also build the Intel package.
-7. Download and inspect the web and desktop artifacts from the completed run.
-8. Smoke test each desktop artifact on the matching operating system.
+7. Leave `publish_itch` off for artifact review only, or enable it to publish the web and signed desktop channels to itch.io after the artifacts build.
+8. Download and inspect the web and desktop artifacts from the completed run.
+9. Smoke test each desktop artifact on the matching operating system.
 
 For a dry-run release check without secrets, use:
 

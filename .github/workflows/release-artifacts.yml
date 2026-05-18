@@ -18,6 +18,11 @@ on:
         required: false
         default: false
         type: boolean
+      publish_itch:
+        description: Publish signed desktop artifacts and the HTML5 build to itch.io
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -437,3 +442,115 @@ jobs:
           fi
           rm -f "$RUNNER_TEMP/pixelaid-certificate.p12"
           rm -rf "$RUNNER_TEMP/appstoreconnect"
+
+  publish-itch:
+    name: Publish itch.io channels
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    needs:
+      - web
+      - windows
+      - windows-signed
+      - macos
+      - macos-signed
+    if: ${{ always() && inputs.publish_itch }}
+    environment: release-publishing
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate publish inputs
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          WINDOWS_SIGNED: ${{ inputs.windows_signed }}
+          MACOS_SIGNED: ${{ inputs.macos_signed }}
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+        run: |
+          if [ "$WINDOWS_SIGNED" != "true" ] || [ "$MACOS_SIGNED" != "true" ]; then
+            echo "Itch publishing requires windows_signed and macos_signed." >&2
+            exit 1
+          fi
+          if [ -z "$BUTLER_API_KEY" ]; then
+            echo "BUTLER_API_KEY is required for itch.io publishing." >&2
+            exit 1
+          fi
+          if [ -z "$ITCH_TARGET" ]; then
+            echo "ITCH_TARGET is required for itch.io publishing." >&2
+            exit 1
+          fi
+
+          node <<'NODE'
+          const needs = JSON.parse(process.env.NEEDS_JSON);
+          const required = {
+            web: "itch.io web package",
+            "windows-signed": "signed Windows package",
+            "macos-signed": "signed macOS package",
+          };
+          const failed = Object.entries(required)
+            .filter(([id]) => needs[id]?.result !== "success")
+            .map(([id, label]) => `${label}: ${needs[id]?.result ?? "missing"}`);
+          if (failed.length > 0) {
+            console.error(`Cannot publish itch.io artifacts because required jobs did not succeed: ${failed.join(", ")}`);
+            process.exit(1);
+          }
+          NODE
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v7
+        with:
+          path: release-artifacts
+
+      - name: Install butler
+        run: |
+          curl -L -o "$RUNNER_TEMP/butler.zip" https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q "$RUNNER_TEMP/butler.zip" -d "$RUNNER_TEMP/butler"
+          chmod +x "$RUNNER_TEMP/butler/butler"
+          echo "$RUNNER_TEMP/butler" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/butler/butler" version
+
+      - name: Publish itch.io channels
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_TARGET: ${{ vars.ITCH_TARGET }}
+          PUBLISH_MACOS_X64: ${{ inputs.macos_x64 }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+
+          web_zip="$(find release-artifacts/pixelaid-web-itch -name '*web-itch.zip' -print -quit)"
+          windows_zip="$(find release-artifacts/pixelaid-windows-signed-portable -name '*windows*-signed-portable.zip' -print -quit)"
+          macos_arm64_zip="$(find release-artifacts/pixelaid-macos-arm64-signed-app -name '*macos*-arm64-signed-app.zip' -print -quit)"
+
+          for artifact in "$web_zip" "$windows_zip" "$macos_arm64_zip"; do
+            if [ -z "$artifact" ] || [ ! -f "$artifact" ]; then
+              echo "Expected release artifact was not found." >&2
+              exit 1
+            fi
+          done
+
+          macos_arm64_dir="$RUNNER_TEMP/itch-macos-arm64"
+          rm -rf "$macos_arm64_dir"
+          mkdir -p "$macos_arm64_dir"
+          unzip -q "$macos_arm64_zip" -d "$macos_arm64_dir"
+          macos_arm64_dir="$(find "$macos_arm64_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+
+          butler push "$web_zip" "$ITCH_TARGET:html5" --userversion "$version"
+          butler push "$windows_zip" "$ITCH_TARGET:windows" --userversion "$version"
+          butler push "$macos_arm64_dir" "$ITCH_TARGET:macos-arm64" --userversion "$version"
+
+          if [ "$PUBLISH_MACOS_X64" = "true" ]; then
+            macos_x64_zip="$(find release-artifacts/pixelaid-macos-x64-signed-app -name '*macos*-x64-signed-app.zip' -print -quit)"
+            if [ -z "$macos_x64_zip" ] || [ ! -f "$macos_x64_zip" ]; then
+              echo "Expected signed macOS x64 release artifact was not found." >&2
+              exit 1
+            fi
+
+            macos_x64_dir="$RUNNER_TEMP/itch-macos-x64"
+            rm -rf "$macos_x64_dir"
+            mkdir -p "$macos_x64_dir"
+            unzip -q "$macos_x64_zip" -d "$macos_x64_dir"
+            macos_x64_dir="$(find "$macos_x64_dir" -mindepth 1 -maxdepth 1 -type d -print -quit)"
+
+            butler push "$macos_x64_dir" "$ITCH_TARGET:macos-x64" --userversion "$version"
+          fi
