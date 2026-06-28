@@ -443,8 +443,10 @@ function detectSalientAccentColors(analysis: PaletteAnalysis, limit: number): st
     const min = Math.min(r, g, b);
     const saturation = max === 0 ? 0 : (max - min) / max;
     const value = max / 255;
-    // Only consider genuinely vivid, non-near-black/near-white pixels as salient candidates.
-    if (saturation < 0.45 || value < 0.2) {
+    // Only consider genuinely vivid, non-near-black/near-white pixels as salient candidates. The floor is
+    // moderate so soft-but-distinct tones (a muted pink nose, skin) still register, while gray fur (near
+    // zero saturation) and near-black/near-white are excluded.
+    if (saturation < 0.33 || value < 0.2) {
       continue;
     }
     // Cluster key: coarse hue sextant + saturation band + lightness band. This merges the many shades of

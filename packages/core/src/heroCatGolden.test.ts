@@ -38,6 +38,8 @@ describe("hero cat golden regression", () => {
 });
 
 function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSuggestion): FixOptions {
+  // Mirror the actual guided recommendation: 128px target, the suggested color budget, mixel repair, and
+  // salient-color protection (so the golden reflects what users really get from "recommended fix").
   const targetSize = 128;
   const maxColors = 64;
 
@@ -52,7 +54,8 @@ function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSugge
       strategy: suggestion.paletteStrategy,
       maxColors,
       lockScope: "single",
-      dithering: "none"
+      dithering: "none",
+      protectSalientColors: true
     },
     grid: {
       detect: suggestion.gridDetect,
@@ -61,7 +64,8 @@ function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSugge
       phaseX: suggestion.gridPhaseX,
       phaseY: suggestion.gridPhaseY,
       cropToBounds: false,
-      localCorrection: false
+      localCorrection: false,
+      fixMixels: suggestion.fixMixels
     },
     downscale: suggestion.downscale,
     alpha: suggestion.alpha,
