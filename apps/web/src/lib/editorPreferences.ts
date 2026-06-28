@@ -4,6 +4,7 @@ import type {
   AssetType,
   ColorSpace,
   DownscaleMethod,
+  LineCleanupStrength,
   OutlineMode,
   PaletteDitheringMode,
   PaletteLockScope,
@@ -54,6 +55,7 @@ export type EditorPreferenceSettings = {
   gridPhaseY: number;
   cropToBounds: boolean;
   localCorrection: boolean;
+  fixMixels: boolean;
   aspectLocked: boolean;
   frameWidth: number;
   frameHeight: number;
@@ -88,6 +90,7 @@ export type EditorPreferenceSettings = {
   qualityProfile: QualityProfileId;
   removeOrphans: boolean;
   jaggyCleanup: boolean;
+  lineCleanup: LineCleanupStrength;
   preserveSinglePixelDetails: boolean;
   removeHalos: boolean;
   denoiseStrength: number;
@@ -137,6 +140,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   gridPhaseY: engineFixDefaults.gridPhaseY,
   cropToBounds: engineFixDefaults.cropToBounds,
   localCorrection: engineFixDefaults.localCorrection,
+  fixMixels: false,
   aspectLocked: engineFixDefaults.aspectLocked,
   frameWidth: engineFixDefaults.frameWidth,
   frameHeight: engineFixDefaults.frameHeight,
@@ -171,6 +175,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   qualityProfile: engineFixDefaults.qualityProfile,
   removeOrphans: engineFixDefaults.removeOrphans,
   jaggyCleanup: engineFixDefaults.jaggyCleanup,
+  lineCleanup: "off",
   preserveSinglePixelDetails: engineFixDefaults.preserveSinglePixelDetails,
   removeHalos: engineFixDefaults.removeHalos,
   denoiseStrength: engineFixDefaults.denoiseStrength,
@@ -261,6 +266,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       gridPhaseY: numberSetting(settings.gridPhaseY, defaults.settings.gridPhaseY, 0, 1024),
       cropToBounds: booleanSetting(settings.cropToBounds, defaults.settings.cropToBounds),
       localCorrection: booleanSetting(settings.localCorrection, defaults.settings.localCorrection),
+      fixMixels: booleanSetting(settings.fixMixels, defaults.settings.fixMixels),
       aspectLocked: booleanSetting(settings.aspectLocked, defaults.settings.aspectLocked),
       frameWidth: integerSetting(settings.frameWidth, defaults.settings.frameWidth, 1, 4096),
       frameHeight: integerSetting(settings.frameHeight, defaults.settings.frameHeight, 1, 4096),
@@ -303,6 +309,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       ),
       removeOrphans: booleanSetting(settings.removeOrphans, defaults.settings.removeOrphans),
       jaggyCleanup: booleanSetting(settings.jaggyCleanup, defaults.settings.jaggyCleanup),
+      lineCleanup: unionSetting(settings.lineCleanup, ["off", "low", "high"], defaults.settings.lineCleanup),
       preserveSinglePixelDetails: booleanSetting(settings.preserveSinglePixelDetails, defaults.settings.preserveSinglePixelDetails),
       removeHalos: booleanSetting(settings.removeHalos, defaults.settings.removeHalos),
       denoiseStrength: numberSetting(settings.denoiseStrength, defaults.settings.denoiseStrength, 0, 100),

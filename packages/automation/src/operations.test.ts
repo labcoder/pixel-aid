@@ -42,6 +42,11 @@ describe("automation operations", () => {
         alpha: "preserved",
       });
       expect(result.value.palette.exactColorCount).toBeGreaterThan(1);
+      expect(typeof result.value.pixelScale.scaleX).toBe("number");
+      expect(typeof result.value.pixelScale.scaleY).toBe("number");
+      expect(typeof result.value.mixels.hasMixels).toBe("boolean");
+      expect(Array.isArray(result.value.mixels.axisX.boundaries)).toBe(true);
+      expect(Array.isArray(result.value.mixels.axisY.boundaries)).toBe(true);
       expect(result.value.gridCandidates.length).toBeGreaterThan(0);
       expect(result.value.suggestion.options.assetType).toBe("icon");
     });

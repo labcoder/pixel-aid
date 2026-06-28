@@ -51,6 +51,9 @@ class PixelAidCliTests(unittest.TestCase):
             palette_weighting="area",
             protect_colors="none",
             emit_palette="palette.gpl",
+            fix_mixels=True,
+            line_cleanup="high",
+            snap=True,
         )
 
         self.assertEqual(args[:2], ["fix", "input.png"])
@@ -64,6 +67,10 @@ class PixelAidCliTests(unittest.TestCase):
         self.assertIn("wu", args)
         self.assertIn("--emit-palette", args)
         self.assertIn("palette.gpl", args)
+        self.assertIn("--fix-mixels", args)
+        self.assertIn("--line-cleanup", args)
+        self.assertIn("high", args)
+        self.assertIn("--snap", args)
         self.assertIn("--json", args)
 
 

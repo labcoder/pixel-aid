@@ -23,7 +23,7 @@ import {
   type FixSpriteSheetRequest,
   type AutomationFixOptionsInput,
 } from "@pixelaid/automation";
-import type { AnimationTag, OutlineMode, PixelFixResult, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { AnimationTag, LineCleanupStrength, OutlineMode, PixelFixResult, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 
 export type CliIo = {
   stdout: ((text: string) => void) | string[];
@@ -725,6 +725,9 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (transparentRgb) options.transparentRgb = transparentRgb;
   const decontaminateRgb = takeBooleanChoice(args, "--decontaminate-rgb", "--keep-transparent-rgb");
   if (decontaminateRgb !== undefined) options.decontaminateRgb = decontaminateRgb;
+  takeBooleanFlag(args, "--detect-scale");
+  const lineCleanup = takeValue(args, "--line-cleanup");
+  if (lineCleanup) options.lineCleanup = lineCleanup as LineCleanupStrength;
   const outlineMode = takeValue(args, "--outline-mode");
   const outlineSourceColors = takeValue(args, "--outline-source-colors");
   const outlineColor = takeValue(args, "--outline-color");
@@ -749,7 +752,8 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
     removeHalos !== undefined ||
     denoiseStrength !== undefined ||
     contrastExpansion !== undefined ||
-    matteCleanup !== undefined
+    matteCleanup !== undefined ||
+    lineCleanup !== undefined
   ) {
     const cleanup: NonNullable<AutomationFixOptionsInput["cleanup"]> = {};
     if (outlineMode) {
@@ -792,18 +796,24 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
         alphaThreshold: alphaThreshold ?? 128
       };
     }
+    if (lineCleanup) {
+      cleanup.lineCleanup = lineCleanup as LineCleanupStrength;
+    }
     options.cleanup = cleanup;
   }
 
   const gridMode = takeValue(args, "--grid");
+  const fixMixels = takeBooleanFlag(args, "--fix-mixels");
+  const snap = takeBooleanFlag(args, "--snap");
   const scale = readOptionalNumberFlag(args, "--scale");
   const scaleX = readOptionalNumberFlag(args, "--scale-x");
   const scaleY = readOptionalNumberFlag(args, "--scale-y");
   const phaseX = readOptionalNumberFlag(args, "--phase-x");
   const phaseY = readOptionalNumberFlag(args, "--phase-y");
-  if (gridMode || scale !== undefined || scaleX !== undefined || scaleY !== undefined || phaseX !== undefined || phaseY !== undefined) {
+  if (gridMode || fixMixels || snap || scale !== undefined || scaleX !== undefined || scaleY !== undefined || phaseX !== undefined || phaseY !== undefined) {
     options.grid = {
       ...(gridMode ? { detect: gridMode as "auto" | "manual" } : {}),
+      ...(fixMixels ? { fixMixels: true } : {}),
       ...(scale !== undefined ? { scale } : {}),
       ...(scaleX !== undefined ? { scaleX } : {}),
       ...(scaleY !== undefined ? { scaleY } : {}),
@@ -811,6 +821,8 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
       ...(phaseY !== undefined ? { phaseY } : {}),
     };
   }
+  if (fixMixels) options.fixMixels = true;
+  if (snap) options.snap = true;
 
   const frame = takeValue(args, "--frame");
   const rows = readOptionalNumberFlag(args, "--rows");
@@ -1028,6 +1040,13 @@ function usageText(): string {
     "  --downscale-method perceptual|nearest|bilinear|dominant|median|adaptive|averageThenPalette|detailPreserving|contrast|kCentroid",
     "  --emit-palette <palette.aco|palette.gpl|palette.pal|palette.hex|palette.json|palette.png>",
     "  --emit-palette-conditioning <artifact.json>",
+    "",
+    "Grid / pixel-perfect options:",
+    "  --detect-scale                 Print detected pixel scale on inspect JSON (accepted on fix)",
+    "  --fix-mixels                   Normalize mixed pixel block sizes during fix",
+    "  --snap                         Request pixel-grid snapping when a manual/detected uniform scale is available",
+    "  --line-cleanup off|low|high    Use explicit line cleanup strength instead of legacy jaggy cleanup",
+    "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
     "",
   ].join("\n");
 }

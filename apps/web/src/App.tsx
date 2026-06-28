@@ -38,6 +38,7 @@ import type {
   DownscaleMethod,
   FixOptions,
   GridCandidate,
+  LineCleanupStrength,
   OutlineMode,
   PaletteDitheringMode,
   PaletteLockScope,
@@ -864,6 +865,7 @@ type AssetEditorSession = {
     gridPhaseY: number;
     cropToBounds: boolean;
     localCorrection: boolean;
+    fixMixels: boolean;
     aspectLocked: boolean;
     frameWidth: number;
     frameHeight: number;
@@ -897,6 +899,7 @@ type AssetEditorSession = {
     qualityProfile: QualityProfileId;
     removeOrphans: boolean;
     jaggyCleanup: boolean;
+    lineCleanup: LineCleanupStrength;
     preserveSinglePixelDetails: boolean;
     removeHalos: boolean;
     denoiseStrength: number;
@@ -1055,6 +1058,7 @@ export function App() {
   const [gridPhaseY, setGridPhaseY] = useState(initialSettings.gridPhaseY);
   const [cropToBounds, setCropToBounds] = useState(initialSettings.cropToBounds);
   const [localCorrection, setLocalCorrection] = useState(initialSettings.localCorrection);
+  const [fixMixels, setFixMixels] = useState(initialSettings.fixMixels);
   const [aspectLocked, setAspectLocked] = useState(initialSettings.aspectLocked);
   const [frameWidth, setFrameWidth] = useState(initialSettings.frameWidth);
   const [frameHeight, setFrameHeight] = useState(initialSettings.frameHeight);
@@ -1118,6 +1122,7 @@ export function App() {
   const [qualityProfile, setQualityProfile] = useState<QualityProfileId>(initialSettings.qualityProfile);
   const [removeOrphans, setRemoveOrphans] = useState(initialSettings.removeOrphans);
   const [jaggyCleanup, setJaggyCleanup] = useState(initialSettings.jaggyCleanup);
+  const [lineCleanup, setLineCleanup] = useState<LineCleanupStrength>(initialSettings.lineCleanup);
   const [preserveSinglePixelDetails, setPreserveSinglePixelDetails] = useState(initialSettings.preserveSinglePixelDetails);
   const [removeHalos, setRemoveHalos] = useState(initialSettings.removeHalos);
   const [denoiseStrength, setDenoiseStrength] = useState(initialSettings.denoiseStrength);
@@ -1312,6 +1317,8 @@ export function App() {
       setGridPhaseY(settings.gridPhaseY);
       setCropToBounds(settings.cropToBounds);
       setLocalCorrection(settings.localCorrection);
+      setFixMixels(settings.fixMixels);
+      setLineCleanup(settings.lineCleanup);
       setAspectLocked(settings.aspectLocked);
       setFrameWidth(settings.frameWidth);
       setFrameHeight(settings.frameHeight);
@@ -1403,6 +1410,8 @@ export function App() {
         gridPhaseY,
         cropToBounds,
         localCorrection,
+        fixMixels,
+        lineCleanup,
         aspectLocked,
         frameWidth,
         frameHeight,
@@ -1791,6 +1800,8 @@ export function App() {
         gridPhaseY,
         cropToBounds,
         localCorrection,
+        fixMixels,
+        lineCleanup,
         aspectLocked,
         frameWidth,
         frameHeight,
@@ -2051,6 +2062,8 @@ export function App() {
     setGridPhaseY(settings.gridPhaseY);
     setCropToBounds(settings.cropToBounds);
     setLocalCorrection(settings.localCorrection);
+    setFixMixels(settings.fixMixels);
+    setLineCleanup(settings.lineCleanup);
     setAspectLocked(settings.aspectLocked);
     setFrameWidth(settings.frameWidth);
     setFrameHeight(settings.frameHeight);
@@ -4216,6 +4229,7 @@ export function App() {
         scaleY: gridScaleY,
         cropToBounds: mode === "single" && cropToBounds,
         localCorrection: mode === "single" && localCorrection,
+        ...(mode === "single" && fixMixels ? { fixMixels: true } : {}),
         phaseX: gridPhaseX,
         phaseY: gridPhaseY
       },
@@ -4232,6 +4246,7 @@ export function App() {
         removeOrphans,
         jaggyCleanup,
         preserveSinglePixelDetails,
+        ...(lineCleanup !== "off" ? { lineCleanup } : {}),
         removeHalos,
         denoiseStrength,
         dominantThreshold: clampDominantThreshold(dominantThreshold),
@@ -7544,6 +7559,16 @@ export function App() {
           <input type="checkbox" checked={jaggyCleanup} onChange={(event) => setJaggyCleanup(event.currentTarget.checked)} />
           Close 1px gaps
         </label>
+        <SelectField
+          label="Line cleanup"
+          value={lineCleanup}
+          options={[
+            ["off", "Off (use jaggy boolean)"],
+            ["low", "Low (conservative)"],
+            ["high", "High (aggressive)"]
+          ]}
+          onChange={(value) => setLineCleanup(value as LineCleanupStrength)}
+        />
         <label className="toggle-row">
           <input type="checkbox" checked={morphologyCleanup} onChange={(event) => setMorphologyCleanup(event.currentTarget.checked)} />
           Morphological cleanup
@@ -7651,6 +7676,15 @@ export function App() {
             onChange={(event) => setLocalCorrection(event.currentTarget.checked)}
           />
           Correct local drift
+        </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={mode === "single" && fixMixels}
+            disabled={mode !== "single"}
+            onChange={(event) => setFixMixels(event.currentTarget.checked)}
+          />
+          Fix mixels (normalize uneven block sizes)
         </label>
         <p className="field-note">
           Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid.

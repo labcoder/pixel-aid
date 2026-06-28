@@ -65,6 +65,10 @@ describe("PixelAid MCP-ready handlers", () => {
       expect(result.isError).toBe(false);
       expect(result.content[0]?.text).toBe("inspect_image completed.");
       expect(result.structuredContent.result.image).toEqual({ width: 4, height: 4 });
+      expect(result.structuredContent.result).toMatchObject({
+        pixelScale: { scaleX: expect.any(Number), scaleY: expect.any(Number) },
+        mixels: { hasMixels: expect.any(Boolean) },
+      });
       expect(result.structuredContent.progress[0]).toMatchObject({
         operation: "inspect_image",
         stage: "input-read",
@@ -114,6 +118,8 @@ describe("PixelAid MCP-ready handlers", () => {
       "export_engine_bundle",
     ]);
     expect(pixelaidMcpTools.every((tool) => tool.inputSchema.type === "object")).toBe(true);
+    expect(pixelaidMcpTools[0]?.description).toContain("detected pixel scale");
+    expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("fixMixels");
   });
 
   it("validates required string inputs", () => {
@@ -131,7 +137,14 @@ describe("PixelAid MCP-ready handlers", () => {
 
       expect(inspect.isError).toBe(false);
       expect(inspect.structuredContent.ok).toBe(true);
-      expect(inspect.structuredContent.result.image.width).toBe(4);
+      const inspectResult = inspect.structuredContent.result as {
+        image: { width: number };
+        pixelScale: { scaleX: number };
+        mixels: { axisX: { boundaries: unknown[] } };
+      };
+      expect(inspectResult.image.width).toBe(4);
+      expect(inspectResult.pixelScale.scaleX).toEqual(expect.any(Number));
+      expect(inspectResult.mixels.axisX.boundaries).toEqual(expect.any(Array));
       expect(suggest.structuredContent.result.options.targetWidth).toBe(2);
     });
   });
