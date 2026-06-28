@@ -11,12 +11,32 @@ export type { AnalyzeFrameStabilityOptions } from "./frameStability";
 export { createNormalizedSheetPacking } from "./normalizedSheet";
 export type { NormalizedSheetPacking, NormalizedSheetPlacement } from "./normalizedSheet";
 export {
+  PALETTE_CONDITIONING_SCHEMA,
+  createAcoPalette,
   createGplPaletteFile,
   createHexPaletteFile,
+  createPalPalette,
+  createPaletteConditioningArtifact,
   createPaletteJsonFile,
-  normalizePaletteColors
+  normalizePaletteColors,
+  paletteFromStripImage,
+  paletteToStripImage,
+  parseAcoPalette,
+  parseGplPalette,
+  parseHexPalette,
+  parsePalPalette,
+  parsePaletteFile,
+  resolveNamedPalette,
+  serializePaletteFile
 } from "./paletteFiles";
-export type { PaletteJsonFile } from "./paletteFiles";
+export type {
+  PaletteConditioningArtifact,
+  PaletteConditioningArtifactMeta,
+  PaletteJsonFile,
+  PaletteStripDescriptor,
+  PaletteStripImage,
+  SerializedPaletteFile
+} from "./paletteFiles";
 export { createExportValidationReport } from "./exportValidation";
 export type { ExportValidationIssue, ExportValidationReport, ExportValidationSeverity } from "./exportValidation";
 export { collectCommonEngineWarnings } from "./engineWarnings";
