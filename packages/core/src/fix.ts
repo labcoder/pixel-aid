@@ -4,6 +4,7 @@ import type {
   FixOptions,
   GridCandidate,
   GridDriftDiagnostics,
+  MixelNormalizationDiagnostics,
   MorphologyDiagnostics,
   PaletteDiagnostics,
   PaletteSettings,
@@ -21,6 +22,8 @@ import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
+import { applyLineCleanup } from "./lineCleanup";
+import { normalizeMixels } from "./mixels";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
@@ -59,8 +62,20 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   );
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);
-  const downsampled = measurePhase(phaseTimer, "downsampling", () =>
-    downsampleBlocks(
+  let mixelDiagnostics: MixelNormalizationDiagnostics | undefined;
+  const downsampled = measurePhase(phaseTimer, "downsampling", () => {
+    if (options.mode === "single" && options.grid.fixMixels) {
+      const normalized = normalizeMixels(contrastExpanded.image, {
+        method: options.downscale,
+        alpha: options.alpha,
+        ...foregroundAlphaThresholdOption(options, sourceAlphaResult !== undefined),
+        ...adaptiveCoverageOption(options)
+      });
+      mixelDiagnostics = normalized.diagnostics;
+      return normalized.image;
+    }
+
+    return downsampleBlocks(
       contrastExpanded.image,
       {
         outputWidth: gridWithDrift.outputWidth,
@@ -81,8 +96,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
         startPercent: 20,
         endPercent: 45
       }
-    )
-  );
+    );
+  });
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "alpha-cleanup", 50, "Applying alpha and edge cleanup");
   assertNotCancelled(runtime?.signal);
@@ -109,19 +124,24 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       alpha: options.cleanup.outlineAlpha,
       size: options.cleanup.outlineSize,
       removeOrphans: options.cleanup.removeOrphans,
-      closeGaps: options.cleanup.jaggyCleanup,
+      closeGaps: options.cleanup.lineCleanup !== undefined ? options.cleanup.lineCleanup !== "off" : options.cleanup.jaggyCleanup,
       preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
     })
   );
   const outlineCleaned = outlineResult.image;
+  const lineCleanupStrength = options.cleanup.lineCleanup;
+  const lineCleanupResult = lineCleanupStrength !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applyLineCleanup(outlineCleaned, { strength: lineCleanupStrength }))
+    : undefined;
+  const lineCleaned = lineCleanupResult?.image ?? outlineCleaned;
   reportProgress(runtime, "alpha-cleanup", 65, "Alpha cleanup complete");
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "palette-remap", 70, "Resolving palette");
   assertNotCancelled(runtime?.signal);
-  const reservedPalette = reservedPaletteForCleanup(outlineCleaned, options);
+  const reservedPalette = reservedPaletteForCleanup(lineCleaned, options);
   const paletteSettings = resolvePaletteSettings(options, reservedPalette);
   const paletteResult = measurePhase(phaseTimer, "palette-extraction", () =>
-    resolvePalette(outlineCleaned, {
+    resolvePalette(lineCleaned, {
       ...(paletteSettings ? { requested: paletteSettings } : {}),
       fallbackMaxColors: options.maxColors,
       reservedColors: reservedPalette
@@ -130,7 +150,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const effectivePalette = refinePaletteForCleanup(paletteResult.palette, options);
   const paletteDiagnostics = refreshPaletteDiagnostics(paletteResult.diagnostics, effectivePalette);
   const remapped = measurePhase(phaseTimer, "palette-remap", () =>
-    remapToPalette(outlineCleaned, effectivePalette, {
+    remapToPalette(lineCleaned, effectivePalette, {
       runtime,
       stage: "palette-remap",
       startPercent: 78,
@@ -142,7 +162,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
   assertNotCancelled(runtime?.signal);
-  const resultGrid = outlinePadding > 0 ? padGridForOutline(gridWithDrift, outlinePadding) : gridWithDrift;
+  const resultGridBase = mixelDiagnostics ? attachMixelDiagnostics(gridWithDrift, mixelDiagnostics) : gridWithDrift;
+  const resultGrid = outlinePadding > 0 ? padGridForOutline(resultGridBase, outlinePadding) : resultGridBase;
   const phaseTimings = collectedPhaseTimings(phaseTimer);
 
   const result = {
@@ -163,8 +184,10 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       alpha: alphaDiagnostics,
       ...(options.cleanup.removeHalos ? { halo: haloResult.diagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
+      ...(mixelDiagnostics ? { mixels: mixelDiagnostics } : {}),
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
       ...((options.cleanup.outlineMode ?? "none") !== "none" ? { outline: outlineResult.diagnostics } : {}),
+      ...(lineCleanupResult ? { lineCleanup: lineCleanupResult.diagnostics } : {}),
       palette: paletteDiagnostics,
       ...(phaseTimings ? { phaseTimings } : {})
     }
@@ -190,6 +213,41 @@ function attachDriftDiagnostics(grid: GridCandidate, drift: GridDriftDiagnostics
         notes: [grid.reason]
       }),
       drift
+    }
+  };
+}
+
+function attachMixelDiagnostics(grid: GridCandidate, mixels: MixelNormalizationDiagnostics): GridCandidate {
+  return {
+    ...grid,
+    outputWidth: mixels.outputWidth,
+    outputHeight: mixels.outputHeight,
+    scaleX: mixels.targetScaleX,
+    scaleY: mixels.targetScaleY,
+    reason: `${grid.reason}; mixel normalization ${mixels.used ? "used" : "evaluated"}`,
+    diagnostics: {
+      ...(grid.diagnostics ?? {
+        edgeScore: 0,
+        runScore: 0,
+        sizeScore: 0,
+        scaleScore: 0,
+        divisibilityScore: 0,
+        cropUsed: grid.sourceRect !== undefined,
+        sourceCoverage: 1,
+        confidenceLabel: grid.confidence >= 0.8 ? "high" : grid.confidence >= 0.55 ? "medium" : "low",
+        notes: [grid.reason]
+      }),
+      mixels: {
+        used: mixels.used,
+        outputWidth: mixels.outputWidth,
+        outputHeight: mixels.outputHeight,
+        targetScaleX: mixels.targetScaleX,
+        targetScaleY: mixels.targetScaleY,
+        irregularityX: mixels.irregularityX,
+        irregularityY: mixels.irregularityY,
+        confidence: mixels.confidence,
+        notes: [...mixels.notes]
+      }
     }
   };
 }
@@ -1084,14 +1142,18 @@ function cleanFixedImage(
       alpha: options.cleanup.outlineAlpha,
       size: options.cleanup.outlineSize,
       removeOrphans: options.cleanup.removeOrphans,
-      closeGaps: options.cleanup.jaggyCleanup,
+      closeGaps: options.cleanup.lineCleanup !== undefined ? options.cleanup.lineCleanup !== "off" : options.cleanup.jaggyCleanup,
       preserveSinglePixelDetails: options.cleanup.preserveSinglePixelDetails
     })
   );
+  const nestedLineCleanupStrength = options.cleanup.lineCleanup;
+  const lineCleaned = nestedLineCleanupStrength !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applyLineCleanup(outlined, { strength: nestedLineCleanupStrength }).image)
+    : outlined;
   assertNotCancelled(runtime?.signal);
   return {
-    image: outlined,
-    alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, outlined),
+    image: lineCleaned,
+    alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, lineCleaned),
     ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {})
   };
 }

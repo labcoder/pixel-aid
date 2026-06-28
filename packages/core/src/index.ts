@@ -9,11 +9,17 @@ export type {
   FixOptions,
   GridCandidate,
   HaloRemovalDiagnostics,
+  LineCleanupDiagnostics,
+  LineCleanupStrength,
+  MixelAxisReport,
+  MixelNormalizationDiagnostics,
+  MixelReport,
   MorphologyCleanupSettings,
   MorphologyDiagnostics,
   OutlineCleanupDiagnostics,
   OutlineMode,
   PixelFixResult,
+  PixelScaleReport,
   RGBAImage,
   SceneAssetDiagnostics,
   SheetLayoutDetection,
@@ -28,8 +34,16 @@ export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
+export { detectPixelScale } from "./pixelScale";
+export type { PixelScaleDetectionOptions } from "./pixelScale";
 export { planLocalGridDrift } from "./gridDrift";
 export type { LocalGridDriftOptions, LocalGridDriftPlan } from "./gridDrift";
+export { MIXEL_IRREGULARITY_THRESHOLD, detectMixels, normalizeMixels } from "./mixels";
+export type { MixelDetectionOptions, MixelNormalizationResult, MixelNormalizeOptions } from "./mixels";
+export { snapToGrid } from "./snap";
+export type { SnapToGridOptions, SnapToGridResult } from "./snap";
+export { applyLineCleanup } from "./lineCleanup";
+export type { LineCleanupOptions, LineCleanupResult } from "./lineCleanup";
 export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
 export { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
