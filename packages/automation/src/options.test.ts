@@ -163,4 +163,76 @@ describe("automation option normalization", () => {
       connectivity: 4,
     });
   });
+
+  it("normalizes new color and palette controls", () => {
+    const result = normalizeFixOptions({
+      maxColors: "auto",
+      colorSpace: "oklab",
+      quantizer: "wu",
+      dither: "bayer4",
+      downscaleMethod: "perceptual",
+      paletteWeighting: "area",
+      minRegion: 2,
+      seed: 42,
+      protectColors: "auto",
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.maxColors).toBe(512);
+    expect(result.value.paletteSettings).toMatchObject({
+      maxColors: "auto",
+      colorSpace: "oklab",
+      strategy: "wu",
+      dithering: "bayer4",
+      weighting: "area",
+      minRegion: 2,
+      seed: 42,
+      protectColors: "auto",
+    });
+    expect(result.value.downscale).toBe("perceptual");
+  });
+
+  it.each(["wu", "kmeans"] as const)("accepts %s quantizer", (quantizer) => {
+    const result = normalizeFixOptions({ quantizer });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.paletteSettings?.strategy).toBe(quantizer);
+  });
+
+  it.each(["bayer2", "bayer4", "floyd"] as const)("accepts %s dithering", (dither) => {
+    const result = normalizeFixOptions({ dither });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.paletteSettings?.dithering).toBe(dither);
+  });
+
+  it.each(["perceptual", "nearest", "bilinear"] as const)("accepts %s downscale method", (downscaleMethod) => {
+    const result = normalizeFixOptions({ downscaleMethod });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.downscale).toBe(downscaleMethod);
+  });
+
+  it("parses protected colors and clamps explicit max colors", () => {
+    const result = normalizeFixOptions({ maxColors: 999, protectColors: "#ff0000,00ff00" });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.maxColors).toBe(512);
+    expect(result.value.paletteSettings?.maxColors).toBe(512);
+    expect(result.value.paletteSettings?.protectColors).toEqual(["#ff0000", "#00ff00"]);
+  });
+
+  it.each([
+    { colorSpace: "xyz" },
+    { quantizer: "octree" },
+    { dither: "noise" },
+    { downscaleMethod: "lanczos" },
+    { protectColors: "not-hex" },
+  ] as const)("rejects invalid new option %# with invalid_options", (input) => {
+    const result = normalizeFixOptions(input as Parameters<typeof normalizeFixOptions>[0]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("invalid_options");
+  });
 });

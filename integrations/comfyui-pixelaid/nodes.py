@@ -41,8 +41,8 @@ class PixelAidInspect:
 
 class PixelAidFixSprite:
     CATEGORY = CATEGORY
-    RETURN_TYPES = ("IMAGE", "PIXELAID_JSON", "STRING")
-    RETURN_NAMES = ("fixed_image", "metadata", "manifest_path")
+    RETURN_TYPES = ("IMAGE", "PIXELAID_JSON", "STRING", "STRING")
+    RETURN_NAMES = ("fixed_image", "metadata", "manifest_path", "emitted_palette_path")
     FUNCTION = "fix"
 
     @classmethod
@@ -54,26 +54,42 @@ class PixelAidFixSprite:
                 "pixelaid_executable": ("STRING", {"default": default_pixelaid_executable()}),
                 "asset_type": (["sprite", "icon", "portrait", "uiElement"], {"default": "sprite"}),
                 "target": ("STRING", {"default": "64x64"}),
-                "colors": ("INT", {"default": 24, "min": 2, "max": 256}),
-                "downscale": (["detailPreserving", "dominant", "median", "adaptive", "averageThenPalette"], {"default": "detailPreserving"}),
+                "colors": ("INT", {"default": 24, "min": 2, "max": 512}),
+                "max_colors": ("STRING", {"default": ""}),
+                "color_space": (["oklab", "cielab", "srgb"], {"default": "oklab"}),
+                "quantizer": (["median-cut", "medianCut", "frequency", "perceptual", "wu", "kmeans"], {"default": "median-cut"}),
+                "palette": ("STRING", {"default": ""}),
+                "dither": (["none", "ordered", "bayer2", "bayer4", "floyd", "errorDiffusion"], {"default": "none"}),
+                "palette_weighting": (["area", "frequency"], {"default": "frequency"}),
+                "protect_colors": ("STRING", {"default": "none"}),
+                "emit_palette": ("STRING", {"default": ""}),
+                "downscale": (["detailPreserving", "dominant", "median", "adaptive", "averageThenPalette", "perceptual", "nearest", "bilinear", "contrast", "kCentroid"], {"default": "detailPreserving"}),
                 "alpha": (["backgroundFloodFill", "binary", "preserve", "colorKey"], {"default": "backgroundFloodFill"}),
                 "overwrite": ("BOOLEAN", {"default": True}),
             }
         }
 
-    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, downscale, alpha, overwrite):
-        fixed_image, payload, manifest_path = fix_image_tensor_with_pixelaid(
+    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, emit_palette, downscale, alpha, overwrite):
+        fixed_image, payload, manifest_path, emitted_palette_path = fix_image_tensor_with_pixelaid(
             image,
             output_dir=output_dir,
             pixelaid_executable=pixelaid_executable,
             asset_type=asset_type,
             target=target,
             colors=colors,
+            max_colors=max_colors or None,
+            color_space=color_space,
+            quantizer=quantizer,
+            palette=palette or None,
+            dither=dither,
+            palette_weighting=palette_weighting,
+            protect_colors=protect_colors,
+            emit_palette=emit_palette or None,
             downscale=downscale,
             alpha=alpha,
             overwrite=overwrite,
         )
-        return (fixed_image, payload, manifest_path)
+        return (fixed_image, payload, manifest_path, emitted_palette_path)
 
 
 class PixelAidPaletteReport:

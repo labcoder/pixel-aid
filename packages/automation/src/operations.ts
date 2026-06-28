@@ -1,4 +1,4 @@
-import { rm } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import {
@@ -11,6 +11,7 @@ import {
   detectSheetLayout,
   extractPalette,
   fixImage,
+  resolvePalette,
   suggestFixSettings as suggestCoreFixSettings,
   suggestFixSettingsForAssetType as suggestCoreFixSettingsForAssetType,
   type FixSettingSuggestion as CoreFixSettingSuggestion,
@@ -20,14 +21,22 @@ import {
 import {
   createEngineExportBundle as createExporterEngineBundle,
   createHexPaletteFile,
+  createPaletteConditioningArtifact,
   createPaletteJsonFile,
   createPixelAssetManifest,
+  parsePaletteFile,
+  resolveNamedPalette,
+  serializePaletteFile,
   type EngineExportTarget,
 } from "@pixelaid/exporters";
 import {
   getAssetTypeDefinition,
   type AnimationTag,
+  type ColorSpace,
   type FixOptions,
+  type PaletteProtectColors,
+  type PaletteStrategy,
+  type PaletteWeighting,
   type PixelAssetManifest,
   type PixelFixResult,
   type RGBAImage,
@@ -176,7 +185,14 @@ export type FixSpriteSheetRequest = {
 export type ExtractPaletteFileRequest = {
   inputPath: string;
   outputPath: string;
-  maxColors: number;
+  maxColors: number | "auto";
+  paletteStrategy?: PaletteStrategy;
+  quantizer?: PaletteStrategy;
+  colorSpace?: ColorSpace;
+  seed?: number;
+  paletteWeighting?: PaletteWeighting;
+  minRegion?: number;
+  protectColors?: PaletteProtectColors | string;
   overwrite?: boolean;
 };
 
@@ -235,7 +251,7 @@ export async function inspectImage(
       image: { width: image.width, height: image.height },
       palette: {
         exactColorCount: countVisibleExactColors(image),
-        preview: extractPalette(image, Math.min(8, request.options?.maxColors ?? 8)),
+        preview: extractPalette(image, Math.min(8, numericMaxColors(request.options?.maxColors, 8))),
       },
       alpha: countAlphaPixels(image),
       gridCandidates: withFallbackGridCandidates(image),
@@ -384,17 +400,21 @@ export async function fixSprite(
 
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "analysis", 15, "Resolving fix settings");
+    const preparedOptions = await resolvePaletteFileOption(request.options);
+    if (!preparedOptions.ok) {
+      return preparedOptions;
+    }
     let fixOptions: FixOptions;
     let optionWarnings: string[];
     if (request.autoSuggest) {
-      const suggestion = createFixSuggestion(imageResult.value, request.options);
+      const suggestion = createFixSuggestion(imageResult.value, preparedOptions.value);
       if (!suggestion.ok) {
         return suggestion;
       }
       fixOptions = suggestion.value.options;
       optionWarnings = suggestion.warnings;
     } else {
-      const options = normalizeFixOptions(request.options ?? {});
+      const options = normalizeFixOptions(preparedOptions.value ?? {});
       if (!options.ok) {
         return options;
       }
@@ -431,6 +451,13 @@ export async function fixSprite(
       writtenPaths.push(manifest.value.path);
       files.push(fileRecord("manifest", manifest.value.path, path.dirname(output.value.path)));
     }
+
+    const paletteFiles = await emitPaletteOutputs(fixed.palette, preparedOptions.value, request.inputPath, request.overwrite);
+    if (!paletteFiles.ok) {
+      return paletteFiles;
+    }
+    writtenPaths.push(...paletteFiles.value.map((file) => file.path));
+    files.push(...paletteFiles.value);
 
     reportAutomationProgress(scopedRuntime, operation, "complete", 100, "Sprite fix complete");
     return automationOk({
@@ -484,10 +511,14 @@ export async function fixSpriteSheet(
       return automationError("processing_failed", "No sprite sheet frames were provided or detected.", 4);
     }
 
-    const sheet = sheetFromFrames(frames, layout, request.options?.sheet);
+    const preparedOptions = await resolvePaletteFileOption(request.options);
+    if (!preparedOptions.ok) {
+      return preparedOptions;
+    }
+    const sheet = sheetFromFrames(frames, layout, preparedOptions.value?.sheet);
     const suggestion = createFixSuggestion(imageResult.value, {
-      assetType: request.options?.assetType ?? "animationSheet",
-      ...request.options,
+      assetType: preparedOptions.value?.assetType ?? "animationSheet",
+      ...preparedOptions.value,
       sheet,
       sheetFrames: frames,
     });
@@ -521,6 +552,12 @@ export async function fixSpriteSheet(
       fileRecord("image", output.value.path, outDir),
       fileRecord("manifest", manifestOutput.value.path, outDir),
     ];
+    const paletteFiles = await emitPaletteOutputs(fixed.palette, preparedOptions.value, request.inputPath, request.overwrite);
+    if (!paletteFiles.ok) {
+      return paletteFiles;
+    }
+    writtenPaths.push(...paletteFiles.value.map((file) => file.path));
+    files.push(...paletteFiles.value);
     const warnings = [...suggestion.warnings, ...layout.warnings];
     reportAutomationProgress(scopedRuntime, operation, "complete", 100, "Sprite sheet fix complete");
     return automationOk({ result: fixed, manifest: pixelManifest, files, warnings }, warnings);
@@ -553,14 +590,25 @@ export async function extractPaletteFile(
 
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "palette-extraction", 55, "Extracting palette");
-    const palette = extractPalette(imageResult.value, request.maxColors);
-    const extension = path.extname(output.value.path).toLowerCase();
-    const contents = extension === ".json"
-      ? `${JSON.stringify(createPaletteJsonFile(palette, { image: path.basename(request.inputPath) }), null, 2)}\n`
-      : createHexPaletteFile(palette);
+    const normalized = normalizeFixOptions({
+      maxColors: request.maxColors,
+      ...(request.paletteStrategy ? { paletteStrategy: request.paletteStrategy } : {}),
+      ...(request.quantizer ? { quantizer: request.quantizer } : {}),
+      ...(request.colorSpace ? { colorSpace: request.colorSpace } : {}),
+      ...(request.seed !== undefined ? { seed: request.seed } : {}),
+      ...(request.paletteWeighting ? { paletteWeighting: request.paletteWeighting } : {}),
+      ...(request.minRegion !== undefined ? { minRegion: request.minRegion } : {}),
+      ...(request.protectColors !== undefined ? { protectColors: request.protectColors } : {}),
+    });
+    if (!normalized.ok) return normalized;
+    const resolved = resolvePalette(imageResult.value, {
+      ...(normalized.value.paletteSettings ? { requested: normalized.value.paletteSettings } : {}),
+      fallbackMaxColors: normalized.value.maxColors,
+    });
+    const palette = resolved.palette;
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "output-write", 90, "Writing palette file");
-    const write = await writeTextOutput(output.value.path, contents, { overwrite: true });
+    const write = await writePaletteFile(output.value.path, palette, request.inputPath, true);
     if (!write.ok) return write;
     writtenPaths.push(output.value.path);
 
@@ -568,7 +616,7 @@ export async function extractPaletteFile(
     return automationOk({
       palette,
       files: [fileRecord("palette", output.value.path, path.dirname(output.value.path))],
-    });
+    }, resolved.diagnostics.warnings);
   } catch (error) {
     const cancelled = cancellationFailure(error, scopedRuntime, operation);
     if (cancelled) {
@@ -609,7 +657,9 @@ export async function exportEngineBundle(
 
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "analysis", 12, "Resolving export settings");
-    const options = normalizeFixOptions(request.options ?? {});
+    const preparedOptions = await resolvePaletteFileOption(request.options);
+    if (!preparedOptions.ok) return preparedOptions;
+    const options = normalizeFixOptions(preparedOptions.value ?? {});
     if (!options.ok) return options;
 
     const fixed = runFix(imageResult.value, options.value, scopedRuntime, operation, 15, 65);
@@ -715,6 +765,123 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     warnings,
     support: definition.support,
   }, warnings);
+}
+
+async function resolvePaletteFileOption(
+  options: AutomationFixOptionsInput | undefined,
+): Promise<AutomationResult<AutomationFixOptionsInput | undefined>> {
+  if (typeof options?.palette !== "string") {
+    return automationOk(options);
+  }
+
+  const named = resolveNamedPalette(options.palette);
+  if (named) {
+    return automationOk({ ...options, palette: named, paletteMode: options.paletteMode ?? "fixed" });
+  }
+
+  const colors = await readPaletteColorsFromFile(options.palette);
+  if (!colors.ok) {
+    return colors;
+  }
+  return automationOk({ ...options, palette: colors.value, paletteMode: "fixed" });
+}
+
+async function readPaletteColorsFromFile(filePath: string): Promise<AutomationResult<string[]>> {
+  const resolved = path.resolve(filePath);
+  try {
+    if (path.extname(resolved).toLowerCase() === ".png") {
+      const image = await readRgbaImageFile(resolved);
+      if (!image.ok) {
+        return image;
+      }
+      return automationOk(parsePaletteFile(resolved, image.value));
+    }
+
+    if (path.extname(resolved).toLowerCase() === ".json") {
+      const parsed = JSON.parse(await readFile(resolved, "utf8")) as { colors?: unknown };
+      const colors = Array.isArray(parsed.colors) ? parsed.colors.filter((color): color is string => typeof color === "string") : [];
+      return automationOk(colors);
+    }
+
+    return automationOk(parsePaletteFile(resolved, await readFile(resolved)));
+  } catch (error) {
+    return automationError("invalid_options", `Could not read palette file: ${resolved}`, 2, {
+      path: resolved,
+      cause: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+async function emitPaletteOutputs(
+  colors: readonly string[],
+  options: AutomationFixOptionsInput | undefined,
+  sourcePath: string,
+  overwrite: boolean | undefined,
+): Promise<AutomationResult<AutomationFileRecord[]>> {
+  const files: AutomationFileRecord[] = [];
+  if (options?.emitPalette) {
+    const write = await writePaletteFile(options.emitPalette, colors, sourcePath, overwrite);
+    if (!write.ok) {
+      return write;
+    }
+    files.push(fileRecord("palette", write.value.path, path.dirname(write.value.path)));
+  }
+  if (options?.emitPaletteConditioning) {
+    const artifact = createPaletteConditioningArtifact(colors, { source: path.basename(sourcePath) });
+    const write = await writeJsonOutput(options.emitPaletteConditioning, artifact, { overwrite });
+    if (!write.ok) {
+      return write;
+    }
+    files.push(fileRecord("json", write.value.path, path.dirname(write.value.path)));
+  }
+  return automationOk(files);
+}
+
+async function writePaletteFile(
+  filePath: string,
+  colors: readonly string[],
+  sourcePath: string,
+  overwrite: boolean | undefined,
+): Promise<AutomationResult<{ path: string }>> {
+  const extension = path.extname(filePath).toLowerCase();
+  if (extension === ".json") {
+    return writeJsonOutput(filePath, createPaletteJsonFile(colors, { image: path.basename(sourcePath) }), { overwrite });
+  }
+
+  let serialized: ReturnType<typeof serializePaletteFile>;
+  try {
+    serialized = serializePaletteFile(filePath, colors);
+  } catch (error) {
+    return automationError("invalid_options", error instanceof Error ? error.message : String(error), 2, { path: filePath });
+  }
+
+  if (typeof serialized === "string") {
+    return writeTextOutput(filePath, serialized, { overwrite });
+  }
+  const planned = await planOutputFile(filePath, { overwrite });
+  if (!planned.ok) {
+    return planned;
+  }
+  try {
+    if (serialized instanceof Uint8Array) {
+      await writeFile(planned.value.path, serialized);
+      return planned;
+    }
+    const imageWrite = await encodePngFile(serialized, planned.value.path);
+    if (!imageWrite.ok) {
+      return imageWrite;
+    }
+    return planned;
+  } catch (error) {
+    return automationError("write_failed", `Could not write file: ${planned.value.path}`, 3, {
+      path: planned.value.path,
+      cause: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+function numericMaxColors(value: number | "auto" | undefined, fallback: number): number {
+  return value === undefined || value === "auto" ? fallback : value;
 }
 
 function mergeSuggestedFixOptions(

@@ -255,13 +255,33 @@ async function runFixSheetCommand(command: string, args: string[], context: CliC
 async function runPaletteCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
-  const maxColors = readNumberFlag(args, "--max-colors", readNumberFlag(args, "--colors", 24));
+  const maxColors = readOptionalMaxColorsFlag(args, "--max-colors") ?? readOptionalMaxColorsFlag(args, "--colors") ?? 24;
+  const colorSpace = takeValue(args, "--color-space");
+  const quantizer = takeValue(args, "--quantizer");
+  const paletteStrategy = takeValue(args, "--palette-strategy");
+  const seed = readOptionalNumberFlag(args, "--seed");
+  const paletteWeighting = takeValue(args, "--palette-weighting");
+  const minRegion = readOptionalNumberFlag(args, "--min-region");
+  const protectColors = takeValue(args, "--protect-colors");
   const overwrite = takeBooleanFlag(args, "--overwrite");
   assertNoExtraArgs(args);
+  const request = {
+    inputPath,
+    outputPath,
+    maxColors,
+    ...(paletteStrategy ? { paletteStrategy: paletteStrategy as NonNullable<AutomationFixOptionsInput["paletteStrategy"]> } : {}),
+    ...(quantizer ? { quantizer: normalizeQuantizerFlag(quantizer) as NonNullable<AutomationFixOptionsInput["quantizer"]> } : {}),
+    ...(colorSpace ? { colorSpace: colorSpace as NonNullable<AutomationFixOptionsInput["colorSpace"]> } : {}),
+    ...(seed !== undefined ? { seed } : {}),
+    ...(paletteWeighting ? { paletteWeighting: paletteWeighting as NonNullable<AutomationFixOptionsInput["paletteWeighting"]> } : {}),
+    ...(minRegion !== undefined ? { minRegion } : {}),
+    ...(protectColors ? { protectColors } : {}),
+    overwrite,
+  };
   return emitAutomation(
     command,
-    await extractPaletteFile({ inputPath, outputPath, maxColors, overwrite }, createCliRuntime(command, context, { inputPath, outputPath })),
-    { operation: "extract_palette", options: { maxColors, overwrite }, paths: { inputPath, outputPath } },
+    await extractPaletteFile(request, createCliRuntime(command, context, { inputPath, outputPath })),
+    { operation: "extract_palette", options: request, paths: { inputPath, outputPath } },
   );
 }
 
@@ -667,14 +687,32 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (assetType) options.assetType = assetType as NonNullable<AutomationFixOptionsInput["assetType"]>;
   const target = takeValue(args, "--target");
   if (target) options.target = target;
-  const colors = readOptionalNumberFlag(args, "--colors") ?? readOptionalNumberFlag(args, "--max-colors");
+  const colors = readOptionalMaxColorsFlag(args, "--colors") ?? readOptionalMaxColorsFlag(args, "--max-colors");
   if (colors !== undefined) options.maxColors = colors;
+  const colorSpace = takeValue(args, "--color-space");
+  if (colorSpace) options.colorSpace = colorSpace as NonNullable<AutomationFixOptionsInput["colorSpace"]>;
+  const quantizer = takeValue(args, "--quantizer");
+  if (quantizer) options.quantizer = normalizeQuantizerFlag(quantizer) as NonNullable<AutomationFixOptionsInput["quantizer"]>;
+  const palette = takeValue(args, "--palette");
+  if (palette) options.palette = palette;
+  const paletteWeighting = takeValue(args, "--palette-weighting");
+  if (paletteWeighting) options.paletteWeighting = paletteWeighting as NonNullable<AutomationFixOptionsInput["paletteWeighting"]>;
+  const minRegion = readOptionalNumberFlag(args, "--min-region");
+  if (minRegion !== undefined) options.minRegion = minRegion;
+  const protectColors = takeValue(args, "--protect-colors");
+  if (protectColors) options.protectColors = protectColors;
+  const seed = readOptionalNumberFlag(args, "--seed");
+  if (seed !== undefined) options.seed = seed;
+  const emitPalette = takeValue(args, "--emit-palette");
+  if (emitPalette) options.emitPalette = emitPalette;
+  const emitPaletteConditioning = takeValue(args, "--emit-palette-conditioning");
+  if (emitPaletteConditioning) options.emitPaletteConditioning = emitPaletteConditioning;
   const paletteStrategy = takeValue(args, "--palette-strategy");
   if (paletteStrategy) options.paletteStrategy = paletteStrategy as NonNullable<AutomationFixOptionsInput["paletteStrategy"]>;
   const dither = takeValue(args, "--dither") ?? takeValue(args, "--dithering");
-  if (dither) options.paletteDithering = dither as NonNullable<AutomationFixOptionsInput["paletteDithering"]>;
-  const downscale = takeValue(args, "--downscale");
-  if (downscale) options.downscale = downscale as NonNullable<AutomationFixOptionsInput["downscale"]>;
+  if (dither) options.dither = dither as NonNullable<AutomationFixOptionsInput["dither"]>;
+  const downscale = takeValue(args, "--downscale") ?? takeValue(args, "--downscale-method");
+  if (downscale) options.downscaleMethod = downscale as NonNullable<AutomationFixOptionsInput["downscaleMethod"]>;
   const alpha = takeValue(args, "--alpha");
   if (alpha) options.alpha = alpha as NonNullable<AutomationFixOptionsInput["alpha"]>;
   const alphaThreshold = readOptionalNumberFlag(args, "--alpha-threshold");
@@ -916,8 +954,19 @@ function readOptionalNumberFlag(args: string[], name: string): number | undefine
   return parsed;
 }
 
-function readNumberFlag(args: string[], name: string, fallback: number): number {
-  return readOptionalNumberFlag(args, name) ?? fallback;
+function readOptionalMaxColorsFlag(args: string[], name: string): number | "auto" | undefined {
+  const value = takeValue(args, name);
+  if (value === undefined) return undefined;
+  if (value === "auto") return "auto";
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new CliUsageError(`${name} must be a number or auto.`);
+  }
+  return parsed;
+}
+
+function normalizeQuantizerFlag(value: string): string {
+  return value === "median-cut" ? "medianCut" : value;
 }
 
 function parseSize(value: string, flagName: string): { width: number; height: number } {
@@ -966,8 +1015,19 @@ function usageText(): string {
     "  pixelaid export <input.png|input.jpg|input.webp> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
     "",
     "Palette options:",
-    "  --palette-strategy medianCut|perceptual|frequency",
-    "  --dither none|ordered|errorDiffusion",
+    "  --max-colors <n|auto> (alias: --colors)",
+    "  --palette <name|path> (named palettes include pico-8, db16, gameboy, cga16)",
+    "  --palette-strategy medianCut|perceptual|frequency|wu|kmeans",
+    "  --quantizer median-cut|medianCut|wu|kmeans|perceptual|frequency",
+    "  --color-space oklab|cielab|srgb",
+    "  --palette-weighting area|frequency",
+    "  --min-region <px>",
+    "  --protect-colors auto|none|<hex,...>",
+    "  --seed <n>",
+    "  --dither none|ordered|bayer2|bayer4|floyd|errorDiffusion",
+    "  --downscale-method perceptual|nearest|bilinear|dominant|median|adaptive|averageThenPalette|detailPreserving|contrast|kCentroid",
+    "  --emit-palette <palette.aco|palette.gpl|palette.pal|palette.hex|palette.json|palette.png>",
+    "  --emit-palette-conditioning <artifact.json>",
     "",
   ].join("\n");
 }

@@ -325,18 +325,52 @@ describe("automation operations", () => {
     });
   });
 
-  it("extracts palettes as hex and JSON files", async () => {
+  it("extracts palettes as hex, JSON, GPL, and ACO files", async () => {
     await withFixture(async ({ dir, input }) => {
       const hexPath = path.join(dir, "palette.hex");
       const jsonPath = path.join(dir, "palette.json");
+      const gplPath = path.join(dir, "palette.gpl");
+      const acoPath = path.join(dir, "palette.aco");
 
       const hex = await extractPaletteFile({ inputPath: input, outputPath: hexPath, maxColors: 3 });
       const json = await extractPaletteFile({ inputPath: input, outputPath: jsonPath, maxColors: 3 });
+      const gpl = await extractPaletteFile({ inputPath: input, outputPath: gplPath, maxColors: 3, quantizer: "wu", colorSpace: "oklab" });
+      const aco = await extractPaletteFile({ inputPath: input, outputPath: acoPath, maxColors: 3 });
 
       expect(hex.ok).toBe(true);
       expect(json.ok).toBe(true);
+      expect(gpl.ok).toBe(true);
+      expect(aco.ok).toBe(true);
       expect(await readFile(hexPath, "utf8")).toContain("#");
       expect(JSON.parse(await readFile(jsonPath, "utf8"))).toMatchObject({ app: "PixelAid", colorCount: 3 });
+      expect(await readFile(gplPath, "utf8")).toContain("GIMP Palette");
+      expect((await stat(acoPath)).size).toBeGreaterThan(0);
+    });
+  });
+
+  it("fixes with a fixed palette file and emits the chosen palette", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const palettePath = path.join(dir, "fixed.gpl");
+      const emitPath = path.join(dir, "chosen.gpl");
+      const out = path.join(dir, "fixed.png");
+      await extractPaletteFile({ inputPath: input, outputPath: palettePath, maxColors: 2 });
+
+      const result = await fixSprite({
+        inputPath: input,
+        outputPath: out,
+        options: {
+          target: "2x2",
+          palette: palettePath,
+          emitPalette: emitPath,
+          grid: { detect: "manual", scale: 2 },
+        },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.result.palette).toEqual(result.value.result.settings.paletteSettings?.colors);
+      expect(result.value.files.some((file) => file.path === emitPath && file.kind === "palette")).toBe(true);
+      expect(await readFile(emitPath, "utf8")).toContain("GIMP Palette");
     });
   });
 
