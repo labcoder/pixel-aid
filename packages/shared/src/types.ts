@@ -364,6 +364,8 @@ export type PixelFixDiagnostics = {
   outline?: OutlineCleanupDiagnostics;
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
+  mixels?: MixelNormalizationDiagnostics;
+  lineCleanup?: LineCleanupDiagnostics;
   tilesetRepairs?: TilesetSeamRepairDiagnostics;
   phaseTimings?: FixPhaseTiming[];
 };
@@ -482,6 +484,7 @@ export type GridCandidateDiagnostics = {
   notes: string[];
   sobelTileVoting?: GridSobelTileVotingDiagnostics;
   drift?: GridDriftDiagnostics;
+  mixels?: MixelNormalizationDiagnostics;
 };
 
 export type GridSobelTileVotingDiagnostics = {
@@ -509,6 +512,55 @@ export type GridDriftDiagnostics = {
   notes: string[];
 };
 
+export type PixelScaleReport = {
+  scaleX: number;
+  scaleY: number;
+  confidence: number;
+  label: "low" | "medium" | "high";
+  uniform: boolean;
+  source: "grid-candidate" | "fallback";
+  notes: string[];
+};
+
+export type MixelAxisReport = {
+  medianBlock: number;
+  minBlock: number;
+  maxBlock: number;
+  irregularity: number;
+  boundaries: number[];
+};
+
+export type MixelReport = {
+  hasMixels: boolean;
+  axisX: MixelAxisReport;
+  axisY: MixelAxisReport;
+  targetScaleX: number;
+  targetScaleY: number;
+  confidence: number;
+  notes: string[];
+};
+
+export type MixelNormalizationDiagnostics = {
+  used: boolean;
+  outputWidth: number;
+  outputHeight: number;
+  targetScaleX: number;
+  targetScaleY: number;
+  irregularityX: number;
+  irregularityY: number;
+  confidence: number;
+  notes: string[];
+};
+
+export type LineCleanupStrength = "off" | "low" | "high";
+
+export type LineCleanupDiagnostics = {
+  strength: LineCleanupStrength;
+  changedPixels: number;
+  removedJaggyPixels: number;
+  notes: string[];
+};
+
 export type FixOptions = {
   mode: AssetMode;
   assetType: AssetType;
@@ -526,6 +578,7 @@ export type FixOptions = {
     phaseY?: number;
     cropToBounds?: boolean;
     localCorrection?: boolean;
+    fixMixels?: boolean;
   };
   downscale: DownscaleMethod;
   alpha: AlphaMode;
@@ -545,6 +598,7 @@ export type FixOptions = {
     outlineSourceColors?: string[];
     outlineAlpha?: number;
     contrastExpansion?: ContrastExpansionSettings;
+    lineCleanup?: LineCleanupStrength;
   };
   sheet?: SheetSliceOptions;
   sheetFrames?: SpriteFrame[];
