@@ -579,6 +579,7 @@ export type FixOptions = {
     cropToBounds?: boolean;
     localCorrection?: boolean;
     fixMixels?: boolean;
+    snap?: boolean;
   };
   downscale: DownscaleMethod;
   alpha: AlphaMode;
