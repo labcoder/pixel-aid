@@ -67,10 +67,14 @@ export function detectMixels(image: RGBAImage, options: MixelDetectionOptions = 
   const xAxis = fitUniformLattice(verticalEdgeEnergy(image), image.width, expectedScaleX, maxScale);
   const yAxis = fitUniformLattice(horizontalEdgeEnergy(image), image.height, expectedScaleY, maxScale);
 
-  // Target cell size comes from the grid candidate (the true pixel size, e.g. 12 for a 12x sprite),
-  // not the lattice sweep (which favors the finest period). The lattice supplies phase + alignment.
+  // Target cell size comes from the grid candidate (the true pixel size, e.g. 12 for a 12x sprite).
   const targetScaleX = expectedScaleX;
   const targetScaleY = expectedScaleY;
+  // Boundaries MUST be built at the target cell size (not the lattice sweep's finest period), otherwise
+  // regularization would flatten into tiny 2px cells. We reuse the per-axis edge-energy profiles to lock
+  // the phase of the target-sized lattice, then emit uniform target-sized boundaries.
+  const xBoundaries = buildLatticeAtScale(verticalEdgeEnergy(image), image.width, targetScaleX);
+  const yBoundaries = buildLatticeAtScale(horizontalEdgeEnergy(image), image.height, targetScaleY);
   // Block-internal flatness is the real mixel signal: clean pixel art has near-uniform NxN cells
   // (~90% of neighbouring pixels identical); mixel/AI art has noisy, non-flat cells (~25%).
   const flatness = blockFlatness(image, targetScaleX, targetScaleY);
@@ -86,8 +90,8 @@ export function detectMixels(image: RGBAImage, options: MixelDetectionOptions = 
     targetScaleX >= 2 &&
     targetScaleY >= 2 &&
     confidence >= 0.35 &&
-    xAxis.boundaries.length >= 3 &&
-    yAxis.boundaries.length >= 3;
+    xBoundaries.length >= 3 &&
+    yBoundaries.length >= 3;
   const hasMixels = pixelArtLike && maxJitter >= threshold;
   const notes: string[] = [];
 
@@ -103,8 +107,8 @@ export function detectMixels(image: RGBAImage, options: MixelDetectionOptions = 
 
   return {
     hasMixels,
-    axisX: latticeToAxisReport(xAxis, jitterX),
-    axisY: latticeToAxisReport(yAxis, jitterY),
+    axisX: axisReport(targetScaleX, jitterX, xBoundaries),
+    axisY: axisReport(targetScaleY, jitterY, yBoundaries),
     targetScaleX,
     targetScaleY,
     confidence,
@@ -245,15 +249,39 @@ export function normalizeMixels(image: RGBAImage, reportOrOptions: MixelReport |
   };
 }
 
-function latticeToAxisReport(axis: AxisLattice, jitter: number): MixelAxisReport {
-  // For a uniform lattice every cell is `scale` wide; cell roughness is reported as irregularity.
+function axisReport(scale: number, jitter: number, boundaries: number[]): MixelAxisReport {
+  // Uniform target-sized lattice: every cell is `scale` wide; cell roughness is reported as irregularity.
   return {
-    medianBlock: axis.scale,
-    minBlock: axis.scale,
-    maxBlock: axis.scale,
+    medianBlock: scale,
+    minBlock: scale,
+    maxBlock: scale,
     irregularity: roundScore(jitter),
-    boundaries: [...axis.boundaries]
+    boundaries: [...boundaries]
   };
+}
+
+/**
+ * Build a uniform lattice of cells of exactly `scale` px, phase-locked to the edge-energy profile.
+ * Used to produce the target-sized boundaries that regularization snaps to (e.g. clean 12px cells),
+ * independent of the finest-period sweep used only for the alignment/jitter signal.
+ */
+function buildLatticeAtScale(profile: Float64Array, length: number, scale: number): number[] {
+  const cell = Math.max(2, Math.min(Math.round(scale), Math.floor(length / 2)));
+  let bestPhase = 0;
+  let bestEnergy = -1;
+  for (let phase = 0; phase < cell; phase += 1) {
+    let energy = 0;
+    for (let pos = phase; pos < length; pos += cell) {
+      if (pos > 0) {
+        energy += profile[pos]!;
+      }
+    }
+    if (energy > bestEnergy) {
+      bestEnergy = energy;
+      bestPhase = phase;
+    }
+  }
+  return buildUniformBoundaries(bestPhase, cell, length);
 }
 
 /**

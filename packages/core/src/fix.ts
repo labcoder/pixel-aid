@@ -23,7 +23,7 @@ import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
 import { applyLineCleanup } from "./lineCleanup";
-import { regularizeMixels } from "./mixels";
+import { detectMixels, regularizeMixels } from "./mixels";
 import { snapToGrid } from "./snap";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
@@ -67,8 +67,13 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   let mixelDiagnostics: MixelNormalizationDiagnostics | undefined;
   const downsampleSource = (() => {
     if (options.mode === "single" && options.grid.fixMixels) {
+      // Detect mixels on the ORIGINAL image (before background flood-fill / preprocessing, which adds
+      // alpha-edge noise and flat transparent regions that skew the flatness/roughness signal), then
+      // APPLY the regularization to the preprocessed (contrast-expanded) image.
+      const mixelReport = detectMixels(image);
       const regularized = measurePhase(phaseTimer, "downsampling", () =>
         regularizeMixels(contrastExpanded.image, {
+          report: mixelReport,
           method: options.downscale,
           alpha: options.alpha,
           ...foregroundAlphaThresholdOption(options, sourceAlphaResult !== undefined),
