@@ -111,6 +111,110 @@ describe("advanced downsample modes", () => {
     }
   });
 
+  test("perceptual downsampling returns source-block medoids deterministically", () => {
+    const source = createImage(4, 4, [0, 0, 0, 255]);
+    const rows = [
+      [
+        [12, 20, 30],
+        [48, 58, 62],
+        [200, 32, 28],
+        [210, 44, 36]
+      ],
+      [
+        [16, 24, 34],
+        [160, 170, 180],
+        [26, 30, 210],
+        [34, 40, 220]
+      ],
+      [
+        [12, 180, 80],
+        [24, 190, 96],
+        [240, 220, 140],
+        [250, 230, 150]
+      ],
+      [
+        [18, 170, 88],
+        [200, 40, 180],
+        [32, 34, 36],
+        [230, 232, 236]
+      ]
+    ] as const;
+    for (let y = 0; y < 4; y += 1) {
+      for (let x = 0; x < 4; x += 1) {
+        const color = rows[y]![x]!;
+        writePixel(source, x, y, color[0], color[1], color[2], 255);
+      }
+    }
+
+    const first = downsampleBlocks(source, {
+      outputWidth: 2,
+      outputHeight: 2,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "perceptual",
+      alpha: "preserve"
+    });
+    const second = downsampleBlocks(source, {
+      outputWidth: 2,
+      outputHeight: 2,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "perceptual",
+      alpha: "preserve"
+    });
+
+    expect(Array.from(second.data)).toEqual(Array.from(first.data));
+    for (let y = 0; y < 2; y += 1) {
+      for (let x = 0; x < 2; x += 1) {
+        expect(blockContainsRgb(source, x * 2, y * 2, 2, 2, readPixel(first, x, y))).toBe(true);
+      }
+    }
+  });
+
+  test("nearest downsampling point-samples the source block top-left", () => {
+    const source = createImage(4, 2, [0, 0, 0, 255]);
+    writePixel(source, 0, 0, 10, 20, 30, 255);
+    writePixel(source, 1, 0, 40, 50, 60, 255);
+    writePixel(source, 2, 0, 70, 80, 90, 255);
+    writePixel(source, 3, 0, 100, 110, 120, 255);
+
+    const sampled = downsampleBlocks(source, {
+      outputWidth: 2,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "nearest",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(sampled, 0, 0)).toEqual([10, 20, 30, 255]);
+    expect(readPixel(sampled, 1, 0)).toEqual([70, 80, 90, 255]);
+  });
+
+  test("bilinear downsampling interpolates at the target cell center", () => {
+    const source = createImage(2, 1, [0, 0, 0, 255]);
+    writePixel(source, 1, 0, 255, 255, 255, 255);
+
+    const sampled = downsampleBlocks(source, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 1,
+      phaseX: 0,
+      phaseY: 0,
+      method: "bilinear",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(sampled, 0, 0)).toEqual([128, 128, 128, 255]);
+  });
+
   test("contrast preserves sparse dark linework missed by existing block modes", () => {
     const source = createImage(6, 6, [220, 214, 190, 255]);
     writePixel(source, 2, 1, 22, 24, 30, 255);
@@ -209,6 +313,25 @@ function patternedSource(width: number, height: number) {
     }
   }
   return source;
+}
+
+function blockContainsRgb(
+  source: ReturnType<typeof createImage>,
+  startX: number,
+  startY: number,
+  width: number,
+  height: number,
+  pixel: readonly [number, number, number, number]
+): boolean {
+  for (let y = startY; y < startY + height; y += 1) {
+    for (let x = startX; x < startX + width; x += 1) {
+      const sourcePixel = readPixel(source, x, y);
+      if (sourcePixel[0] === pixel[0] && sourcePixel[1] === pixel[1] && sourcePixel[2] === pixel[2]) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function luma(pixel: readonly [number, number, number, number]): number {
