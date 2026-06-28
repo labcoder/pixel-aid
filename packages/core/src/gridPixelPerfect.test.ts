@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
-import type { RGBAImage } from "@pixelaid/shared";
+import type { FixOptions, RGBAImage } from "@pixelaid/shared";
 import { applyLineCleanup } from "./lineCleanup";
-import { detectMixels, normalizeMixels } from "./mixels";
+import { detectMixels, normalizeMixels, regularizeMixels } from "./mixels";
 import { detectPixelScale } from "./pixelScale";
 import { snapToGrid } from "./snap";
+import { fixImage } from "./fix";
 import { createImage, readPixel, writePixel } from "./image";
 
 type Color = readonly [number, number, number, number];
@@ -176,5 +177,46 @@ describe("grid and pixel-perfect helpers", () => {
     expect(readPixel(high.image, 2, 1)[3]).toBe(0);
     expect(low.diagnostics.removedJaggyPixels).toBeGreaterThan(0);
     expect(bytes(lowAgain.image)).toEqual(bytes(low.image));
+  });
+
+  test("regularizeMixels preserves full image dimensions (de-mixel pre-pass)", () => {
+    const widths = [6, 6, 5, 6, 6, 5, 6];
+    const heights = [6, 5, 6, 6, 5];
+    const source = mixelSprite(widths, heights);
+    const result = regularizeMixels(source, { maxScale: 12 });
+    // Unlike normalizeMixels (collapses to block count), regularize keeps the source size.
+    expect(result.image.width).toBe(source.width);
+    expect(result.image.height).toBe(source.height);
+    // Deterministic and no invented colors.
+    expect(bytes(regularizeMixels(source, { maxScale: 12 }).image)).toEqual(bytes(result.image));
+  });
+
+  test("fixImage with fixMixels honors the requested target dimensions (regression for squish bug)", () => {
+    const widths = [6, 6, 5, 6, 6, 5, 6, 6, 5, 6];
+    const heights = [6, 5, 6, 6, 5, 6, 6, 5, 6, 6];
+    const source = mixelSprite(widths, heights);
+
+    const baseOptions: FixOptions = {
+      mode: "single",
+      assetType: "sprite",
+      targetWidth: 16,
+      targetHeight: 16,
+      maxColors: 16,
+      paletteSettings: { mode: "auto", strategy: "medianCut", maxColors: 16, lockScope: "single", dithering: "none" },
+      grid: { detect: "auto", cropToBounds: false, localCorrection: false },
+      downscale: "dominant",
+      alpha: "preserve",
+      cleanup: { removeOrphans: false, jaggyCleanup: false, preserveSinglePixelDetails: true }
+    };
+
+    const without = fixImage(source, baseOptions);
+    const withMixels = fixImage(source, { ...baseOptions, grid: { ...baseOptions.grid, fixMixels: true } });
+
+    // The bug: fixMixels produced block-count dims (non-target, non-square) → squished output.
+    // Both paths must now produce the same target dimensions.
+    expect(without.image.width).toBe(16);
+    expect(without.image.height).toBe(16);
+    expect(withMixels.image.width).toBe(16);
+    expect(withMixels.image.height).toBe(16);
   });
 });

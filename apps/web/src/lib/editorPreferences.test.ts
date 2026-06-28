@@ -161,14 +161,17 @@ describe("editor preferences", () => {
   test("defaults and round-trips grid mixel and line cleanup preferences", () => {
     const defaults = createDefaultEditorPreferences();
     expect(defaults.settings.fixMixels).toBe(false);
+    expect(defaults.settings.snap).toBe(false);
     expect(defaults.settings.lineCleanup).toBe("off");
 
-    const normalized = normalizeEditorPreferences({ settings: { fixMixels: true, lineCleanup: "high" } });
-    const invalid = normalizeEditorPreferences({ settings: { fixMixels: "yes", lineCleanup: "maximum" } });
+    const normalized = normalizeEditorPreferences({ settings: { fixMixels: true, snap: true, lineCleanup: "high" } });
+    const invalid = normalizeEditorPreferences({ settings: { fixMixels: "yes", snap: "nope", lineCleanup: "maximum" } });
 
     expect(normalized.settings.fixMixels).toBe(true);
+    expect(normalized.settings.snap).toBe(true);
     expect(normalized.settings.lineCleanup).toBe("high");
     expect(invalid.settings.fixMixels).toBe(false);
+    expect(invalid.settings.snap).toBe(false);
     expect(invalid.settings.lineCleanup).toBe("off");
   });
 
