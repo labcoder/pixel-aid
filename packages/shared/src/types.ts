@@ -239,6 +239,9 @@ export type SheetConditioningDiagnostics = {
 export type DownscaleMethod =
   | "dominant"
   | "median"
+  | "perceptual"
+  | "nearest"
+  | "bilinear"
   | "adaptive"
   | "averageThenPalette"
   | "detailPreserving"
@@ -279,22 +282,33 @@ export type HaloRemovalDiagnostics = {
 
 export type PaletteMode = "auto" | "fixed" | "preset";
 
-export type PaletteStrategy = "medianCut" | "frequency" | "perceptual";
+export type PaletteStrategy = "medianCut" | "frequency" | "perceptual" | "wu" | "kmeans";
+
+export type ColorSpace = "oklab" | "cielab" | "srgb";
+
+export type PaletteWeighting = "area" | "frequency";
+
+export type PaletteProtectColors = "auto" | "none" | string[];
 
 export type PaletteLockScope = "single" | "firstFrame" | "sheet" | "project";
 
-export type PaletteDitheringMode = "none" | "ordered" | "errorDiffusion";
+export type PaletteDitheringMode = "none" | "ordered" | "bayer2" | "bayer4" | "errorDiffusion" | "floyd";
 
 export type PaletteDitheringRisk = "low" | "medium" | "high";
 
 export type PaletteSettings = {
   mode?: PaletteMode;
   strategy?: PaletteStrategy;
-  maxColors?: number;
+  maxColors?: number | "auto";
   colors?: string[];
   preset?: string;
   lockScope?: PaletteLockScope;
   dithering?: PaletteDitheringMode;
+  colorSpace?: ColorSpace;
+  seed?: number;
+  weighting?: PaletteWeighting;
+  minRegion?: number;
+  protectColors?: PaletteProtectColors;
 };
 
 export type PaletteStabilityLabel = "stable" | "review" | "unstable";
@@ -334,6 +348,12 @@ export type PaletteDiagnostics = {
   dithering: PaletteDitheringMode;
   ditheringSafety?: PaletteDitheringSafetyDiagnostics;
   drift?: PaletteDriftDiagnostics;
+  colorSpace?: ColorSpace;
+  seed?: number;
+  weighting?: PaletteWeighting;
+  minRegion?: number;
+  protectedColors?: string[];
+  protectedColorCount?: number;
   warnings: string[];
 };
 

@@ -68,8 +68,20 @@ export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./i
 export type { RgbaTuple } from "./image";
 export { applyOutlineCleanup, applyOutlineCleanupDetailed, detectOutlineColorCandidates } from "./outline";
 export type { OutlineCleanupOptions, OutlineCleanupResult, OutlineColorCandidate } from "./outline";
-export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolvePalette } from "./palette";
-export type { AnalyzePaletteDriftOptions, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
+export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolveAutoColorCount, resolvePalette } from "./palette";
+export type { AnalyzePaletteDriftOptions, PaletteAnalysis, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
+export {
+  cielabToRgb,
+  colorSpaceToRgb,
+  linearRgbToOklab,
+  normalizeColorSpace,
+  oklabToRgb,
+  perceptualColorDistanceSq,
+  rgbToCielab,
+  rgbToColorSpace,
+  rgbToOklab
+} from "./color";
+export type { ColorVector } from "./color";
 export { analyzeQualityReport } from "./qualityReport";
 export type { QualityFinding, QualityFindingCategory, QualityFindingSeverity, QualityRecommendation, QualityRecommendationSettings, QualityReport, QualityReportOptions } from "./qualityReport";
 export { assertNotCancelled, collectedPhaseTimings, createFixPhaseTimer, FixCancelledError, measurePhase, phasePercent, reportProgress, shouldReportRow } from "./runtime";
