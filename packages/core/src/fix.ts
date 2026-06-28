@@ -23,7 +23,7 @@ import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
 import { applyLineCleanup } from "./lineCleanup";
-import { normalizeMixels } from "./mixels";
+import { regularizeMixels } from "./mixels";
 import { snapToGrid } from "./snap";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
@@ -61,26 +61,34 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const contrastExpanded = measurePhase(phaseTimer, "contrast-expansion", () =>
     applyContrastExpansion(processingSource, options.cleanup.contrastExpansion)
   );
+  // De-mixel BEFORE downsampling: regularize inconsistent block sizes onto a clean full-resolution
+  // grid, then let the normal target-driven downsample run. This keeps target size, aspect ratio,
+  // and foreground cropping intact (unlike collapsing straight to block count, which distorted output).
+  let mixelDiagnostics: MixelNormalizationDiagnostics | undefined;
+  const downsampleSource = (() => {
+    if (options.mode === "single" && options.grid.fixMixels) {
+      const regularized = measurePhase(phaseTimer, "downsampling", () =>
+        regularizeMixels(contrastExpanded.image, {
+          method: options.downscale,
+          alpha: options.alpha,
+          ...foregroundAlphaThresholdOption(options, sourceAlphaResult !== undefined),
+          ...adaptiveCoverageOption(options)
+        })
+      );
+      mixelDiagnostics = regularized.diagnostics;
+      return regularized.image;
+    }
+    return contrastExpanded.image;
+  })();
   reportProgress(runtime, "downsampling", 20, "Downsampling source blocks");
   assertNotCancelled(runtime?.signal);
-  let mixelDiagnostics: MixelNormalizationDiagnostics | undefined;
   const downsampled = measurePhase(phaseTimer, "downsampling", () => {
-    if (options.mode === "single" && options.grid.fixMixels) {
-      const normalized = normalizeMixels(contrastExpanded.image, {
-        method: options.downscale,
-        alpha: options.alpha,
-        ...foregroundAlphaThresholdOption(options, sourceAlphaResult !== undefined),
-        ...adaptiveCoverageOption(options)
-      });
-      mixelDiagnostics = normalized.diagnostics;
-      return normalized.image;
-    }
-
     if (options.mode === "single" && options.grid.snap) {
-      // Force a clean uniform integer grid from the resolved scale/phase, ignoring drift wobble.
-      const snapped = snapToGrid(contrastExpanded.image, {
-        scaleX: Math.max(1, Math.round(gridWithDrift.scaleX)),
-        scaleY: Math.max(1, Math.round(gridWithDrift.scaleY)),
+      // Force square pixels: a single uniform integer scale from the resolved grid, ignoring drift.
+      const uniformScale = Math.max(1, Math.round(Math.min(gridWithDrift.scaleX, gridWithDrift.scaleY)));
+      const snapped = snapToGrid(downsampleSource, {
+        scaleX: uniformScale,
+        scaleY: uniformScale,
         phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
         phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
         method: options.downscale,
@@ -90,7 +98,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
     }
 
     return downsampleBlocks(
-      contrastExpanded.image,
+      downsampleSource,
       {
         outputWidth: gridWithDrift.outputWidth,
         outputHeight: gridWithDrift.outputHeight,
@@ -232,13 +240,11 @@ function attachDriftDiagnostics(grid: GridCandidate, drift: GridDriftDiagnostics
 }
 
 function attachMixelDiagnostics(grid: GridCandidate, mixels: MixelNormalizationDiagnostics): GridCandidate {
+  // Output dimensions/scale stay target-driven (mixel regularization is a full-res pre-pass that
+  // feeds the normal downsample); we only attach the diagnostic record + a note here.
   return {
     ...grid,
-    outputWidth: mixels.outputWidth,
-    outputHeight: mixels.outputHeight,
-    scaleX: mixels.targetScaleX,
-    scaleY: mixels.targetScaleY,
-    reason: `${grid.reason}; mixel normalization ${mixels.used ? "used" : "evaluated"}`,
+    reason: `${grid.reason}; mixel regularization ${mixels.used ? "used" : "evaluated"}`,
     diagnostics: {
       ...(grid.diagnostics ?? {
         edgeScore: 0,

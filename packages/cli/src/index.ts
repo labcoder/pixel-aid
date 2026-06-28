@@ -1043,9 +1043,9 @@ function usageText(): string {
     "",
     "Grid / pixel-perfect options:",
     "  --detect-scale                 Print detected pixel scale on inspect JSON (accepted on fix)",
-    "  --fix-mixels                   Normalize mixed pixel block sizes during fix",
-    "  --snap                         Request pixel-grid snapping when a manual/detected uniform scale is available",
-    "  --line-cleanup off|low|high    Use explicit line cleanup strength instead of legacy jaggy cleanup",
+    "  --fix-mixels                   Normalize uneven pixel block sizes (mixels) before downscaling; honors --target",
+    "  --snap                         Force square pixels (single uniform integer scale; output size follows the subject, not --target)",
+    "  --line-cleanup off|low|high    Pixel-perfect line cleanup strength (supersedes the legacy 1px-gap cleanup)",
     "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
     "",
   ].join("\n");

@@ -866,6 +866,7 @@ type AssetEditorSession = {
     cropToBounds: boolean;
     localCorrection: boolean;
     fixMixels: boolean;
+    snap: boolean;
     aspectLocked: boolean;
     frameWidth: number;
     frameHeight: number;
@@ -1059,6 +1060,7 @@ export function App() {
   const [cropToBounds, setCropToBounds] = useState(initialSettings.cropToBounds);
   const [localCorrection, setLocalCorrection] = useState(initialSettings.localCorrection);
   const [fixMixels, setFixMixels] = useState(initialSettings.fixMixels);
+  const [snap, setSnap] = useState(initialSettings.snap);
   const [aspectLocked, setAspectLocked] = useState(initialSettings.aspectLocked);
   const [frameWidth, setFrameWidth] = useState(initialSettings.frameWidth);
   const [frameHeight, setFrameHeight] = useState(initialSettings.frameHeight);
@@ -1318,6 +1320,7 @@ export function App() {
       setCropToBounds(settings.cropToBounds);
       setLocalCorrection(settings.localCorrection);
       setFixMixels(settings.fixMixels);
+      setSnap(settings.snap);
       setLineCleanup(settings.lineCleanup);
       setAspectLocked(settings.aspectLocked);
       setFrameWidth(settings.frameWidth);
@@ -1411,6 +1414,7 @@ export function App() {
         cropToBounds,
         localCorrection,
         fixMixels,
+        snap,
         lineCleanup,
         aspectLocked,
         frameWidth,
@@ -1801,6 +1805,7 @@ export function App() {
         cropToBounds,
         localCorrection,
         fixMixels,
+        snap,
         lineCleanup,
         aspectLocked,
         frameWidth,
@@ -2063,6 +2068,7 @@ export function App() {
     setCropToBounds(settings.cropToBounds);
     setLocalCorrection(settings.localCorrection);
     setFixMixels(settings.fixMixels);
+    setSnap(settings.snap);
     setLineCleanup(settings.lineCleanup);
     setAspectLocked(settings.aspectLocked);
     setFrameWidth(settings.frameWidth);
@@ -4230,6 +4236,7 @@ export function App() {
         cropToBounds: mode === "single" && cropToBounds,
         localCorrection: mode === "single" && localCorrection,
         ...(mode === "single" && fixMixels ? { fixMixels: true } : {}),
+        ...(mode === "single" && snap ? { snap: true } : {}),
         phaseX: gridPhaseX,
         phaseY: gridPhaseY
       },
@@ -7557,13 +7564,13 @@ export function App() {
         </label>
         <label className="toggle-row">
           <input type="checkbox" checked={jaggyCleanup} onChange={(event) => setJaggyCleanup(event.currentTarget.checked)} />
-          Close 1px gaps
+          Close 1px gaps (fill interior holes)
         </label>
         <SelectField
           label="Line cleanup"
           value={lineCleanup}
           options={[
-            ["off", "Off (use jaggy boolean)"],
+            ["off", "Off"],
             ["low", "Low (conservative)"],
             ["high", "High (aggressive)"]
           ]}
@@ -7686,8 +7693,17 @@ export function App() {
           />
           Fix mixels (normalize uneven block sizes)
         </label>
+        <label className="toggle-row">
+          <input
+            type="checkbox"
+            checked={mode === "single" && snap}
+            disabled={mode !== "single"}
+            onChange={(event) => setSnap(event.currentTarget.checked)}
+          />
+          Force square pixels
+        </label>
         <p className="field-note">
-          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid.
+          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid. Fix mixels cleans up uneven upscaler block sizes before resizing. Force square pixels uses one uniform scale (output size follows the subject, not the target).
         </p>
       </>
     ),

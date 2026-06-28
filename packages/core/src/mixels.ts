@@ -8,6 +8,7 @@ import type {
 } from "@pixelaid/shared";
 import { downsampleBlocks } from "./downsample";
 import { detectGridCandidates } from "./grid";
+import { createImage, readPixel, writePixel } from "./image";
 
 // Block-size irregularity at/above this fraction of the median block flags an image as mixel-laden.
 // 0.10 catches common upscaler artifacts: a 5/6 mix (1px of 6 = 0.167) AND an 8/9 mix (1px of 9 = 0.111),
@@ -127,6 +128,75 @@ export function normalizeMixels(image: RGBAImage, reportOrOptions: MixelReport |
       irregularityY: report.axisY.irregularity,
       confidence: report.confidence,
       notes: [...report.notes]
+    }
+  };
+}
+
+export type MixelRegularizeResult = {
+  image: RGBAImage;
+  diagnostics: MixelNormalizationDiagnostics;
+};
+
+/**
+ * De-mixel at FULL resolution: flatten each detected source block to one representative color while
+ * preserving the original image width/height. Unlike normalizeMixels (which collapses to one pixel
+ * per block and CHANGES dimensions), this produces a clean, grid-consistent source that the normal
+ * target-driven downsample can then resample — so target size, aspect ratio, and foreground cropping
+ * are all still honored by the caller. Colors are existing block colors (nearest expansion), never
+ * interpolated. Deterministic.
+ */
+export function regularizeMixels(image: RGBAImage, reportOrOptions: MixelReport | MixelNormalizeOptions = {}): MixelRegularizeResult {
+  const options = isMixelReport(reportOrOptions) ? {} : reportOrOptions;
+  const report = isMixelReport(reportOrOptions) ? reportOrOptions : (options.report ?? detectMixels(image, options));
+  const xBoundaries = toBoundaryArray(report.axisX.boundaries, image.width, report.targetScaleX);
+  const yBoundaries = toBoundaryArray(report.axisY.boundaries, image.height, report.targetScaleY);
+
+  // Collapse each block to its representative color (one pixel per block)...
+  const collapsed = downsampleBlocks(image, {
+    outputWidth: Math.max(1, xBoundaries.length - 1),
+    outputHeight: Math.max(1, yBoundaries.length - 1),
+    scaleX: report.targetScaleX,
+    scaleY: report.targetScaleY,
+    phaseX: xBoundaries[0]!,
+    phaseY: yBoundaries[0]!,
+    xBoundaries,
+    yBoundaries,
+    method: options.method ?? "dominant",
+    alpha: options.alpha ?? "preserve",
+    ...(options.binaryAlphaThreshold !== undefined ? { binaryAlphaThreshold: options.binaryAlphaThreshold } : {}),
+    ...(options.foregroundAlphaThreshold !== undefined ? { foregroundAlphaThreshold: options.foregroundAlphaThreshold } : {}),
+    ...(options.adaptiveCoverage !== undefined ? { adaptiveCoverage: options.adaptiveCoverage } : {})
+  });
+
+  // ...then paint each collapsed cell back over its full-resolution block span (nearest expansion).
+  const output = createImage(image.width, image.height, [0, 0, 0, 0]);
+  for (let cy = 0; cy < collapsed.height; cy += 1) {
+    const y0 = yBoundaries[cy]!;
+    const y1 = yBoundaries[cy + 1]!;
+    for (let cx = 0; cx < collapsed.width; cx += 1) {
+      const x0 = xBoundaries[cx]!;
+      const x1 = xBoundaries[cx + 1]!;
+      const [r, g, b, a] = readPixel(collapsed, cx, cy);
+      for (let y = y0; y < y1; y += 1) {
+        for (let x = x0; x < x1; x += 1) {
+          writePixel(output, x, y, r, g, b, a);
+        }
+      }
+    }
+  }
+
+  return {
+    image: output,
+    diagnostics: {
+      used: report.hasMixels,
+      outputWidth: image.width,
+      outputHeight: image.height,
+      targetScaleX: report.targetScaleX,
+      targetScaleY: report.targetScaleY,
+      irregularityX: report.axisX.irregularity,
+      irregularityY: report.axisY.irregularity,
+      confidence: report.confidence,
+      notes: [...report.notes, "Regularized at full resolution; caller downsamples to target"]
     }
   };
 }
