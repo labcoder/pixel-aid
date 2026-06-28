@@ -88,7 +88,7 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType, target, maxColors, paletteStrategy, paletteDithering, grid, downscale, alpha, cleanup, and sheet settings.",
+  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, cleanup, and sheet settings. Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
   additionalProperties: true,
 };
 
@@ -155,11 +155,18 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   },
   {
     name: "extract_palette",
-    description: "Extract a limited palette from a PNG/JPEG image and write it as .hex or JSON.",
+    description: "Extract a limited palette from a PNG/JPEG image and write it as .aco, .gpl, .pal, .hex, .json, or PNG strip.",
     inputSchema: objectSchema(["inputPath", "outputPath"], {
       inputPath: stringSchema("Path to a PNG or JPEG image."),
-      outputPath: stringSchema("Palette output path (.hex or .json)."),
-      maxColors: { type: "number", description: "Maximum number of colors.", default: 24 },
+      outputPath: stringSchema("Palette output path (.aco, .gpl, .pal, .hex, .json, or .png strip)."),
+      maxColors: { oneOf: [{ type: "number" }, { type: "string", enum: ["auto"] }], description: "Maximum number of colors or auto.", default: 24 },
+      colorSpace: { type: "string", enum: ["oklab", "cielab", "srgb"], description: "Color space for perceptual quantizers." },
+      quantizer: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans"], description: "Palette quantizer/strategy." },
+      paletteStrategy: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans"], description: "Alias for quantizer." },
+      seed: { type: "number", description: "Deterministic seed for kmeans." },
+      paletteWeighting: { type: "string", enum: ["area", "frequency"], description: "Palette analysis weighting." },
+      minRegion: { type: "number", description: "Minimum visible region size in pixels." },
+      protectColors: { description: "auto, none, or hex color array/string to preserve." },
       overwrite: booleanSchema("Allow replacing an existing palette file."),
     }),
   },
@@ -493,10 +500,18 @@ function toFixSpriteSheetRequest(input: ToolInput): FixSpriteSheetRequest {
 }
 
 function toExtractPaletteRequest(input: ToolInput): ExtractPaletteFileRequest {
+  const maxColors = input.maxColors === "auto" || typeof input.maxColors === "number" ? input.maxColors : 24;
   return {
     inputPath: String(input.inputPath),
     outputPath: String(input.outputPath),
-    maxColors: typeof input.maxColors === "number" ? input.maxColors : 24,
+    maxColors,
+    ...(typeof input.paletteStrategy === "string" ? { paletteStrategy: input.paletteStrategy as NonNullable<ExtractPaletteFileRequest["paletteStrategy"]> } : {}),
+    ...(typeof input.quantizer === "string" ? { quantizer: input.quantizer as NonNullable<ExtractPaletteFileRequest["quantizer"]> } : {}),
+    ...(typeof input.colorSpace === "string" ? { colorSpace: input.colorSpace as NonNullable<ExtractPaletteFileRequest["colorSpace"]> } : {}),
+    ...(typeof input.seed === "number" ? { seed: input.seed } : {}),
+    ...(typeof input.paletteWeighting === "string" ? { paletteWeighting: input.paletteWeighting as NonNullable<ExtractPaletteFileRequest["paletteWeighting"]> } : {}),
+    ...(typeof input.minRegion === "number" ? { minRegion: input.minRegion } : {}),
+    ...(typeof input.protectColors === "string" || Array.isArray(input.protectColors) ? { protectColors: input.protectColors as NonNullable<ExtractPaletteFileRequest["protectColors"]> } : {}),
     ...(typeof input.overwrite === "boolean" ? { overwrite: input.overwrite } : {}),
   };
 }

@@ -43,13 +43,27 @@ class PixelAidCliTests(unittest.TestCase):
             downscale="detailPreserving",
             alpha="backgroundFloodFill",
             overwrite=True,
+            color_space="oklab",
+            quantizer="wu",
+            max_colors="auto",
+            palette="pico-8",
+            dither="bayer4",
+            palette_weighting="area",
+            protect_colors="none",
+            emit_palette="palette.gpl",
         )
 
         self.assertEqual(args[:2], ["fix", "input.png"])
         self.assertIn("--manifest", args)
         self.assertIn("fixed.json", args)
-        self.assertIn("--downscale", args)
+        self.assertIn("--downscale-method", args)
         self.assertIn("detailPreserving", args)
+        self.assertIn("--max-colors", args)
+        self.assertIn("auto", args)
+        self.assertIn("--quantizer", args)
+        self.assertIn("wu", args)
+        self.assertIn("--emit-palette", args)
+        self.assertIn("palette.gpl", args)
         self.assertIn("--json", args)
 
 

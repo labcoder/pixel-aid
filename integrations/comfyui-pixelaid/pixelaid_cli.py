@@ -72,6 +72,14 @@ def build_fix_sprite_args(
     downscale: str,
     alpha: str,
     overwrite: bool,
+    color_space: str | None = None,
+    quantizer: str | None = None,
+    max_colors: str | int | None = None,
+    palette: str | None = None,
+    dither: str | None = None,
+    palette_weighting: str | None = None,
+    protect_colors: str | None = None,
+    emit_palette: str | None = None,
 ) -> list[str]:
     args = [
         "fix",
@@ -84,14 +92,26 @@ def build_fix_sprite_args(
         asset_type,
         "--target",
         target,
-        "--colors",
-        str(colors),
-        "--downscale",
+        "--max-colors",
+        str(max_colors or colors),
+        "--downscale-method",
         downscale,
         "--alpha",
         alpha,
         "--json",
     ]
+    optional_flags = {
+        "--color-space": color_space,
+        "--quantizer": quantizer,
+        "--palette": palette,
+        "--dither": dither,
+        "--palette-weighting": palette_weighting,
+        "--protect-colors": protect_colors,
+        "--emit-palette": emit_palette,
+    }
+    for flag, value in optional_flags.items():
+        if value not in (None, ""):
+            args.extend([flag, str(value)])
     if overwrite:
         args.append("--overwrite")
     return args
@@ -146,7 +166,15 @@ def fix_image_tensor_with_pixelaid(
     downscale: str,
     alpha: str,
     overwrite: bool,
-) -> tuple[Any, dict[str, Any], str]:
+    color_space: str | None = None,
+    quantizer: str | None = None,
+    max_colors: str | int | None = None,
+    palette: str | None = None,
+    dither: str | None = None,
+    palette_weighting: str | None = None,
+    protect_colors: str | None = None,
+    emit_palette: str | None = None,
+) -> tuple[Any, dict[str, Any], str, str]:
     output_root = Path(output_dir).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
 
@@ -154,6 +182,7 @@ def fix_image_tensor_with_pixelaid(
         input_path = Path(tmp) / "input.png"
         fixed_path = output_root / "pixelaid.fixed.png"
         manifest_path = output_root / "pixelaid.manifest.json"
+        emitted_palette_path = Path(emit_palette).expanduser().resolve() if emit_palette else output_root / "pixelaid.palette.gpl"
         save_image_tensor_png(image, input_path)
 
         payload = run_pixelaid_json(
@@ -167,11 +196,19 @@ def fix_image_tensor_with_pixelaid(
                 downscale=downscale,
                 alpha=alpha,
                 overwrite=overwrite,
+                color_space=color_space,
+                quantizer=quantizer,
+                max_colors=max_colors,
+                palette=palette,
+                dither=dither,
+                palette_weighting=palette_weighting,
+                protect_colors=protect_colors,
+                emit_palette=str(emitted_palette_path),
             ),
             executable=pixelaid_executable,
         )
         fixed_image = load_image_tensor_png(fixed_path)
-        return fixed_image, payload, str(manifest_path)
+        return fixed_image, payload, str(manifest_path), str(emitted_palette_path)
 
 
 def save_image_tensor_png(image: Any, path: str | Path) -> None:

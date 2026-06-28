@@ -4,6 +4,7 @@ import {
   type AlphaMode,
   type AssetMode,
   type AssetType,
+  type ColorSpace,
   type DownscaleMethod,
   type FixOptions,
   type MorphologyCleanupSettings,
@@ -11,10 +12,13 @@ import {
   type PaletteDitheringMode,
   type PaletteLockScope,
   type PaletteMode,
+  type PaletteProtectColors,
   type PaletteStrategy,
+  type PaletteWeighting,
   type SheetSliceOptions,
   type SpriteFrame,
 } from "@pixelaid/shared";
+import { resolveNamedPalette } from "@pixelaid/exporters";
 import { automationError, automationOk, type AutomationResult } from "./result";
 
 export type AutomationAssetTypeInput =
@@ -37,14 +41,24 @@ export type AutomationFixOptionsInput = {
   target?: AutomationTargetInput;
   targetWidth?: number;
   targetHeight?: number;
-  maxColors?: number;
-  palette?: string[];
+  maxColors?: number | "auto";
+  palette?: string[] | string;
   paletteMode?: PaletteMode;
   paletteStrategy?: PaletteStrategy;
+  quantizer?: PaletteStrategy;
   paletteLockScope?: PaletteLockScope;
   paletteDithering?: PaletteDitheringMode;
+  dither?: PaletteDitheringMode;
   palettePreset?: string;
   downscale?: DownscaleMethod;
+  downscaleMethod?: DownscaleMethod;
+  colorSpace?: ColorSpace;
+  seed?: number;
+  paletteWeighting?: PaletteWeighting;
+  minRegion?: number;
+  protectColors?: PaletteProtectColors | string;
+  emitPalette?: string;
+  emitPaletteConditioning?: string;
   alpha?: AlphaMode;
   alphaThreshold?: number;
   alphaTolerance?: number;
@@ -105,12 +119,17 @@ const downscaleMethods = new Set<DownscaleMethod>([
   "detailPreserving",
   "contrast",
   "kCentroid",
+  "perceptual",
+  "nearest",
+  "bilinear",
 ]);
 const alphaModes = new Set<AlphaMode>(["preserve", "binary", "backgroundFloodFill", "colorKey"]);
 const paletteModes = new Set<PaletteMode>(["auto", "fixed", "preset"]);
-const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual"]);
+const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual", "wu", "kmeans"]);
 const paletteLockScopes = new Set<PaletteLockScope>(["single", "firstFrame", "sheet", "project"]);
-const paletteDitheringModes = new Set<PaletteDitheringMode>(["none", "ordered", "errorDiffusion"]);
+const paletteDitheringModes = new Set<PaletteDitheringMode>(["none", "ordered", "bayer2", "bayer4", "errorDiffusion", "floyd"]);
+const colorSpaces = new Set<ColorSpace>(["oklab", "cielab", "srgb"]);
+const paletteWeightings = new Set<PaletteWeighting>(["area", "frequency"]);
 const outlineModes = new Set<OutlineMode>(["none", "repairExisting", "add"]);
 
 const presets: Record<AssetType, AssetPreset> = {
@@ -161,12 +180,13 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return target;
   }
 
-  const maxColors = normalizePositiveInteger(input.maxColors ?? preset.maxColors, "maxColors");
+  const maxColors = normalizeMaxColors(input.maxColors ?? preset.maxColors, "maxColors");
   if (!maxColors.ok) {
     return maxColors;
   }
+  const fixMaxColors = maxColors.value === "auto" ? 512 : maxColors.value;
 
-  const downscale = normalizeEnum(input.downscale ?? preset.downscale, downscaleMethods, "downscale");
+  const downscale = normalizeEnum(input.downscaleMethod ?? input.downscale ?? preset.downscale, downscaleMethods, "downscale");
   if (!downscale.ok) {
     return downscale;
   }
@@ -181,12 +201,17 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return grid;
   }
 
-  const paletteMode = normalizeEnum(input.paletteMode ?? (input.palette ? "fixed" : "auto"), paletteModes, "paletteMode");
+  const paletteColors = normalizePaletteInput(input.palette);
+  if (!paletteColors.ok) {
+    return paletteColors;
+  }
+
+  const paletteMode = normalizeEnum(input.paletteMode ?? (paletteColors.value && paletteColors.value.length > 0 ? "fixed" : "auto"), paletteModes, "paletteMode");
   if (!paletteMode.ok) {
     return paletteMode;
   }
 
-  const paletteStrategy = normalizeEnum(input.paletteStrategy ?? "medianCut", paletteStrategies, "paletteStrategy");
+  const paletteStrategy = normalizePaletteStrategy(input.quantizer ?? input.paletteStrategy ?? "medianCut", "paletteStrategy");
   if (!paletteStrategy.ok) {
     return paletteStrategy;
   }
@@ -196,9 +221,34 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return paletteLockScope;
   }
 
-  const paletteDithering = normalizeEnum(input.paletteDithering ?? "none", paletteDitheringModes, "paletteDithering");
+  const paletteDithering = normalizeEnum(input.dither ?? input.paletteDithering ?? "none", paletteDitheringModes, "paletteDithering");
   if (!paletteDithering.ok) {
     return paletteDithering;
+  }
+
+  const colorSpace = normalizeEnum(input.colorSpace ?? "oklab", colorSpaces, "colorSpace");
+  if (!colorSpace.ok) {
+    return colorSpace;
+  }
+
+  const paletteWeighting = normalizeEnum(input.paletteWeighting ?? "frequency", paletteWeightings, "paletteWeighting");
+  if (!paletteWeighting.ok) {
+    return paletteWeighting;
+  }
+
+  const minRegion = normalizeNonNegativeInteger(input.minRegion ?? 0, "minRegion");
+  if (!minRegion.ok) {
+    return minRegion;
+  }
+
+  const seed = input.seed === undefined ? undefined : normalizeInteger(input.seed, "seed");
+  if (seed && !seed.ok) {
+    return seed;
+  }
+
+  const protectColors = normalizeProtectColors(input.protectColors);
+  if (!protectColors.ok) {
+    return protectColors;
   }
 
   const cleanup = normalizeCleanup(input.cleanup, preset.cleanup);
@@ -225,7 +275,12 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     maxColors: maxColors.value,
     lockScope: paletteLockScope.value,
     dithering: paletteDithering.value,
-    ...(input.palette && input.palette.length > 0 ? { colors: normalizeHexColors(input.palette) } : {}),
+    colorSpace: colorSpace.value,
+    weighting: paletteWeighting.value,
+    minRegion: minRegion.value,
+    ...(seed?.ok ? { seed: seed.value } : {}),
+    ...(protectColors.value !== undefined ? { protectColors: protectColors.value } : {}),
+    ...(paletteColors.value && paletteColors.value.length > 0 ? { colors: paletteColors.value } : {}),
     ...(input.palettePreset ? { preset: input.palettePreset } : {}),
   };
 
@@ -234,8 +289,8 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     assetType,
     ...(target.value.targetWidth ? { targetWidth: target.value.targetWidth } : {}),
     ...(target.value.targetHeight ? { targetHeight: target.value.targetHeight } : {}),
-    maxColors: maxColors.value,
-    ...(input.palette && input.palette.length > 0 ? { palette: normalizeHexColors(input.palette) } : {}),
+    maxColors: fixMaxColors,
+    ...(paletteColors.value && paletteColors.value.length > 0 ? { palette: paletteColors.value } : {}),
     paletteSettings,
     grid: grid.value,
     downscale: downscale.value,
@@ -457,6 +512,66 @@ function normalizeSheet(input: Partial<SheetSliceOptions>): AutomationResult<She
   });
 }
 
+function normalizeMaxColors(value: number | "auto", name: string): AutomationResult<number | "auto"> {
+  if (value === "auto") {
+    return automationOk("auto");
+  }
+  const normalized = normalizePositiveInteger(value, name);
+  if (!normalized.ok) {
+    return normalized;
+  }
+  return automationOk(Math.min(512, normalized.value));
+}
+
+function normalizePaletteStrategy(value: unknown, name: string): AutomationResult<PaletteStrategy> {
+  const normalized = value === "median-cut" ? "medianCut" : value;
+  return normalizeEnum(normalized, paletteStrategies, name);
+}
+
+function normalizeInteger(value: number, name: string): AutomationResult<number> {
+  if (!Number.isFinite(value)) {
+    return automationError("invalid_options", `${name} must be a finite number.`, 2, { [name]: value });
+  }
+  return automationOk(Math.round(value));
+}
+
+function normalizePaletteInput(input: string[] | string | undefined): AutomationResult<string[] | undefined> {
+  if (input === undefined) {
+    return automationOk(undefined);
+  }
+  if (Array.isArray(input)) {
+    return automationOk(normalizeHexColors(input));
+  }
+
+  const named = resolveNamedPalette(input);
+  if (named) {
+    return automationOk(named);
+  }
+
+  return automationError(
+    "invalid_options",
+    `Unknown palette "${input}". Use a named palette or resolve palette files before normalization.`,
+    2,
+    { palette: input },
+  );
+}
+
+function normalizeProtectColors(input: PaletteProtectColors | string | undefined): AutomationResult<PaletteProtectColors | undefined> {
+  if (input === undefined) {
+    return automationOk(undefined);
+  }
+  if (input === "auto" || input === "none") {
+    return automationOk(input);
+  }
+
+  const colors = Array.isArray(input) ? input : input.split(",").map((item) => item.trim()).filter(Boolean);
+  const normalized = normalizeHexColorsStrict(colors, "protectColors");
+  if (!normalized.ok) {
+    return normalized;
+  }
+  return automationOk(normalized.value);
+}
+
 function normalizeEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>, name: string): AutomationResult<T> {
   if (typeof value === "string" && allowed.has(value as T)) {
     return automationOk(value as T);
@@ -515,6 +630,24 @@ function normalizeHexColors(colors: readonly string[]): string[] {
     }
   }
   return normalized;
+}
+
+function normalizeHexColorsStrict(colors: readonly string[], name: string): AutomationResult<string[]> {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const color of colors) {
+    const trimmed = color.trim();
+    const hex = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+    if (!/^#[0-9a-f]{6}$/i.test(hex)) {
+      return automationError("invalid_options", `Invalid ${name} color "${color}".`, 2, { [name]: color });
+    }
+    const lower = hex.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      normalized.push(lower);
+    }
+  }
+  return automationOk(normalized);
 }
 
 function cloneFrames(frames: readonly SpriteFrame[]): SpriteFrame[] {

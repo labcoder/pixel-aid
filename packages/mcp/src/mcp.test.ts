@@ -173,13 +173,22 @@ describe("PixelAid MCP-ready handlers", () => {
   it("handles detect_sprite_sheet and extract_palette tools", async () => {
     await withFixture(async ({ dir, input }) => {
       const detect = await handlePixelAidTool("detect_sprite_sheet", { inputPath: input });
-      const palettePath = path.join(dir, "palette.json");
-      const palette = await handlePixelAidTool("extract_palette", { inputPath: input, outputPath: palettePath, maxColors: 3 });
+      const palettePath = path.join(dir, "palette.gpl");
+      const palette = await handlePixelAidTool("extract_palette", {
+        inputPath: input,
+        outputPath: palettePath,
+        maxColors: "auto",
+        quantizer: "wu",
+        colorSpace: "oklab",
+        paletteWeighting: "area",
+        minRegion: 0,
+        protectColors: "none",
+      });
 
       expect(detect.structuredContent.ok).toBe(true);
       expect(detect.structuredContent.result).toHaveProperty("sheetLayout");
-      expect(palette.structuredContent.result.palette).toHaveLength(3);
-      expect(JSON.parse(await readFile(palettePath, "utf8")).colorCount).toBe(3);
+      expect(palette.structuredContent.result.palette.length).toBeGreaterThan(0);
+      expect(await readFile(palettePath, "utf8")).toContain("GIMP Palette");
     });
   });
 

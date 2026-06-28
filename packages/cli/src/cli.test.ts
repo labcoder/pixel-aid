@@ -361,6 +361,60 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("parses canonical palette flags for fix and emits a palette", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "canonical.png");
+      const emitPalette = path.join(dir, "out.gpl");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--target",
+        "2x2",
+        "--quantizer",
+        "wu",
+        "--color-space",
+        "oklab",
+        "--dither",
+        "bayer4",
+        "--palette",
+        "pico-8",
+        "--emit-palette",
+        emitPalette,
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--json",
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body.ok).toBe(true);
+      expect(body.result.result?.settings.paletteSettings).toMatchObject({
+        strategy: "wu",
+        colorSpace: "oklab",
+        dithering: "bayer4",
+        mode: "fixed",
+      });
+      await expect(stat(emitPalette)).resolves.toBeTruthy();
+    });
+  });
+
+  it("lists canonical palette flags in help text", async () => {
+    const capture = createCapture();
+    const code = await runCli(["--help"], capture);
+    const body = capture.stdout.join("");
+
+    expect(code).toBe(0);
+    expect(body).toContain("--quantizer");
+    expect(body).toContain("--color-space");
+    expect(body).toContain("--emit-palette");
+    expect(body).toContain("--protect-colors");
+  });
+
   it("exports engine files and an optional zip bundle", async () => {
     await withFixture(async ({ dir, input }) => {
       const capture = createCapture();
