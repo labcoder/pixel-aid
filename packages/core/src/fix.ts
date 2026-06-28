@@ -24,6 +24,7 @@ import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
 import { applyLineCleanup } from "./lineCleanup";
 import { normalizeMixels } from "./mixels";
+import { snapToGrid } from "./snap";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
@@ -73,6 +74,19 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       });
       mixelDiagnostics = normalized.diagnostics;
       return normalized.image;
+    }
+
+    if (options.mode === "single" && options.grid.snap) {
+      // Force a clean uniform integer grid from the resolved scale/phase, ignoring drift wobble.
+      const snapped = snapToGrid(contrastExpanded.image, {
+        scaleX: Math.max(1, Math.round(gridWithDrift.scaleX)),
+        scaleY: Math.max(1, Math.round(gridWithDrift.scaleY)),
+        phaseX: gridWithDrift.sourceRect?.x ?? gridWithDrift.phaseX,
+        phaseY: gridWithDrift.sourceRect?.y ?? gridWithDrift.phaseY,
+        method: options.downscale,
+        alpha: options.alpha
+      });
+      return snapped.image;
     }
 
     return downsampleBlocks(
