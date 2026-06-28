@@ -1,6 +1,6 @@
 import type { PaletteDiagnostics } from "@pixelaid/shared";
 
-export const paletteBudgets = [8, 16, 24, 32, 64] as const;
+export const paletteBudgets = [8, 16, 24, 32, 64, 128, 256, 512] as const;
 
 export function parsePaletteText(value: string): string[] {
   const seen = new Set<string>();

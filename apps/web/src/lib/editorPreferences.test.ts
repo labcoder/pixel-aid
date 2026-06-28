@@ -85,6 +85,56 @@ describe("editor preferences", () => {
     expect(invalid.settings.paletteDithering).toBe("none");
   });
 
+  test("accepts the M1-A color pipeline strategies, dithers, and downscales", () => {
+    const wu = normalizeEditorPreferences({ settings: { paletteStrategy: "wu" } });
+    const kmeans = normalizeEditorPreferences({ settings: { paletteStrategy: "kmeans" } });
+    const bayer = normalizeEditorPreferences({ settings: { paletteDithering: "bayer4" } });
+    const floyd = normalizeEditorPreferences({ settings: { paletteDithering: "floyd" } });
+    const perceptual = normalizeEditorPreferences({ settings: { downscale: "perceptual" } });
+    const nearest = normalizeEditorPreferences({ settings: { downscale: "nearest" } });
+
+    expect(wu.settings.paletteStrategy).toBe("wu");
+    expect(kmeans.settings.paletteStrategy).toBe("kmeans");
+    expect(bayer.settings.paletteDithering).toBe("bayer4");
+    expect(floyd.settings.paletteDithering).toBe("floyd");
+    expect(perceptual.settings.downscale).toBe("perceptual");
+    expect(nearest.settings.downscale).toBe("nearest");
+  });
+
+  test("defaults and round-trips the M1-A color & palette preferences", () => {
+    const defaults = createDefaultEditorPreferences();
+    expect(defaults.settings.maxColorsAuto).toBe(false);
+    expect(defaults.settings.paletteColorSpace).toBe("oklab");
+    expect(defaults.settings.paletteWeighting).toBe("area");
+    expect(defaults.settings.paletteProtectColors).toBe("auto");
+    expect(defaults.settings.paletteMinRegion).toBe(1);
+
+    const normalized = normalizeEditorPreferences({
+      settings: {
+        maxColorsAuto: true,
+        maxColors: 512,
+        paletteColorSpace: "cielab",
+        paletteWeighting: "frequency",
+        paletteProtectColors: "none",
+        paletteMinRegion: 4,
+        paletteSeed: 12345
+      }
+    });
+    expect(normalized.settings.maxColorsAuto).toBe(true);
+    expect(normalized.settings.maxColors).toBe(512);
+    expect(normalized.settings.paletteColorSpace).toBe("cielab");
+    expect(normalized.settings.paletteWeighting).toBe("frequency");
+    expect(normalized.settings.paletteProtectColors).toBe("none");
+    expect(normalized.settings.paletteMinRegion).toBe(4);
+    expect(normalized.settings.paletteSeed).toBe(12345);
+  });
+
+  test("clamps an over-budget max colors preference to the 512 ceiling", () => {
+    const normalized = normalizeEditorPreferences({ settings: { maxColors: 99999 } });
+    expect(normalized.settings.maxColors).toBeLessThanOrEqual(512);
+  });
+
+
   test("preserves hold-frame playback preferences", () => {
     const preferences = normalizeEditorPreferences({ settings: { playbackDirection: "hold" } });
 
