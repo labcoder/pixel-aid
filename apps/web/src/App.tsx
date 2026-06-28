@@ -34,6 +34,7 @@ import type {
   AssetMode,
   AssetType,
   AssetTypeWarning,
+  ColorSpace,
   DownscaleMethod,
   FixOptions,
   GridCandidate,
@@ -42,6 +43,7 @@ import type {
   PaletteLockScope,
   PaletteMode,
   PaletteStrategy,
+  PaletteWeighting,
   PixelFixResult,
   QualityProfileId,
   RGBAImage,
@@ -430,6 +432,8 @@ const fixTransferMemoryKey = "fix transfer clone";
 const workerResultMemoryKey = "worker result buffer";
 const onboardingSampleCards = getOnboardingSampleCards();
 const DocsPage = lazy(() => import("./components/DocsPage").then((module) => ({ default: module.DocsPage })));
+const autoPaletteColorCap = 64;
+const paletteMaxColorOptions = [["auto", "Auto (≤64)"], ...paletteBudgets.map((budget) => [String(budget), String(budget)] as const)] as const;
 const palettePresetOptions = [
   ["pixelaid-mono-4", "PixelAid Mono 4"],
   ["pixelaid-arcade-8", "PixelAid Arcade 8"],
@@ -840,10 +844,17 @@ type AssetEditorSession = {
     targetWidth: number;
     targetHeight: number;
     maxColors: number;
+    maxColorsAuto: boolean;
     paletteMode: PaletteMode;
     paletteStrategy: PaletteStrategy;
     paletteLockScope: PaletteLockScope;
     paletteDithering: PaletteDitheringMode;
+    paletteColorSpace: ColorSpace;
+    paletteSeed: number;
+    paletteWeighting: PaletteWeighting;
+    paletteMinRegion: number;
+    paletteProtectColors: "auto" | "none" | "custom";
+    paletteProtectColorsText: string;
     palettePreset: string;
     customPaletteText: string;
     gridDetect: "auto" | "manual";
@@ -1024,10 +1035,17 @@ export function App() {
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
   const [targetHeight, setTargetHeight] = useState(initialSettings.targetHeight);
   const [maxColors, setMaxColors] = useState(initialSettings.maxColors);
+  const [maxColorsAuto, setMaxColorsAuto] = useState(initialSettings.maxColorsAuto);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>(initialSettings.paletteMode);
   const [paletteStrategy, setPaletteStrategy] = useState<PaletteStrategy>(initialSettings.paletteStrategy);
   const [paletteLockScope, setPaletteLockScope] = useState<PaletteLockScope>(initialSettings.paletteLockScope);
   const [paletteDithering, setPaletteDithering] = useState<PaletteDitheringMode>(initialSettings.paletteDithering);
+  const [paletteColorSpace, setPaletteColorSpace] = useState<ColorSpace>(initialSettings.paletteColorSpace);
+  const [paletteSeed, setPaletteSeed] = useState(initialSettings.paletteSeed);
+  const [paletteWeighting, setPaletteWeighting] = useState<PaletteWeighting>(initialSettings.paletteWeighting);
+  const [paletteMinRegion, setPaletteMinRegion] = useState(initialSettings.paletteMinRegion);
+  const [paletteProtectColors, setPaletteProtectColors] = useState<"auto" | "none" | "custom">(initialSettings.paletteProtectColors);
+  const [paletteProtectColorsText, setPaletteProtectColorsText] = useState(initialSettings.paletteProtectColorsText);
   const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
   const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">(initialSettings.gridDetect);
@@ -1238,7 +1256,20 @@ export function App() {
 
   const setPaletteBudget = useCallback((value: number) => {
     setMaxColors(normalizePaletteBudget(value));
+    setMaxColorsAuto(false);
   }, []);
+
+  const setPaletteMaxColorsSelection = useCallback(
+    (value: string) => {
+      if (value === "auto") {
+        setMaxColorsAuto(true);
+        setMaxColors((current) => Math.min(current, autoPaletteColorCap));
+        return;
+      }
+      setPaletteBudget(Number(value));
+    },
+    [setPaletteBudget]
+  );
 
   const cacheFixSuggestionAnalysis = useCallback((asset: ImportedImageAsset, suggestion: FixSettingSuggestion) => {
     const qualityKey = buildQualityAnalysisCacheKey({
@@ -1260,11 +1291,18 @@ export function App() {
       setMode(settings.mode);
       setTargetWidth(settings.targetWidth);
       setTargetHeight(settings.targetHeight);
-      setPaletteBudget(settings.maxColors);
+      setMaxColors(settings.maxColors);
+      setMaxColorsAuto(settings.maxColorsAuto);
       setPaletteMode(settings.paletteMode);
       setPaletteStrategy(settings.paletteStrategy);
       setPaletteLockScope(settings.paletteLockScope);
       setPaletteDithering(settings.paletteDithering);
+      setPaletteColorSpace(settings.paletteColorSpace);
+      setPaletteSeed(settings.paletteSeed);
+      setPaletteWeighting(settings.paletteWeighting);
+      setPaletteMinRegion(settings.paletteMinRegion);
+      setPaletteProtectColors(settings.paletteProtectColors);
+      setPaletteProtectColorsText(settings.paletteProtectColorsText);
       setPalettePreset(settings.palettePreset);
       setCustomPaletteText(settings.customPaletteText);
       setGridDetect(settings.gridDetect);
@@ -1321,7 +1359,7 @@ export function App() {
       setTelemetryConsent(settings.telemetryConsent);
       setInspectorGroupOrder(settings.inspectorGroupOrder);
     },
-    [setPaletteBudget]
+    []
   );
 
   const toggleEngineExportTarget = useCallback((target: EngineExportTarget) => {
@@ -1345,10 +1383,17 @@ export function App() {
         targetWidth,
         targetHeight,
         maxColors,
+        maxColorsAuto,
         paletteMode,
         paletteStrategy,
         paletteLockScope,
         paletteDithering,
+        paletteColorSpace,
+        paletteSeed,
+        paletteWeighting,
+        paletteMinRegion,
+        paletteProtectColors,
+        paletteProtectColorsText,
         palettePreset,
         customPaletteText,
         gridDetect,
@@ -1436,6 +1481,7 @@ export function App() {
     jaggyCleanup,
     localCorrection,
     maxColors,
+    maxColorsAuto,
     matteCleanup,
     mode,
     morphologyCleanup,
@@ -1447,10 +1493,16 @@ export function App() {
     outlineSize,
     outlineSourceMode,
     paletteLockScope,
+    paletteColorSpace,
     paletteDithering,
+    paletteMinRegion,
     paletteMode,
     palettePreset,
+    paletteProtectColors,
+    paletteProtectColorsText,
+    paletteSeed,
     paletteStrategy,
+    paletteWeighting,
     playbackDirection,
     playbackFps,
     playbackLoop,
@@ -1719,10 +1771,17 @@ export function App() {
         targetWidth,
         targetHeight,
         maxColors,
+        maxColorsAuto,
         paletteMode,
         paletteStrategy,
         paletteLockScope,
         paletteDithering,
+        paletteColorSpace,
+        paletteSeed,
+        paletteWeighting,
+        paletteMinRegion,
+        paletteProtectColors,
+        paletteProtectColorsText,
         palettePreset,
         customPaletteText,
         gridDetect,
@@ -1863,6 +1922,7 @@ export function App() {
       lastExportValidation,
       localCorrection,
       maxColors,
+      maxColorsAuto,
       matteCleanup,
       mode,
       morphologyCleanup,
@@ -1874,11 +1934,17 @@ export function App() {
       outlineMode,
       outlineSize,
       outlineSourceMode,
+      paletteColorSpace,
       paletteDithering,
       paletteLockScope,
+      paletteMinRegion,
       paletteMode,
       palettePreset,
+      paletteProtectColors,
+      paletteProtectColorsText,
+      paletteSeed,
       paletteStrategy,
+      paletteWeighting,
       pivotOverrides,
       pivotPreset,
       playbackDirection,
@@ -1965,10 +2031,17 @@ export function App() {
     setTargetWidth(settings.targetWidth);
     setTargetHeight(settings.targetHeight);
     setMaxColors(settings.maxColors);
+    setMaxColorsAuto(settings.maxColorsAuto ?? false);
     setPaletteMode(settings.paletteMode);
     setPaletteStrategy(settings.paletteStrategy);
     setPaletteLockScope(settings.paletteLockScope);
     setPaletteDithering(settings.paletteDithering);
+    setPaletteColorSpace(settings.paletteColorSpace ?? "oklab");
+    setPaletteSeed(settings.paletteSeed ?? 0x9e3779b9);
+    setPaletteWeighting(settings.paletteWeighting ?? "area");
+    setPaletteMinRegion(settings.paletteMinRegion ?? 1);
+    setPaletteProtectColors(settings.paletteProtectColors ?? "auto");
+    setPaletteProtectColorsText(settings.paletteProtectColorsText ?? "");
     setPalettePreset(settings.palettePreset);
     setCustomPaletteText(settings.customPaletteText);
     setGridDetect(settings.gridDetect);
@@ -2178,6 +2251,8 @@ export function App() {
   const sheetMode = isSheetLikeMode(mode);
   const activePaletteLockScope: PaletteLockScope = sheetMode ? (paletteLockScope === "single" ? "sheet" : paletteLockScope) : "single";
   const fixedPaletteColors = useMemo(() => parsePaletteText(customPaletteText), [customPaletteText]);
+  const customProtectedPaletteColors = useMemo(() => parsePaletteText(paletteProtectColorsText), [paletteProtectColorsText]);
+  const effectiveMaxColors = maxColorsAuto ? autoPaletteColorCap : maxColors;
   const paletteDiagnostics = fixResult?.diagnostics?.palette;
   const paletteWarningMessages = summarizePaletteWarnings(paletteDiagnostics);
   const outputPalettePreview = outputPalette.slice(0, Math.min(outputPalette.length, 16));
@@ -3863,11 +3938,32 @@ export function App() {
       setDownscale(settings.downscale);
       setAlpha(settings.alpha);
       applyAlphaSettings(settings.alphaSettings ?? {});
-      setPaletteBudget(settings.paletteSettings?.maxColors ?? settings.maxColors);
+      const restoredMaxColors = settings.paletteSettings?.maxColors ?? settings.maxColors;
+      if (restoredMaxColors === "auto") {
+        setMaxColorsAuto(true);
+      } else {
+        setMaxColorsAuto(false);
+        setPaletteBudget(restoredMaxColors);
+      }
       setPaletteMode(settings.paletteSettings?.mode ?? (paletteColors.length > 0 ? "fixed" : "auto"));
       setPaletteStrategy(settings.paletteSettings?.strategy ?? "frequency");
       setPaletteLockScope(settings.paletteSettings?.lockScope ?? (settings.mode === "single" ? "single" : "sheet"));
       setPaletteDithering(settings.paletteSettings?.dithering ?? "none");
+      setPaletteColorSpace(settings.paletteSettings?.colorSpace ?? "oklab");
+      setPaletteWeighting(settings.paletteSettings?.weighting ?? "area");
+      setPaletteMinRegion(settings.paletteSettings?.minRegion ?? 1);
+      if (typeof settings.paletteSettings?.seed === "number") {
+        setPaletteSeed(settings.paletteSettings.seed);
+      }
+      const restoredProtect = settings.paletteSettings?.protectColors;
+      if (Array.isArray(restoredProtect)) {
+        setPaletteProtectColors("custom");
+        setPaletteProtectColorsText(restoredProtect.join("\n"));
+      } else if (restoredProtect === "none") {
+        setPaletteProtectColors("none");
+      } else {
+        setPaletteProtectColors("auto");
+      }
       setPalettePreset(settings.paletteSettings?.preset ?? initialSettings.palettePreset);
       setCustomPaletteText(paletteColors.join("\n"));
       setRemoveOrphans(settings.cleanup.removeOrphans);
@@ -4098,13 +4194,19 @@ export function App() {
       assetType,
       targetWidth: effectiveTargetWidth,
       targetHeight: effectiveTargetHeight,
-      maxColors,
+      maxColors: effectiveMaxColors,
       paletteSettings: {
         mode: paletteMode,
         strategy: paletteStrategy,
-        maxColors,
+        maxColors: maxColorsAuto ? "auto" : maxColors,
         lockScope: activePaletteLockScope,
         dithering: paletteDithering,
+        colorSpace: paletteColorSpace,
+        weighting: paletteWeighting,
+        minRegion: paletteMinRegion,
+        protectColors:
+          paletteProtectColors === "custom" ? customProtectedPaletteColors : paletteProtectColors,
+        ...(paletteStrategy === "kmeans" ? { seed: paletteSeed } : {}),
         ...(paletteMode === "fixed" ? { colors: fixedPaletteColors } : {}),
         ...(paletteMode === "preset" ? { preset: palettePreset } : {})
       },
@@ -7100,9 +7202,9 @@ export function App() {
         ) : null}
         <SelectField
           label="Max colors"
-          value={String(maxColors)}
-          options={paletteBudgets.map((budget) => [String(budget), String(budget)] as const)}
-          onChange={(value) => setPaletteBudget(Number(value))}
+          value={maxColorsAuto ? "auto" : String(maxColors)}
+          options={paletteMaxColorOptions}
+          onChange={setPaletteMaxColorsSelection}
         />
         <SelectField
           label="Palette"
@@ -7118,6 +7220,8 @@ export function App() {
           label="Quantizer"
           value={paletteStrategy}
           options={[
+            ["wu", "Wu (variance)"],
+            ["kmeans", "K-means"],
             ["medianCut", "Median cut"],
             ["perceptual", "Perceptual"],
             ["frequency", "Frequency"]
@@ -7125,12 +7229,84 @@ export function App() {
           disabled={paletteMode !== "auto"}
           onChange={(value) => setPaletteStrategy(value as PaletteStrategy)}
         />
+        {paletteMode === "auto" && paletteStrategy === "kmeans" ? (
+          <label className="field-row">
+            <span>Seed</span>
+            <input
+              type="number"
+              value={paletteSeed}
+              aria-label="K-means seed"
+              onChange={(event) => setPaletteSeed(Number(event.currentTarget.value) || 0)}
+            />
+          </label>
+        ) : null}
+        <SelectField
+          label="Color space"
+          value={paletteColorSpace}
+          options={[
+            ["oklab", "OKLab"],
+            ["cielab", "CIELAB"],
+            ["srgb", "sRGB"]
+          ]}
+          onChange={(value) => setPaletteColorSpace(value as ColorSpace)}
+        />
+        <SelectField
+          label="Weighting"
+          value={paletteWeighting}
+          options={[
+            ["area", "Area (coherent)"],
+            ["frequency", "Frequency"]
+          ]}
+          disabled={paletteMode !== "auto"}
+          onChange={(value) => setPaletteWeighting(value as PaletteWeighting)}
+        />
+        {paletteMode === "auto" && paletteWeighting === "area" ? (
+          <label className="field-row">
+            <span>Min region</span>
+            <input
+              type="number"
+              min={1}
+              value={paletteMinRegion}
+              aria-label="Minimum region size in pixels"
+              onChange={(event) => setPaletteMinRegion(Math.max(1, Number(event.currentTarget.value) || 1))}
+            />
+          </label>
+        ) : null}
+        <SelectField
+          label="Protect colors"
+          value={paletteProtectColors}
+          options={[
+            ["auto", "Auto (outline + accents)"],
+            ["none", "None"],
+            ["custom", "Custom"]
+          ]}
+          disabled={paletteMode !== "auto"}
+          onChange={(value) => setPaletteProtectColors(value as "auto" | "none" | "custom")}
+        />
+        {paletteMode === "auto" && paletteProtectColors === "custom" ? (
+          <>
+            <label className="field-row field-row-stack">
+              <span>Protected colors</span>
+              <textarea
+                className="palette-textarea"
+                value={paletteProtectColorsText}
+                spellCheck={false}
+                aria-label="Protected palette colors"
+                onChange={(event) => setPaletteProtectColorsText(event.currentTarget.value)}
+              />
+            </label>
+            <p className="field-note">{customProtectedPaletteColors.length} protected colors parsed.</p>
+          </>
+        ) : null}
         <SelectField
           label="Dither"
           value={paletteDithering}
           options={[
             ["none", "None"],
+            ["bayer2", "Bayer 2×2"],
+            ["bayer4", "Bayer 4×4"],
             ["ordered", "Ordered"],
+            ["floyd", "Floyd–Steinberg"],
             ["errorDiffusion", "Error diffusion"]
           ]}
           onChange={(value) => setPaletteDithering(value as PaletteDitheringMode)}

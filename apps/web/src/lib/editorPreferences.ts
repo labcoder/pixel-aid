@@ -2,11 +2,13 @@ import type {
   AlphaMode,
   AssetMode,
   AssetType,
+  ColorSpace,
   DownscaleMethod,
   OutlineMode,
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
+  PaletteWeighting,
   PaletteStrategy,
   QualityProfileId
 } from "@pixelaid/shared";
@@ -32,10 +34,17 @@ export type EditorPreferenceSettings = {
   targetWidth: number;
   targetHeight: number;
   maxColors: number;
+  maxColorsAuto: boolean;
   paletteMode: PaletteMode;
   paletteStrategy: PaletteStrategy;
   paletteLockScope: PaletteLockScope;
   paletteDithering: PaletteDitheringMode;
+  paletteColorSpace: ColorSpace;
+  paletteSeed: number;
+  paletteWeighting: PaletteWeighting;
+  paletteMinRegion: number;
+  paletteProtectColors: "auto" | "none" | "custom";
+  paletteProtectColorsText: string;
   palettePreset: string;
   customPaletteText: string;
   gridDetect: "auto" | "manual";
@@ -108,10 +117,17 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   targetWidth: engineFixDefaults.targetWidth,
   targetHeight: engineFixDefaults.targetHeight,
   maxColors: engineFixDefaults.maxColors,
+  maxColorsAuto: false,
   paletteMode: engineFixDefaults.paletteMode,
   paletteStrategy: engineFixDefaults.paletteStrategy,
   paletteLockScope: engineFixDefaults.paletteLockScope,
   paletteDithering: engineFixDefaults.paletteDithering,
+  paletteColorSpace: "oklab",
+  paletteSeed: 0x9e3779b9,
+  paletteWeighting: "area",
+  paletteMinRegion: 1,
+  paletteProtectColors: "auto",
+  paletteProtectColorsText: "",
   palettePreset: engineFixDefaults.palettePreset,
   customPaletteText: engineFixDefaults.customPaletteText,
   gridDetect: engineFixDefaults.gridDetect,
@@ -224,11 +240,18 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       mode: unionSetting<AssetMode>(settings.mode, ["single", "spriteSheet", "tileSheet"], defaults.settings.mode),
       targetWidth: integerSetting(settings.targetWidth, defaults.settings.targetWidth, 1, 4096),
       targetHeight: integerSetting(settings.targetHeight, defaults.settings.targetHeight, 1, 4096),
-      maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 256),
+      maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 512),
+      maxColorsAuto: booleanSetting(settings.maxColorsAuto, defaults.settings.maxColorsAuto),
       paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
-      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency", "perceptual"], defaults.settings.paletteStrategy),
+      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency", "perceptual", "wu", "kmeans"], defaults.settings.paletteStrategy),
       paletteLockScope: unionSetting(settings.paletteLockScope, ["single", "firstFrame", "sheet", "project"], defaults.settings.paletteLockScope),
-      paletteDithering: unionSetting(settings.paletteDithering, ["none", "ordered", "errorDiffusion"], defaults.settings.paletteDithering),
+      paletteDithering: unionSetting(settings.paletteDithering, ["none", "ordered", "bayer2", "bayer4", "errorDiffusion", "floyd"], defaults.settings.paletteDithering),
+      paletteColorSpace: unionSetting(settings.paletteColorSpace, ["oklab", "cielab", "srgb"], defaults.settings.paletteColorSpace),
+      paletteSeed: integerSetting(settings.paletteSeed, defaults.settings.paletteSeed, 0, 0xffffffff),
+      paletteWeighting: unionSetting(settings.paletteWeighting, ["area", "frequency"], defaults.settings.paletteWeighting),
+      paletteMinRegion: integerSetting(settings.paletteMinRegion, defaults.settings.paletteMinRegion, 1, 4096),
+      paletteProtectColors: unionSetting(settings.paletteProtectColors, ["auto", "none", "custom"], defaults.settings.paletteProtectColors),
+      paletteProtectColorsText: stringSetting(settings.paletteProtectColorsText, defaults.settings.paletteProtectColorsText),
       palettePreset: stringSetting(settings.palettePreset, defaults.settings.palettePreset),
       customPaletteText: stringSetting(settings.customPaletteText, defaults.settings.customPaletteText),
       gridDetect: unionSetting(settings.gridDetect, ["auto", "manual"], defaults.settings.gridDetect),
@@ -257,7 +280,11 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       normalizeTimelineFrames: booleanSetting(settings.normalizeTimelineFrames, defaults.settings.normalizeTimelineFrames),
       showOnionSkin: booleanSetting(settings.showOnionSkin, defaults.settings.showOnionSkin),
       timelineViewportSourceMode: unionSetting(settings.timelineViewportSourceMode, ["input", "output", "compare"], defaults.settings.timelineViewportSourceMode),
-      downscale: unionSetting(settings.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving"], defaults.settings.downscale),
+      downscale: unionSetting(
+        settings.downscale,
+        ["dominant", "median", "perceptual", "nearest", "bilinear", "adaptive", "averageThenPalette", "detailPreserving", "contrast", "kCentroid"],
+        defaults.settings.downscale
+      ),
       alpha: unionSetting(settings.alpha, ["preserve", "binary", "backgroundFloodFill", "colorKey"], defaults.settings.alpha),
       alphaThreshold: integerSetting(settings.alphaThreshold, defaults.settings.alphaThreshold, 0, 255),
       alphaTolerance: integerSetting(settings.alphaTolerance, defaults.settings.alphaTolerance, 0, 255),
@@ -442,11 +469,16 @@ function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSe
   if (typeof value.mode === "string") settings.mode = unionSetting<AssetMode>(value.mode, ["single", "spriteSheet", "tileSheet"], "single");
   if (typeof value.targetWidth === "number") settings.targetWidth = integerSetting(value.targetWidth, 64, 1, 4096);
   if (typeof value.targetHeight === "number") settings.targetHeight = integerSetting(value.targetHeight, 64, 1, 4096);
-  if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 256);
+  if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 512);
   if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
   if (typeof value.gridScaleX === "number") settings.gridScaleX = numberSetting(value.gridScaleX, 8, 0.01, 1024);
   if (typeof value.gridScaleY === "number") settings.gridScaleY = numberSetting(value.gridScaleY, 8, 0.01, 1024);
-  if (typeof value.downscale === "string") settings.downscale = unionSetting(value.downscale, ["dominant", "median", "adaptive", "averageThenPalette", "detailPreserving", "contrast", "kCentroid"], "dominant");
+  if (typeof value.downscale === "string")
+    settings.downscale = unionSetting(
+      value.downscale,
+      ["dominant", "median", "perceptual", "nearest", "bilinear", "adaptive", "averageThenPalette", "detailPreserving", "contrast", "kCentroid"],
+      "dominant"
+    );
   if (typeof value.alpha === "string") settings.alpha = unionSetting(value.alpha, ["preserve", "binary", "backgroundFloodFill", "colorKey"], "preserve");
   return settings;
 }
