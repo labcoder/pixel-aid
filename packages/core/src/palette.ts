@@ -81,6 +81,7 @@ type NormalizedPaletteSettings = {
   weighting: PaletteWeighting;
   minRegion: number;
   protectColors: PaletteProtectColors;
+  protectSalientColors: boolean;
 };
 
 export type ResolvePaletteOptions = {
@@ -141,7 +142,7 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
   const maxColors =
     settings.maxColors === "auto" ? resolveAutoColorCount(paletteSourceAnalysis, { cap: AUTO_COLOR_COUNT_CAP }) : settings.maxColors;
   const protectedColors =
-    settings.mode === "auto" ? resolveProtectedColors(paletteSource, paletteSourceAnalysis, settings.protectColors, maxColors) : resolveExplicitProtectedColors(settings.protectColors);
+    settings.mode === "auto" ? resolveProtectedColors(paletteSource, paletteSourceAnalysis, settings.protectColors, maxColors, settings.protectSalientColors) : resolveExplicitProtectedColors(settings.protectColors);
   const reserved = uniqueHexColors([...(options.reservedColors ?? []), ...protectedColors]);
   const palette = hasFixedPalette
     ? fixedColors
@@ -292,7 +293,8 @@ function resolveProtectedColors(
   image: RGBAImage,
   analysis: PaletteAnalysis,
   protectColors: PaletteProtectColors,
-  maxColors: number
+  maxColors: number,
+  protectSalientColors: boolean
 ): string[] {
   if (Array.isArray(protectColors)) {
     return uniqueHexColors(protectColors);
@@ -310,6 +312,18 @@ function resolveProtectedColors(
 
   for (const accent of detectHighSaturationAccentColors(analysis)) {
     addUniquePaletteColor(protectedColors, seen, accent, maxColors);
+  }
+
+  // Salience-based protection: small but vivid regions (eyes, nose, mouth) that fall below the frequency
+  // floor above. Reserve at most a quarter of the budget so we never starve the main palette.
+  if (protectSalientColors) {
+    const salientBudget = Math.max(2, Math.floor(maxColors / 4));
+    for (const salient of detectSalientAccentColors(analysis, salientBudget)) {
+      if (protectedColors.length >= salientBudget + 1) {
+        break;
+      }
+      addUniquePaletteColor(protectedColors, seen, salient, maxColors);
+    }
   }
   return protectedColors;
 }
@@ -400,6 +414,101 @@ function detectHighSaturationAccentColors(analysis: PaletteAnalysis): string[] {
     }
   }
   return accents;
+}
+
+/**
+ * Salience-based accent detection. Unlike frequency-based detection, this clusters vivid pixels into
+ * coarse hue/saturation/lightness bins so a small region whose color is spread across many near-duplicate
+ * shades (typical of AI/upscaled art — e.g. green eyes, a pink nose) aggregates into one cluster. Any
+ * vivid cluster above a LOW area floor is protected, ordered by a salience score (saturation x sqrt(area)),
+ * so small-but-striking colors survive low color budgets. Deterministic.
+ */
+function detectSalientAccentColors(analysis: PaletteAnalysis, limit: number): string[] {
+  const ranked = rankCounts(analysis.exactCounts);
+  if (ranked.length === 0 || limit <= 0) {
+    return [];
+  }
+  const total = ranked.reduce((sum, entry) => sum + entry.count, 0);
+  if (total <= 0) {
+    return [];
+  }
+
+  type Cluster = { score: number; bestColor: number; bestSat: number; area: number };
+  const clusters = new Map<number, Cluster>();
+  for (const entry of ranked) {
+    const r = (entry.color >> 16) & 0xff;
+    const g = (entry.color >> 8) & 0xff;
+    const b = entry.color & 0xff;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const saturation = max === 0 ? 0 : (max - min) / max;
+    const value = max / 255;
+    // Only consider genuinely vivid, non-near-black/near-white pixels as salient candidates.
+    if (saturation < 0.45 || value < 0.2) {
+      continue;
+    }
+    // Cluster key: coarse hue sextant + saturation band + lightness band. This merges the many shades of
+    // one vivid region without merging distinct accent colors (e.g. green eyes vs pink nose stay apart).
+    const { hueSextant, satBand, valBand } = clusterKeyParts(r, g, b, saturation, value);
+    const key = hueSextant * 64 + satBand * 8 + valBand;
+    const existing = clusters.get(key);
+    if (existing) {
+      existing.area += entry.count;
+      if (saturation > existing.bestSat) {
+        existing.bestSat = saturation;
+        existing.bestColor = entry.color;
+      }
+    } else {
+      clusters.set(key, { score: 0, bestColor: entry.color, bestSat: saturation, area: entry.count });
+    }
+  }
+
+  // Low area floor: a salient region need only cover ~0.1% of visible pixels (vs 1% for plain accents).
+  const areaFloor = Math.max(8, total * 0.001);
+  const candidates: Cluster[] = [];
+  for (const cluster of clusters.values()) {
+    if (cluster.area < areaFloor) {
+      continue;
+    }
+    // Salience favours saturation and (sub-linearly) area, so a vivid small region outranks a dull large one.
+    cluster.score = cluster.bestSat * Math.sqrt(cluster.area);
+    candidates.push(cluster);
+  }
+  candidates.sort((a, b) =>
+    b.score - a.score || b.area - a.area || a.bestColor - b.bestColor
+  );
+  return candidates.slice(0, limit).map((cluster) => rgbToHex(cluster.bestColor));
+}
+
+function clusterKeyParts(
+  r: number,
+  g: number,
+  b: number,
+  saturation: number,
+  value: number
+): { hueSextant: number; satBand: number; valBand: number } {
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  const delta = max - min;
+  let hue = 0;
+  if (delta !== 0) {
+    if (max === r) {
+      hue = ((g - b) / delta) % 6;
+    } else if (max === g) {
+      hue = (b - r) / delta + 2;
+    } else {
+      hue = (r - g) / delta + 4;
+    }
+    hue *= 60;
+    if (hue < 0) {
+      hue += 360;
+    }
+  }
+  return {
+    hueSextant: Math.min(5, Math.floor(hue / 60)),
+    satBand: Math.min(3, Math.floor(saturation * 4)),
+    valBand: Math.min(3, Math.floor(value * 4))
+  };
 }
 
 function extractFrequencyPalette(image: RGBAImage, maxColors: number): string[] {
@@ -1179,6 +1288,7 @@ function normalizePaletteSettings(requested: PaletteSettings | undefined, fallba
     weighting: normalizePaletteWeighting(requested?.weighting),
     minRegion: normalizeMinRegion(requested?.minRegion),
     protectColors: requested?.protectColors ?? "auto",
+    protectSalientColors: requested?.protectSalientColors ?? true,
     ...(requested?.colors ? { colors: requested.colors } : {}),
     ...(requested?.preset ? { preset: requested.preset } : {})
   };

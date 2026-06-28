@@ -58,6 +58,7 @@ export type AutomationFixOptionsInput = {
   paletteWeighting?: PaletteWeighting;
   minRegion?: number;
   protectColors?: PaletteProtectColors | string;
+  protectSalientColors?: boolean;
   emitPalette?: string;
   emitPaletteConditioning?: string;
   alpha?: AlphaMode;
@@ -292,6 +293,7 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     minRegion: minRegion.value,
     ...(seed?.ok ? { seed: seed.value } : {}),
     ...(protectColors.value !== undefined ? { protectColors: protectColors.value } : {}),
+    ...(input.protectSalientColors !== undefined ? { protectSalientColors: input.protectSalientColors } : {}),
     ...(paletteColors.value && paletteColors.value.length > 0 ? { colors: paletteColors.value } : {}),
     ...(input.palettePreset ? { preset: input.palettePreset } : {}),
   };
