@@ -1,5 +1,5 @@
 import type { AlphaMode, DownscaleMethod, RGBAImage, WorkerProgressStage } from "@pixelaid/shared";
-import { clampByte, packQuantizedRgb, unpackRgb } from "./color";
+import { clampByte, packQuantizedRgb, rgbToOklab, unpackRgb } from "./color";
 import { createImage } from "./image";
 import { assertNotCancelled, phasePercent, reportProgress, shouldReportRow } from "./runtime";
 import type { FixRuntimeOptions } from "./runtime";
@@ -60,6 +60,23 @@ type MedianScratch = {
   a: Uint32Array;
 };
 
+type PerceptualScratch = {
+  rs: Uint8Array;
+  gs: Uint8Array;
+  bs: Uint8Array;
+  labLs: Float64Array;
+  labAs: Float64Array;
+  labBs: Float64Array;
+  centroidLs: Float64Array;
+  centroidAs: Float64Array;
+  centroidBs: Float64Array;
+  sumLs: Float64Array;
+  sumAs: Float64Array;
+  sumBs: Float64Array;
+  clusterCounts: Uint32Array;
+  firstIndices: Uint32Array;
+};
+
 type DetailCluster = ColorCluster & {
   minX: number;
   maxX: number;
@@ -80,6 +97,7 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
   const block: BlockBounds = { startX: 0, endX: 1, startY: 0, endY: 1 };
   const dominantScratch = options.method === "dominant" || options.method === "adaptive" ? createDominantScratch() : undefined;
   const medianScratch = options.method === "median" || options.method === "adaptive" ? createMedianScratch() : undefined;
+  const perceptualScratch = options.method === "perceptual" ? createPerceptualScratch() : undefined;
   const regularIntegerBlocks = createRegularIntegerBlockSampler(image, options);
 
   for (let y = 0; y < options.outputHeight; y += 1) {
@@ -111,6 +129,16 @@ export function downsampleBlocks(image: RGBAImage, options: DownsampleOptions, p
         pixel = contrastBlock(image, block);
       } else if (options.method === "kCentroid") {
         pixel = kCentroidBlock(image, block);
+      } else if (options.method === "perceptual") {
+        const perceptual = perceptualBlock(image, block, perceptualScratch!);
+        pixel = perceptual.pixel;
+        foregroundCoverage = perceptual.visibleCoverage;
+      } else if (options.method === "nearest") {
+        pixel = nearestBlock(image, block);
+      } else if (options.method === "bilinear") {
+        // Explicit opt-in compatibility sampler: bilinear is the only downscale mode here
+        // that intentionally manufactures colors not present in the source block.
+        pixel = bilinearBlock(image, block);
       } else {
         const dominant = dominantBlock(image, block, dominantScratch!);
         pixel = dominant.pixel;
@@ -442,6 +470,249 @@ function adaptiveBlock(
     pixel: medianBlock(image, block, medianScratch),
     visibleCoverage: dominant.dominant.visibleCoverage
   };
+}
+
+function perceptualBlock(
+  image: RGBAImage,
+  block: BlockBounds,
+  scratch: PerceptualScratch
+): { pixel: [number, number, number, number]; visibleCoverage: number } {
+  const capacity = Math.max(1, (block.endX - block.startX) * (block.endY - block.startY));
+  ensurePerceptualCapacity(scratch, capacity);
+  let count = 0;
+  let total = 0;
+  let alphaTotal = 0;
+  let transparentR = 0;
+  let transparentG = 0;
+  let transparentB = 0;
+  let transparentCount = 0;
+
+  for (let y = block.startY; y < block.endY; y += 1) {
+    for (let x = block.startX; x < block.endX; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      alphaTotal += alpha;
+      total += 1;
+      if (alpha < 16) {
+        transparentR += image.data[offset]!;
+        transparentG += image.data[offset + 1]!;
+        transparentB += image.data[offset + 2]!;
+        transparentCount += 1;
+        continue;
+      }
+
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      const lab = rgbToOklab((r << 16) | (g << 8) | b);
+      scratch.rs[count] = r;
+      scratch.gs[count] = g;
+      scratch.bs[count] = b;
+      scratch.labLs[count] = lab.x;
+      scratch.labAs[count] = lab.y;
+      scratch.labBs[count] = lab.z;
+      count += 1;
+    }
+  }
+
+  const alpha = total > 0 ? clampByte(alphaTotal / total) : 0;
+  const visibleCoverage = total > 0 ? count / total : 0;
+  if (count === 0) {
+    return {
+      pixel:
+        transparentCount > 0
+          ? [clampByte(transparentR / transparentCount), clampByte(transparentG / transparentCount), clampByte(transparentB / transparentCount), alpha]
+          : [0, 0, 0, alpha],
+      visibleCoverage
+    };
+  }
+  if (count === 1) {
+    return { pixel: [scratch.rs[0]!, scratch.gs[0]!, scratch.bs[0]!, alpha], visibleCoverage };
+  }
+
+  const k = Math.min(3, count);
+  const cluster = choosePerceptualCluster(scratch, count, k);
+  const medoid = nearestPerceptualMedoid(scratch, count, cluster, k);
+  return { pixel: [scratch.rs[medoid]!, scratch.gs[medoid]!, scratch.bs[medoid]!, alpha], visibleCoverage };
+}
+
+function createPerceptualScratch(): PerceptualScratch {
+  return {
+    rs: new Uint8Array(0),
+    gs: new Uint8Array(0),
+    bs: new Uint8Array(0),
+    labLs: new Float64Array(0),
+    labAs: new Float64Array(0),
+    labBs: new Float64Array(0),
+    centroidLs: new Float64Array(3),
+    centroidAs: new Float64Array(3),
+    centroidBs: new Float64Array(3),
+    sumLs: new Float64Array(3),
+    sumAs: new Float64Array(3),
+    sumBs: new Float64Array(3),
+    clusterCounts: new Uint32Array(3),
+    firstIndices: new Uint32Array(3)
+  };
+}
+
+function ensurePerceptualCapacity(scratch: PerceptualScratch, capacity: number): void {
+  if (scratch.rs.length >= capacity) {
+    return;
+  }
+
+  scratch.rs = new Uint8Array(capacity);
+  scratch.gs = new Uint8Array(capacity);
+  scratch.bs = new Uint8Array(capacity);
+  scratch.labLs = new Float64Array(capacity);
+  scratch.labAs = new Float64Array(capacity);
+  scratch.labBs = new Float64Array(capacity);
+}
+
+function choosePerceptualCluster(scratch: PerceptualScratch, count: number, k: number): number {
+  seedPerceptualCentroids(scratch, count, k);
+
+  for (let iteration = 0; iteration < 6; iteration += 1) {
+    resetPerceptualClusterSums(scratch, k);
+    for (let index = 0; index < count; index += 1) {
+      const clusterIndex = nearestPerceptualCentroid(scratch.labLs[index]!, scratch.labAs[index]!, scratch.labBs[index]!, scratch, k);
+      scratch.clusterCounts[clusterIndex] = scratch.clusterCounts[clusterIndex]! + 1;
+      scratch.sumLs[clusterIndex] = scratch.sumLs[clusterIndex]! + scratch.labLs[index]!;
+      scratch.sumAs[clusterIndex] = scratch.sumAs[clusterIndex]! + scratch.labAs[index]!;
+      scratch.sumBs[clusterIndex] = scratch.sumBs[clusterIndex]! + scratch.labBs[index]!;
+      scratch.firstIndices[clusterIndex] = Math.min(scratch.firstIndices[clusterIndex]!, index);
+    }
+
+    for (let clusterIndex = 0; clusterIndex < k; clusterIndex += 1) {
+      const clusterCount = scratch.clusterCounts[clusterIndex]!;
+      if (clusterCount === 0) {
+        continue;
+      }
+      scratch.centroidLs[clusterIndex] = scratch.sumLs[clusterIndex]! / clusterCount;
+      scratch.centroidAs[clusterIndex] = scratch.sumAs[clusterIndex]! / clusterCount;
+      scratch.centroidBs[clusterIndex] = scratch.sumBs[clusterIndex]! / clusterCount;
+    }
+  }
+
+  let bestCluster = 0;
+  for (let clusterIndex = 1; clusterIndex < k; clusterIndex += 1) {
+    if (
+      scratch.clusterCounts[clusterIndex]! > scratch.clusterCounts[bestCluster]! ||
+      (scratch.clusterCounts[clusterIndex] === scratch.clusterCounts[bestCluster] && scratch.firstIndices[clusterIndex]! < scratch.firstIndices[bestCluster]!)
+    ) {
+      bestCluster = clusterIndex;
+    }
+  }
+  return bestCluster;
+}
+
+function resetPerceptualClusterSums(scratch: PerceptualScratch, k: number): void {
+  for (let clusterIndex = 0; clusterIndex < k; clusterIndex += 1) {
+    scratch.clusterCounts[clusterIndex] = 0;
+    scratch.sumLs[clusterIndex] = 0;
+    scratch.sumAs[clusterIndex] = 0;
+    scratch.sumBs[clusterIndex] = 0;
+    scratch.firstIndices[clusterIndex] = 0xffffffff;
+  }
+}
+
+function seedPerceptualCentroids(scratch: PerceptualScratch, count: number, k: number): void {
+  const darkest = indexOfExtremePerceptualLightness(scratch, count, "min");
+  setPerceptualCentroid(scratch, 0, darkest);
+  if (k === 1) {
+    return;
+  }
+
+  const brightest = indexOfExtremePerceptualLightness(scratch, count, "max");
+  setPerceptualCentroid(scratch, 1, brightest);
+  if (k === 2) {
+    return;
+  }
+
+  let farthest = 0;
+  let farthestDistance = -1;
+  for (let index = 0; index < count; index += 1) {
+    if (index === darkest || index === brightest) {
+      continue;
+    }
+    const l = scratch.labLs[index]!;
+    const a = scratch.labAs[index]!;
+    const b = scratch.labBs[index]!;
+    const distance = Math.min(
+      perceptualVectorDistanceSq(l, a, b, scratch.centroidLs[0]!, scratch.centroidAs[0]!, scratch.centroidBs[0]!),
+      perceptualVectorDistanceSq(l, a, b, scratch.centroidLs[1]!, scratch.centroidAs[1]!, scratch.centroidBs[1]!)
+    );
+    if (distance > farthestDistance) {
+      farthest = index;
+      farthestDistance = distance;
+    }
+  }
+  setPerceptualCentroid(scratch, 2, farthest);
+}
+
+function indexOfExtremePerceptualLightness(scratch: PerceptualScratch, count: number, mode: "min" | "max"): number {
+  let bestIndex = 0;
+  let bestValue = scratch.labLs[0]!;
+  for (let index = 1; index < count; index += 1) {
+    const value = scratch.labLs[index]!;
+    if ((mode === "min" && value < bestValue) || (mode === "max" && value > bestValue)) {
+      bestIndex = index;
+      bestValue = value;
+    }
+  }
+  return bestIndex;
+}
+
+function setPerceptualCentroid(scratch: PerceptualScratch, centroidIndex: number, sourceIndex: number): void {
+  scratch.centroidLs[centroidIndex] = scratch.labLs[sourceIndex]!;
+  scratch.centroidAs[centroidIndex] = scratch.labAs[sourceIndex]!;
+  scratch.centroidBs[centroidIndex] = scratch.labBs[sourceIndex]!;
+}
+
+function nearestPerceptualCentroid(l: number, a: number, b: number, scratch: PerceptualScratch, k: number): number {
+  let bestIndex = 0;
+  let bestDistance = perceptualVectorDistanceSq(l, a, b, scratch.centroidLs[0]!, scratch.centroidAs[0]!, scratch.centroidBs[0]!);
+  for (let index = 1; index < k; index += 1) {
+    const distance = perceptualVectorDistanceSq(l, a, b, scratch.centroidLs[index]!, scratch.centroidAs[index]!, scratch.centroidBs[index]!);
+    if (distance < bestDistance) {
+      bestIndex = index;
+      bestDistance = distance;
+    }
+  }
+  return bestIndex;
+}
+
+function nearestPerceptualMedoid(scratch: PerceptualScratch, count: number, clusterIndex: number, k: number): number {
+  let bestIndex = scratch.firstIndices[clusterIndex]!;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < count; index += 1) {
+    const assignedCluster = nearestPerceptualCentroid(scratch.labLs[index]!, scratch.labAs[index]!, scratch.labBs[index]!, scratch, k);
+    if (assignedCluster !== clusterIndex) {
+      continue;
+    }
+
+    const distance = perceptualVectorDistanceSq(
+      scratch.labLs[index]!,
+      scratch.labAs[index]!,
+      scratch.labBs[index]!,
+      scratch.centroidLs[clusterIndex]!,
+      scratch.centroidAs[clusterIndex]!,
+      scratch.centroidBs[clusterIndex]!
+    );
+    if (distance < bestDistance || (distance === bestDistance && index < bestIndex)) {
+      bestIndex = index;
+      bestDistance = distance;
+    }
+  }
+
+  return bestIndex;
+}
+
+function perceptualVectorDistanceSq(l1: number, a1: number, b1: number, l2: number, a2: number, b2: number): number {
+  const dl = l1 - l2;
+  const da = a1 - a2;
+  const db = b1 - b2;
+  return dl * dl + da * da + db * db;
 }
 
 function detailPreservingBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
@@ -937,6 +1208,40 @@ function averageBlock(image: RGBAImage, block: BlockBounds): [number, number, nu
   }
 
   return [clampByte(r / total), clampByte(g / total), clampByte(b / total), clampByte(a / total)];
+}
+
+function nearestBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  const x = Math.max(0, Math.min(image.width - 1, block.startX));
+  const y = Math.max(0, Math.min(image.height - 1, block.startY));
+  const offset = (y * image.width + x) * 4;
+  return [image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!, image.data[offset + 3]!];
+}
+
+function bilinearBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
+  const sampleX = Math.max(0, Math.min(image.width - 1, (block.startX + block.endX - 1) / 2));
+  const sampleY = Math.max(0, Math.min(image.height - 1, (block.startY + block.endY - 1) / 2));
+  const x0 = Math.floor(sampleX);
+  const y0 = Math.floor(sampleY);
+  const x1 = Math.min(image.width - 1, x0 + 1);
+  const y1 = Math.min(image.height - 1, y0 + 1);
+  const tx = sampleX - x0;
+  const ty = sampleY - y0;
+  const topLeft = (y0 * image.width + x0) * 4;
+  const topRight = (y0 * image.width + x1) * 4;
+  const bottomLeft = (y1 * image.width + x0) * 4;
+  const bottomRight = (y1 * image.width + x1) * 4;
+  return [
+    bilinearChannel(image.data[topLeft]!, image.data[topRight]!, image.data[bottomLeft]!, image.data[bottomRight]!, tx, ty),
+    bilinearChannel(image.data[topLeft + 1]!, image.data[topRight + 1]!, image.data[bottomLeft + 1]!, image.data[bottomRight + 1]!, tx, ty),
+    bilinearChannel(image.data[topLeft + 2]!, image.data[topRight + 2]!, image.data[bottomLeft + 2]!, image.data[bottomRight + 2]!, tx, ty),
+    bilinearChannel(image.data[topLeft + 3]!, image.data[topRight + 3]!, image.data[bottomLeft + 3]!, image.data[bottomRight + 3]!, tx, ty)
+  ];
+}
+
+function bilinearChannel(topLeft: number, topRight: number, bottomLeft: number, bottomRight: number, tx: number, ty: number): number {
+  const top = topLeft + (topRight - topLeft) * tx;
+  const bottom = bottomLeft + (bottomRight - bottomLeft) * tx;
+  return clampByte(top + (bottom - top) * ty);
 }
 
 function luminance(r: number, g: number, b: number): number {

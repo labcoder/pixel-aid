@@ -36,6 +36,32 @@ describe("palette dithering", () => {
     expect(readHex(remapped, 3, 3)).toBe("#ffffff");
   });
 
+  test("bayer2 and bayer4 dithering are deterministic distinct ordered kernels", () => {
+    const source = solidImage(4, 4, [128, 128, 128, 255]);
+    const bayer2 = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "bayer2" });
+    const bayer2Again = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "bayer2" });
+    const bayer4 = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "bayer4" });
+    const bayer4Again = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "bayer4" });
+    const none = remapToPalette(imageFromHexRows([["#000000", "#ffffff"]]), ["#000000", "#ffffff"], { dithering: "none" });
+
+    expect(Array.from(bayer2Again.data)).toEqual(Array.from(bayer2.data));
+    expect(Array.from(bayer4Again.data)).toEqual(Array.from(bayer4.data));
+    expect(Array.from(bayer2.data)).not.toEqual(Array.from(bayer4.data));
+    expect(readHex(none, 0, 0)).toBe("#000000");
+    expect(readHex(none, 1, 0)).toBe("#ffffff");
+  });
+
+  test("floyd dithering is deterministic and conserves gradient tone better than none", () => {
+    const source = horizontalGradientImage(16, 8, 48, 112);
+    const none = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "none" });
+    const floyd = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "floyd" });
+    const floydAgain = remapToPalette(source, ["#000000", "#ffffff"], { dithering: "floyd" });
+    const sourceTone = averageLuma(source);
+
+    expect(Array.from(floydAgain.data)).toEqual(Array.from(floyd.data));
+    expect(Math.abs(averageLuma(floyd) - sourceTone)).toBeLessThan(Math.abs(averageLuma(none) - sourceTone));
+  });
+
   test("non-dithered remap caches repeated quantized colors without changing alpha", () => {
     const source = imageFromPixels(4, [
       [120, 121, 122, 255],
@@ -185,6 +211,34 @@ function noisyGradientImage(width: number, height: number): RGBAImage {
     }
   }
   return { width, height, data };
+}
+
+function horizontalGradientImage(width: number, height: number, start: number, end: number): RGBAImage {
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const value = Math.round(start + ((end - start) * x) / Math.max(1, width - 1));
+      const offset = (y * width + x) * 4;
+      data[offset] = value;
+      data[offset + 1] = value;
+      data[offset + 2] = value;
+      data[offset + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+
+function averageLuma(image: RGBAImage): number {
+  let total = 0;
+  let count = 0;
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    if (image.data[offset + 3]! < 16) {
+      continue;
+    }
+    total += image.data[offset]! * 0.299 + image.data[offset + 1]! * 0.587 + image.data[offset + 2]! * 0.114;
+    count += 1;
+  }
+  return count > 0 ? total / count : 0;
 }
 
 function imageFromHexRows(rows: readonly (readonly string[])[]): RGBAImage {
