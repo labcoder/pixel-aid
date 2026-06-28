@@ -135,7 +135,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       stage: "palette-remap",
       startPercent: 78,
       endPercent: 90,
-      dithering: paletteDiagnostics.dithering
+      dithering: paletteDiagnostics.dithering,
+      ...(paletteDiagnostics.colorSpace ? { colorSpace: paletteDiagnostics.colorSpace } : {})
     })
   );
   assertNotCancelled(runtime?.signal);
@@ -268,7 +269,8 @@ function fixSheetFrames(
       stage: "palette-remap",
       startPercent: 82,
       endPercent: 92,
-      dithering: paletteDiagnostics.dithering
+      dithering: paletteDiagnostics.dithering,
+      ...(paletteDiagnostics.colorSpace ? { colorSpace: paletteDiagnostics.colorSpace } : {})
     })
   );
   assertNotCancelled(runtime?.signal);
