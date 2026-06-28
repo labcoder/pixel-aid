@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { FixOptions, RGBAImage } from "@pixelaid/shared";
 import { applyLineCleanup } from "./lineCleanup";
-import { detectMixels, normalizeMixels, regularizeMixels } from "./mixels";
+import { detectMixels, regularizeMixels } from "./mixels";
 import { detectPixelScale } from "./pixelScale";
 import { snapToGrid } from "./snap";
 import { fixImage } from "./fix";
@@ -61,10 +61,6 @@ function bytes(image: RGBAImage): number[] {
   return Array.from(image.data);
 }
 
-function pixelKey(pixel: readonly number[]): string {
-  return pixel.join(",");
-}
-
 describe("grid and pixel-perfect helpers", () => {
   test("detectPixelScale reports a clean 6x sprite scale", () => {
     const report = detectPixelScale(upscaledSprite(8, 8, 6), { maxScale: 12 });
@@ -76,77 +72,60 @@ describe("grid and pixel-perfect helpers", () => {
     expect(report.source).toBe("grid-candidate");
   });
 
-  test("detectMixels and normalizeMixels handle non-uniform block sizes deterministically", () => {
-    const widths = [6, 6, 5, 6, 6, 5, 6];
-    const heights = [6, 5, 6, 6, 5];
-    const source = mixelSprite(widths, heights);
+  test("detectMixels flags noisy (non-flat) cells and normalizes deterministically", () => {
+    // Real mixels = an upscaled grid whose cells are NOT flat (per-pixel noise), the way AI/upscaler
+    // output looks. Build a 6x grid then add deterministic intra-cell noise so blocks aren't uniform.
+    const base = upscaledSprite(10, 10, 6);
+    const source = createImage(base.width, base.height, [0, 0, 0, 0]);
+    source.data.set(base.data);
+    let seed = 1;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    for (let y = 0; y < source.height; y += 1) {
+      for (let x = 0; x < source.width; x += 1) {
+        const [r, g, b, a] = readPixel(source, x, y);
+        if (a === 0) continue;
+        const jitter = Math.round((rand() - 0.5) * 60);
+        writePixel(source, x, y, r + jitter, g + jitter, b + jitter, a);
+      }
+    }
+
     const report = detectMixels(source, { maxScale: 12 });
-
     expect(report.hasMixels).toBe(true);
-    expect(report.axisX.irregularity).toBeGreaterThan(0);
-    expect(report.axisY.irregularity).toBeGreaterThan(0);
-    expect(report.targetScaleX).toBe(6);
-    expect(report.targetScaleY).toBe(6);
+    expect(report.axisX.irregularity).toBeGreaterThan(0.4);
 
-    const first = normalizeMixels(source, report);
-    const second = normalizeMixels(source, report);
-    expect(first.image.width).toBe(widths.length);
-    expect(first.image.height).toBe(heights.length);
-    expect(Array.from(first.xBoundaries)).toEqual(report.axisX.boundaries);
-    expect(Array.from(first.yBoundaries)).toEqual(report.axisY.boundaries);
+    const first = regularizeMixels(source, report);
+    const second = regularizeMixels(source, report);
+    // Full-resolution de-mixel preserves dimensions and is deterministic.
+    expect(first.image.width).toBe(source.width);
+    expect(first.image.height).toBe(source.height);
     expect(bytes(second.image)).toEqual(bytes(first.image));
-
-    const sourceColors = new Set<string>();
-    for (let y = 0; y < heights.length; y += 1) {
-      for (let x = 0; x < widths.length; x += 1) {
-        sourceColors.add(pixelKey(colorForCell(x, y)));
-      }
-    }
-    for (let y = 0; y < first.image.height; y += 1) {
-      for (let x = 0; x < first.image.width; x += 1) {
-        expect(sourceColors.has(pixelKey(readPixel(first.image, x, y)))).toBe(true);
-      }
-    }
   });
 
-  test("detects a finer 8/9 mixel pattern (tuned irregularity threshold)", () => {
+  test("clean flat-block art is NOT flagged as mixels even at odd block sizes", () => {
+    // Flat solid-color blocks (even of varying size) are clean pixel art, not mixels: the new detector
+    // keys on cell FLATNESS, not block-size variance, so these score as not-mixel.
     const widths = [9, 8, 9, 9, 8, 9];
     const heights = [8, 9, 8, 9];
     const source = mixelSprite(widths, heights);
     const report = detectMixels(source, { maxScale: 16 });
 
-    // The 8/9 mix (1px of 9 ~= 0.111 irregularity) must clear the tuned threshold,
-    // and the robust-median target scale must be 9 on both axes.
-    expect(report.hasMixels).toBe(true);
-    expect(report.targetScaleX).toBe(9);
-    expect(report.targetScaleY).toBe(9);
-    // Normalization is deterministic and never invents a color outside the source palette.
-    const first = normalizeMixels(source, report);
-    const second = normalizeMixels(source, report);
-    expect(bytes(second.image)).toEqual(bytes(first.image));
-    const sourceColors = new Set<string>();
-    for (let y = 0; y < heights.length; y += 1) {
-      for (let x = 0; x < widths.length; x += 1) {
-        sourceColors.add(pixelKey(colorForCell(x, y)));
-      }
-    }
-    for (let y = 0; y < first.image.height; y += 1) {
-      for (let x = 0; x < first.image.width; x += 1) {
-        expect(sourceColors.has(pixelKey(readPixel(first.image, x, y)))).toBe(true);
-      }
-    }
+    expect(report.hasMixels).toBe(false);
+    expect(report.axisX.irregularity).toBeLessThan(0.3);
   });
 
-  test("uniform images are not mixels and normalize to the detected block count", () => {
+  test("clean upscaled art is not mixels and regularize returns it unchanged", () => {
     const source = upscaledSprite(5, 4, 6);
     const report = detectMixels(source, { maxScale: 12 });
-    const normalized = normalizeMixels(source, report);
+    const regularized = regularizeMixels(source, report);
 
     expect(report.hasMixels).toBe(false);
-    expect(report.axisX.irregularity).toBe(0);
-    expect(report.axisY.irregularity).toBe(0);
-    expect(normalized.image.width).toBe(5);
-    expect(normalized.image.height).toBe(4);
+    expect(report.axisX.irregularity).toBeLessThan(0.3);
+    // No mixels => source returned byte-identical (never degrade clean input).
+    expect(regularized.diagnostics.used).toBe(false);
+    expect(bytes(regularized.image)).toEqual(bytes(source));
   });
 
   test("snapToGrid returns expected dimensions and colors for a uniform source", () => {
