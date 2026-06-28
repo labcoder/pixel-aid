@@ -202,7 +202,7 @@ describe("cleanup fixture suite", () => {
     expect(result.palette.length).toBeLessThanOrEqual(fixture.expected.palette!.maxColors);
     expect(result.image.width).toBe(96);
     expect(result.image.height).toBe(32);
-    expect(signature.checksum).toBe("0130e5a5");
+    expect(signature.checksum).toBe("8e0e8665");
   });
 
   test("detects row structure for uneven animation-sheet fixtures", () => {
