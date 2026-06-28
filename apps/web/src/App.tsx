@@ -3599,6 +3599,7 @@ export function App() {
     setGridDetect(suggestion.gridDetect);
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
+    setFixMixels(resolvedMode === "single" && suggestion.fixMixels);
     setDownscale(resolvedDownscale);
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
@@ -7691,19 +7692,10 @@ export function App() {
             disabled={mode !== "single"}
             onChange={(event) => setFixMixels(event.currentTarget.checked)}
           />
-          Fix mixels (normalize uneven block sizes)
-        </label>
-        <label className="toggle-row">
-          <input
-            type="checkbox"
-            checked={mode === "single" && snap}
-            disabled={mode !== "single"}
-            onChange={(event) => setSnap(event.currentTarget.checked)}
-          />
-          Force square pixels
+          Fix uneven pixels (mixels)
         </label>
         <p className="field-note">
-          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid. Fix mixels cleans up uneven upscaler block sizes before resizing. Force square pixels uses one uniform scale (output size follows the subject, not the target).
+          Scale is source pixels per output pixel. Phase shifts where the sampling grid starts. Crop trims single sprites to the detected foreground bounds while output size still guides the grid. Fix uneven pixels repairs inconsistent, drifting block sizes from AI/upscaler output before resizing; the guided recommendation turns it on automatically only when mixels are clearly present.
         </p>
       </>
     ),
@@ -8773,12 +8765,14 @@ export function App() {
                 alphaChoice={getSimpleAlphaChoice(alpha)}
                 denoiseChoice={getSimpleDenoiseChoice(denoiseStrength)}
                 outlineChoice={getSimpleOutlineChoice(outlineMode)}
+                fixMixels={fixMixels}
                 onResize={applySimpleSpriteResize}
                 onKeepSize={applyKeepSourceSize}
                 onAlphaChange={applySimpleAlphaChoice}
                 onDenoiseChange={applySimpleDenoiseChoice}
                 onOutlineChange={applySimpleOutlineChoice}
                 onMaxColorsChange={setPaletteBudget}
+                onFixMixelsChange={setFixMixels}
               />
             ) : null
           }
@@ -9860,24 +9854,28 @@ function SimpleSpriteControls({
   alphaChoice,
   denoiseChoice,
   outlineChoice,
+  fixMixels,
   onResize,
   onKeepSize,
   onAlphaChange,
   onDenoiseChange,
   onOutlineChange,
-  onMaxColorsChange
+  onMaxColorsChange,
+  onFixMixelsChange
 }: {
   resizeChoice: string;
   maxColors: number;
   alphaChoice: SimpleAlphaChoice;
   denoiseChoice: SimpleDenoiseChoice;
   outlineChoice: SimpleOutlineChoice;
+  fixMixels: boolean;
   onResize: (value: number) => void;
   onKeepSize: () => void;
   onAlphaChange: (value: SimpleAlphaChoice) => void;
   onDenoiseChange: (value: SimpleDenoiseChoice) => void;
   onOutlineChange: (value: SimpleOutlineChoice) => void;
   onMaxColorsChange: (value: number) => void;
+  onFixMixelsChange: (value: boolean) => void;
 }) {
   return (
     <div className="simple-sprite-controls" aria-label="Simple sprite controls">
@@ -9904,6 +9902,15 @@ function SimpleSpriteControls({
         options={simpleDenoiseChoices.map((choice) => ({ id: choice.id, label: choice.label }))}
         value={denoiseChoice}
         onChange={(value) => onDenoiseChange(value as SimpleDenoiseChoice)}
+      />
+      <SimpleButtonGroup
+        label="Fix uneven pixels"
+        options={[
+          { id: "off", label: "Off" },
+          { id: "on", label: "On" }
+        ]}
+        value={fixMixels ? "on" : "off"}
+        onChange={(value) => onFixMixelsChange(value === "on")}
       />
       <SimpleButtonGroup
         label="Outline"

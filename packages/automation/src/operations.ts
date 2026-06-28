@@ -961,6 +961,7 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
       phaseY: suggestion.gridPhaseY,
       cropToBounds: false,
       localCorrection: suggestion.localCorrection,
+      fixMixels: suggestion.fixMixels,
     },
     cleanup: {
       removeOrphans: suggestion.removeOrphans,

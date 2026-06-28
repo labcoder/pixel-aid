@@ -19,6 +19,8 @@ describe("hero cat golden regression", () => {
     expect(suggestion.alpha).toBe("backgroundFloodFill");
     expect(suggestion.matteCleanup).toBe(true);
     expect(suggestion.paletteStrategy).toBe("perceptual");
+    // This AI sprite is mixel-laden, so the guided flow should auto-recommend the fix (near-certain bar).
+    expect(suggestion.fixMixels).toBe(true);
 
     const result = fixImage(source, buildGuidedHeroCatOptions(source, suggestion));
 

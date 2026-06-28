@@ -1,5 +1,6 @@
 import { applyAlphaMode } from "./alpha";
 import { detectGridCandidates } from "./grid";
+import { detectMixels } from "./mixels";
 import { analyzeQualityReport, type QualityReport } from "./qualityReport";
 import { detectSheetLayout } from "./sheet";
 import { analyzeSheetConditioning } from "./sheetConditioning";
@@ -76,6 +77,7 @@ export type FixSettingSuggestion = {
   gridPhaseX: number;
   gridPhaseY: number;
   localCorrection: boolean;
+  fixMixels: boolean;
   downscale: DownscaleMethod;
   paletteStrategy: PaletteStrategy;
   alpha: AlphaMode;
@@ -314,6 +316,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
       classification.assetType !== "background" &&
       (candidate?.scaleX ?? 1) >= 4 &&
       (candidate?.confidence ?? 0) >= 0.55,
+    fixMixels: recommendFixMixels(image, mode, classification.assetType),
     downscale,
     paletteStrategy,
     alpha: suggestedAlpha,
@@ -347,6 +350,27 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
 
 function detectSuggestionGridCandidates(image: RGBAImage): GridCandidate[] {
   return detectGridCandidates(image, { maxScale: 32, sampling: "sampled" });
+}
+
+// Conservative auto-recommendation for mixel repair (the guided "Fix uneven pixels" toggle). Only ON
+// when mixels are NEAR-CERTAIN: single-sprite mode, a non-background asset, and cell roughness well
+// above the bare detection threshold (0.5) — we require >= 0.65 so borderline cases default OFF.
+// Mixel repair only runs in single mode in the fix pipeline, so it's pointless to recommend otherwise.
+const FIX_MIXELS_AUTO_ROUGHNESS = 0.65;
+
+function recommendFixMixels(image: RGBAImage, mode: AssetMode, assetType: AssetType): boolean {
+  if (mode !== "single" || assetType === "background") {
+    return false;
+  }
+  // detectMixels runs its own grid-scale detection, so we don't gate on the suggestion's chosen
+  // candidate scale (which may collapse to native 1x for a noisy AI sprite). hasMixels already requires
+  // a >=2px cell with pixel-art-like evidence.
+  const report = detectMixels(image);
+  if (!report.hasMixels) {
+    return false;
+  }
+  const roughness = Math.max(report.axisX.irregularity, report.axisY.irregularity);
+  return roughness >= FIX_MIXELS_AUTO_ROUGHNESS;
 }
 
 export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: AssetType): FixSettingSuggestion {
@@ -431,6 +455,8 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     denoiseStrength: preserveSuggestedSingleCleanup ? suggestion.denoiseStrength : strictSourceSheetCleanup ? strictSourceSheetDenoiseStrength : sourceSizedSheetPreservation ? 0 : preset.denoiseStrength,
     inferNativeScale: strictSourceSheetCleanup,
     nativeScaleInference,
+    // Mixel repair only applies to single sprites; clear it if a manual asset type isn't single mode.
+    fixMixels: mode === "single" ? suggestion.fixMixels : false,
     downscale: assetType === "sprite" || assetType === "icon" ? suggestion.downscale : preset.downscale,
     contrastExpansionEnabled: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.contrastExpansionEnabled : false,
     outlineMode: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineMode : "none",
