@@ -7,6 +7,8 @@ import {
   analyzeQualityReport,
   analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
+  detectMixels,
+  detectPixelScale,
   detectGridCandidates,
   detectSheetLayout,
   extractPalette,
@@ -39,7 +41,9 @@ import {
   type PaletteWeighting,
   type PixelAssetManifest,
   type PixelFixResult,
+  type PixelScaleReport,
   type RGBAImage,
+  type MixelReport,
   type SheetLayoutDetection,
   type SheetSliceOptions,
   type SpriteFrame,
@@ -99,6 +103,8 @@ export type ImageInspection = {
     transparentPixels: number;
     softAlphaPixels: number;
   };
+  pixelScale: PixelScaleReport;
+  mixels: MixelReport;
   gridCandidates: ReturnType<typeof detectGridCandidates>;
   sheetLayout?: SheetLayoutDetection;
   suggestion: FixSuggestion;
@@ -254,6 +260,8 @@ export async function inspectImage(
         preview: extractPalette(image, Math.min(8, numericMaxColors(request.options?.maxColors, 8))),
       },
       alpha: countAlphaPixels(image),
+      pixelScale: detectPixelScale(image),
+      mixels: detectMixels(image),
       gridCandidates: withFallbackGridCandidates(image),
       ...(sheetLayout.confidence > 0 ? { sheetLayout } : {}),
       suggestion: suggestion.value,

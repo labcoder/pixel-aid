@@ -42,6 +42,24 @@ describe("pixelaid CLI", () => {
       expect(body.ok).toBe(true);
       expect(body.command).toBe("inspect");
       expect(body.result.image).toMatchObject({ width: 4, height: 4 });
+      const inspection = body.result as { pixelScale: { scaleX: number }; mixels: { hasMixels: boolean; axisX: { boundaries: unknown[] } } };
+      expect(typeof inspection.pixelScale.scaleX).toBe("number");
+      expect(typeof inspection.mixels.hasMixels).toBe("boolean");
+      expect(Array.isArray(inspection.mixels.axisX.boundaries)).toBe(true);
+    });
+  });
+
+  it("prints detected scale and mixel reports for inspect --detect-scale JSON", async () => {
+    await withFixture(async ({ input }) => {
+      const capture = createCapture();
+      const code = await runCli(["inspect", input, "--detect-scale", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      const inspection = body.result as { pixelScale: { scaleX: number; scaleY: number }; mixels: { hasMixels: boolean; axisY: { boundaries: unknown[] } } };
+      expect(inspection.pixelScale).toMatchObject({ scaleX: expect.any(Number), scaleY: expect.any(Number) });
+      expect(inspection.mixels).toMatchObject({ hasMixels: expect.any(Boolean) });
+      expect(Array.isArray(inspection.mixels.axisY.boundaries)).toBe(true);
     });
   });
 
@@ -188,6 +206,42 @@ describe("pixelaid CLI", () => {
         strategy: "perceptual",
         dithering: "ordered",
       });
+    });
+  });
+
+  it("fixes a sprite with grid/pixel-perfect flags", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "pixel-perfect-fixed.png");
+      const manifest = path.join(dir, "pixel-perfect-fixed.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--target",
+        "2x2",
+        "--colors",
+        "4",
+        "--grid",
+        "manual",
+        "--scale",
+        "2",
+        "--fix-mixels",
+        "--line-cleanup",
+        "high",
+        "--snap",
+        "--json",
+      ], capture);
+
+      expect(code).toBe(0);
+      expect(parseStdout(capture).ok).toBe(true);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.operation.settings.grid.fixMixels).toBe(true);
+      expect(manifestJson.meta.operation.settings.cleanup.lineCleanup).toBe("high");
+      await expect(stat(output)).resolves.toBeTruthy();
     });
   });
 

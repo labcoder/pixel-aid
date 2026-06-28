@@ -7,6 +7,7 @@ import {
   type ColorSpace,
   type DownscaleMethod,
   type FixOptions,
+  type LineCleanupStrength,
   type MorphologyCleanupSettings,
   type OutlineMode,
   type PaletteDitheringMode,
@@ -65,6 +66,9 @@ export type AutomationFixOptionsInput = {
   alphaColorKey?: string;
   decontaminateRgb?: boolean;
   transparentRgb?: string;
+  fixMixels?: boolean;
+  snap?: boolean;
+  lineCleanup?: LineCleanupStrength;
   grid?: Partial<FixOptions["grid"]>;
   cleanup?: Partial<FixOptions["cleanup"]>;
   sheet?: Partial<SheetSliceOptions>;
@@ -131,6 +135,7 @@ const paletteDitheringModes = new Set<PaletteDitheringMode>(["none", "ordered", 
 const colorSpaces = new Set<ColorSpace>(["oklab", "cielab", "srgb"]);
 const paletteWeightings = new Set<PaletteWeighting>(["area", "frequency"]);
 const outlineModes = new Set<OutlineMode>(["none", "repairExisting", "add"]);
+const lineCleanupStrengths = new Set<LineCleanupStrength>(["off", "low", "high"]);
 
 const presets: Record<AssetType, AssetPreset> = {
   sprite: createPreset(24, "dominant", "backgroundFloodFill", "single"),
@@ -196,7 +201,11 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return alpha;
   }
 
-  const grid = normalizeGrid(input.grid, mode);
+  const grid = normalizeGrid({
+    ...(input.grid ?? {}),
+    ...(input.fixMixels !== undefined ? { fixMixels: input.fixMixels } : {}),
+    ...(input.snap !== undefined ? { snap: input.snap } : {}),
+  }, mode);
   if (!grid.ok) {
     return grid;
   }
@@ -251,7 +260,10 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     return protectColors;
   }
 
-  const cleanup = normalizeCleanup(input.cleanup, preset.cleanup);
+  const cleanup = normalizeCleanup({
+    ...(input.cleanup ?? {}),
+    ...(input.lineCleanup !== undefined ? { lineCleanup: input.lineCleanup } : {}),
+  }, preset.cleanup);
   if (!cleanup.ok) {
     return cleanup;
   }
@@ -365,6 +377,8 @@ function normalizeGrid(input: Partial<FixOptions["grid"]> | undefined, mode: Ass
     detect,
     cropToBounds: input?.cropToBounds ?? mode === "single",
     localCorrection: input?.localCorrection ?? mode === "single",
+    fixMixels: input?.fixMixels ?? false,
+    ...(input?.snap !== undefined ? { snap: input.snap } : {}),
   };
 
   assignFinite(grid, "scale", input?.scale);
@@ -384,6 +398,11 @@ function normalizeCleanup(
     return automationError("invalid_options", `Invalid outline mode "${outlineMode}".`, 2);
   }
 
+  const lineCleanup = input?.lineCleanup ?? fallback.lineCleanup;
+  if (lineCleanup !== undefined && !lineCleanupStrengths.has(lineCleanup)) {
+    return automationError("invalid_options", `Invalid line cleanup strength "${lineCleanup}".`, 2);
+  }
+
   const cleanup: FixOptions["cleanup"] = {
     removeOrphans: input?.removeOrphans ?? fallback.removeOrphans,
     jaggyCleanup: input?.jaggyCleanup ?? fallback.jaggyCleanup,
@@ -392,6 +411,7 @@ function normalizeCleanup(
     outlineMode,
     outlineSize: normalizeIntegerOrDefault(input?.outlineSize, fallback.outlineSize ?? 1),
     outlineAlpha: normalizeIntegerOrDefault(input?.outlineAlpha, fallback.outlineAlpha ?? 255),
+    ...(lineCleanup !== undefined ? { lineCleanup } : {}),
   };
   const dominantThreshold = normalizeRatioOrDefault(input?.dominantThreshold, fallback.dominantThreshold);
   if (dominantThreshold !== undefined) {

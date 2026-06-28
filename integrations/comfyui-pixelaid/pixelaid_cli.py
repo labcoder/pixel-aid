@@ -80,6 +80,9 @@ def build_fix_sprite_args(
     palette_weighting: str | None = None,
     protect_colors: str | None = None,
     emit_palette: str | None = None,
+    fix_mixels: bool = False,
+    line_cleanup: str | None = None,
+    snap: bool = False,
 ) -> list[str]:
     args = [
         "fix",
@@ -114,6 +117,12 @@ def build_fix_sprite_args(
             args.extend([flag, str(value)])
     if overwrite:
         args.append("--overwrite")
+    if fix_mixels:
+        args.append("--fix-mixels")
+    if line_cleanup not in (None, ""):
+        args.extend(["--line-cleanup", str(line_cleanup)])
+    if snap:
+        args.append("--snap")
     return args
 
 
@@ -174,6 +183,9 @@ def fix_image_tensor_with_pixelaid(
     palette_weighting: str | None = None,
     protect_colors: str | None = None,
     emit_palette: str | None = None,
+    fix_mixels: bool = False,
+    line_cleanup: str | None = None,
+    snap: bool = False,
 ) -> tuple[Any, dict[str, Any], str, str]:
     output_root = Path(output_dir).expanduser().resolve()
     output_root.mkdir(parents=True, exist_ok=True)
@@ -204,6 +216,9 @@ def fix_image_tensor_with_pixelaid(
                 palette_weighting=palette_weighting,
                 protect_colors=protect_colors,
                 emit_palette=str(emitted_palette_path),
+                fix_mixels=fix_mixels,
+                line_cleanup=line_cleanup,
+                snap=snap,
             ),
             executable=pixelaid_executable,
         )

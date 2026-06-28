@@ -88,14 +88,14 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, cleanup, and sheet settings. Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
+  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, cleanup, and sheet settings. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
   additionalProperties: true,
 };
 
 export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   {
     name: "inspect_image",
-    description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, sheet layout, and suggested PixelAid settings.",
+    description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, detected pixel scale, mixel boundary map, sheet layout, and suggested PixelAid settings.",
     inputSchema: objectSchema(["inputPath"], {
       inputPath: stringSchema("Path to a PNG or JPEG image."),
       options: commonOptionsSchema,

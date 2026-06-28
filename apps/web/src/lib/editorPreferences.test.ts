@@ -154,9 +154,22 @@ describe("editor preferences", () => {
   test("preserves contrast expansion cleanup preference", () => {
     const enabled = normalizeEditorPreferences({ settings: { contrastExpansionEnabled: true } });
     const defaults = createDefaultEditorPreferences();
-
     expect(defaults.settings.contrastExpansionEnabled).toBe(false);
     expect(enabled.settings.contrastExpansionEnabled).toBe(true);
+  });
+
+  test("defaults and round-trips grid mixel and line cleanup preferences", () => {
+    const defaults = createDefaultEditorPreferences();
+    expect(defaults.settings.fixMixels).toBe(false);
+    expect(defaults.settings.lineCleanup).toBe("off");
+
+    const normalized = normalizeEditorPreferences({ settings: { fixMixels: true, lineCleanup: "high" } });
+    const invalid = normalizeEditorPreferences({ settings: { fixMixels: "yes", lineCleanup: "maximum" } });
+
+    expect(normalized.settings.fixMixels).toBe(true);
+    expect(normalized.settings.lineCleanup).toBe("high");
+    expect(invalid.settings.fixMixels).toBe(false);
+    expect(invalid.settings.lineCleanup).toBe("off");
   });
 
   test("defaults telemetry consent off and preserves explicit opt-in", () => {

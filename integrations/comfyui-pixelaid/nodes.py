@@ -65,11 +65,14 @@ class PixelAidFixSprite:
                 "emit_palette": ("STRING", {"default": ""}),
                 "downscale": (["detailPreserving", "dominant", "median", "adaptive", "averageThenPalette", "perceptual", "nearest", "bilinear", "contrast", "kCentroid"], {"default": "detailPreserving"}),
                 "alpha": (["backgroundFloodFill", "binary", "preserve", "colorKey"], {"default": "backgroundFloodFill"}),
+                "fix_mixels": ("BOOLEAN", {"default": False}),
+                "line_cleanup": (["off", "low", "high"], {"default": "off"}),
+                "snap": ("BOOLEAN", {"default": False}),
                 "overwrite": ("BOOLEAN", {"default": True}),
             }
         }
 
-    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, emit_palette, downscale, alpha, overwrite):
+    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, emit_palette, downscale, alpha, fix_mixels, line_cleanup, snap, overwrite):
         fixed_image, payload, manifest_path, emitted_palette_path = fix_image_tensor_with_pixelaid(
             image,
             output_dir=output_dir,
@@ -87,6 +90,9 @@ class PixelAidFixSprite:
             emit_palette=emit_palette or None,
             downscale=downscale,
             alpha=alpha,
+            fix_mixels=fix_mixels,
+            line_cleanup=line_cleanup,
+            snap=snap,
             overwrite=overwrite,
         )
         return (fixed_image, payload, manifest_path, emitted_palette_path)
