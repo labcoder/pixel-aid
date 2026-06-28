@@ -296,7 +296,10 @@ describe("astro sprite sheet golden regressions", () => {
     const comparison = compareGoldenImage(actualFrame, goldenFrame, {
       mode: "tolerance",
       perChannelTolerance: 32,
-      allowedChangedPixels: 6_000
+      // Reviewed for M1-A (D1): OKLab-default nearest-color assigns ~53 extra boundary
+      // pixels a slightly different in-palette color (deterministic 6053). Silhouette/alpha
+      // assertions below are unchanged; raised from 6_000 to keep modest headroom.
+      allowedChangedPixels: 6_500
     });
     const alphaDiff = compareAlphaMasks(actualFrame, goldenFrame);
 

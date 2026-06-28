@@ -45,17 +45,18 @@ export const visualRegressionCases: VisualRegressionCase[] = [
     expected: {
       width: 104,
       height: 146,
-      checksum: "e3ee558d",
+      checksum: "bd4a8747",
       visiblePixels: 9160,
       transparentPixels: 6024,
       palette: [
         "#018484",
         "#01ebe1",
         "#0a2d2e",
-        "#0b2e2f",
+        "#0d3031",
         "#101112",
         "#192022",
         "#1d4d4d",
+        "#23524e",
         "#272e31",
         "#4e9489",
         "#5ca095",
@@ -176,10 +177,10 @@ export const visualRegressionCases: VisualRegressionCase[] = [
     expected: {
       width: 96,
       height: 32,
-      checksum: "0130e5a5",
+      checksum: "8e0e8665",
       visiblePixels: 1136,
       transparentPixels: 1936,
-      palette: ["#20343c", "#242a30", "#243840", "#282e34", "#2c3238", "#2c4048", "#4c8e7e", "#509282", "#589a8a"],
+      palette: ["#242a30", "#243840", "#282e34", "#2c3238", "#2c4048", "#4c8e7e", "#509282", "#589a8a"],
       samplePixels: {
         "12,16": [76, 142, 126, 255],
         "36,16": [80, 146, 130, 255],
@@ -214,10 +215,10 @@ export const visualRegressionCases: VisualRegressionCase[] = [
     expected: {
       width: 288,
       height: 126,
-      checksum: "bf1962ef",
+      checksum: "65e4deeb",
       visiblePixels: 30240,
       transparentPixels: 6048,
-      palette: ["#363c46", "#58968e", "#589690", "#71848e", "#718490", "#718498", "#8a728e", "#8a7290", "#b45878", "#e6b45a"],
+      palette: ["#363c46", "#58968e", "#589694", "#71848e", "#718492", "#718498", "#8a728e", "#8a7292", "#b45878", "#e6b45a"],
       samplePixels: {
         "0,0": [54, 60, 70, 255],
         "95,20": [54, 60, 70, 255],
@@ -292,24 +293,22 @@ export const visualRegressionCases: VisualRegressionCase[] = [
     expected: {
       width: 64,
       height: 64,
-      checksum: "e00e9855",
+      checksum: "decdee05",
       visiblePixels: 4096,
       transparentPixels: 0,
       palette: [
         "#2c5c3a",
         "#3a844c",
-        "#40844c",
         "#46844c",
         "#48845e",
         "#4e845e",
+        "#54845e",
         "#568470",
-        "#5a845e",
         "#5ca858",
         "#5f8470",
         "#648482",
         "#688470",
-        "#6a8482",
-        "#738482"
+        "#6d8482"
       ],
       samplePixels: {
         "15,8": [44, 92, 58, 255],
