@@ -148,7 +148,7 @@ Fixed and preset modes treat the active palette as a hard output contract: visib
 
 For sheet-like assets, palette locking can use the whole sheet or the first frame. The fix result stores palette settings plus diagnostics, including drift warnings when frame-local palettes differ from the active locked palette. Palette drift diagnostics also include a 0-1 stability score, a stable/review/unstable label, frame-local palette variance, average/max frame palette delta, and remap pressure so the metrics panel can explain likely animation shimmer without an extra image pass. Dithering defaults to `none` for animation-sensitive workflows; if ordered or error-diffusion dithering is explicitly selected, diagnostics and export validation record a review-before-export warning because dither patterns can crawl between frames.
 
-The editor palette library builds on that same contract instead of creating a separate color path. Saved palettes are normalized RGB hex arrays that can be imported from `.hex`, `.gpl`, or JSON text, edited in the Palettes panel, exported back to those sidecar formats, and applied by switching the active palette mode to `fixed`. That means the next Fix run, export manifest, palette sidecars, CLI-equivalent settings, and diagnostics all describe the same explicit palette.
+The editor palette library builds on that same contract instead of creating a separate color path. Saved palettes are normalized RGB hex arrays that can be imported from `.hex`, `.gpl`, or JSON text, edited in the Palettes panel, exported back to those sidecar formats, and applied by switching the active palette mode to `fixed`. That means the next Fix run, export manifest, palette sidecars, CLI-equivalent settings, and diagnostics all describe the same explicit palette. Offline named palettes are bundled in exporters for well-known small sets such as PICO-8, DB16, Game Boy, and CGA 16; Lospec-by-name/network palette resolution is intentionally deferred outside the offline core.
 
 ## Denoise
 
@@ -262,6 +262,19 @@ The manifest is the canonical export contract. Bundle assembly does not infer ne
 The generic ZIP writer sorts file paths before compression so repeated exports produce stable entry ordering. Browser-only PNG encoding stays in the web app, while pure format helpers live in `packages/exporters`.
 
 Palette sidecar files derive from the fixed result palette. `.hex` writes one normalized lowercase `#rrggbb` color per line, `.gpl` writes a deterministic GIMP palette, and `.palette.json` includes app/version, image name, color count, and colors.
+
+### Palette conditioning contract (A10)
+
+PixelAid owns a stable, versioned palette-conditioning artifact for generator handoff. The schema id is `pixelaid.palette-conditioning/v1`; fields are:
+
+- `schema`: the exact schema id string.
+- `version`: the PixelAid package/app version that emitted the artifact.
+- `colorCount`: the number of normalized colors.
+- `colors`: the locked palette as normalized lowercase `#rrggbb` strings in deterministic palette order.
+- `strip`: a descriptor for the rendered palette strip image with `width`, `height`, and `swatchSize`.
+- `source` (optional): source image name or identifier.
+
+The v1 field names and semantics are stable for Milestone 2 generator consumption. Additive fields may be introduced later, but existing v1 consumers can rely on the fields above. The artifact is JSON-serializable and deterministic; enforcement still happens by remapping output to the locked palette in the core palette remap path.
 
 The validation report combines `validateManifest` errors with operation diagnostics copied into the manifest. It warns about missing animation metadata for multi-frame exports, alpha cleanup warnings, remaining soft alpha after non-preserve alpha modes, palette warnings, palette drift warnings, and missing frame-sequence PNGs.
 

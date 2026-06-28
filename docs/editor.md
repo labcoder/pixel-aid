@@ -147,9 +147,14 @@ The viewport renders images through Canvas2D with smoothing disabled.
 
 Cleanup controls run after block downsampling and alpha handling.
 
-- Max colors limits the fixed output palette.
+- Max colors limits the fixed output palette. Choose `Auto (≤64)` to let PixelAid detect the natural color count (capped at 64 for tight, pixel-art-like results), or pick an explicit budget up to 512 for higher-color work.
+- Quantizer selects the palette extraction algorithm. `Wu` (variance-minimizing) and `K-means` are the perceptual defaults; `Median cut`, `Perceptual`, and `Frequency` remain available. `K-means` is deterministic under a fixed Seed, exposed as a number field when selected.
+- Color space controls where palette extraction and pixel→palette matching happen. `OKLab` (default) and `CIELAB` are perceptually uniform; `sRGB` is the legacy raw-distance path and is opt-in only.
+- Weighting scores candidate colors by connected-region `Area` (default, so thin anti-aliased fringe colors do not win palette slots) or raw pixel `Frequency`. Min region ignores sub-threshold regions when area weighting is active.
+- Protect colors keeps structural colors from being merged away. `Auto` protects the dominant near-black outline and high-saturation accents; `None` disables protection; `Custom` accepts an explicit hex list.
+- Dither defaults to `None`. `Bayer 2×2`, `Bayer 4×4`/`Ordered`, and `Floyd–Steinberg`/`Error diffusion` are opt-in; dithering can crawl between animation frames, so it stays off by default and is flagged for review before export.
 - Denoise controls local color cleanup before palette reduction. `Off` preserves current behavior, `Light` removes mild AI speckles, and `Flat` aggressively merges similar local colors into broader pixel-art regions.
-- Downscale selects the block-to-pixel strategy. `Dominant` is best for crisp fake-pixel blocks, `Adaptive` falls back when a block is mixed, `Median` resists noise, `Average + palette` preserves broad lighting, and `Detail preserving` is intended for complex AI sheet frames where minority high-contrast lines need to survive before palette locking.
+- Downscale selects the block-to-pixel strategy. `Dominant` is best for crisp fake-pixel blocks, `Adaptive` falls back when a block is mixed, `Median` resists noise, `Average + palette` preserves broad lighting, `Detail preserving` is intended for complex AI sheet frames where minority high-contrast lines need to survive before palette locking, `Perceptual` picks a representative existing block color in OKLab, `Nearest` point-samples, and `Bilinear` is an explicit opt-in interpolating sampler (the only method that manufactures intermediate colors).
 - Alpha preserves alpha, thresholds it, or flood-fills connected background to transparency.
 - Remove edge halos remaps semi-transparent or background-colored edge pixels to nearby subject colors before outline and palette extraction. It is useful for AI images with pale fringes from white or transparent backgrounds, but complex presentation sheets leave it off by default so frame seams, visor edges, and tiny dark details survive the final cleanup pass.
 - Outline can stay off, repair an existing dark outline, or add an outline around visible pixels.
