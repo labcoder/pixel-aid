@@ -1049,6 +1049,7 @@ export function App() {
   const [paletteWeighting, setPaletteWeighting] = useState<PaletteWeighting>(initialSettings.paletteWeighting);
   const [paletteMinRegion, setPaletteMinRegion] = useState(initialSettings.paletteMinRegion);
   const [paletteProtectColors, setPaletteProtectColors] = useState<"auto" | "none" | "custom">(initialSettings.paletteProtectColors);
+  const [protectSalientColors, setProtectSalientColors] = useState(true);
   const [paletteProtectColorsText, setPaletteProtectColorsText] = useState(initialSettings.paletteProtectColorsText);
   const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
   const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
@@ -4226,6 +4227,7 @@ export function App() {
         minRegion: paletteMinRegion,
         protectColors:
           paletteProtectColors === "custom" ? customProtectedPaletteColors : paletteProtectColors,
+        protectSalientColors: mode === "single" && protectSalientColors,
         ...(paletteStrategy === "kmeans" ? { seed: paletteSeed } : {}),
         ...(paletteMode === "fixed" ? { colors: fixedPaletteColors } : {}),
         ...(paletteMode === "preset" ? { preset: palettePreset } : {})
@@ -7306,6 +7308,16 @@ export function App() {
           disabled={paletteMode !== "auto"}
           onChange={(value) => setPaletteProtectColors(value as "auto" | "none" | "custom")}
         />
+        {mode === "single" && paletteMode === "auto" ? (
+          <label className="toggle-row">
+            <input
+              type="checkbox"
+              checked={protectSalientColors}
+              onChange={(event) => setProtectSalientColors(event.currentTarget.checked)}
+            />
+            Keep vivid details (eyes, nose) at low color counts
+          </label>
+        ) : null}
         {paletteMode === "auto" && paletteProtectColors === "custom" ? (
           <>
             <label className="field-row field-row-stack">

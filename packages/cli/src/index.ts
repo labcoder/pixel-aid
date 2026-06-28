@@ -701,6 +701,8 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (minRegion !== undefined) options.minRegion = minRegion;
   const protectColors = takeValue(args, "--protect-colors");
   if (protectColors) options.protectColors = protectColors;
+  const protectSalientColors = takeBooleanChoice(args, "--protect-salient-colors", "--no-protect-salient-colors");
+  if (protectSalientColors !== undefined) options.protectSalientColors = protectSalientColors;
   const seed = readOptionalNumberFlag(args, "--seed");
   if (seed !== undefined) options.seed = seed;
   const emitPalette = takeValue(args, "--emit-palette");
@@ -1035,6 +1037,7 @@ function usageText(): string {
     "  --palette-weighting area|frequency",
     "  --min-region <px>",
     "  --protect-colors auto|none|<hex,...>",
+    "  --protect-salient-colors / --no-protect-salient-colors  Keep small vivid regions (eyes/nose) at low color budgets (default: on for single sprites)",
     "  --seed <n>",
     "  --dither none|ordered|bayer2|bayer4|floyd|errorDiffusion",
     "  --downscale-method perceptual|nearest|bilinear|dominant|median|adaptive|averageThenPalette|detailPreserving|contrast|kCentroid",

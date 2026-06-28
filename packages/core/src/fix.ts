@@ -935,6 +935,11 @@ function foregroundAlphaThresholdOption(
 
 function resolvePaletteSettings(options: FixOptions, reservedColors: readonly string[] = []): PaletteSettings | undefined {
   if (options.paletteSettings) {
+    // Salient-color protection (vivid eyes/nose/mouth) matters for single character sprites; for sheets
+    // and tilesets every tile color is already intentional, so default it off there unless explicitly set.
+    if (options.paletteSettings.protectSalientColors === undefined && options.paletteSettings.mode !== "fixed") {
+      return { ...options.paletteSettings, protectSalientColors: options.mode === "single" };
+    }
     return options.paletteSettings;
   }
   if (options.palette) {
@@ -947,7 +952,8 @@ function resolvePaletteSettings(options: FixOptions, reservedColors: readonly st
       dithering: "none"
     };
   }
-  return undefined;
+  // Auto palette with no explicit settings: enable salient protection for single sprites only.
+  return { protectSalientColors: options.mode === "single" };
 }
 
 function refinePaletteForCleanup(palette: readonly string[], options: FixOptions): string[] {

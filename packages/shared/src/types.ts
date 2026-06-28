@@ -309,6 +309,13 @@ export type PaletteSettings = {
   weighting?: PaletteWeighting;
   minRegion?: number;
   protectColors?: PaletteProtectColors;
+  /**
+   * When true (default in auto mode), small but perceptually-salient regions (vivid eyes, nose, mouth)
+   * are protected from being quantized away at low color budgets, even if their pixel frequency is far
+   * below the normal accent floor. Clusters near-duplicate vivid shades so spread-out AI gradients still
+   * register. Set false to disable and fall back to pure frequency-based accent protection.
+   */
+  protectSalientColors?: boolean;
 };
 
 export type PaletteStabilityLabel = "stable" | "review" | "unstable";
