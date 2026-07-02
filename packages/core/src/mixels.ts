@@ -59,13 +59,18 @@ export function detectMixels(image: RGBAImage, options: MixelDetectionOptions = 
   const expectedScaleX = clampScale(candidate?.scaleX, maxScale, image.width);
   const expectedScaleY = clampScale(candidate?.scaleY, maxScale, image.height);
 
+  // Per-axis edge-energy profiles are O(w*h) full-image passes — compute once, reuse for both the
+  // lattice fit and the target-scale boundary build below.
+  const xProfile = verticalEdgeEnergy(image);
+  const yProfile = horizontalEdgeEnergy(image);
+
   // Fit ONE global uniform lattice per axis (cell size + best phase), rather than tracking noisy
   // per-block boundaries. This is the key robustness fix: the intended grid is uniform, and the
   // mixel "drift" is the artifact to remove — so we snap to the lattice instead of reproducing drift.
   // The cell size is chosen by lattice ALIGNMENT quality (energy concentration on the grid), which is
   // what actually distinguishes clean grids from mixels — not the grid candidate's coarser estimate.
-  const xAxis = fitUniformLattice(verticalEdgeEnergy(image), image.width, expectedScaleX, maxScale);
-  const yAxis = fitUniformLattice(horizontalEdgeEnergy(image), image.height, expectedScaleY, maxScale);
+  const xAxis = fitUniformLattice(xProfile, image.width, expectedScaleX, maxScale);
+  const yAxis = fitUniformLattice(yProfile, image.height, expectedScaleY, maxScale);
 
   // Target cell size comes from the grid candidate (the true pixel size, e.g. 12 for a 12x sprite).
   const targetScaleX = expectedScaleX;
@@ -73,8 +78,8 @@ export function detectMixels(image: RGBAImage, options: MixelDetectionOptions = 
   // Boundaries MUST be built at the target cell size (not the lattice sweep's finest period), otherwise
   // regularization would flatten into tiny 2px cells. We reuse the per-axis edge-energy profiles to lock
   // the phase of the target-sized lattice, then emit uniform target-sized boundaries.
-  const xBoundaries = buildLatticeAtScale(verticalEdgeEnergy(image), image.width, targetScaleX);
-  const yBoundaries = buildLatticeAtScale(horizontalEdgeEnergy(image), image.height, targetScaleY);
+  const xBoundaries = buildLatticeAtScale(xProfile, image.width, targetScaleX);
+  const yBoundaries = buildLatticeAtScale(yProfile, image.height, targetScaleY);
   // Block-internal flatness is the real mixel signal: clean pixel art has near-uniform NxN cells
   // (~90% of neighbouring pixels identical); mixel/AI art has noisy, non-flat cells (~25%).
   const flatness = blockFlatness(image, targetScaleX, targetScaleY);
@@ -285,10 +290,13 @@ function buildLatticeAtScale(profile: Float64Array, length: number, scale: numbe
 }
 
 /**
- * Block-internal flatness: the fraction of neighbouring pixels (sampled within a cell-sized stride)
- * that are identical to the pixel one step left / up. Clean pixel art upscaled by N has flat NxN cells,
- * so ~85-95% of neighbours match; mixel / AI art has noisy, anti-aliased cells, so far fewer match.
- * This is the strongest, scale-robust mixel signal. Sampled for performance on large sources.
+ * Block-internal flatness: the fraction of neighbouring OPAQUE pixels (sampled within a cell-sized
+ * stride) that are identical to the pixel one step left / up. Clean pixel art upscaled by N has flat
+ * NxN cells, so ~85-95% of neighbours match; mixel / AI art has noisy, anti-aliased cells, so far fewer
+ * match. Pairs involving transparent pixels are SKIPPED — transparent padding is byte-identical
+ * everywhere and would otherwise dilute the signal toward "flat", silently suppressing mixel detection
+ * on alpha-padded sprites. Sampled for performance on large sources. Returns 1 (flat / no evidence)
+ * when there are no opaque pairs to measure.
  */
 function blockFlatness(image: RGBAImage, scaleX: number, scaleY: number): number {
   const data = image.data;
@@ -303,16 +311,23 @@ function blockFlatness(image: RGBAImage, scaleX: number, scaleY: number): number
     const upBase = (y - 1) * w;
     for (let x = 1; x < w; x += stepX) {
       const idx = (rowBase + x) * 4;
+      if (data[idx + 3]! < 16) {
+        continue;
+      }
       const left = (rowBase + x - 1) * 4;
       const up = (upBase + x) * 4;
-      if (pixelsEqual(data, idx, left)) {
-        same += 1;
+      if (data[left + 3]! >= 16) {
+        if (pixelsEqual(data, idx, left)) {
+          same += 1;
+        }
+        total += 1;
       }
-      total += 1;
-      if (pixelsEqual(data, idx, up)) {
-        same += 1;
+      if (data[up + 3]! >= 16) {
+        if (pixelsEqual(data, idx, up)) {
+          same += 1;
+        }
+        total += 1;
       }
-      total += 1;
     }
   }
   return total > 0 ? same / total : 1;

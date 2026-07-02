@@ -364,8 +364,9 @@ function recommendFixMixels(image: RGBAImage, mode: AssetMode, assetType: AssetT
   }
   // detectMixels runs its own grid-scale detection, so we don't gate on the suggestion's chosen
   // candidate scale (which may collapse to native 1x for a noisy AI sprite). hasMixels already requires
-  // a >=2px cell with pixel-art-like evidence.
-  const report = detectMixels(image);
+  // a >=2px cell with pixel-art-like evidence. Sampled detection matches the perf profile of the rest
+  // of the suggestion path (flatness — the deciding signal — is always measured on the full image).
+  const report = detectMixels(image, { sampling: "sampled" });
   if (!report.hasMixels) {
     return false;
   }

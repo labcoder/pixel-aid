@@ -62,6 +62,7 @@ class PixelAidFixSprite:
                 "dither": (["none", "ordered", "bayer2", "bayer4", "floyd", "errorDiffusion"], {"default": "none"}),
                 "palette_weighting": (["area", "frequency"], {"default": "frequency"}),
                 "protect_colors": ("STRING", {"default": "none"}),
+                "protect_salient_colors": (["auto", "on", "off"], {"default": "auto"}),
                 "emit_palette": ("STRING", {"default": ""}),
                 "downscale": (["detailPreserving", "dominant", "median", "adaptive", "averageThenPalette", "perceptual", "nearest", "bilinear", "contrast", "kCentroid"], {"default": "detailPreserving"}),
                 "alpha": (["backgroundFloodFill", "binary", "preserve", "colorKey"], {"default": "backgroundFloodFill"}),
@@ -72,7 +73,7 @@ class PixelAidFixSprite:
             }
         }
 
-    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, emit_palette, downscale, alpha, fix_mixels, line_cleanup, snap, overwrite):
+    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, protect_salient_colors, emit_palette, downscale, alpha, fix_mixels, line_cleanup, snap, overwrite):
         fixed_image, payload, manifest_path, emitted_palette_path = fix_image_tensor_with_pixelaid(
             image,
             output_dir=output_dir,
@@ -87,6 +88,7 @@ class PixelAidFixSprite:
             dither=dither,
             palette_weighting=palette_weighting,
             protect_colors=protect_colors,
+            protect_salient_colors=protect_salient_colors,
             emit_palette=emit_palette or None,
             downscale=downscale,
             alpha=alpha,

@@ -50,6 +50,7 @@ class PixelAidCliTests(unittest.TestCase):
             dither="bayer4",
             palette_weighting="area",
             protect_colors="none",
+            protect_salient_colors="off",
             emit_palette="palette.gpl",
             fix_mixels=True,
             line_cleanup="high",
@@ -68,6 +69,7 @@ class PixelAidCliTests(unittest.TestCase):
         self.assertIn("--emit-palette", args)
         self.assertIn("palette.gpl", args)
         self.assertIn("--fix-mixels", args)
+        self.assertIn("--no-protect-salient-colors", args)
         self.assertIn("--line-cleanup", args)
         self.assertIn("high", args)
         self.assertIn("--snap", args)
