@@ -855,6 +855,7 @@ type AssetEditorSession = {
     paletteWeighting: PaletteWeighting;
     paletteMinRegion: number;
     paletteProtectColors: "auto" | "none" | "custom";
+    protectSalientColors: boolean;
     paletteProtectColorsText: string;
     palettePreset: string;
     customPaletteText: string;
@@ -1049,7 +1050,7 @@ export function App() {
   const [paletteWeighting, setPaletteWeighting] = useState<PaletteWeighting>(initialSettings.paletteWeighting);
   const [paletteMinRegion, setPaletteMinRegion] = useState(initialSettings.paletteMinRegion);
   const [paletteProtectColors, setPaletteProtectColors] = useState<"auto" | "none" | "custom">(initialSettings.paletteProtectColors);
-  const [protectSalientColors, setProtectSalientColors] = useState(true);
+  const [protectSalientColors, setProtectSalientColors] = useState(initialSettings.protectSalientColors);
   const [paletteProtectColorsText, setPaletteProtectColorsText] = useState(initialSettings.paletteProtectColorsText);
   const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
   const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
@@ -1310,6 +1311,7 @@ export function App() {
       setPaletteWeighting(settings.paletteWeighting);
       setPaletteMinRegion(settings.paletteMinRegion);
       setPaletteProtectColors(settings.paletteProtectColors);
+      setProtectSalientColors(settings.protectSalientColors);
       setPaletteProtectColorsText(settings.paletteProtectColorsText);
       setPalettePreset(settings.palettePreset);
       setCustomPaletteText(settings.customPaletteText);
@@ -1404,6 +1406,7 @@ export function App() {
         paletteWeighting,
         paletteMinRegion,
         paletteProtectColors,
+        protectSalientColors,
         paletteProtectColorsText,
         palettePreset,
         customPaletteText,
@@ -1795,6 +1798,7 @@ export function App() {
         paletteWeighting,
         paletteMinRegion,
         paletteProtectColors,
+        protectSalientColors,
         paletteProtectColorsText,
         palettePreset,
         customPaletteText,
@@ -2058,6 +2062,7 @@ export function App() {
     setPaletteWeighting(settings.paletteWeighting ?? "area");
     setPaletteMinRegion(settings.paletteMinRegion ?? 1);
     setPaletteProtectColors(settings.paletteProtectColors ?? "auto");
+    setProtectSalientColors(settings.protectSalientColors ?? true);
     setPaletteProtectColorsText(settings.paletteProtectColorsText ?? "");
     setPalettePreset(settings.palettePreset);
     setCustomPaletteText(settings.customPaletteText);

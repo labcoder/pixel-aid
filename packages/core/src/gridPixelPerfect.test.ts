@@ -104,6 +104,42 @@ describe("grid and pixel-perfect helpers", () => {
     expect(bytes(second.image)).toEqual(bytes(first.image));
   });
 
+  test("transparent padding does not suppress mixel detection (flatness ignores alpha pairs)", () => {
+    // Same noisy 6x grid as above, but embedded in a 3x transparent canvas the way AI sprites are often
+    // exported. Transparent padding is byte-identical everywhere; if it were counted, flatness would be
+    // diluted toward "clean" and the mixel fix would silently skip (regression guard).
+    const base = upscaledSprite(10, 10, 6);
+    const noisy = createImage(base.width, base.height, [0, 0, 0, 0]);
+    noisy.data.set(base.data);
+    let seed = 1;
+    const rand = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 0xffffffff;
+    };
+    for (let y = 0; y < noisy.height; y += 1) {
+      for (let x = 0; x < noisy.width; x += 1) {
+        const [r, g, b, a] = readPixel(noisy, x, y);
+        if (a === 0) continue;
+        const jitter = Math.round((rand() - 0.5) * 60);
+        writePixel(noisy, x, y, r + jitter, g + jitter, b + jitter, a);
+      }
+    }
+    const padded = createImage(noisy.width * 3, noisy.height * 3, [0, 0, 0, 0]);
+    for (let y = 0; y < noisy.height; y += 1) {
+      for (let x = 0; x < noisy.width; x += 1) {
+        const [r, g, b, a] = readPixel(noisy, x, y);
+        writePixel(padded, noisy.width + x, noisy.height + y, r, g, b, a);
+      }
+    }
+
+    const bare = detectMixels(noisy, { maxScale: 12 });
+    const withPadding = detectMixels(padded, { maxScale: 12 });
+    expect(bare.hasMixels).toBe(true);
+    expect(withPadding.hasMixels).toBe(true);
+    // Roughness should be driven by the opaque cells, not averaged down by the transparent border.
+    expect(withPadding.axisX.irregularity).toBeGreaterThan(0.4);
+  });
+
   test("clean flat-block art is NOT flagged as mixels even at odd block sizes", () => {
     // Flat solid-color blocks (even of varying size) are clean pixel art, not mixels: the new detector
     // keys on cell FLATNESS, not block-size variance, so these score as not-mixel.

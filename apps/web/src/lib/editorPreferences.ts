@@ -56,6 +56,7 @@ export type EditorPreferenceSettings = {
   cropToBounds: boolean;
   localCorrection: boolean;
   fixMixels: boolean;
+  protectSalientColors: boolean;
   snap: boolean;
   aspectLocked: boolean;
   frameWidth: number;
@@ -142,6 +143,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   cropToBounds: engineFixDefaults.cropToBounds,
   localCorrection: engineFixDefaults.localCorrection,
   fixMixels: false,
+  protectSalientColors: true,
   snap: false,
   aspectLocked: engineFixDefaults.aspectLocked,
   frameWidth: engineFixDefaults.frameWidth,
@@ -269,6 +271,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       cropToBounds: booleanSetting(settings.cropToBounds, defaults.settings.cropToBounds),
       localCorrection: booleanSetting(settings.localCorrection, defaults.settings.localCorrection),
       fixMixels: booleanSetting(settings.fixMixels, defaults.settings.fixMixels),
+      protectSalientColors: booleanSetting(settings.protectSalientColors, defaults.settings.protectSalientColors),
       snap: booleanSetting(settings.snap, defaults.settings.snap),
       aspectLocked: booleanSetting(settings.aspectLocked, defaults.settings.aspectLocked),
       frameWidth: integerSetting(settings.frameWidth, defaults.settings.frameWidth, 1, 4096),

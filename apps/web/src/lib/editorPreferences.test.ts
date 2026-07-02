@@ -163,16 +163,19 @@ describe("editor preferences", () => {
     expect(defaults.settings.fixMixels).toBe(false);
     expect(defaults.settings.snap).toBe(false);
     expect(defaults.settings.lineCleanup).toBe("off");
+    expect(defaults.settings.protectSalientColors).toBe(true);
 
-    const normalized = normalizeEditorPreferences({ settings: { fixMixels: true, snap: true, lineCleanup: "high" } });
-    const invalid = normalizeEditorPreferences({ settings: { fixMixels: "yes", snap: "nope", lineCleanup: "maximum" } });
+    const normalized = normalizeEditorPreferences({ settings: { fixMixels: true, snap: true, lineCleanup: "high", protectSalientColors: false } });
+    const invalid = normalizeEditorPreferences({ settings: { fixMixels: "yes", snap: "nope", lineCleanup: "maximum", protectSalientColors: "sure" } });
 
     expect(normalized.settings.fixMixels).toBe(true);
     expect(normalized.settings.snap).toBe(true);
     expect(normalized.settings.lineCleanup).toBe("high");
+    expect(normalized.settings.protectSalientColors).toBe(false);
     expect(invalid.settings.fixMixels).toBe(false);
     expect(invalid.settings.snap).toBe(false);
     expect(invalid.settings.lineCleanup).toBe("off");
+    expect(invalid.settings.protectSalientColors).toBe(true);
   });
 
   test("defaults telemetry consent off and preserves explicit opt-in", () => {

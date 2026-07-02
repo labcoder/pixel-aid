@@ -79,6 +79,7 @@ def build_fix_sprite_args(
     dither: str | None = None,
     palette_weighting: str | None = None,
     protect_colors: str | None = None,
+    protect_salient_colors: str | None = None,
     emit_palette: str | None = None,
     fix_mixels: bool = False,
     line_cleanup: str | None = None,
@@ -115,6 +116,10 @@ def build_fix_sprite_args(
     for flag, value in optional_flags.items():
         if value not in (None, ""):
             args.extend([flag, str(value)])
+    if protect_salient_colors == "on":
+        args.append("--protect-salient-colors")
+    elif protect_salient_colors == "off":
+        args.append("--no-protect-salient-colors")
     if overwrite:
         args.append("--overwrite")
     if fix_mixels:
@@ -182,6 +187,7 @@ def fix_image_tensor_with_pixelaid(
     dither: str | None = None,
     palette_weighting: str | None = None,
     protect_colors: str | None = None,
+    protect_salient_colors: str | None = None,
     emit_palette: str | None = None,
     fix_mixels: bool = False,
     line_cleanup: str | None = None,
@@ -215,6 +221,7 @@ def fix_image_tensor_with_pixelaid(
                 dither=dither,
                 palette_weighting=palette_weighting,
                 protect_colors=protect_colors,
+                protect_salient_colors=protect_salient_colors,
                 emit_palette=str(emitted_palette_path),
                 fix_mixels=fix_mixels,
                 line_cleanup=line_cleanup,
