@@ -180,7 +180,12 @@ export function regularizeMixels(image: RGBAImage, reportOrOptions: MixelReport 
     ...(options.adaptiveCoverage !== undefined ? { adaptiveCoverage: options.adaptiveCoverage } : {})
   });
 
-  // ...then paint each collapsed cell back over its full-resolution cell span (nearest expansion).
+  // ...then paint each collapsed cell's COLOR back over the visible pixels of its full-resolution cell
+  // span, PRESERVING the source's per-pixel alpha. Boundary cells straddle the silhouette (part
+  // transparent background, part edge anti-aliasing); flooding the whole span opaque would bulge the
+  // silhouette out in cell-sized steps and ring it with the cell's dominant color (black outline
+  // artifacts / background-color bleed). Keeping the original alpha means the downstream alpha cleanup
+  // sees exactly the same silhouette as the non-mixel path.
   const output = createImage(image.width, image.height, [0, 0, 0, 0]);
   for (let cy = 0; cy < collapsed.height; cy += 1) {
     const y0 = yBoundaries[cy]!;
@@ -188,10 +193,13 @@ export function regularizeMixels(image: RGBAImage, reportOrOptions: MixelReport 
     for (let cx = 0; cx < collapsed.width; cx += 1) {
       const x0 = xBoundaries[cx]!;
       const x1 = xBoundaries[cx + 1]!;
-      const [r, g, b, a] = readPixel(collapsed, cx, cy);
+      const [r, g, b] = readPixel(collapsed, cx, cy);
       for (let y = y0; y < y1; y += 1) {
         for (let x = x0; x < x1; x += 1) {
-          writePixel(output, x, y, r, g, b, a);
+          const sourceAlpha = image.data[(y * image.width + x) * 4 + 3]!;
+          if (sourceAlpha > 0) {
+            writePixel(output, x, y, r, g, b, sourceAlpha);
+          }
         }
       }
     }
