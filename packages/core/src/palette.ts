@@ -307,11 +307,11 @@ function resolveProtectedColors(
   const seen = new Set<string>();
   const outline = detectDominantOutlineColor(image, analysis);
   if (outline) {
-    addUniquePaletteColor(protectedColors, seen, outline, maxColors);
+    addProtectedPaletteColor(protectedColors, seen, outline, maxColors);
   }
 
   for (const accent of detectHighSaturationAccentColors(analysis)) {
-    addUniquePaletteColor(protectedColors, seen, accent, maxColors);
+    addProtectedPaletteColor(protectedColors, seen, accent, maxColors);
   }
 
   // Salience-based protection: small but vivid regions (eyes, nose, mouth) that fall below the frequency
@@ -322,7 +322,7 @@ function resolveProtectedColors(
       if (protectedColors.length >= salientBudget + 1) {
         break;
       }
-      addUniquePaletteColor(protectedColors, seen, salient, maxColors);
+      addProtectedPaletteColor(protectedColors, seen, salient, maxColors);
     }
   }
   return protectedColors;
@@ -467,19 +467,44 @@ function detectSalientAccentColors(analysis: PaletteAnalysis, limit: number): st
 
   // Low area floor: a salient region need only cover ~0.1% of visible pixels (vs 1% for plain accents).
   const areaFloor = Math.max(8, total * 0.001);
-  const candidates: Cluster[] = [];
-  for (const cluster of clusters.values()) {
+  type ScoredCluster = Cluster & { hueSextant: number };
+  const candidates: ScoredCluster[] = [];
+  for (const [key, cluster] of clusters.entries()) {
     if (cluster.area < areaFloor) {
       continue;
     }
     // Salience favours saturation and (sub-linearly) area, so a vivid small region outranks a dull large one.
     cluster.score = cluster.bestSat * Math.sqrt(cluster.area);
-    candidates.push(cluster);
+    candidates.push({ ...cluster, hueSextant: Math.floor(key / 64) });
   }
   candidates.sort((a, b) =>
     b.score - a.score || b.area - a.area || a.bestColor - b.bestColor
   );
-  return candidates.slice(0, limit).map((cluster) => rgbToHex(cluster.bestColor));
+
+  // Hue-family diversification: without it, several clusters of ONE dominant family (e.g. big green eyes
+  // plus green fur highlights) can fill every salient slot and shut out a small-but-distinct family like a
+  // pink nose. First pass seats the single best cluster from EACH hue sextant in score order; only then are
+  // remaining slots filled by absolute score. Deterministic — stable sort plus fixed iteration order.
+  const selected: ScoredCluster[] = [];
+  const seatedFamilies = new Set<number>();
+  for (const candidate of candidates) {
+    if (selected.length >= limit) {
+      break;
+    }
+    if (!seatedFamilies.has(candidate.hueSextant)) {
+      seatedFamilies.add(candidate.hueSextant);
+      selected.push(candidate);
+    }
+  }
+  for (const candidate of candidates) {
+    if (selected.length >= limit) {
+      break;
+    }
+    if (!selected.includes(candidate)) {
+      selected.push(candidate);
+    }
+  }
+  return selected.map((cluster) => rgbToHex(cluster.bestColor));
 }
 
 function clusterKeyParts(
@@ -1275,6 +1300,40 @@ function addUniquePaletteColor(palette: string[], seen: Set<string>, color: stri
 
   seen.add(color);
   palette.push(color);
+}
+
+/**
+ * Protected-slot variant of addUniquePaletteColor with a near-duplicate guard. Protected slots are
+ * scarce (a quarter of the budget), so colors within a small per-channel distance of an already-protected
+ * color (e.g. #000000 vs #030201 vs #020100) must not each burn a slot — quantization merges them anyway,
+ * and every wasted slot can shut out a genuinely distinct family (a pink nose at 24 colors). The main
+ * palette assembly intentionally does NOT dedupe this way: near-shades there are legitimate gradient steps.
+ */
+function addProtectedPaletteColor(palette: string[], seen: Set<string>, color: string, maxColors: number): void {
+  if (palette.length >= maxColors || seen.has(color)) {
+    return;
+  }
+  for (const existing of palette) {
+    if (maxChannelDelta(existing, color) <= PROTECTED_COLOR_NEAR_DUPLICATE_DELTA) {
+      return;
+    }
+  }
+
+  seen.add(color);
+  palette.push(color);
+}
+
+// Two colors whose largest per-channel difference is at or below this are treated as the same color for
+// protected-slot purposes. 8/255 is comfortably below a visible step in flat pixel-art fills.
+const PROTECTED_COLOR_NEAR_DUPLICATE_DELTA = 8;
+
+function maxChannelDelta(hexA: string, hexB: string): number {
+  const a = parseInt(hexA.slice(1), 16);
+  const b = parseInt(hexB.slice(1), 16);
+  const dr = Math.abs(((a >> 16) & 0xff) - ((b >> 16) & 0xff));
+  const dg = Math.abs(((a >> 8) & 0xff) - ((b >> 8) & 0xff));
+  const db = Math.abs((a & 0xff) - (b & 0xff));
+  return Math.max(dr, dg, db);
 }
 
 function normalizePaletteSettings(requested: PaletteSettings | undefined, fallbackMaxColors: number): NormalizedPaletteSettings {
