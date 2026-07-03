@@ -172,6 +172,7 @@ export type FixSpriteRequest = {
   outputPath: string;
   manifestPath?: string;
   options?: AutomationFixOptionsInput;
+  /** Defaults to true. Pass false to bypass guided suggestion defaults and use only explicit/manual options. */
   autoSuggest?: boolean;
   overwrite?: boolean;
 };
@@ -414,7 +415,7 @@ export async function fixSprite(
     }
     let fixOptions: FixOptions;
     let optionWarnings: string[];
-    if (request.autoSuggest) {
+    if (request.autoSuggest !== false) {
       const suggestion = createFixSuggestion(imageResult.value, preparedOptions.value);
       if (!suggestion.ok) {
         return suggestion;
@@ -937,6 +938,12 @@ function mergeSuggestedFixOptions(
 }
 
 function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestion): AutomationFixOptionsInput {
+  const suggestionAllowsCleanup = (pass: CoreFixSettingSuggestion["cleanupEligibility"][number]["pass"]): boolean =>
+    suggestion.cleanupEligibility.some((decision) => decision.pass === pass && decision.enabled);
+  const usesSpriteCleanup = suggestion.assetType === "sprite" || suggestion.assetType === "icon";
+  const useSuggestedStrictSheetCleanup = suggestion.mode === "spriteSheet" && suggestion.matteCleanup;
+  const resolvedPreservesScene = suggestion.assetType === "background" || suggestion.assetType === "tilemap";
+  const usesEdgeCleanup = !resolvedPreservesScene && (usesSpriteCleanup || useSuggestedStrictSheetCleanup || suggestionAllowsCleanup("outlineRepair"));
   const options: AutomationFixOptionsInput = {
     assetType: suggestion.assetType,
     targetWidth: suggestion.targetWidth,
@@ -946,6 +953,11 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
     paletteStrategy: suggestion.paletteStrategy,
     paletteLockScope: suggestion.mode === "single" ? "single" : "sheet",
     paletteDithering: "none",
+    colorSpace: "oklab",
+    paletteWeighting: "area",
+    minRegion: 1,
+    protectColors: "auto",
+    protectSalientColors: suggestion.mode === "single",
     downscale: suggestion.downscale,
     alpha: suggestion.alpha,
     alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
@@ -959,9 +971,9 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
       scaleY: suggestion.gridScaleY,
       phaseX: suggestion.gridPhaseX,
       phaseY: suggestion.gridPhaseY,
-      cropToBounds: false,
-      localCorrection: suggestion.localCorrection,
-      fixMixels: suggestion.fixMixels,
+      cropToBounds: suggestion.mode === "single",
+      localCorrection: suggestion.mode === "single" && suggestion.localCorrection,
+      fixMixels: suggestion.mode === "single" && suggestion.fixMixels,
     },
     cleanup: {
       removeOrphans: suggestion.removeOrphans,
@@ -969,20 +981,28 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
       preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
       removeHalos: suggestion.removeHalos,
       denoiseStrength: suggestion.denoiseStrength,
-      inferNativeScale: suggestion.inferNativeScale,
-      outlineMode: suggestion.outlineMode,
+      dominantThreshold: 0.6,
+      inferNativeScale: suggestion.mode !== "single" && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"),
+      outlineMode: usesEdgeCleanup ? suggestion.outlineMode : "none",
       outlineSize: suggestion.outlineSize,
-      ...(suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {}),
+      ...(usesEdgeCleanup && suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {}),
       ...(suggestion.matteCleanup
         ? {
             morphology: {
               enabled: true,
+              close: false,
+              fillTinyHoles: false,
+              removeTinyComponents: false,
+              preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
+              maxHolePixels: 1,
+              maxComponentPixels: 1,
               matteCleanup: true,
               alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
+              connectivity: 8,
             },
           }
         : {}),
-      ...(suggestion.contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
+      ...(usesEdgeCleanup && suggestion.contrastExpansionEnabled ? { contrastExpansion: { enabled: true } } : {}),
     },
   };
   const sheet = sheetFromCoreSuggestion(suggestion);

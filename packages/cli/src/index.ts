@@ -198,7 +198,9 @@ async function runFixCommand(command: string, args: string[], context: CliContex
   const inputPath = readInput(args);
   const outputPath = takeRequiredValue(args, "--out");
   const manifestPath = takeValue(args, "--manifest");
-  const autoSuggest = takeBooleanFlag(args, "--auto") || takeBooleanFlag(args, "--auto-suggest");
+  takeBooleanFlag(args, "--auto");
+  takeBooleanFlag(args, "--auto-suggest");
+  const autoSuggest = !takeBooleanFlag(args, "--no-auto");
   const overwrite = takeBooleanFlag(args, "--overwrite");
   const options = parseFixOptions(args);
   assertNoExtraArgs(args);
@@ -326,6 +328,9 @@ async function runBatchCommand(command: string, args: string[], context: CliCont
   const continueOnError = takeBooleanFlag(args, "--continue-on-error");
   const overwrite = takeBooleanFlag(args, "--overwrite");
   const recursive = takeBooleanFlag(args, "--recursive");
+  takeBooleanFlag(args, "--auto");
+  takeBooleanFlag(args, "--auto-suggest");
+  const autoSuggest = !takeBooleanFlag(args, "--no-auto");
   const options = parseFixOptions(args);
   const inputPatterns = readInputs(args);
   assertNoExtraArgs(args);
@@ -357,6 +362,7 @@ async function runBatchCommand(command: string, args: string[], context: CliCont
       outputPath,
       manifestPath,
       options,
+      autoSuggest,
       overwrite,
     }, createCliRuntime(command, context, {
       inputPath,
@@ -411,7 +417,7 @@ async function runBatchCommand(command: string, args: string[], context: CliCont
     ].join("\n"),
     diagnostics: {
       operation: "batch_fix_sprite",
-      options: { ...options, dryRun, continueOnError, overwrite, recursive },
+      options: { ...options, autoSuggest, dryRun, continueOnError, overwrite, recursive },
       paths: { inputPatterns, inputPaths, outDir },
       warnings: items.flatMap((item) => item.warnings),
     },
@@ -1023,7 +1029,7 @@ function usageText(): string {
     "  pixelaid inspect <input.png|input.jpg|input.webp> --json",
     "  pixelaid report <input.png|input.jpg|input.webp> [more.png|more.jpg|more.webp] --json",
     "  pixelaid suggest <input.png|input.jpg|input.webp> --json",
-    "  pixelaid fix <input.png|input.jpg|input.webp> --out <fixed.png> --manifest <manifest.json> [--auto]",
+    "  pixelaid fix <input.png|input.jpg|input.webp> --out <fixed.png> --manifest <manifest.json> [--no-auto]",
     "  pixelaid fix-sheet <input.png|input.jpg|input.webp> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
     "  pixelaid palette <input.png|input.jpg|input.webp> --max-colors <n> --out <palette.hex|palette.json>",
     "  pixelaid export <input.png|input.jpg|input.webp> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
@@ -1041,6 +1047,8 @@ function usageText(): string {
     "  --seed <n>",
     "  --dither none|ordered|bayer2|bayer4|floyd|errorDiffusion",
     "  --downscale-method perceptual|nearest|bilinear|dominant|median|adaptive|averageThenPalette|detailPreserving|contrast|kCentroid",
+    "  --auto / --auto-suggest         Guided suggestion path (default; accepted for back-compat)",
+    "  --no-auto                      Manual legacy fix path; use only explicit/default algorithm options",
     "  --emit-palette <palette.aco|palette.gpl|palette.pal|palette.hex|palette.json|palette.png>",
     "  --emit-palette-conditioning <artifact.json>",
     "",
