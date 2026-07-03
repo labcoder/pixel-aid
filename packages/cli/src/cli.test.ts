@@ -304,7 +304,7 @@ describe("pixelaid CLI", () => {
       expect(body.result.result?.settings).toMatchObject({
         alpha: "backgroundFloodFill",
         paletteSettings: {
-          strategy: "perceptual",
+          strategy: "familyFirst",
         },
         cleanup: {
           morphology: {

@@ -88,7 +88,7 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, protectSalientColors (keep small vivid regions like eyes/nose at low color budgets; default on for single sprites), paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, cleanup, and sheet settings. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
+  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, protectSalientColors (keep small vivid regions like eyes/nose at low color budgets; default on for single sprites), paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, cleanup, and sheet settings. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans, familyFirst. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
   additionalProperties: true,
 };
 
@@ -162,8 +162,8 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
       outputPath: stringSchema("Palette output path (.aco, .gpl, .pal, .hex, .json, or .png strip)."),
       maxColors: { oneOf: [{ type: "number" }, { type: "string", enum: ["auto"] }], description: "Maximum number of colors or auto.", default: 24 },
       colorSpace: { type: "string", enum: ["oklab", "cielab", "srgb"], description: "Color space for perceptual quantizers." },
-      quantizer: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans"], description: "Palette quantizer/strategy." },
-      paletteStrategy: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans"], description: "Alias for quantizer." },
+      quantizer: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans", "familyFirst"], description: "Palette quantizer/strategy." },
+      paletteStrategy: { type: "string", enum: ["medianCut", "frequency", "perceptual", "wu", "kmeans", "familyFirst"], description: "Alias for quantizer." },
       seed: { type: "number", description: "Deterministic seed for kmeans." },
       paletteWeighting: { type: "string", enum: ["area", "frequency"], description: "Palette analysis weighting." },
       minRegion: { type: "number", description: "Minimum visible region size in pixels." },

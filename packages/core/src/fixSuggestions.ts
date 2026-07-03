@@ -493,7 +493,7 @@ function suggestPaletteStrategy({
   matteCleanup: boolean;
 }): PaletteStrategy {
   if (mode === "single" && (assetType === "sprite" || assetType === "icon") && (alpha === "backgroundFloodFill" || matteCleanup)) {
-    return "perceptual";
+    return "familyFirst";
   }
 
   return "medianCut";

@@ -57,7 +57,7 @@ class PixelAidFixSprite:
                 "colors": ("INT", {"default": 24, "min": 2, "max": 512}),
                 "max_colors": ("STRING", {"default": ""}),
                 "color_space": (["oklab", "cielab", "srgb"], {"default": "oklab"}),
-                "quantizer": (["median-cut", "medianCut", "frequency", "perceptual", "wu", "kmeans"], {"default": "median-cut"}),
+                "quantizer": (["median-cut", "medianCut", "frequency", "perceptual", "wu", "kmeans", "familyFirst"], {"default": "median-cut"}),
                 "palette": ("STRING", {"default": ""}),
                 "dither": (["none", "ordered", "bayer2", "bayer4", "floyd", "errorDiffusion"], {"default": "none"}),
                 "palette_weighting": (["area", "frequency"], {"default": "frequency"}),

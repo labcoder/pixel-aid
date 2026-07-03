@@ -88,6 +88,7 @@ describe("editor preferences", () => {
   test("accepts the M1-A color pipeline strategies, dithers, and downscales", () => {
     const wu = normalizeEditorPreferences({ settings: { paletteStrategy: "wu" } });
     const kmeans = normalizeEditorPreferences({ settings: { paletteStrategy: "kmeans" } });
+    const familyFirst = normalizeEditorPreferences({ settings: { paletteStrategy: "familyFirst" } });
     const bayer = normalizeEditorPreferences({ settings: { paletteDithering: "bayer4" } });
     const floyd = normalizeEditorPreferences({ settings: { paletteDithering: "floyd" } });
     const perceptual = normalizeEditorPreferences({ settings: { downscale: "perceptual" } });
@@ -95,6 +96,7 @@ describe("editor preferences", () => {
 
     expect(wu.settings.paletteStrategy).toBe("wu");
     expect(kmeans.settings.paletteStrategy).toBe("kmeans");
+    expect(familyFirst.settings.paletteStrategy).toBe("familyFirst");
     expect(bayer.settings.paletteDithering).toBe("bayer4");
     expect(floyd.settings.paletteDithering).toBe("floyd");
     expect(perceptual.settings.downscale).toBe("perceptual");

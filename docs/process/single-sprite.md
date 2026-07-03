@@ -105,7 +105,7 @@ flowchart TD
   K --> L["resolveAutoColorCount<br/>98.5 percent mass heuristic<br/>palette.ts:248-281"]
   L --> M["resolveProtectedColors<br/>palette.ts:292"]
   M --> N["auto quantizer strategy"]
-  N --> O["frequency, medianCut, perceptual, wu, kmeans"]
+  N --> O["frequency, medianCut, perceptual, wu, kmeans, familyFirst"]
   J --> P["merge reserved colors"]
   O --> P
   P --> Q["refinePaletteForCleanup<br/>fix.ts:959"]
@@ -118,7 +118,7 @@ Palette details:
 - `resolvePalette()` normalizes settings, analyzes visible colors, selects the palette source according to lock scope, resolves `maxColors`, protects colors, extracts or accepts colors, checks drift, checks dithering safety, and returns diagnostics (`palette.ts:124-201`).
 - Auto color count keeps enough ranked color mass to explain 98.5 percent, capped by the default auto cap of 64 (`palette.ts:248-281`).
 - Protected colors are dominant near-black boundary outline color, high-saturation accents above a 1 percent floor, and optional salient accent clusters (`palette.ts:292-328`). Salient clusters use coarse hue sextants, saturation/value bands, a 0.1 percent area floor, and hue-family round-robin selection (`palette.ts:426-508`).
-- Strategy variants are one stage: `frequency`, `medianCut`, `perceptual`, `wu`, and `kmeans` (`palette.ts:231-240`).
+- Strategy variants are one stage: `frequency`, `medianCut`, `perceptual`, `wu`, `kmeans`, and `familyFirst` (`palette.ts:231-247`). `familyFirst` buckets visible colors into perceptual families, seats representative medoids first, then adds nested monotone ramp splits as the budget grows.
 - `refinePaletteForCleanup()` filters matte palette colors for non-single matte-cleanup outputs and can merge nearby auto palette colors when non-single binary denoise is strong (`fix.ts:959-1005`).
 
 ## Guided defaults that drive this path
@@ -130,7 +130,7 @@ For single sprites and icons:
 - Alpha may become `backgroundFloodFill` only for `sprite` or `icon` when corner alpha is opaque and the image has a bright or removable opaque background (`fixSuggestions.ts:1842-1882`).
 - `fixMixels` is recommended only for single, non-background assets when `detectMixels()` reports roughness at least 0.65, a near-certain bar above the base detection threshold (`fixSuggestions.ts:355-374`).
 - Matte cleanup turns on for visible chroma matte on single sprites/icons with `backgroundFloodFill` (`fixSuggestions.ts:193-197`, `fixSuggestions.ts:869-877`).
-- Palette strategy becomes `perceptual` for single sprites/icons when flood-fill alpha or matte cleanup is active; otherwise it is `medianCut` (`fixSuggestions.ts:484-500`).
+- Palette strategy becomes `familyFirst` for single sprites/icons when flood-fill alpha or matte cleanup is active; otherwise it is `medianCut` (`fixSuggestions.ts:484-500`). Because `familyFirst` seats vivid families natively, the subject-detail reservation and salient protected-color bolt-ons are skipped for it (`fix.ts:1617-1625`, `palette.ts:145-149`, `palette.ts:299-309 resolveFamilyFirstProtectedColors`).
 - Denoise, halo removal, orphan removal, jaggy cleanup, and preservation of single-pixel details come from asset presets unless special low-scale or matte-cleanup branches override them (`assetTypePresets.ts:72-86`, `fixSuggestions.ts:796-888`).
 - Outline defaults are enabled only when cleanup eligibility and outline evidence agree; selected source colors are dark candidate colors, typically one or two (`fixSuggestions.ts:679-698`).
 
