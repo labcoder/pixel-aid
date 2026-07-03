@@ -256,6 +256,7 @@ export type AlphaCleanupSettings = {
   colorKey?: string;
   decontaminateRgb?: boolean;
   transparentRgb?: string;
+  backgroundDetection?: "classic" | "adaptive";
 };
 
 export type AlphaCleanupDiagnostics = {
@@ -266,6 +267,13 @@ export type AlphaCleanupDiagnostics = {
   decontaminatedPixels: number;
   transparentPixels: number;
   softAlphaPixels: number;
+  background?: {
+    kind: string;
+    clusterCount: number;
+    thresholdOklab: number;
+    confidence: number;
+    checkerCellSize?: number;
+  };
   warnings: string[];
 };
 

@@ -30,6 +30,8 @@ export type {
 
 export { applyAlphaMode } from "./alpha";
 export type { AlphaCleanupResult } from "./alpha";
+export { analyzeBackground } from "./backgroundAnalysis";
+export type { BackgroundAnalysis, BackgroundCluster } from "./backgroundAnalysis";
 export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";

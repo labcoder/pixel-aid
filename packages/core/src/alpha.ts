@@ -1,5 +1,7 @@
 import type { AlphaCleanupDiagnostics, AlphaCleanupSettings, AlphaMode, RGBAImage } from "@pixelaid/shared";
-import { clampByte, parseHexColor } from "./color";
+import type { BackgroundAnalysis } from "./backgroundAnalysis";
+import { analyzeBackground } from "./backgroundAnalysis";
+import { clampByte, parseHexColor, rgbChannelsToOklab } from "./color";
 import { cloneImage } from "./image";
 
 export type AlphaCleanupResult = {
@@ -10,6 +12,7 @@ export type AlphaCleanupResult = {
 export function applyAlphaMode(image: RGBAImage, mode: AlphaMode, options: AlphaCleanupSettings = {}): AlphaCleanupResult {
   const threshold = clampByte(options.threshold ?? 128);
   const tolerance = Math.max(0, Math.round(options.tolerance ?? 18));
+  const toleranceProvided = options.tolerance !== undefined;
   const decontaminateRgb = options.decontaminateRgb ?? mode !== "preserve";
   const transparentRgb = parseHexColor(options.transparentRgb ?? "#000000");
 
@@ -32,7 +35,7 @@ export function applyAlphaMode(image: RGBAImage, mode: AlphaMode, options: Alpha
     return applyColorKey(image, threshold, tolerance, options.colorKey, decontaminateRgb, transparentRgb);
   }
 
-  return backgroundFloodFill(image, threshold, tolerance, options.colorKey, decontaminateRgb, transparentRgb);
+  return backgroundFloodFill(image, threshold, tolerance, toleranceProvided, options.colorKey, decontaminateRgb, transparentRgb, options.backgroundDetection);
 }
 
 function applyBinaryAlpha(
@@ -98,16 +101,29 @@ function backgroundFloodFill(
   image: RGBAImage,
   threshold: number,
   tolerance: number,
+  toleranceProvided: boolean,
   colorKey: string | undefined,
   decontaminateRgb: boolean,
-  transparentRgb: number
+  transparentRgb: number,
+  backgroundDetection: AlphaCleanupSettings["backgroundDetection"]
 ): AlphaCleanupResult {
   const output = cloneImage(image);
   const visited = new Uint8Array(image.width * image.height);
   const queue = new Int32Array(image.width * image.height);
   const background = estimateBackgroundModel(image);
+  const analysis = backgroundDetection === "adaptive" ? analyzeBackground(image) : undefined;
+  const adaptiveLut = analysis ? createAdaptiveBackgroundLut(analysis, toleranceProvided ? tolerance : undefined) : undefined;
   const toleranceSq = tolerance * tolerance * 3;
   const diagnostics = createDiagnostics("backgroundFloodFill", threshold, tolerance, colorKey);
+  if (analysis) {
+    diagnostics.background = {
+      kind: analysis.kind,
+      clusterCount: analysis.clusters.length,
+      thresholdOklab: adaptiveLut?.thresholdOklab ?? analysis.thresholdOklab,
+      confidence: analysis.confidence,
+      ...(analysis.checker ? { checkerCellSize: analysis.checker.cellSize } : {})
+    };
+  }
   let read = 0;
   let write = 0;
 
@@ -122,7 +138,7 @@ function backgroundFloodFill(
     }
 
     const offset = index * 4;
-    if (!matchesBackgroundModel(image.data, offset, background, toleranceSq)) {
+    if (adaptiveLut ? !matchesAdaptiveBackgroundLut(image.data, offset, adaptiveLut) : !matchesBackgroundModel(image.data, offset, background, toleranceSq)) {
       return;
     }
 
@@ -224,6 +240,51 @@ type BackgroundModel = {
     maxSpread: number;
   };
 };
+
+type AdaptiveBackgroundLut = {
+  pass: Uint8Array;
+  thresholdOklab: number;
+};
+
+function createAdaptiveBackgroundLut(analysis: BackgroundAnalysis, tolerance: number | undefined): AdaptiveBackgroundLut {
+  const pass = new Uint8Array(4096);
+  const effectiveThreshold = Math.min(analysis.thresholdOklab, tolerance === undefined ? analysis.thresholdOklab : (tolerance / 255) * 0.35);
+  if (analysis.clusters.length === 0) {
+    return { pass, thresholdOklab: effectiveThreshold };
+  }
+  // The fill hot path uses a 4096-entry 4-bit RGB bucket LUT: at most 4096 OKLab
+  // conversions per image, then one byte lookup per pixel. Bucket representatives use
+  // the bucket midpoint, so quantization error is bounded by half a bucket step per RGB
+  // channel; the same half-step is added as slack to avoid false negatives at bucket
+  // extremes (e.g. #fff in the high bucket). An explicit RGB tolerance is an approximate cap: RGB Euclidean tolerance
+  // maps to OKLab via (tolerance / 255) * 0.35, keeping user intent deterministic.
+  const quantizationSlack = (Math.sqrt(3) * 8 * 0.35) / 255;
+  const effectiveThresholdWithSlack = effectiveThreshold + quantizationSlack;
+  const effectiveThresholdSq = effectiveThresholdWithSlack * effectiveThresholdWithSlack;
+  for (let r4 = 0; r4 < 16; r4 += 1) {
+    for (let g4 = 0; g4 < 16; g4 += 1) {
+      for (let b4 = 0; b4 < 16; b4 += 1) {
+        const bucket = (r4 << 8) | (g4 << 4) | b4;
+        const lab = rgbChannelsToOklab((r4 << 4) | 8, (g4 << 4) | 8, (b4 << 4) | 8);
+        for (const cluster of analysis.clusters) {
+          const dl = lab.x - cluster.centerL;
+          const da = lab.y - cluster.centerA;
+          const db = lab.z - cluster.centerB;
+          if (dl * dl + da * da + db * db <= effectiveThresholdSq) {
+            pass[bucket] = 1;
+            break;
+          }
+        }
+      }
+    }
+  }
+  return { pass, thresholdOklab: effectiveThreshold };
+}
+
+function matchesAdaptiveBackgroundLut(data: Uint8ClampedArray, offset: number, lut: AdaptiveBackgroundLut): boolean {
+  const bucket = ((data[offset]! >> 4) << 8) | ((data[offset + 1]! >> 4) << 4) | (data[offset + 2]! >> 4);
+  return lut.pass[bucket] === 1;
+}
 
 function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
   const bucketCounts = new Uint16Array(4096);
