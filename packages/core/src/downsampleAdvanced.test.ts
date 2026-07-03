@@ -42,11 +42,44 @@ describe("advanced downsample modes", () => {
     expect(readPixel(adaptive, 1, 0)).toEqual(readPixel(dominant, 1, 0));
   });
 
+  test("median and average downsampling ignore transparent-black RGB while preserving alpha statistics", () => {
+    const source = createImage(2, 2, [0, 0, 0, 0]);
+    writePixel(source, 0, 0, 0, 0, 0, 0);
+    writePixel(source, 1, 0, 255, 255, 255, 255);
+    writePixel(source, 0, 1, 0, 0, 0, 0);
+    writePixel(source, 1, 1, 255, 255, 255, 255);
+
+    const median = downsampleBlocks(source, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "median",
+      alpha: "preserve"
+    });
+    const average = downsampleBlocks(source, {
+      outputWidth: 1,
+      outputHeight: 1,
+      scaleX: 2,
+      scaleY: 2,
+      phaseX: 0,
+      phaseY: 0,
+      method: "averageThenPalette",
+      alpha: "preserve"
+    });
+
+    expect(readPixel(median, 0, 0)).toEqual([255, 255, 255, 128]);
+    expect(readPixel(average, 0, 0)).toEqual([255, 255, 255, 128]);
+  });
+
   test("median downsampling preserves odd even and alpha median semantics", () => {
     const oddSource = createImage(3, 1);
     writePixel(oddSource, 0, 0, 10, 30, 90, 0);
     writePixel(oddSource, 1, 0, 100, 80, 60, 128);
     writePixel(oddSource, 2, 0, 250, 210, 40, 255);
+
     const odd = downsampleBlocks(oddSource, {
       outputWidth: 1,
       outputHeight: 1,
@@ -74,8 +107,14 @@ describe("advanced downsample modes", () => {
       alpha: "preserve"
     });
 
-    expect(readPixel(odd, 0, 0)).toEqual([100, 80, 60, 128]);
-    expect(readPixel(even, 0, 0)).toEqual([55, 110, 115, 150]);
+    // RGB medians are computed over VISIBLE pixels only (alpha >= 16): the first pixel is fully
+    // transparent (often flood-filled to black), so counting its RGB would drag boundary colors dark.
+    // Visible RGB pixels: (100,80,60) and (250,210,40) -> even-count averages (175,145,50).
+    // The ALPHA median still spans all pixels: (0,128,255) -> 128.
+    expect(readPixel(odd, 0, 0)).toEqual([175, 145, 50, 128]);
+    // Visible RGB pixels: (10,20,110), (100,200,120), (255,250,130) -> odd-count medians (100,200,120).
+    // Alpha spans all four: (0,100,200,255) -> (100+200)/2 = 150.
+    expect(readPixel(even, 0, 0)).toEqual([100, 200, 120, 150]);
   });
 
   test("common integer-scale fast paths match generic block bounds", () => {
