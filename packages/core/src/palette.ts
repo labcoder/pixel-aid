@@ -27,6 +27,7 @@ import {
 } from "./color";
 import { assertNotCancelled, phasePercent, reportProgress, shouldReportRow } from "./runtime";
 import type { LoopProgressOptions } from "./downsample";
+import { extractFamilyFirstPaletteFromCounts } from "./paletteFamilyFirst";
 
 export type ColorCount = {
   color: number;
@@ -142,7 +143,11 @@ export function resolvePalette(image: RGBAImage, options: ResolvePaletteOptions)
   const maxColors =
     settings.maxColors === "auto" ? resolveAutoColorCount(paletteSourceAnalysis, { cap: AUTO_COLOR_COUNT_CAP }) : settings.maxColors;
   const protectedColors =
-    settings.mode === "auto" ? resolveProtectedColors(paletteSource, paletteSourceAnalysis, settings.protectColors, maxColors, settings.protectSalientColors) : resolveExplicitProtectedColors(settings.protectColors);
+    settings.mode === "auto"
+      ? settings.strategy === "familyFirst"
+        ? resolveFamilyFirstProtectedColors(paletteSource, paletteSourceAnalysis, settings.protectColors, maxColors)
+        : resolveProtectedColors(paletteSource, paletteSourceAnalysis, settings.protectColors, maxColors, settings.protectSalientColors)
+      : resolveExplicitProtectedColors(settings.protectColors);
   const reserved = uniqueHexColors([...(options.reservedColors ?? []), ...protectedColors]);
   const palette = hasFixedPalette
     ? fixedColors
@@ -237,7 +242,9 @@ function extractAutoPaletteFromAnalysis(
           ? extractVariancePaletteFromCounts(analysis.exactCounts, autoBudget, colorSpace)
           : strategy === "kmeans"
             ? extractKMeansPaletteFromCounts(analysis.exactCounts, autoBudget, colorSpace, seed)
-            : extractMedianCutPaletteFromCounts(analysis.exactCounts, autoBudget);
+            : strategy === "familyFirst"
+              ? extractFamilyFirstPaletteFromCounts(analysis.exactCounts, autoBudget)
+              : extractMedianCutPaletteFromCounts(analysis.exactCounts, autoBudget);
   const reservedExact = new Set(reserved);
   const reservedQuantized = new Set(reserved.map(quantizedHexColor));
   const filtered = palette.filter((color: string) => !reservedExact.has(color) && !reservedQuantized.has(color));
@@ -287,6 +294,18 @@ function isPaletteAnalysis(value: PaletteAnalysis | RGBAImage): value is Palette
 
 function resolveExplicitProtectedColors(protectColors: PaletteProtectColors): string[] {
   return Array.isArray(protectColors) ? uniqueHexColors(protectColors) : [];
+}
+
+function resolveFamilyFirstProtectedColors(image: RGBAImage, analysis: PaletteAnalysis, protectColors: PaletteProtectColors, maxColors: number): string[] {
+  if (Array.isArray(protectColors)) {
+    return uniqueHexColors(protectColors);
+  }
+  if (protectColors === "none" || analysis.exactColorCount <= maxColors) {
+    return [];
+  }
+
+  const outline = detectDominantOutlineColor(image, analysis);
+  return outline ? [outline] : [];
 }
 
 function resolveProtectedColors(
@@ -1356,7 +1375,7 @@ function normalizePaletteSettings(requested: PaletteSettings | undefined, fallba
 }
 
 function normalizePaletteStrategy(value: PaletteStrategy | undefined): PaletteStrategy {
-  return value === "frequency" || value === "perceptual" || value === "medianCut" || value === "wu" || value === "kmeans" ? value : "medianCut";
+  return value === "frequency" || value === "perceptual" || value === "medianCut" || value === "wu" || value === "kmeans" || value === "familyFirst" ? value : "medianCut";
 }
 
 function normalizePaletteWeighting(value: PaletteWeighting | undefined): PaletteWeighting {

@@ -282,7 +282,7 @@ export type HaloRemovalDiagnostics = {
 
 export type PaletteMode = "auto" | "fixed" | "preset";
 
-export type PaletteStrategy = "medianCut" | "frequency" | "perceptual" | "wu" | "kmeans";
+export type PaletteStrategy = "medianCut" | "frequency" | "perceptual" | "wu" | "kmeans" | "familyFirst";
 
 export type ColorSpace = "oklab" | "cielab" | "srgb";
 

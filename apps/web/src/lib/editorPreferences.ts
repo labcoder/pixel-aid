@@ -252,7 +252,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 512),
       maxColorsAuto: booleanSetting(settings.maxColorsAuto, defaults.settings.maxColorsAuto),
       paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
-      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency", "perceptual", "wu", "kmeans"], defaults.settings.paletteStrategy),
+      paletteStrategy: unionSetting(settings.paletteStrategy, ["medianCut", "frequency", "perceptual", "wu", "kmeans", "familyFirst"], defaults.settings.paletteStrategy),
       paletteLockScope: unionSetting(settings.paletteLockScope, ["single", "firstFrame", "sheet", "project"], defaults.settings.paletteLockScope),
       paletteDithering: unionSetting(settings.paletteDithering, ["none", "ordered", "bayer2", "bayer4", "errorDiffusion", "floyd"], defaults.settings.paletteDithering),
       paletteColorSpace: unionSetting(settings.paletteColorSpace, ["oklab", "cielab", "srgb"], defaults.settings.paletteColorSpace),

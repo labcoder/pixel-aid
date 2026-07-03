@@ -130,7 +130,7 @@ const downscaleMethods = new Set<DownscaleMethod>([
 ]);
 const alphaModes = new Set<AlphaMode>(["preserve", "binary", "backgroundFloodFill", "colorKey"]);
 const paletteModes = new Set<PaletteMode>(["auto", "fixed", "preset"]);
-const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual", "wu", "kmeans"]);
+const paletteStrategies = new Set<PaletteStrategy>(["medianCut", "frequency", "perceptual", "wu", "kmeans", "familyFirst"]);
 const paletteLockScopes = new Set<PaletteLockScope>(["single", "firstFrame", "sheet", "project"]);
 const paletteDitheringModes = new Set<PaletteDitheringMode>(["none", "ordered", "bayer2", "bayer4", "errorDiffusion", "floyd"]);
 const colorSpaces = new Set<ColorSpace>(["oklab", "cielab", "srgb"]);
