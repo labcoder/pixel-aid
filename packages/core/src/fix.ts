@@ -1620,6 +1620,9 @@ function shouldReserveSubjectDetailPaletteColors(options: FixOptions): boolean {
     options.cleanup.morphology?.enabled === true &&
     options.cleanup.morphology.matteCleanup === true &&
     options.paletteSettings?.mode !== "fixed" &&
+    // familyFirst seats vivid families natively (eyes/nose get seats on merit); the up-to-6-color
+    // reservation would starve small budgets (at K=8 it ate 6 slots with near-duplicate greens).
+    options.paletteSettings?.strategy !== "familyFirst" &&
     options.palette === undefined
   );
 }
