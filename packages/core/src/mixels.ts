@@ -8,7 +8,7 @@ import type {
 } from "@pixelaid/shared";
 import { downsampleBlocks } from "./downsample";
 import { detectGridCandidates } from "./grid";
-import { createImage, cloneImage, readPixel, writePixel } from "./image";
+import { createImage, cloneImage } from "./image";
 
 // Mixel-ness is 1 - lattice alignment: the fraction of structural edge energy that does NOT land on a
 // single global uniform lattice (0 = every edge on-grid, higher = drifting/off-grid). At/above this
@@ -16,6 +16,13 @@ import { createImage, cloneImage, readPixel, writePixel } from "./image";
 // of its edge energy on the lattice (jitter <= ~0.35); mixel/AI art smears it (jitter >= ~0.6). 0.5
 // sits in the gap, so clean sheets are never falsely flagged and genuine mixels still trip it.
 export const MIXEL_IRREGULARITY_THRESHOLD = 0.5;
+
+// A cell is considered structured when the average per-channel absolute RGB deviation from that cell's
+// opaque-pixel mean exceeds this value. Noisy single-color mixels on the cat and synthetic fixtures stay
+// below ~10, while real sub-cell features (white outline crossing dark fur, eyes/nose/ear tips) land far
+// above 24. Mixed-alpha cells are always preserved separately because they straddle the silhouette.
+const MIXEL_STRUCTURED_CELL_RGB_MAD_THRESHOLD = 24;
+const MIXEL_OPAQUE_ALPHA_THRESHOLD = 16;
 
 export type MixelDetectionOptions = {
   maxScale?: number;
@@ -180,30 +187,31 @@ export function regularizeMixels(image: RGBAImage, reportOrOptions: MixelReport 
     ...(options.adaptiveCoverage !== undefined ? { adaptiveCoverage: options.adaptiveCoverage } : {})
   });
 
-  // ...then paint each collapsed cell's COLOR back over the visible pixels of its full-resolution cell
-  // span, PRESERVING the source's per-pixel alpha. Boundary cells straddle the silhouette (part
-  // transparent background, part edge anti-aliasing); flooding the whole span opaque would bulge the
-  // silhouette out in cell-sized steps and ring it with the cell's dominant color (black outline
-  // artifacts / background-color bleed). Keeping the original alpha means the downstream alpha cleanup
-  // sees exactly the same silhouette as the non-mixel path.
+  // ...then paint low-structure cells back over their full-resolution span, PRESERVING the source's
+  // per-pixel alpha. Boundary/feature cells are copied through verbatim: silhouette-straddling cells
+  // contain mixed alpha, and outline/nose/eye cells have high RGB spread among opaque pixels. Flattening
+  // only noisy homogeneous cells keeps the interior de-mixel benefit without destroying sub-cell art.
   const output = createImage(image.width, image.height, [0, 0, 0, 0]);
+  let flattenedCells = 0;
+  let preservedCells = 0;
   for (let cy = 0; cy < collapsed.height; cy += 1) {
     const y0 = yBoundaries[cy]!;
     const y1 = yBoundaries[cy + 1]!;
     for (let cx = 0; cx < collapsed.width; cx += 1) {
       const x0 = xBoundaries[cx]!;
       const x1 = xBoundaries[cx + 1]!;
-      const [r, g, b] = readPixel(collapsed, cx, cy);
-      for (let y = y0; y < y1; y += 1) {
-        for (let x = x0; x < x1; x += 1) {
-          const sourceAlpha = image.data[(y * image.width + x) * 4 + 3]!;
-          if (sourceAlpha > 0) {
-            writePixel(output, x, y, r, g, b, sourceAlpha);
-          }
-        }
+      if (isStructuredMixelCell(image, x0, x1, y0, y1)) {
+        copyCell(image, output, x0, x1, y0, y1);
+        preservedCells += 1;
+      } else {
+        const collapsedOffset = (cy * collapsed.width + cx) * 4;
+        paintFlattenedCell(image, output, x0, x1, y0, y1, collapsed.data[collapsedOffset]!, collapsed.data[collapsedOffset + 1]!, collapsed.data[collapsedOffset + 2]!);
+        flattenedCells += 1;
       }
     }
   }
+
+  const totalCells = flattenedCells + preservedCells;
 
   return {
     image: output,
@@ -216,9 +224,96 @@ export function regularizeMixels(image: RGBAImage, reportOrOptions: MixelReport 
       irregularityX: report.axisX.irregularity,
       irregularityY: report.axisY.irregularity,
       confidence: report.confidence,
-      notes: [...report.notes, "Regularized to a uniform lattice; caller downsamples to target"]
+      notes: [
+        ...report.notes,
+        `Regularized ${totalCells} cells; flattened ${flattenedCells} low-structure cells; preserved ${preservedCells} structured cells`,
+        "Regularized low-structure cells to a uniform lattice; preserved structured cells verbatim; caller downsamples to target"
+      ]
     }
   };
+}
+
+function isStructuredMixelCell(image: RGBAImage, x0: number, x1: number, y0: number, y1: number): boolean {
+  const data = image.data;
+  const width = image.width;
+  let opaquePixels = 0;
+  let transparentPixels = 0;
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+
+  for (let y = y0; y < y1; y += 1) {
+    const rowBase = y * width;
+    for (let x = x0; x < x1; x += 1) {
+      const offset = (rowBase + x) * 4;
+      const alpha = data[offset + 3]!;
+      if (alpha < MIXEL_OPAQUE_ALPHA_THRESHOLD) {
+        transparentPixels += 1;
+        continue;
+      }
+      opaquePixels += 1;
+      sumR += data[offset]!;
+      sumG += data[offset + 1]!;
+      sumB += data[offset + 2]!;
+    }
+  }
+
+  if (opaquePixels === 0) {
+    return false;
+  }
+  if (transparentPixels > 0) {
+    return true;
+  }
+
+  const meanR = sumR / opaquePixels;
+  const meanG = sumG / opaquePixels;
+  const meanB = sumB / opaquePixels;
+  let totalDeviation = 0;
+  for (let y = y0; y < y1; y += 1) {
+    const rowBase = y * width;
+    for (let x = x0; x < x1; x += 1) {
+      const offset = (rowBase + x) * 4;
+      if (data[offset + 3]! < MIXEL_OPAQUE_ALPHA_THRESHOLD) {
+        continue;
+      }
+      totalDeviation += Math.abs(data[offset]! - meanR) + Math.abs(data[offset + 1]! - meanG) + Math.abs(data[offset + 2]! - meanB);
+    }
+  }
+
+  return totalDeviation / (opaquePixels * 3) > MIXEL_STRUCTURED_CELL_RGB_MAD_THRESHOLD;
+}
+
+function copyCell(source: RGBAImage, output: RGBAImage, x0: number, x1: number, y0: number, y1: number): void {
+  const sourceData = source.data;
+  const outputData = output.data;
+  const width = source.width;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const offset = (y * width + x) * 4;
+      outputData[offset] = sourceData[offset]!;
+      outputData[offset + 1] = sourceData[offset + 1]!;
+      outputData[offset + 2] = sourceData[offset + 2]!;
+      outputData[offset + 3] = sourceData[offset + 3]!;
+    }
+  }
+}
+
+function paintFlattenedCell(source: RGBAImage, output: RGBAImage, x0: number, x1: number, y0: number, y1: number, r: number, g: number, b: number): void {
+  const sourceData = source.data;
+  const outputData = output.data;
+  const width = source.width;
+  for (let y = y0; y < y1; y += 1) {
+    for (let x = x0; x < x1; x += 1) {
+      const offset = (y * width + x) * 4;
+      const sourceAlpha = sourceData[offset + 3]!;
+      if (sourceAlpha > 0) {
+        outputData[offset] = r;
+        outputData[offset + 1] = g;
+        outputData[offset + 2] = b;
+        outputData[offset + 3] = sourceAlpha;
+      }
+    }
+  }
 }
 
 export function normalizeMixels(image: RGBAImage, reportOrOptions: MixelReport | MixelNormalizeOptions = {}): MixelNormalizationResult {
