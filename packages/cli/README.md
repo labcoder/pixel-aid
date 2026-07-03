@@ -30,6 +30,8 @@ npm install --save-dev pixelaid
 npx pixelaid fix panda-test.png --out panda-fixed.png --target 96x96 --json
 ```
 
+`pixelaid fix` and `pixelaid batch` use PixelAid's guided suggestion as the default base settings, matching the web "recommended fix" flow. Explicit flags such as `--target`, `--max-colors`, `--alpha`, or grid/cleanup controls are applied as overrides on top of that suggestion. Pass `--no-auto` to restore the fully manual legacy path that uses only explicit flags plus algorithm defaults. `--auto` and `--auto-suggest` remain accepted for older scripts but are now redundant.
+
 Local workspace usage:
 
 ```sh
@@ -58,7 +60,7 @@ pixelaid inspect panda-test.png \
   --json
 ```
 
-Generate the 96px example. These flags match the guided setup choices: width `96`, keep background, light noise cleanup, no outline, and max colors `24`.
+Generate the 96px example. Bare `fix` starts from the guided recommendation; these flags override the target size and cleanup choices for the docs sample: width `96`, keep background, light noise cleanup, no outline, and max colors `24`.
 
 ```sh
 pixelaid fix panda-test.png \
@@ -152,7 +154,7 @@ pixelaid export panda-test-fixed-96.png \
 - `export`: fixed output plus manifests, palette files, validation output, and engine sidecars.
 - `batch`: repeated `fix` workflow for files, directories, or simple glob patterns.
 
-Use `--json` for stable stdout payloads. Use `--progress-json` to stream progress events to stderr. Use `--diagnostics <path>` to write a redacted diagnostics file.
+Use `--json` for stable stdout payloads. Use `--progress-json` to stream progress events to stderr. Use `--diagnostics <path>` to write a redacted diagnostics file. Use `--no-auto` on `fix` or `batch` only when you intentionally want the manual legacy path instead of the guided web-equivalent default.
 
 ## Development
 

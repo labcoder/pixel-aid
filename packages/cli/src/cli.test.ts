@@ -201,7 +201,7 @@ describe("pixelaid CLI", () => {
       expect(body.result.result?.image.data).toBeUndefined();
       await expect(stat(output)).resolves.toBeTruthy();
       const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
-      expect(manifestJson.meta.assetType).toBe("sprite");
+      expect(manifestJson.meta.assetType).toBe("icon");
       expect(manifestJson.meta.operation.settings.paletteSettings).toMatchObject({
         strategy: "perceptual",
         dithering: "ordered",

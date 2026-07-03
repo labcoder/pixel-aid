@@ -121,12 +121,13 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   },
   {
     name: "fix_sprite",
-    description: "Fix a single sprite image and optionally write a PixelAid manifest.",
+    description: "Fix a single sprite image with the guided suggestion path by default and optionally write a PixelAid manifest. Pass autoSuggest:false for the manual legacy path.",
     inputSchema: objectSchema(["inputPath", "outputPath"], {
       inputPath: stringSchema("Path to a PNG or JPEG image."),
       outputPath: stringSchema("PNG output path."),
       manifestPath: stringSchema("Optional JSON manifest output path."),
       options: commonOptionsSchema,
+      autoSuggest: { type: "boolean", description: "Use the guided suggestion as the base fix settings. Defaults to true; pass false to use only manual/default algorithm options.", default: true },
       overwrite: booleanSchema("Allow replacing existing output files."),
     }),
   },
@@ -481,6 +482,7 @@ function toFixSpriteRequest(input: ToolInput): FixSpriteRequest {
     outputPath: String(input.outputPath),
     ...(typeof input.manifestPath === "string" ? { manifestPath: input.manifestPath } : {}),
     ...(isObject(input.options) ? { options: input.options } : {}),
+    ...(typeof input.autoSuggest === "boolean" ? { autoSuggest: input.autoSuggest } : {}),
     ...(typeof input.overwrite === "boolean" ? { overwrite: input.overwrite } : {}),
   };
 }

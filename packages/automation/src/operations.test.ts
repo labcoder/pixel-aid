@@ -363,6 +363,7 @@ describe("automation operations", () => {
       const result = await fixSprite({
         inputPath: input,
         outputPath: out,
+        autoSuggest: false,
         options: {
           target: "2x2",
           palette: palettePath,
