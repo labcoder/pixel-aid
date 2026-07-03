@@ -265,6 +265,7 @@ import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/grid
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
 import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import { getGuidedFixDefaultSettings } from "./lib/guidedFixDefaults";
 import { shouldEnableGuidedMatteCleanup, shouldUseMatteAwareMorphology, supportsMatteCleanupAlpha } from "./lib/matteCleanup";
 import {
   createMainThreadPhaseWarningKey,
@@ -3529,6 +3530,7 @@ export function App() {
     const resolvedQualityProfile = getDefaultQualityProfileForAssetType(resolvedAssetType, useSuggestedStrictSheetCleanup);
     const resolvedQualityProfileSettings = getQualityProfileDefinition(resolvedQualityProfile).settings;
     const resolvedProfileMorphology = resolvedQualityProfileSettings.cleanup.morphology;
+    const guidedDefaults = getGuidedFixDefaultSettings();
     const resolvedCategoryReason =
       targetAssetSource === "manual"
         ? `Manual asset type: ${definition.label}. ${definition.description}`
@@ -3606,17 +3608,27 @@ export function App() {
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
     setFixMixels(resolvedMode === "single" && suggestion.fixMixels);
+    setSnap(guidedDefaults.snap);
     setDownscale(resolvedDownscale);
     setAlpha(resolvedAlpha);
     applyAlphaSettings(resolvedAlphaSettings);
     setPaletteBudget(targetAssetSource === "manual" && !useSuggestedStrictSheetCleanup ? preset.maxColors : suggestion.maxColors);
+    setPaletteMode(guidedDefaults.paletteMode);
     setPaletteStrategy(suggestion.paletteStrategy);
-    if (paletteMode === "fixed" && fixedPaletteColors.length === 0) {
-      setPaletteMode("auto");
-      setCustomPaletteText("");
-    }
+    setPaletteLockScope(guidedDefaults.paletteLockScope);
+    setPaletteDithering(guidedDefaults.paletteDithering);
+    setPaletteColorSpace(guidedDefaults.paletteColorSpace);
+    setPaletteSeed(guidedDefaults.paletteSeed);
+    setPaletteWeighting(guidedDefaults.paletteWeighting);
+    setPaletteMinRegion(guidedDefaults.paletteMinRegion);
+    setPaletteProtectColors(guidedDefaults.paletteProtectColors);
+    setProtectSalientColors(guidedDefaults.protectSalientColors);
+    setPaletteProtectColorsText(guidedDefaults.paletteProtectColorsText);
+    setPalettePreset(guidedDefaults.palettePreset);
+    setCustomPaletteText(guidedDefaults.customPaletteText);
     setRemoveOrphans(cleanupDefaults.removeOrphans);
     setJaggyCleanup(cleanupDefaults.jaggyCleanup);
+    setLineCleanup(guidedDefaults.lineCleanup);
     setPreserveSinglePixelDetails(cleanupDefaults.preserveSinglePixelDetails);
     setRemoveHalos(cleanupDefaults.removeHalos);
     setDenoiseStrength(cleanupDefaults.denoiseStrength);
@@ -3638,6 +3650,8 @@ export function App() {
     setInferNativeScale(isSheetLikeMode(resolvedMode) && suggestion.inferNativeScale && suggestionAllowsCleanup("nativeScaleInference"));
     setOutlineMode(resolvedOutlineMode);
     setOutlineSize(suggestion.outlineSize);
+    setOutlineColor(guidedDefaults.outlineColor);
+    setOutlineAlpha(guidedDefaults.outlineAlpha);
     setOutlineColorEdited(false);
     setOutlineSourceMode(resolvedOutlineSourceColors.length > 0 ? "manual" : "auto");
     setSelectedOutlineSourceColors(resolvedOutlineSourceColors);
@@ -3655,7 +3669,7 @@ export function App() {
         resolvedWarnings
       )
     );
-  }, [applyAlphaSettings, fixedPaletteColors.length, paletteMode, selectedAsset, setPaletteBudget]);
+  }, [applyAlphaSettings, selectedAsset, setPaletteBudget]);
 
   const importPixelAidDocumentFile = useCallback(
     async (file: File, operation: BusyOperation, importSource: TelemetryImportSource) => {
@@ -4911,7 +4925,6 @@ export function App() {
       const nextHeight = Math.max(1, Math.round(next.targetHeight));
       setTargetWidth(nextWidth);
       setTargetHeight(nextHeight);
-      setCropToBounds(false);
       if (selectedAsset) {
         const scale = deriveGridScale(selectedAsset.image, { width: nextWidth, height: nextHeight });
         setGridScaleX(scale.scaleX);
