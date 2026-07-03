@@ -32,6 +32,8 @@ npx pixelaid fix panda-test.png --out panda-fixed.png --target 96x96 --json
 
 `pixelaid fix` and `pixelaid batch` use PixelAid's guided suggestion as the default base settings, matching the web "recommended fix" flow. Explicit flags such as `--target`, `--max-colors`, `--alpha`, or grid/cleanup controls are applied as overrides on top of that suggestion. Pass `--no-auto` to restore the fully manual legacy path that uses only explicit flags plus algorithm defaults. `--auto` and `--auto-suggest` remain accepted for older scripts but are now redundant.
 
+Palette strategies accepted by `--palette-strategy`/`--quantizer` are `medianCut`, `frequency`, `perceptual`, `wu`, `kmeans`, and `familyFirst` (`median-cut` remains a CLI alias for `medianCut`). `familyFirst` seats perceptual color families first, adds nested ramps as the color budget grows, and is the guided default for single sprites/icons.
+
 Local workspace usage:
 
 ```sh

@@ -7265,6 +7265,7 @@ export function App() {
           options={[
             ["wu", "Wu (variance)"],
             ["kmeans", "K-means"],
+            ["familyFirst", "Family first (color groups + ramps)"],
             ["medianCut", "Median cut"],
             ["perceptual", "Perceptual"],
             ["frequency", "Frequency"]

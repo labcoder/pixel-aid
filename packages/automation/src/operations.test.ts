@@ -107,7 +107,7 @@ describe("automation operations", () => {
       if (!result.ok) return;
       expect(result.value.options.alpha).toBe("backgroundFloodFill");
       expect(result.value.options.maxColors).toBe(64);
-      expect(result.value.options.paletteSettings?.strategy).toBe("perceptual");
+      expect(result.value.options.paletteSettings?.strategy).toBe("familyFirst");
       expect(result.value.options.cleanup.morphology).toMatchObject({
         enabled: true,
         matteCleanup: true
@@ -134,7 +134,7 @@ describe("automation operations", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       expect(result.value.result.settings.alpha).toBe("backgroundFloodFill");
-      expect(result.value.result.settings.paletteSettings?.strategy).toBe("perceptual");
+      expect(result.value.result.settings.paletteSettings?.strategy).toBe("familyFirst");
       expect(result.value.result.settings.cleanup.morphology).toMatchObject({
         enabled: true,
         matteCleanup: true,

@@ -14,8 +14,8 @@ const guidedAlphaHash = "6687882db21b4017ca2268e284391b186464777d7ffc120721a4d69
 
 type Bounds = { x0: number; y0: number; x1: number; y1: number };
 
-describe("hero cat guided 128px/24-color regression", () => {
-  test("keeps silhouette edges alpha-stable and preserves the pink nose family", () => {
+describe("hero cat legacy perceptual 128px/24-color regression", () => {
+  test("locks the pre-familyFirst guided contract for alpha stability and pink nose preservation", () => {
     const source = readGoldenPng(sourcePath);
     const result = fixImage(source, heroCatGuided24Options(true));
     const noMixels = fixImage(source, heroCatGuided24Options(false));

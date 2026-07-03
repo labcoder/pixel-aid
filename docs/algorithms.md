@@ -142,7 +142,11 @@ For detected sheet suggestions, source and output rectangles are deliberately di
 
 ### Palette Workflows
 
-PixelAid supports auto, fixed, and safe in-repo preset palette modes. Auto mode defaults to deterministic median-cut quantization, with frequency ranking kept as a selectable fallback strategy for simpler assets or compatibility checks.
+PixelAid supports auto, fixed, and safe in-repo preset palette modes. Auto mode defaults to deterministic median-cut quantization for sheet-like and manual paths, with frequency ranking kept as a selectable fallback strategy for simpler assets or compatibility checks.
+
+### Family-first palette strategy
+
+`familyFirst` is the guided default for single sprites/icons that need background flood-fill or matte cleanup. It buckets visible colors in OKLab into neutral/lightness and chromatic hue families, seats deterministic medoid representatives for the strongest families first, then spends extra budget by nested monotone splits inside seated families so larger budgets grow ramps instead of replacing earlier family seats. This keeps small but important sprite families such as eyes, noses, whites, and outlines represented at low color counts while preserving deterministic output.
 
 Fixed and preset modes treat the active palette as a hard output contract: visible pixels are remapped only to colors in that palette. MIG-8 keeps dithering disabled because automatic ordered or error-diffusion patterns can introduce shimmer across animation frames.
 

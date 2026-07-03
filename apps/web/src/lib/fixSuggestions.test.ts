@@ -850,7 +850,7 @@ describe("fix setting suggestions", () => {
       transparentRgb: "#000000"
     });
     expect(suggestion.downscale).toBe("adaptive");
-    expect(suggestion.paletteStrategy).toBe("perceptual");
+    expect(suggestion.paletteStrategy).toBe("familyFirst");
   });
 
   test("suggests crisp sprite cleanup for baked checkerboard panda backgrounds", () => {
