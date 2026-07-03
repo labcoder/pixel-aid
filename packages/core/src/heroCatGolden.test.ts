@@ -1,12 +1,16 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import { fixImage, suggestFixSettings } from "./index";
 import { compareGoldenImage, readGoldenPng, shouldUpdateGoldens, writeGoldenPng } from "./goldenImage.test-utils";
 import type { FixOptions, RGBAImage } from "@pixelaid/shared";
 import type { FixSettingSuggestion } from "./fixSuggestions";
 
-const sourcePath = path.resolve("src/goldens/hero-cat-ai.png");
-const goldenPath = path.resolve("src/goldens/hero-cat-fixed-128.png");
+const testDir = path.dirname(fileURLToPath(import.meta.url));
+const sourcePath = path.resolve(testDir, "goldens/hero-cat-ai.png");
+const goldenPath = path.resolve(testDir, "goldens/hero-cat-fixed-guided.png");
+const guidedAlphaHash = "6687882db21b4017ca2268e284391b186464777d7ffc120721a4d698ff0c6365";
 
 describe("hero cat golden regression", () => {
   test("keeps guided 128px cat cleanup stable", () => {
@@ -24,6 +28,11 @@ describe("hero cat golden regression", () => {
 
     const result = fixImage(source, buildGuidedHeroCatOptions(source, suggestion));
 
+    expect(result.image.width).toBe(90);
+    expect(result.image.height).toBe(113);
+    expect(result.palette.length).toBeLessThanOrEqual(24);
+    expect(alphaHash(result.image)).toBe(guidedAlphaHash);
+
     if (shouldUpdateGoldens()) {
       writeGoldenPng(goldenPath, result.image);
       return;
@@ -38,10 +47,12 @@ describe("hero cat golden regression", () => {
 });
 
 function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSuggestion): FixOptions {
-  // Mirror the actual guided recommendation: 128px target, the suggested color budget, mixel repair, and
-  // salient-color protection (so the golden reflects what users really get from "recommended fix").
+  // The real web flow applied the guided suggestion, then the user changed only the target size to 128px.
+  // The web size-edit path derives grid scale from the full source dimensions, not suggestion.gridScaleX/Y.
   const targetSize = 128;
-  const maxColors = 64;
+  const maxColors = suggestion.maxColors;
+  // Keep drift loud: packages/core/src/heroCatGuided24Regression.test.ts locks the guided 24-color contract.
+  expect(maxColors).toBe(24);
 
   return {
     mode: suggestion.mode,
@@ -55,6 +66,10 @@ function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSugge
       maxColors,
       lockScope: "single",
       dithering: "none",
+      colorSpace: "oklab",
+      weighting: "area",
+      minRegion: 1,
+      protectColors: "auto",
       protectSalientColors: true
     },
     grid: {
@@ -63,7 +78,7 @@ function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSugge
       scaleY: image.height / targetSize,
       phaseX: suggestion.gridPhaseX,
       phaseY: suggestion.gridPhaseY,
-      cropToBounds: false,
+      cropToBounds: true,
       localCorrection: false,
       fixMixels: suggestion.fixMixels
     },
@@ -76,19 +91,35 @@ function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSugge
       preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
       removeHalos: suggestion.removeHalos,
       denoiseStrength: suggestion.denoiseStrength,
-      inferNativeScale: suggestion.inferNativeScale,
+      dominantThreshold: 0.6,
+      inferNativeScale: false,
       outlineMode: suggestion.outlineMode,
       outlineSize: suggestion.outlineSize,
-      outlineSourceColors: suggestion.outlineSourceColors,
+      ...(suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {}),
       ...(suggestion.matteCleanup
         ? {
             morphology: {
               enabled: true,
+              close: false,
+              fillTinyHoles: false,
+              removeTinyComponents: false,
+              preserveSinglePixelDetails: suggestion.preserveSinglePixelDetails,
+              maxHolePixels: 1,
+              maxComponentPixels: 1,
               matteCleanup: true,
-              alphaThreshold: suggestion.alphaSettings.threshold ?? 128
+              alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
+              connectivity: 8
             }
           }
         : {})
     }
   };
+}
+
+function alphaHash(image: RGBAImage): string {
+  const alpha = new Uint8Array(image.width * image.height);
+  for (let source = 3, target = 0; source < image.data.length; source += 4, target += 1) {
+    alpha[target] = image.data[source]!;
+  }
+  return createHash("sha256").update(alpha).digest("hex");
 }
