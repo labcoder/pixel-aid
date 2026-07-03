@@ -1,8 +1,10 @@
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
+
 import { decodePngFile, encodePngFile } from "./imageIo";
 import {
   createAutomationCancellationController,
@@ -15,6 +17,9 @@ import {
   suggestFixSettings,
   type AutomationProgressEvent,
 } from "./operations";
+
+const automationTestDir = path.dirname(fileURLToPath(import.meta.url));
+const heroCatFixturePath = path.resolve(automationTestDir, "../../core/src/goldens/hero-cat-ai.png");
 
 async function withFixture<T>(run: (paths: { dir: string; input: string }) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-ops-"));
@@ -264,6 +269,33 @@ describe("automation operations", () => {
       expect(events.map((event) => event.stage)).toContain("downsampling");
       expect(events.at(-1)).toMatchObject({ operation: "fix_sprite", stage: "complete", percent: 100 });
     });
+  });
+
+  it("derives guided grid scale from target-size overrides for the hero cat", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-hero-cat-"));
+    const out = path.join(dir, "fixed.png");
+    try {
+      const result = await fixSprite({
+        inputPath: heroCatFixturePath,
+        outputPath: out,
+        options: { targetWidth: 128, targetHeight: 128 },
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.result.settings.grid.scaleX).toBeCloseTo(1254 / 128, 6);
+      expect(result.value.result.settings.grid.scaleY).toBeCloseTo(1254 / 128, 6);
+      expect(result.value.result.image.width).toBe(90);
+      expect(result.value.result.image.height).toBe(113);
+
+      const decoded = await decodePngFile(out);
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) return;
+      expect(decoded.value.width).toBe(90);
+      expect(decoded.value.height).toBe(113);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("cancels a fix cooperatively before writing partial output", async () => {

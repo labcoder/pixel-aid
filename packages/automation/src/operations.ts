@@ -756,7 +756,13 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
   const coreSuggestion = parsedAssetType
     ? suggestCoreFixSettingsForAssetType(image, parsedAssetType.value.assetType)
     : suggestCoreFixSettings(image);
-  const normalized = normalizeFixOptions(mergeSuggestedFixOptions(coreSuggestion, overrides));
+  const merged = deriveGuidedGridScaleFromTargetOverride(
+    mergeSuggestedFixOptions(coreSuggestion, overrides),
+    image,
+    coreSuggestion,
+    overrides,
+  );
+  const normalized = normalizeFixOptions(merged);
   if (!normalized.ok) {
     return normalized;
   }
@@ -774,6 +780,56 @@ function createFixSuggestion(image: RGBAImage, overrides: AutomationFixOptionsIn
     warnings,
     support: definition.support,
   }, warnings);
+}
+
+function deriveGuidedGridScaleFromTargetOverride(
+  merged: AutomationFixOptionsInput,
+  image: RGBAImage,
+  suggestion: CoreFixSettingSuggestion,
+  overrides: AutomationFixOptionsInput | undefined,
+): AutomationFixOptionsInput {
+  const target = explicitTargetSizeOverride(overrides);
+  if (!target || suggestion.mode !== "single" || hasExplicitGridScale(overrides?.grid)) {
+    return merged;
+  }
+
+  return {
+    ...merged,
+    grid: {
+      ...merged.grid,
+      scaleX: image.width / target.targetWidth,
+      scaleY: image.height / target.targetHeight,
+    },
+  };
+}
+
+function explicitTargetSizeOverride(
+  overrides: AutomationFixOptionsInput | undefined,
+): { targetWidth: number; targetHeight: number } | undefined {
+  if (!overrides) {
+    return undefined;
+  }
+
+  let targetWidth = overrides.targetWidth;
+  let targetHeight = overrides.targetHeight;
+  if (typeof overrides.target === "string") {
+    const match = /^(\d+)(?:x(\d+))?$/i.exec(overrides.target.trim());
+    if (match) {
+      targetWidth = Number(match[1]);
+      targetHeight = Number(match[2] ?? match[1]);
+    }
+  } else if (overrides.target) {
+    targetWidth = overrides.target.width;
+    targetHeight = overrides.target.height;
+  }
+
+  return targetWidth !== undefined && targetHeight !== undefined && targetWidth > 0 && targetHeight > 0
+    ? { targetWidth, targetHeight }
+    : undefined;
+}
+
+function hasExplicitGridScale(grid: AutomationFixOptionsInput["grid"] | undefined): boolean {
+  return grid?.scale !== undefined || grid?.scaleX !== undefined || grid?.scaleY !== undefined;
 }
 
 async function resolvePaletteFileOption(
