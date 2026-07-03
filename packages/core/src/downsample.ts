@@ -403,19 +403,42 @@ function medianBlock(image: RGBAImage, block: BlockBounds, scratch: MedianScratc
   scratch.b.fill(0);
   scratch.a.fill(0);
   let total = 0;
+  let visibleTotal = 0;
 
   for (let y = block.startY; y < block.endY; y += 1) {
     for (let x = block.startX; x < block.endX; x += 1) {
       const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      scratch.a[alpha] = scratch.a[alpha]! + 1;
+      total += 1;
+      if (alpha < 16) {
+        continue;
+      }
       scratch.r[image.data[offset]!] = scratch.r[image.data[offset]!]! + 1;
       scratch.g[image.data[offset + 1]!] = scratch.g[image.data[offset + 1]!]! + 1;
       scratch.b[image.data[offset + 2]!] = scratch.b[image.data[offset + 2]!]! + 1;
-      scratch.a[image.data[offset + 3]!] = scratch.a[image.data[offset + 3]!]! + 1;
-      total += 1;
+      visibleTotal += 1;
     }
   }
 
-  return [medianFromHistogram(scratch.r, total), medianFromHistogram(scratch.g, total), medianFromHistogram(scratch.b, total), medianFromHistogram(scratch.a, total)];
+  if (visibleTotal === 0) {
+    for (let y = block.startY; y < block.endY; y += 1) {
+      for (let x = block.startX; x < block.endX; x += 1) {
+        const offset = (y * image.width + x) * 4;
+        scratch.r[image.data[offset]!] = scratch.r[image.data[offset]!]! + 1;
+        scratch.g[image.data[offset + 1]!] = scratch.g[image.data[offset + 1]!]! + 1;
+        scratch.b[image.data[offset + 2]!] = scratch.b[image.data[offset + 2]!]! + 1;
+      }
+    }
+    visibleTotal = total;
+  }
+
+  return [
+    medianFromHistogram(scratch.r, visibleTotal),
+    medianFromHistogram(scratch.g, visibleTotal),
+    medianFromHistogram(scratch.b, visibleTotal),
+    medianFromHistogram(scratch.a, total)
+  ];
 }
 
 function createMedianScratch(): MedianScratch {
@@ -1193,21 +1216,37 @@ function averageBlock(image: RGBAImage, block: BlockBounds): [number, number, nu
   let r = 0;
   let g = 0;
   let b = 0;
+  let transparentR = 0;
+  let transparentG = 0;
+  let transparentB = 0;
   let a = 0;
   let total = 0;
+  let visibleTotal = 0;
 
   for (let y = block.startY; y < block.endY; y += 1) {
     for (let x = block.startX; x < block.endX; x += 1) {
       const offset = (y * image.width + x) * 4;
+      const alpha = image.data[offset + 3]!;
+      a += alpha;
+      total += 1;
+      if (alpha < 16) {
+        transparentR += image.data[offset]!;
+        transparentG += image.data[offset + 1]!;
+        transparentB += image.data[offset + 2]!;
+        continue;
+      }
       r += image.data[offset]!;
       g += image.data[offset + 1]!;
       b += image.data[offset + 2]!;
-      a += image.data[offset + 3]!;
-      total += 1;
+      visibleTotal += 1;
     }
   }
 
-  return [clampByte(r / total), clampByte(g / total), clampByte(b / total), clampByte(a / total)];
+  const colorTotal = visibleTotal > 0 ? visibleTotal : total;
+  const colorR = visibleTotal > 0 ? r : transparentR;
+  const colorG = visibleTotal > 0 ? g : transparentG;
+  const colorB = visibleTotal > 0 ? b : transparentB;
+  return [clampByte(colorR / colorTotal), clampByte(colorG / colorTotal), clampByte(colorB / colorTotal), clampByte(a / total)];
 }
 
 function nearestBlock(image: RGBAImage, block: BlockBounds): [number, number, number, number] {
@@ -1230,12 +1269,55 @@ function bilinearBlock(image: RGBAImage, block: BlockBounds): [number, number, n
   const topRight = (y0 * image.width + x1) * 4;
   const bottomLeft = (y1 * image.width + x0) * 4;
   const bottomRight = (y1 * image.width + x1) * 4;
+  const alpha = bilinearChannel(image.data[topLeft + 3]!, image.data[topRight + 3]!, image.data[bottomLeft + 3]!, image.data[bottomRight + 3]!, tx, ty);
+  const topWeight = 1 - ty;
+  const bottomWeight = ty;
+  const leftWeight = 1 - tx;
+  const rightWeight = tx;
+  const w00 = leftWeight * topWeight;
+  const w10 = rightWeight * topWeight;
+  const w01 = leftWeight * bottomWeight;
+  const w11 = rightWeight * bottomWeight;
+  const visibleWeight =
+    (image.data[topLeft + 3]! >= 16 ? w00 : 0) +
+    (image.data[topRight + 3]! >= 16 ? w10 : 0) +
+    (image.data[bottomLeft + 3]! >= 16 ? w01 : 0) +
+    (image.data[bottomRight + 3]! >= 16 ? w11 : 0);
+  if (visibleWeight <= 0) {
+    return [
+      bilinearChannel(image.data[topLeft]!, image.data[topRight]!, image.data[bottomLeft]!, image.data[bottomRight]!, tx, ty),
+      bilinearChannel(image.data[topLeft + 1]!, image.data[topRight + 1]!, image.data[bottomLeft + 1]!, image.data[bottomRight + 1]!, tx, ty),
+      bilinearChannel(image.data[topLeft + 2]!, image.data[topRight + 2]!, image.data[bottomLeft + 2]!, image.data[bottomRight + 2]!, tx, ty),
+      alpha
+    ];
+  }
   return [
-    bilinearChannel(image.data[topLeft]!, image.data[topRight]!, image.data[bottomLeft]!, image.data[bottomRight]!, tx, ty),
-    bilinearChannel(image.data[topLeft + 1]!, image.data[topRight + 1]!, image.data[bottomLeft + 1]!, image.data[bottomRight + 1]!, tx, ty),
-    bilinearChannel(image.data[topLeft + 2]!, image.data[topRight + 2]!, image.data[bottomLeft + 2]!, image.data[bottomRight + 2]!, tx, ty),
-    bilinearChannel(image.data[topLeft + 3]!, image.data[topRight + 3]!, image.data[bottomLeft + 3]!, image.data[bottomRight + 3]!, tx, ty)
+    alphaWeightedBilinearChannel(image, topLeft, topRight, bottomLeft, bottomRight, 0, w00, w10, w01, w11, visibleWeight),
+    alphaWeightedBilinearChannel(image, topLeft, topRight, bottomLeft, bottomRight, 1, w00, w10, w01, w11, visibleWeight),
+    alphaWeightedBilinearChannel(image, topLeft, topRight, bottomLeft, bottomRight, 2, w00, w10, w01, w11, visibleWeight),
+    alpha
   ];
+}
+
+function alphaWeightedBilinearChannel(
+  image: RGBAImage,
+  topLeft: number,
+  topRight: number,
+  bottomLeft: number,
+  bottomRight: number,
+  channelOffset: number,
+  w00: number,
+  w10: number,
+  w01: number,
+  w11: number,
+  visibleWeight: number
+): number {
+  const weighted =
+    (image.data[topLeft + 3]! >= 16 ? image.data[topLeft + channelOffset]! * w00 : 0) +
+    (image.data[topRight + 3]! >= 16 ? image.data[topRight + channelOffset]! * w10 : 0) +
+    (image.data[bottomLeft + 3]! >= 16 ? image.data[bottomLeft + channelOffset]! * w01 : 0) +
+    (image.data[bottomRight + 3]! >= 16 ? image.data[bottomRight + channelOffset]! * w11 : 0);
+  return clampByte(weighted / visibleWeight);
 }
 
 function bilinearChannel(topLeft: number, topRight: number, bottomLeft: number, bottomRight: number, tx: number, ty: number): number {
