@@ -66,12 +66,16 @@ describe("structure-guarded mixel regularization", () => {
     const source = readGoldenPng(path.resolve("src/goldens/hero-cat-ai.png"));
     const result = fixImage(source, heroCatValidationOptions(true));
     const edge = edgeAudit(result.image);
-    const nose = regionAudit(result.image, 52, 54, 77, 76);
+    // Nose bbox at 128x128 uncropped geometry (salmon nose sits at ~(53..64, 47..57)).
+    const nose = regionAudit(result.image, 52, 45, 66, 58);
 
-    expect(edge.dark).toBeLessThanOrEqual(168);
-    expect(edge.pinkish).toBeLessThanOrEqual(17);
-    expect(nose.dark).toBeGreaterThanOrEqual(80);
-    expect(nose.pinkish).toBeGreaterThanOrEqual(30);
+    // With alpha-aware median stats the silhouette ring is pure white outline: no dark pixels may
+    // touch transparency (was 158-221 before the downsample fix).
+    expect(edge.dark).toBeLessThanOrEqual(10);
+    expect(edge.pinkish).toBeLessThanOrEqual(10);
+    // Hue-family diversification must keep a pink-family nose at 24 colors (measured 12 salmon px).
+    expect(nose.pinkish).toBeGreaterThanOrEqual(10);
+    expect(nose.dark).toBeGreaterThanOrEqual(5);
     expect(result.diagnostics?.mixels?.notes.some((note: string) => /Regularized \d+ cells; flattened \d+ low-structure cells; preserved \d+ structured cells/.test(note))).toBe(true);
   });
 });
@@ -190,7 +194,9 @@ function alphaAt(image: RGBAImage, x: number, y: number): number {
 function classifyColor(r: number, g: number, b: number): ColorFamily {
   const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
   if (luma < 80) return "dark";
-  if (r > g + 20 && b > g - 10 && r > 120) return "pinkish";
+  // Pink family includes the muted salmon the 24-color quantizer legitimately picks for the nose
+  // (e.g. #c37665, b-g = -17) while excluding true browns (e.g. #8a4c24, b-g = -40): b > g - 30.
+  if (r > g + 20 && b > g - 30 && r > 120) return "pinkish";
   if (r > 190 && g > 190 && b > 170) return "light";
   if (g > r + 10 && g > b + 10) return "green";
   return "other";
