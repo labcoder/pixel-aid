@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
+import type { BackgroundAnalysis } from "./backgroundAnalysis";
 import { analyzeBackground } from "./backgroundAnalysis";
+import { rgbChannelsToOklab } from "./color";
 import { readGoldenPng } from "./goldenImage.test-utils";
 
 const currentDir = path.dirname(fileURLToPath(import.meta.url));
@@ -44,6 +46,23 @@ describe("adaptive background analysis", () => {
     expect(adaptive.diagnostics.background?.spillPixels).toBeGreaterThanOrEqual(0);
     expect(alphaHash(classic.image)).toBe("a38a57304d324aa85d8d082ad527131c1519296ecc46d13f4295f92880022d36");
     expect(Math.abs(adaptiveTransparent - classicTransparent)).toBeLessThanOrEqual(Math.ceil(classicTransparent * 0.1));
+  });
+
+  test("adaptive/default is no worse than classic at removing detected background-family residue", () => {
+    for (const fixtureName of ["hero-cat-ai.png", "samurai-magenta.png"] as const) {
+      const source = readGoldenPng(path.join(goldenDir, fixtureName));
+      const analysis = analyzeBackground(source);
+      const classic = applyAlphaMode(source, "backgroundFloodFill", { backgroundDetection: "classic" });
+      const adaptive = applyAlphaMode(source, "backgroundFloodFill");
+      const classicResidue = countDetectedBackgroundFamilyResidue(source, classic.image, analysis);
+      const adaptiveResidue = countDetectedBackgroundFamilyResidue(source, adaptive.image, analysis);
+
+      expect(analysis.confidence, fixtureName).toBeGreaterThanOrEqual(0.8);
+      expect(adaptiveResidue, `${fixtureName} adaptive/default residue should not exceed classic (${classicResidue})`).toBeLessThanOrEqual(classicResidue);
+      if (fixtureName === "hero-cat-ai.png") {
+        expect(adaptiveResidue, "hero cat adaptive/default should remove the detected background-family fringe").toBe(0);
+      }
+    }
   });
 
   test("removes a vignette background while preserving the subject", () => {
@@ -364,4 +383,38 @@ function countPinkishOpaqueInBounds(image: RGBAImage, bounds: Bounds): number {
 
 function isPinkishRgb(r: number, g: number, b: number): boolean {
   return r > g + 25 && r > 130 && b > g - 15;
+}
+
+function countDetectedBackgroundFamilyResidue(source: RGBAImage, output: RGBAImage, analysis: BackgroundAnalysis): number {
+  const familyThreshold = detectedBackgroundFamilyThreshold(analysis);
+  let residue = 0;
+  for (let index = 0; index < output.width * output.height; index += 1) {
+    const offset = index * 4;
+    if (output.data[offset + 3]! >= 128 && matchesBackgroundAnalysisFamily(source.data, offset, analysis, familyThreshold)) {
+      residue += 1;
+    }
+  }
+  return residue;
+}
+
+function detectedBackgroundFamilyThreshold(analysis: BackgroundAnalysis): number {
+  let maxClusterRadius = 0;
+  for (const cluster of analysis.clusters) {
+    maxClusterRadius = Math.max(maxClusterRadius, cluster.radiusOklab);
+  }
+  return Math.min(0.12, Math.max(analysis.thresholdOklab * 1.5, maxClusterRadius * 3));
+}
+
+function matchesBackgroundAnalysisFamily(data: Uint8ClampedArray, offset: number, analysis: BackgroundAnalysis, thresholdOklab: number): boolean {
+  const lab = rgbChannelsToOklab(data[offset]!, data[offset + 1]!, data[offset + 2]!);
+  const thresholdSq = thresholdOklab * thresholdOklab;
+  for (const cluster of analysis.clusters) {
+    const dl = lab.x - cluster.centerL;
+    const da = lab.y - cluster.centerA;
+    const db = lab.z - cluster.centerB;
+    if (dl * dl + da * da + db * db <= thresholdSq) {
+      return true;
+    }
+  }
+  return false;
 }

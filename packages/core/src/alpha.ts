@@ -260,6 +260,10 @@ function peelExteriorChromaMatteClassic(
     }
   }
 }
+// Keep adaptive spill region-scoped, but allow enough exterior-connected rings to
+// catch broad matte bands from high-confidence background families without a full-image morphology pass.
+const ADAPTIVE_SPILL_RING_LIMIT = 40;
+
 function peelExteriorBackgroundSpill(
   image: RGBAImage,
   outsideMask: Uint8Array,
@@ -271,7 +275,7 @@ function peelExteriorBackgroundSpill(
   let read = 0;
   let write = initialQueueLength;
   let spillPixels = 0;
-  for (let ring = 0; ring < 4 && read < write; ring += 1) {
+  for (let ring = 0; ring < ADAPTIVE_SPILL_RING_LIMIT && read < write; ring += 1) {
     const frontierEnd = write;
     while (read < frontierEnd) {
       const current = queue[read]!;
@@ -337,7 +341,7 @@ function createAdaptiveBackgroundLuts(
   tolerance: number | undefined
 ): { fill: AdaptiveBackgroundLut; spill: AdaptiveBackgroundLut } {
   const effectiveThreshold = Math.min(analysis.thresholdOklab, tolerance === undefined ? analysis.thresholdOklab : (tolerance / 255) * 0.35);
-  const spillThreshold = Math.min(effectiveThreshold * 1.5, 0.12);
+  const spillThreshold = Math.min(Math.max(effectiveThreshold * 1.5, maxClusterRadiusOklab(analysis) * 3), 0.12);
   const fillPass = new Uint8Array(4096);
   const spillPass = new Uint8Array(4096);
   if (analysis.clusters.length === 0) {
@@ -357,6 +361,7 @@ function createAdaptiveBackgroundLuts(
   const fillThresholdSq = fillThresholdWithSlack * fillThresholdWithSlack;
   const spillThresholdWithSlack = spillThreshold + quantizationSlack;
   const spillThresholdSq = spillThresholdWithSlack * spillThresholdWithSlack;
+  const backgroundFamily = backgroundAnalysisChromaFamilyMask(analysis);
   for (let r4 = 0; r4 < 16; r4 += 1) {
     for (let g4 = 0; g4 < 16; g4 += 1) {
       for (let b4 = 0; b4 < 16; b4 += 1) {
@@ -372,7 +377,9 @@ function createAdaptiveBackgroundLuts(
         if (bestDistanceSq <= fillThresholdSq) {
           fillPass[bucket] = 1;
         }
-        if (bestDistanceSq <= spillThresholdSq) {
+        const sameBackgroundChromaFamily =
+          backgroundFamily !== 0 && chromaMatteFamilyMask((r4 << 4) | 8, (g4 << 4) | 8, (b4 << 4) | 8) === backgroundFamily;
+        if (bestDistanceSq <= spillThresholdSq || sameBackgroundChromaFamily) {
           spillPass[bucket] = 1;
         }
       }
@@ -382,6 +389,24 @@ function createAdaptiveBackgroundLuts(
     fill: { pass: fillPass, thresholdOklab: effectiveThreshold },
     spill: { pass: spillPass, thresholdOklab: spillThreshold }
   };
+}
+
+function maxClusterRadiusOklab(analysis: BackgroundAnalysis): number {
+  let maxRadius = 0;
+  for (const cluster of analysis.clusters) {
+    if (cluster.radiusOklab > maxRadius) {
+      maxRadius = cluster.radiusOklab;
+    }
+  }
+  return maxRadius;
+}
+
+function backgroundAnalysisChromaFamilyMask(analysis: BackgroundAnalysis): number {
+  let mask = 0;
+  for (const cluster of analysis.clusters) {
+    mask |= chromaMatteFamilyMask(cluster.centerR, cluster.centerG, cluster.centerBrgb);
+  }
+  return mask;
 }
 
 function matchesAdaptiveBackgroundLut(data: Uint8ClampedArray, offset: number, lut: AdaptiveBackgroundLut): boolean {
