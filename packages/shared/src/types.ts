@@ -273,6 +273,8 @@ export type AlphaCleanupDiagnostics = {
     thresholdOklab: number;
     confidence: number;
     checkerCellSize?: number;
+    exteriorCoverage?: number;
+    spillPixels?: number;
   };
   warnings: string[];
 };

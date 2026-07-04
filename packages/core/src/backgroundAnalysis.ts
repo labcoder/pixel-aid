@@ -1,7 +1,7 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import { rgbChannelsToOklab } from "./color";
 
-const MAX_SAMPLES = 16_000;
+const MAX_SAMPLES = 8_192;
 const BUCKET_COUNT = 4096;
 const MIN_VISIBLE_ALPHA = 16;
 const MIN_THRESHOLD_OKLAB = 0.02;

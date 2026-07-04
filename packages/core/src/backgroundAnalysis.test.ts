@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, test } from "vitest";
@@ -12,53 +13,98 @@ const goldenDir = path.join(currentDir, "goldens");
 type Bounds = { x0: number; y0: number; x1: number; y1: number };
 
 describe("adaptive background analysis", () => {
-  test("detects hero cat background and preserves the pink nose", () => {
+  test("default flood-fill detects hero cat background and preserves the pink nose", () => {
     const source = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
     const analysis = analyzeBackground(source);
-    const classic = applyAlphaMode(source, "backgroundFloodFill");
-    const adaptive = applyAlphaMode(source, "backgroundFloodFill", { backgroundDetection: "adaptive" });
+    const classic = applyAlphaMode(source, "backgroundFloodFill", { backgroundDetection: "classic" });
+    const adaptive = applyAlphaMode(source, "backgroundFloodFill");
     const noseBounds = findPinkComponentNearCenter(source);
 
     expect(analysis.confidence).toBeGreaterThanOrEqual(0.8);
     expect(["solid", "multi"]).toContain(analysis.kind);
     expect(analysis.thresholdOklab).toBeGreaterThanOrEqual(0.02);
     expect(analysis.thresholdOklab).toBeLessThanOrEqual(0.1);
+    expect(adaptive.diagnostics.background).toEqual(expect.objectContaining({ kind: analysis.kind, clusterCount: analysis.clusters.length }));
+    expect(classic.diagnostics.background).toBeUndefined();
+    expect(alphaHash(classic.image)).toBe("cc06b9cff3201f67a7f8beab5b80879d7bf23812c7306e85aa2bc246ed0d9cb0");
     expect(transparentPixelCount(adaptive.image)).toBeGreaterThanOrEqual(Math.floor(transparentPixelCount(classic.image) * 0.95));
     expect(countPinkishOpaqueInBounds(adaptive.image, noseBounds)).toBeGreaterThanOrEqual(8);
   });
 
-  test("matches classic flood-fill coverage on samurai magenta", () => {
+  test("explicit classic preserves legacy coverage on samurai magenta", () => {
     const source = readGoldenPng(path.join(goldenDir, "samurai-magenta.png"));
     const analysis = analyzeBackground(source);
-    const classic = applyAlphaMode(source, "backgroundFloodFill");
-    const adaptive = applyAlphaMode(source, "backgroundFloodFill", { backgroundDetection: "adaptive" });
+    const classic = applyAlphaMode(source, "backgroundFloodFill", { backgroundDetection: "classic" });
+    const adaptive = applyAlphaMode(source, "backgroundFloodFill");
     const classicTransparent = transparentPixelCount(classic.image);
     const adaptiveTransparent = transparentPixelCount(adaptive.image);
 
     expect(analysis.confidence).toBeGreaterThanOrEqual(0.8);
+    expect(classic.diagnostics.background).toBeUndefined();
+    expect(adaptive.diagnostics.background?.spillPixels).toBeGreaterThanOrEqual(0);
+    expect(alphaHash(classic.image)).toBe("a38a57304d324aa85d8d082ad527131c1519296ecc46d13f4295f92880022d36");
     expect(Math.abs(adaptiveTransparent - classicTransparent)).toBeLessThanOrEqual(Math.ceil(classicTransparent * 0.1));
   });
 
   test("removes a vignette background while preserving the subject", () => {
     const image = createVignetteImage();
-    const classic = applyAlphaMode(image, "backgroundFloodFill", { tolerance: 18, decontaminateRgb: false });
-    const adaptive = applyAlphaMode(image, "backgroundFloodFill", { backgroundDetection: "adaptive", decontaminateRgb: false });
+    const classic = applyAlphaMode(image, "backgroundFloodFill", { backgroundDetection: "classic", tolerance: 18, decontaminateRgb: false });
+    const adaptive = applyAlphaMode(image, "backgroundFloodFill", { decontaminateRgb: false });
 
     expect(nonSubjectOpaqueCount(classic.image, 98, 98, 157, 157)).toBeGreaterThan(0);
     expect(nonSubjectOpaqueCount(adaptive.image, 98, 98, 157, 157)).toBe(0);
     expect(subjectOpaqueAndRedCount(adaptive.image, 98, 98, 157, 157)).toBe(60 * 60);
   });
 
+  test("keeps explicit legacy tolerance calls on the classic flood-fill path unless adaptive is requested", () => {
+    const image = createVignetteImage();
+    const implicitClassic = applyAlphaMode(image, "backgroundFloodFill", { tolerance: 18, decontaminateRgb: false });
+    const explicitClassic = applyAlphaMode(image, "backgroundFloodFill", {
+      backgroundDetection: "classic",
+      tolerance: 18,
+      decontaminateRgb: false
+    });
+    const explicitAdaptive = applyAlphaMode(image, "backgroundFloodFill", {
+      backgroundDetection: "adaptive",
+      tolerance: 18,
+      decontaminateRgb: false
+    });
+
+    expect(implicitClassic.diagnostics.background).toBeUndefined();
+    expect(alphaHash(implicitClassic.image)).toBe(alphaHash(explicitClassic.image));
+    expect(transparentPixelCount(implicitClassic.image)).toBe(transparentPixelCount(explicitClassic.image));
+    expect(explicitAdaptive.diagnostics.background?.kind).toBe("solid");
+    expect(explicitAdaptive.diagnostics.background?.thresholdOklab).toBeLessThanOrEqual(18 / 255 * 0.35);
+  });
+
   test("detects checkerboard backgrounds without removing disconnected interior white", () => {
     const image = createCheckerboardImage();
     const analysis = analyzeBackground(image);
-    const adaptive = applyAlphaMode(image, "backgroundFloodFill", { backgroundDetection: "adaptive", decontaminateRgb: false });
+    const adaptive = applyAlphaMode(image, "backgroundFloodFill", { decontaminateRgb: false });
 
     expect(analysis.kind).toBe("checkerboard");
     expect(analysis.checker?.cellSize).toBe(16);
+    expect(adaptive.diagnostics.background?.kind).toBe("checkerboard");
     expect(nonSubjectOpaqueCount(adaptive.image, 98, 98, 157, 157)).toBe(0);
     expect(subjectOpaqueAndBlueCount(adaptive.image, 98, 98, 157, 157, { x0: 118, y0: 118, x1: 137, y1: 137 })).toBe(60 * 60 - 20 * 20);
     expect(subjectOpaqueAndWhiteCount(adaptive.image, 118, 118, 137, 137)).toBe(20 * 20);
+  });
+
+  test("peels only exterior-reachable background-colored spill with the adaptive model", () => {
+    const image = createBackgroundSpillImage();
+    const classic = applyAlphaMode(image, "backgroundFloodFill", { backgroundDetection: "classic", tolerance: 0, decontaminateRgb: false });
+    const adaptive = applyAlphaMode(image, "backgroundFloodFill", { decontaminateRgb: false });
+
+    expect(adaptive.diagnostics.background?.kind).toBe("solid");
+    expect(adaptive.diagnostics.background?.spillPixels).toBeGreaterThanOrEqual(36);
+    expect(opaquePixelAt(adaptive.image, 10, 16)).toBe(false);
+    expect(opaquePixelAt(adaptive.image, 21, 16)).toBe(false);
+    expect(opaquePixelAt(adaptive.image, 16, 10)).toBe(false);
+    expect(opaquePixelAt(adaptive.image, 16, 21)).toBe(false);
+    expect(opaquePixelAt(classic.image, 10, 16)).toBe(true);
+    expect(opaquePixelAt(adaptive.image, 16, 16)).toBe(true);
+    expect(rgbAt(adaptive.image, 16, 16)).toEqual([198, 198, 198]);
+    expect(rgbAt(adaptive.image, 14, 14)).toEqual([220, 42, 58]);
   });
 
   test("reports lower confidence when a subject contaminates the border band", () => {
@@ -114,6 +160,23 @@ function createCheckerboardImage(): RGBAImage {
   return image;
 }
 
+function createBackgroundSpillImage(): RGBAImage {
+  const image = createImage(32, 32);
+  fillRect(image, 0, 0, 32, 32, 198, 198, 198);
+  fillRect(image, 10, 10, 12, 12, 42, 70, 94);
+  for (let x = 10; x <= 21; x += 1) {
+    setPixel(image, x, 10, 186, 186, 186);
+    setPixel(image, x, 21, 186, 186, 186);
+  }
+  for (let y = 11; y <= 20; y += 1) {
+    setPixel(image, 10, y, 186, 186, 186);
+    setPixel(image, 21, y, 186, 186, 186);
+  }
+  fillRect(image, 15, 15, 3, 3, 198, 198, 198);
+  fillRect(image, 13, 13, 3, 3, 220, 42, 58);
+  return image;
+}
+
 function createBorderTouchingSubjectImage(): RGBAImage {
   const image = createImage(128, 128);
   fillRect(image, 0, 0, 128, 128, 240, 192, 208);
@@ -137,6 +200,23 @@ function transparentPixelCount(image: RGBAImage): number {
     }
   }
   return count;
+}
+
+function alphaHash(image: RGBAImage): string {
+  const alpha = Buffer.alloc(image.width * image.height);
+  for (let offset = 3, index = 0; offset < image.data.length; offset += 4, index += 1) {
+    alpha[index] = image.data[offset]!;
+  }
+  return createHash("sha256").update(alpha).digest("hex");
+}
+
+function opaquePixelAt(image: RGBAImage, x: number, y: number): boolean {
+  return image.data[(y * image.width + x) * 4 + 3]! >= 128;
+}
+
+function rgbAt(image: RGBAImage, x: number, y: number): [number, number, number] {
+  const offset = (y * image.width + x) * 4;
+  return [image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!];
 }
 
 function nonSubjectOpaqueCount(image: RGBAImage, x0: number, y0: number, x1: number, y1: number): number {
