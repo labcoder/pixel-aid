@@ -110,9 +110,12 @@ function backgroundFloodFill(
   const output = cloneImage(image);
   const visited = new Uint8Array(image.width * image.height);
   const queue = new Int32Array(image.width * image.height);
-  const background = estimateBackgroundModel(image);
-  const analysis = backgroundDetection === "adaptive" ? analyzeBackground(image) : undefined;
-  const adaptiveLut = analysis ? createAdaptiveBackgroundLut(analysis, toleranceProvided ? tolerance : undefined) : undefined;
+  const useAdaptiveBackground = shouldUseAdaptiveBackground(backgroundDetection, toleranceProvided);
+  const background = useAdaptiveBackground ? undefined : estimateBackgroundModel(image);
+  const analysis = useAdaptiveBackground ? analyzeBackground(image) : undefined;
+  const adaptiveLuts = analysis ? createAdaptiveBackgroundLuts(analysis, toleranceProvided ? tolerance : undefined) : undefined;
+  const adaptiveLut = adaptiveLuts?.fill;
+  const spillLut = adaptiveLuts?.spill;
   const toleranceSq = tolerance * tolerance * 3;
   const diagnostics = createDiagnostics("backgroundFloodFill", threshold, tolerance, colorKey);
   if (analysis) {
@@ -138,7 +141,7 @@ function backgroundFloodFill(
     }
 
     const offset = index * 4;
-    if (adaptiveLut ? !matchesAdaptiveBackgroundLut(image.data, offset, adaptiveLut) : !matchesBackgroundModel(image.data, offset, background, toleranceSq)) {
+    if (adaptiveLut ? !matchesAdaptiveBackgroundLut(image.data, offset, adaptiveLut) : !matchesBackgroundModel(image.data, offset, background!, toleranceSq)) {
       return;
     }
 
@@ -168,7 +171,18 @@ function backgroundFloodFill(
     enqueue(x, y - 1);
   }
 
-  peelExteriorChromaMatte(output, visited, queue, write, background, threshold);
+  if (useAdaptiveBackground && spillLut) {
+    const spillPixels = peelExteriorBackgroundSpill(output, visited, queue, write, spillLut, threshold);
+    if (diagnostics.background) {
+      diagnostics.background = {
+        ...diagnostics.background,
+        exteriorCoverage: roundMetric((write + spillPixels) / Math.max(1, image.width * image.height)),
+        spillPixels
+      };
+    }
+  } else if (background) {
+    peelExteriorChromaMatteClassic(output, visited, queue, write, background, threshold);
+  }
   binarizeFloodFillAlpha(output, threshold);
 
   if (decontaminateRgb) {
@@ -180,7 +194,23 @@ function backgroundFloodFill(
   return { image: output, diagnostics };
 }
 
-function peelExteriorChromaMatte(
+function shouldUseAdaptiveBackground(
+  backgroundDetection: AlphaCleanupSettings["backgroundDetection"],
+  toleranceProvided: boolean
+): boolean {
+  if (backgroundDetection === "classic") {
+    return false;
+  }
+  if (backgroundDetection === "adaptive") {
+    return true;
+  }
+  // Undefined detection is the new adaptive default only for true default calls.
+  // Existing callers that supplied a legacy RGB tolerance keep byte-stable classic
+  // flood-fill unless they explicitly opt in with backgroundDetection: "adaptive".
+  return !toleranceProvided;
+}
+
+function peelExteriorChromaMatteClassic(
   image: RGBAImage,
   outsideMask: Uint8Array,
   queue: Int32Array,
@@ -230,6 +260,62 @@ function peelExteriorChromaMatte(
     }
   }
 }
+function peelExteriorBackgroundSpill(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  queue: Int32Array,
+  initialQueueLength: number,
+  spillLut: AdaptiveBackgroundLut,
+  threshold: number
+): number {
+  let read = 0;
+  let write = initialQueueLength;
+  let spillPixels = 0;
+  for (let ring = 0; ring < 4 && read < write; ring += 1) {
+    const frontierEnd = write;
+    while (read < frontierEnd) {
+      const current = queue[read]!;
+      read += 1;
+      const x = current % image.width;
+      const y = Math.floor(current / image.width);
+
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+            continue;
+          }
+
+          const index = ny * image.width + nx;
+          if (outsideMask[index] === 1) {
+            continue;
+          }
+
+          const offset = index * 4;
+          if (
+            image.data[offset + 3]! < threshold ||
+            !matchesAdaptiveBackgroundLut(image.data, offset, spillLut) ||
+            isProtectedSilhouetteColor(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!)
+          ) {
+            continue;
+          }
+
+          image.data[offset + 3] = 0;
+          outsideMask[index] = 1;
+          queue[write] = index;
+          write += 1;
+          spillPixels += 1;
+        }
+      }
+    }
+  }
+
+  return spillPixels;
+}
 
 type BackgroundModel = {
   colors: Uint8Array;
@@ -246,11 +332,19 @@ type AdaptiveBackgroundLut = {
   thresholdOklab: number;
 };
 
-function createAdaptiveBackgroundLut(analysis: BackgroundAnalysis, tolerance: number | undefined): AdaptiveBackgroundLut {
-  const pass = new Uint8Array(4096);
+function createAdaptiveBackgroundLuts(
+  analysis: BackgroundAnalysis,
+  tolerance: number | undefined
+): { fill: AdaptiveBackgroundLut; spill: AdaptiveBackgroundLut } {
   const effectiveThreshold = Math.min(analysis.thresholdOklab, tolerance === undefined ? analysis.thresholdOklab : (tolerance / 255) * 0.35);
+  const spillThreshold = Math.min(effectiveThreshold * 1.5, 0.12);
+  const fillPass = new Uint8Array(4096);
+  const spillPass = new Uint8Array(4096);
   if (analysis.clusters.length === 0) {
-    return { pass, thresholdOklab: effectiveThreshold };
+    return {
+      fill: { pass: fillPass, thresholdOklab: effectiveThreshold },
+      spill: { pass: spillPass, thresholdOklab: spillThreshold }
+    };
   }
   // The fill hot path uses a 4096-entry 4-bit RGB bucket LUT: at most 4096 OKLab
   // conversions per image, then one byte lookup per pixel. Bucket representatives use
@@ -259,31 +353,44 @@ function createAdaptiveBackgroundLut(analysis: BackgroundAnalysis, tolerance: nu
   // extremes (e.g. #fff in the high bucket). An explicit RGB tolerance is an approximate cap: RGB Euclidean tolerance
   // maps to OKLab via (tolerance / 255) * 0.35, keeping user intent deterministic.
   const quantizationSlack = (Math.sqrt(3) * 8 * 0.35) / 255;
-  const effectiveThresholdWithSlack = effectiveThreshold + quantizationSlack;
-  const effectiveThresholdSq = effectiveThresholdWithSlack * effectiveThresholdWithSlack;
+  const fillThresholdWithSlack = effectiveThreshold + quantizationSlack;
+  const fillThresholdSq = fillThresholdWithSlack * fillThresholdWithSlack;
+  const spillThresholdWithSlack = spillThreshold + quantizationSlack;
+  const spillThresholdSq = spillThresholdWithSlack * spillThresholdWithSlack;
   for (let r4 = 0; r4 < 16; r4 += 1) {
     for (let g4 = 0; g4 < 16; g4 += 1) {
       for (let b4 = 0; b4 < 16; b4 += 1) {
         const bucket = (r4 << 8) | (g4 << 4) | b4;
         const lab = rgbChannelsToOklab((r4 << 4) | 8, (g4 << 4) | 8, (b4 << 4) | 8);
+        let bestDistanceSq = Number.POSITIVE_INFINITY;
         for (const cluster of analysis.clusters) {
           const dl = lab.x - cluster.centerL;
           const da = lab.y - cluster.centerA;
           const db = lab.z - cluster.centerB;
-          if (dl * dl + da * da + db * db <= effectiveThresholdSq) {
-            pass[bucket] = 1;
-            break;
-          }
+          bestDistanceSq = Math.min(bestDistanceSq, dl * dl + da * da + db * db);
+        }
+        if (bestDistanceSq <= fillThresholdSq) {
+          fillPass[bucket] = 1;
+        }
+        if (bestDistanceSq <= spillThresholdSq) {
+          spillPass[bucket] = 1;
         }
       }
     }
   }
-  return { pass, thresholdOklab: effectiveThreshold };
+  return {
+    fill: { pass: fillPass, thresholdOklab: effectiveThreshold },
+    spill: { pass: spillPass, thresholdOklab: spillThreshold }
+  };
 }
 
 function matchesAdaptiveBackgroundLut(data: Uint8ClampedArray, offset: number, lut: AdaptiveBackgroundLut): boolean {
   const bucket = ((data[offset]! >> 4) << 8) | ((data[offset + 1]! >> 4) << 4) | (data[offset + 2]! >> 4);
   return lut.pass[bucket] === 1;
+}
+
+function roundMetric(value: number): number {
+  return Math.round(value * 1_000_000) / 1_000_000;
 }
 
 function estimateBackgroundModel(image: RGBAImage): BackgroundModel {
