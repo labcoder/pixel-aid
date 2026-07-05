@@ -26,6 +26,12 @@ export type OutlineColorCandidate = {
   outsideContact: number;
   luma: number;
   score: number;
+  boundaryCoverage?: number;
+  outsideContactCoverage?: number;
+  boundaryEnrichment?: number;
+  backgroundSeparationOklab?: number;
+  confidence?: number;
+  classification?: "deliberate" | "partial" | "weak";
 };
 
 const DARK_EDGE_LUMA = 96;
@@ -78,7 +84,11 @@ export function applyOutlineCleanupDetailed(image: RGBAImage, mode: OutlineMode,
   const size = normalizeOutlineSize(options.size ?? 1);
   const selectedSourceColors = normalizeSourceColors(options.sourceColors);
   diagnostics.explicitSourceColorCount = selectedSourceColors.length;
-  const detectedOutlineColor = selectedSourceColors[0] ?? detectExistingOutlineColor(image, alphaThreshold, background, backgroundTolerance);
+  const detectedOutlineColor =
+    selectedSourceColors[0] ??
+    (mode === "repairExisting"
+      ? detectExistingOutlineColor(image, alphaThreshold, backgroundTolerance)
+      : detectDarkExistingOutlineColor(image, alphaThreshold, background, backgroundTolerance));
   const outlineColor =
     options.color !== undefined
       ? parseHexColor(options.color)
@@ -195,7 +205,7 @@ export function detectOutlineColorCandidates(
     }
   }
 
-  if (totalBoundary < 4) {
+  if (totalBoundary < 2) {
     return [];
   }
 
@@ -214,16 +224,24 @@ export function detectOutlineColorCandidates(
     const boundaryCoverage = count / totalBoundary;
     const outsideContactCoverage = outsideContact / contactDenominator;
     const interiorCoverage = bucketInteriorCounts[bucket]! / interiorDenominator;
-    const enrichment = boundaryCoverage / Math.max(0.005, interiorCoverage);
-    const rawScore = count * 10 + outsideContact * 4 + enrichment * 3 + outsideContactCoverage * 10;
-    const backgroundSeparation = Math.min(1, Math.max(0, (backgroundModel.backgroundDistance[bucket]! - backgroundModel.backgroundLikeThreshold) / 0.12));
-    const familyPenalty = backgroundModel.backgroundFamilyBuckets[bucket] === 1 ? 0.12 + backgroundSeparation * 0.33 : 1;
+    const boundaryEnrichment = boundaryCoverage / Math.max(0.005, interiorCoverage);
+    const rawScore = count * 10 + outsideContact * 4 + boundaryEnrichment * 3 + outsideContactCoverage * 10;
+    const backgroundSeparationOklab = backgroundModel.backgroundDistance[bucket]!;
+    const normalizedBackgroundSeparation = Math.min(1, Math.max(0, (backgroundSeparationOklab - backgroundModel.backgroundLikeThreshold) / 0.12));
+    const familyPenalty = backgroundModel.backgroundFamilyBuckets[bucket] === 1 ? 0.12 + normalizedBackgroundSeparation * 0.33 : 1;
+    const confidence = outlineCandidateConfidence(boundaryCoverage, outsideContactCoverage, boundaryEnrichment, backgroundSeparationOklab);
     candidates.push({
       color: rgbToHex(representative),
       count,
       outsideContact,
       luma: luminance(r, g, b),
-      score: rawScore * familyPenalty
+      score: rawScore * familyPenalty,
+      boundaryCoverage,
+      outsideContactCoverage,
+      boundaryEnrichment,
+      backgroundSeparationOklab,
+      confidence,
+      classification: classifyOutlineCandidate(confidence)
     });
   }
 
@@ -249,7 +267,13 @@ type ExteriorBackgroundModel = {
   backgroundDistance: Float32Array;
 };
 
-function detectExistingOutlineColor(
+function detectExistingOutlineColor(image: RGBAImage, alphaThreshold: number, backgroundTolerance: number): number | null {
+  const candidates = detectOutlineColorCandidates(image, { alphaThreshold, backgroundTolerance });
+  const selected = candidates.find((candidate) => candidate.classification === "deliberate" && (candidate.confidence ?? 0) >= 0.8);
+  return selected ? Number.parseInt(selected.color.slice(1), 16) : null;
+}
+
+function detectDarkExistingOutlineColor(
   image: RGBAImage,
   alphaThreshold: number,
   background: BackgroundSample,
@@ -277,6 +301,24 @@ function detectExistingOutlineColor(
   }
 
   return bestColor;
+}
+
+function outlineCandidateConfidence(boundaryCoverage: number, outsideContactCoverage: number, boundaryEnrichment: number, backgroundSeparationOklab: number): number {
+  const boundarySupport = Math.min(1, boundaryCoverage / 0.08);
+  const contactSupport = Math.min(1, outsideContactCoverage / 0.08);
+  const enrichmentSupport = Math.min(1, Math.sqrt(Math.max(0, boundaryEnrichment - 1)) / 2);
+  const separationSupport = Math.min(1, backgroundSeparationOklab / 0.16);
+  return Math.max(0, Math.min(1, boundarySupport * 0.38 + contactSupport * 0.27 + enrichmentSupport * 0.25 + separationSupport * 0.1));
+}
+
+function classifyOutlineCandidate(confidence: number): "deliberate" | "partial" | "weak" {
+  if (confidence >= 0.8) {
+    return "deliberate";
+  }
+  if (confidence >= 0.55) {
+    return "partial";
+  }
+  return "weak";
 }
 
 function detectDarkestSubjectColor(

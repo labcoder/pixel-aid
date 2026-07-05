@@ -1615,6 +1615,20 @@ describe("halo cleanup", () => {
       expect(readPixel(unchanged, 0, 0)).toEqual([0, 0, 0, 0]);
     });
 
+    test("repair mode uses a bright contour candidate without explicit source colors", () => {
+      const source = createImage(7, 7);
+      drawBlock(source, 2, 2, 3, 3, 74, 142, 120, 255);
+      drawBlock(source, 1, 1, 5, 1, 250, 252, 255, 255);
+      drawBlock(source, 1, 5, 5, 1, 250, 252, 255, 255);
+      drawBlock(source, 1, 2, 1, 3, 250, 252, 255, 255);
+      drawBlock(source, 5, 2, 1, 3, 250, 252, 255, 255);
+      writePixel(source, 3, 1, 0, 0, 0, 0);
+
+      const repaired = applyOutlineCleanup(source, "repairExisting");
+
+      expect(readPixel(repaired, 3, 1)).toEqual([250, 252, 255, 255]);
+    });
+
     test("repair mode can use selected source outline colors without thickening existing edges", () => {
       const source = createImage(5, 3);
       writePixel(source, 2, 1, 120, 200, 180, 255);
