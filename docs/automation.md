@@ -61,6 +61,7 @@ Useful fix flags:
 - `--downscale dominant|detailPreserving|median|adaptive|averageThenPalette`
 - `--alpha preserve|binary|backgroundFloodFill|colorKey`
 - `--alpha-tolerance N`, `--alpha-threshold N`, `--alpha-color-key #ffffff`
+- `--background-detection classic|adaptive`
 - `--outline-mode none|repairExisting|add`
 - `--outline-color #101112`
 - `--outline-source-colors #102020,#203030`

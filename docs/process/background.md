@@ -134,7 +134,7 @@ Scene diagnostics are not part of `PixelFixResult.diagnostics` unless a caller s
 | `grid.fixMixels` | Usually false for auto background; explicit or inherited true runs the single-mode mixel branch. |
 | `grid.snap` | Explicit true chooses `snapToGrid()` in single mode. |
 | `downscale` | Preset is `adaptive`, but any `DownscaleMethod` can be supplied. |
-| `alpha`, `alphaSettings` | Preset is `preserve` with soft alpha preserved; explicit `backgroundFloodFill`, `binary`, or `colorKey` will use the same alpha code as sprites. |
+| `alpha`, `alphaSettings` | Preset is `preserve` with soft alpha preserved; explicit `backgroundFloodFill`, `binary`, or `colorKey` will use the same alpha code as sprites. For single sprite/icon guided cleanup, background detection is confidence-gated from the original image: `>= 0.80` on an opaque solid or multi-color exterior model auto-enables `alphaSettings.backgroundDetection: "adaptive"`, `0.55–0.80` is suggest-only metadata, and `<0.55` remains classic/manual-compatible. Checkerboard sources and sheet matte cleanup remain conservative unless the caller explicitly overrides with `--background-detection classic|adaptive` / `backgroundDetection`. |
 | `cleanup.removeHalos`, `denoiseStrength`, `morphology`, `outlineMode`, `lineCleanup` | Defaults are off or zero for backgrounds; explicit settings run the corresponding passes. |
 | `cleanup.removeOrphans`, `jaggyCleanup`, `preserveSinglePixelDetails` | Defaults prioritize detail preservation: no orphan or jaggy cleanup, preserve single-pixel details. |
 | `palette`, `paletteSettings`, `maxColors` | Default max colors is 64; explicit fixed/preset/auto settings override palette behavior. |

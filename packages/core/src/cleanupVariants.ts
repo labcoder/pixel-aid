@@ -211,5 +211,7 @@ function cleanupPassLabel(pass: CleanupEligibilityPass): string {
       return "Palette limit";
     case "nativeScaleInference":
       return "Native-scale inference";
+    case "backgroundDetection":
+      return "Background detection";
   }
 }

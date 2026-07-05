@@ -93,6 +93,21 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("passes explicit alpha background detection through to normalized settings", async () => {
+    await withFixture(async ({ input }) => {
+      const capture = createCapture();
+      const code = await runCli(
+        ["suggest", input, "--asset-type", "sprite", "--alpha", "backgroundFloodFill", "--background-detection", "classic", "--json"],
+        capture
+      );
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      const options = body.result.options as { alphaSettings?: { backgroundDetection?: string } };
+      expect(options.alphaSettings?.backgroundDetection).toBe("classic");
+    });
+  });
+
   it("prints core-matched source-sheet recovery suggestions for golden WebPs", async () => {
     for (const input of [astroSourceSheet, hollowKnightSourceSheet]) {
       const capture = createCapture();

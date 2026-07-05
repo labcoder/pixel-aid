@@ -729,6 +729,8 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   if (alphaTolerance !== undefined) options.alphaTolerance = alphaTolerance;
   const alphaColorKey = takeValue(args, "--alpha-color-key");
   if (alphaColorKey) options.alphaColorKey = alphaColorKey;
+  const backgroundDetection = takeValue(args, "--background-detection");
+  if (backgroundDetection) options.backgroundDetection = backgroundDetection as NonNullable<AutomationFixOptionsInput["backgroundDetection"]>;
   const transparentRgb = takeValue(args, "--transparent-rgb");
   if (transparentRgb) options.transparentRgb = transparentRgb;
   const decontaminateRgb = takeBooleanChoice(args, "--decontaminate-rgb", "--keep-transparent-rgb");
@@ -1058,6 +1060,12 @@ function usageText(): string {
     "  --snap                         Force square pixels (single uniform integer scale; output size follows the subject, not --target)",
     "  --line-cleanup off|low|high    Pixel-perfect line cleanup strength (supersedes the legacy 1px-gap cleanup)",
     "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
+    "",
+    "Alpha options:",
+    "  --alpha preserve|binary|backgroundFloodFill|colorKey",
+    "  --alpha-threshold <0-255> --alpha-tolerance <0-255> --alpha-color-key <#rrggbb>",
+    "  --background-detection classic|adaptive",
+    "  --decontaminate-rgb / --keep-transparent-rgb --transparent-rgb <#rrggbb>",
     "",
   ].join("\n");
 }
