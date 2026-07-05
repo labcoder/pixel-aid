@@ -285,6 +285,8 @@ describe("automation operations", () => {
       if (!result.ok) return;
       expect(result.value.result.settings.grid.scaleX).toBeCloseTo(1254 / 128, 6);
       expect(result.value.result.settings.grid.scaleY).toBeCloseTo(1254 / 128, 6);
+      expect(result.value.result.settings.alphaSettings?.backgroundDetection).toBe("adaptive");
+      expect(result.value.manifest.meta.operation.settings.alphaSettings?.backgroundDetection).toBe("adaptive");
       expect(result.value.result.image.width).toBe(90);
       expect(result.value.result.image.height).toBe(113);
 
@@ -296,6 +298,17 @@ describe("automation operations", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  it("honors explicit classic background detection over guided adaptive suggestions", async () => {
+    const result = await suggestFixSettings({
+      inputPath: heroCatFixturePath,
+      options: { targetWidth: 128, targetHeight: 128, backgroundDetection: "classic" }
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.options.alphaSettings?.backgroundDetection).toBe("classic");
   });
 
   it("cancels a fix cooperatively before writing partial output", async () => {

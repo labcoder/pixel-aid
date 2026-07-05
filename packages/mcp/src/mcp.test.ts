@@ -120,6 +120,7 @@ describe("PixelAid MCP-ready handlers", () => {
     expect(pixelaidMcpTools.every((tool) => tool.inputSchema.type === "object")).toBe(true);
     expect(pixelaidMcpTools[0]?.description).toContain("detected pixel scale");
     expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("fixMixels");
+    expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("backgroundDetection");
   });
 
   it("validates required string inputs", () => {

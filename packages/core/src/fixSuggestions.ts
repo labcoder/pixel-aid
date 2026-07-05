@@ -1,4 +1,5 @@
 import { applyAlphaMode } from "./alpha";
+import { analyzeBackground, type BackgroundAnalysis } from "./backgroundAnalysis";
 import { detectGridCandidates } from "./grid";
 import { detectMixels } from "./mixels";
 import { analyzeQualityReport, type QualityReport } from "./qualityReport";
@@ -27,6 +28,8 @@ import type {
 } from "@pixelaid/shared";
 
 const commonNativeFrameSizes = [8, 16, 24, 32, 48, 64, 96, 128, 192, 208, 256, 512] as const;
+const ADAPTIVE_BACKGROUND_AUTO_CONFIDENCE = 0.8;
+const ADAPTIVE_BACKGROUND_SUGGEST_CONFIDENCE = 0.55;
 
 export type CleanupEligibilityPass =
   | "binaryAlpha"
@@ -35,11 +38,22 @@ export type CleanupEligibilityPass =
   | "outlineRepair"
   | "jaggyCleanup"
   | "paletteLimit"
-  | "nativeScaleInference";
+  | "nativeScaleInference"
+  | "backgroundDetection";
 
 export type CleanupEligibilityDecision = {
   pass: CleanupEligibilityPass;
   enabled: boolean;
+  reasonCode: string;
+  reason: string;
+};
+
+type AdaptiveBackgroundSuggestion = {
+  analysis?: BackgroundAnalysis;
+  applicable: boolean;
+  enabled: boolean;
+  suggestOnly: boolean;
+  confidence: number;
   reasonCode: string;
   reason: string;
 };
@@ -185,16 +199,23 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     ? suggestSourceSizedSheetMaxColors(strictSourceSheetMaxColors, exactColorCount)
     : strictSourceSheetMaxColors;
   const strictSourceSheetDenoiseStrength = strictSourceSheetCleanup ? suggestStrictSourceSheetDenoiseStrength() : preset.denoiseStrength;
+  const adaptiveBackgroundSuggestion = suggestAdaptiveBackgroundDetection(image, mode, classification.assetType);
   const suggestedAlpha = strictSourceSheetCleanup
     ? "binary"
     : sheetChromaMatteCleanup
       ? "backgroundFloodFill"
-      : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence);
+      : suggestAlphaMode(image, mode, classification.assetType, preset.alpha, foregroundEvidence, adaptiveBackgroundSuggestion);
   const singleSpriteMatteCleanup =
     suggestedAlpha === "backgroundFloodFill" &&
     mode === "single" &&
     (classification.assetType === "sprite" || classification.assetType === "icon") &&
     hasVisibleChromaMatteAgainstBackground(image);
+  const suggestedAlphaSettings = suggestAlphaCleanupSettings(
+    preset.alphaSettings,
+    suggestedAlpha,
+    adaptiveBackgroundSuggestion,
+    strictSourceSheetCleanup || sheetChromaMatteCleanup || singleSpriteMatteCleanup
+  );
   if (singleSpriteMatteCleanup && Math.min(candidate?.scaleX ?? 1, candidate?.scaleY ?? candidate?.scaleX ?? 1) < 4) {
     candidate = createSourcePreservationGridCandidate(image, "Low-scale sprite cleanup preserves native pixels while removing matte/background artifacts.");
     outputWidth = image.width;
@@ -211,7 +232,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
   });
   const bakedTransparencyDetected = qualityReport.findings.some((finding) => finding.id === "baked-transparency-background");
   if (shouldUseBackgroundCleanedGrid(mode, classification.assetType, bakedTransparencyDetected, suggestedAlpha)) {
-    const cleaned = applyAlphaMode(image, "backgroundFloodFill", preset.alphaSettings).image;
+    const cleaned = applyAlphaMode(image, "backgroundFloodFill", suggestedAlphaSettings).image;
     const cleanedCandidates = detectSuggestionGridCandidates(cleaned);
     if (cleanedCandidates.length > 0) {
       candidates = cleanedCandidates;
@@ -257,7 +278,8 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     strictSourceSheetCleanup,
     sourceSizedSheetPreservation,
     singleSpriteMatteCleanup,
-    sheetChromaMatteCleanup
+    sheetChromaMatteCleanup,
+    adaptiveBackgroundSuggestion
   });
   const blockPurity = estimateBlockPurity(image, candidate);
   const downscale = suggestDownscaleMethod({
@@ -320,10 +342,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     downscale,
     paletteStrategy,
     alpha: suggestedAlpha,
-    alphaSettings:
-      strictSourceSheetCleanup || sheetChromaMatteCleanup || singleSpriteMatteCleanup
-        ? { ...preset.alphaSettings, decontaminateRgb: true }
-        : { ...preset.alphaSettings },
+    alphaSettings: suggestedAlphaSettings,
     removeOrphans: cleanup.removeOrphans,
     jaggyCleanup: cleanup.jaggyCleanup,
     preserveSinglePixelDetails: cleanup.preserveSinglePixelDetails,
@@ -708,6 +727,7 @@ function suggestCleanupEligibility(input: {
   sourceSizedSheetPreservation: boolean;
   singleSpriteMatteCleanup: boolean;
   sheetChromaMatteCleanup: boolean;
+  adaptiveBackgroundSuggestion?: AdaptiveBackgroundSuggestion;
 }): CleanupEligibilityDecision[] {
   const matteIssue = input.sheetConditioning.issues.some((issue) => isStrictSourceSheetCleanupIssue(issue.code));
   const preservesScene = input.assetType === "background" || input.assetType === "tilemap";
@@ -785,8 +805,26 @@ function suggestCleanupEligibility(input: {
       reason: input.strictSourceSheetCleanup
         ? "Frame-first cleanup should condition each source cell at source resolution before final packing."
         : "Native scale inference is only needed for source-sized sheets with cleanup artifacts."
-    }
+    },
+    backgroundDetectionEligibility(input.adaptiveBackgroundSuggestion)
   ];
+}
+
+function backgroundDetectionEligibility(backgroundSuggestion: AdaptiveBackgroundSuggestion | undefined): CleanupEligibilityDecision {
+  if (!backgroundSuggestion?.applicable) {
+    return {
+      pass: "backgroundDetection",
+      enabled: false,
+      reasonCode: "adaptive-background-not-applicable",
+      reason: "Adaptive background detection is not applicable to this asset type or cleanup route."
+    };
+  }
+  return {
+    pass: "backgroundDetection",
+    enabled: backgroundSuggestion.enabled,
+    reasonCode: backgroundSuggestion.reasonCode,
+    reason: backgroundSuggestion.reason
+  };
 }
 
 function isCleanupPassEnabled(decisions: readonly CleanupEligibilityDecision[], pass: CleanupEligibilityPass): boolean {
@@ -1839,15 +1877,101 @@ export function chooseSuggestionGrid(
   return candidate;
 }
 
+function suggestAdaptiveBackgroundDetection(image: RGBAImage, mode: AssetMode, assetType: AssetType): AdaptiveBackgroundSuggestion {
+  const applicable = mode === "single" && (assetType === "sprite" || assetType === "icon");
+  if (!applicable) {
+    return {
+      applicable: false,
+      enabled: false,
+      suggestOnly: false,
+      confidence: 0,
+      reasonCode: "adaptive-background-not-applicable",
+      reason: "Adaptive background detection is only auto-suggested for single sprite/icon background cleanup."
+    };
+  }
+
+  const analysis = analyzeBackground(image);
+  const autoEligibleBackgroundKind = analysis.kind === "solid" || analysis.kind === "multi";
+  if (analysis.confidence >= ADAPTIVE_BACKGROUND_AUTO_CONFIDENCE && autoEligibleBackgroundKind) {
+    return {
+      analysis,
+      applicable: true,
+      enabled: true,
+      suggestOnly: false,
+      confidence: analysis.confidence,
+      reasonCode: "adaptive-background-high-confidence",
+      reason: `${analysis.kind} background confidence ${formatConfidence(analysis.confidence)} is high enough to auto-enable adaptive background detection.`
+    };
+  }
+  if (analysis.kind === "checkerboard") {
+    return {
+      analysis,
+      applicable: true,
+      enabled: false,
+      suggestOnly: analysis.confidence >= ADAPTIVE_BACKGROUND_SUGGEST_CONFIDENCE,
+      confidence: analysis.confidence,
+      reasonCode: "adaptive-background-checkerboard-manual",
+      reason: `Checkerboard background confidence ${formatConfidence(analysis.confidence)} is conservative/manual; adaptive detection is not forced into fix settings.`
+    };
+  }
+  if (analysis.confidence >= ADAPTIVE_BACKGROUND_SUGGEST_CONFIDENCE) {
+    return {
+      analysis,
+      applicable: true,
+      enabled: false,
+      suggestOnly: true,
+      confidence: analysis.confidence,
+      reasonCode: "adaptive-background-suggest-only",
+      reason: `Background confidence ${formatConfidence(analysis.confidence)} is suggest-only; adaptive detection is not forced into fix settings.`
+    };
+  }
+
+  return {
+    analysis,
+    applicable: true,
+    enabled: false,
+    suggestOnly: false,
+    confidence: analysis.confidence,
+    reasonCode: "adaptive-background-low-confidence",
+    reason: `Background confidence ${formatConfidence(analysis.confidence)} is too low to force adaptive detection.`
+  };
+}
+
+function suggestAlphaCleanupSettings(
+  presetAlphaSettings: AlphaCleanupSettings,
+  alpha: AlphaMode,
+  backgroundSuggestion: AdaptiveBackgroundSuggestion,
+  forceDecontaminateRgb: boolean
+): AlphaCleanupSettings {
+  return {
+    ...presetAlphaSettings,
+    ...(forceDecontaminateRgb ? { decontaminateRgb: true } : {}),
+    ...(alpha === "backgroundFloodFill" && backgroundSuggestion.enabled ? { backgroundDetection: "adaptive" as const } : {})
+  };
+}
+
+function formatConfidence(confidence: number): string {
+  return confidence.toFixed(2);
+}
+
 function suggestAlphaMode(
   image: RGBAImage,
   mode: AssetMode,
   assetType: AssetType,
   fallback: AlphaMode,
-  foregroundEvidence?: ForegroundObjectEvidence
+  foregroundEvidence?: ForegroundObjectEvidence,
+  backgroundSuggestion?: AdaptiveBackgroundSuggestion
 ): AlphaMode {
   if (mode !== "single") {
     return fallback;
+  }
+
+  const canFloodFillBackground = assetType === "sprite" || assetType === "icon";
+  if (!canFloodFillBackground) {
+    return fallback;
+  }
+  if (backgroundSuggestion?.enabled) {
+    return "backgroundFloodFill";
   }
 
   const sampleSize = Math.max(1, Math.min(12, image.width, image.height));
@@ -1874,8 +1998,7 @@ function suggestAlphaMode(
 
   const brightness = (r + g + b) / (count * 3);
   const alpha = a / count;
-  const canFloodFillBackground = assetType === "sprite" || assetType === "icon";
-  if (!canFloodFillBackground || alpha <= 240) {
+  if (alpha <= 240) {
     return fallback;
   }
 

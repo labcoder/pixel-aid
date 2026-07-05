@@ -179,6 +179,8 @@ Matte cleanup is subject-safe rather than hue-family based. It learns matte cand
 
 Implemented modes:
 
+Auto Suggest can now opt single sprite/icon `backgroundFloodFill` cleanup into adaptive background detection when the original source image has a high-confidence opaque solid or multi-color exterior background model. The confidence gates are intentionally conservative: `>= 0.80` on solid/multi exterior backgrounds auto-applies `alphaSettings.backgroundDetection = "adaptive"`, `0.55–0.80` records a suggest-only cleanup-eligibility rationale without forcing settings, and `< 0.55` remains classic/manual-compatible. Baked checkerboard backgrounds and sheet chroma-matte cleanup stay conservative by default; users can still explicitly choose adaptive detection through `backgroundDetection`. The core suggestion probes the same alpha settings when it re-checks cleaned-grid candidates so the grid recommendation and final guided fix use the same background model.
+
 - `preserve`: clone alpha unchanged. This is the default for UI, portraits, backgrounds, and effect-heavy assets because intentional soft alpha and glow should not be flattened.
 - `binary`: threshold alpha to 0 or 255. This is useful for sprites and icons that need crisp engine masks.
 - `backgroundFloodFill`: estimate one or two dominant edge/corner matte colors and flood-fill connected background from all image edges to transparency. This handles off-white gradients and baked checkerboard mattes better than comparing every pixel to only the top-left sample.

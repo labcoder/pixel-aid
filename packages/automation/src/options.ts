@@ -4,6 +4,7 @@ import {
   type AlphaMode,
   type AssetMode,
   type AssetType,
+  type AlphaCleanupSettings,
   type ColorSpace,
   type DownscaleMethod,
   type FixOptions,
@@ -65,6 +66,7 @@ export type AutomationFixOptionsInput = {
   alphaThreshold?: number;
   alphaTolerance?: number;
   alphaColorKey?: string;
+  backgroundDetection?: AlphaCleanupSettings["backgroundDetection"];
   decontaminateRgb?: boolean;
   transparentRgb?: string;
   fixMixels?: boolean;
@@ -137,6 +139,7 @@ const colorSpaces = new Set<ColorSpace>(["oklab", "cielab", "srgb"]);
 const paletteWeightings = new Set<PaletteWeighting>(["area", "frequency"]);
 const outlineModes = new Set<OutlineMode>(["none", "repairExisting", "add"]);
 const lineCleanupStrengths = new Set<LineCleanupStrength>(["off", "low", "high"]);
+const backgroundDetectionModes = new Set<NonNullable<AlphaCleanupSettings["backgroundDetection"]>>(["classic", "adaptive"]);
 
 const presets: Record<AssetType, AssetPreset> = {
   sprite: createPreset(24, "dominant", "backgroundFloodFill", "single"),
@@ -200,6 +203,13 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
   const alpha = normalizeEnum(input.alpha ?? preset.alpha, alphaModes, "alpha");
   if (!alpha.ok) {
     return alpha;
+  }
+
+  const backgroundDetection = input.backgroundDetection === undefined
+    ? undefined
+    : normalizeEnum(input.backgroundDetection, backgroundDetectionModes, "backgroundDetection");
+  if (backgroundDetection && !backgroundDetection.ok) {
+    return backgroundDetection;
   }
 
   const grid = normalizeGrid({
@@ -280,6 +290,7 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     colorKey: input.alphaColorKey ?? "#ffffff",
     decontaminateRgb: input.decontaminateRgb ?? true,
     transparentRgb: input.transparentRgb ?? "#000000",
+    ...(backgroundDetection?.ok ? { backgroundDetection: backgroundDetection.value } : {}),
   };
 
   const paletteSettings: FixOptions["paletteSettings"] = {

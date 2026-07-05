@@ -35,6 +35,15 @@ describe("automation option normalization", () => {
     expect(result.error.exitCode).toBe(2);
   });
 
+  it("rejects unknown background detection modes with invalid_options", () => {
+    const result = normalizeFixOptions({ backgroundDetection: "magic" as "adaptive" });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error.code).toBe("invalid_options");
+    expect(result.error.message).toContain("backgroundDetection");
+  });
+
   it("normalizes target, grid, palette, alpha, cleanup, and outline settings", () => {
     const result = normalizeFixOptions({
       assetType: "animation",
@@ -46,6 +55,7 @@ describe("automation option normalization", () => {
       downscale: "detailPreserving",
       alpha: "binary",
       alphaThreshold: 96,
+      backgroundDetection: "adaptive",
       grid: {
         detect: "manual",
         scale: 8,
@@ -90,7 +100,7 @@ describe("automation option normalization", () => {
       phaseY: 3,
       localCorrection: true,
     });
-    expect(result.value.alphaSettings).toMatchObject({ threshold: 96 });
+    expect(result.value.alphaSettings).toMatchObject({ threshold: 96, backgroundDetection: "adaptive" });
     expect(result.value.cleanup.dominantThreshold).toBe(0.72);
     expect(result.value.cleanup.outlineSourceColors).toEqual(["#102020", "#203030"]);
     expect(result.value.cleanup.contrastExpansion).toMatchObject({

@@ -890,6 +890,7 @@ type AssetEditorSession = {
     alphaThreshold: number;
     alphaTolerance: number;
     alphaColorKey: string;
+    alphaBackgroundDetection?: AlphaCleanupSettings["backgroundDetection"];
     decontaminateRgb: boolean;
     outlineMode: OutlineMode;
     outlineSize: number;
@@ -1115,6 +1116,7 @@ export function App() {
   const [alphaThreshold, setAlphaThreshold] = useState(initialSettings.alphaThreshold);
   const [alphaTolerance, setAlphaTolerance] = useState(initialSettings.alphaTolerance);
   const [alphaColorKey, setAlphaColorKey] = useState(initialSettings.alphaColorKey);
+  const [alphaBackgroundDetection, setAlphaBackgroundDetection] = useState<AlphaCleanupSettings["backgroundDetection"]>(undefined);
   const [decontaminateRgb, setDecontaminateRgb] = useState(initialSettings.decontaminateRgb);
   const [outlineMode, setOutlineMode] = useState<OutlineMode>(initialSettings.outlineMode);
   const [outlineSize, setOutlineSize] = useState(initialSettings.outlineSize);
@@ -1834,6 +1836,7 @@ export function App() {
         alphaThreshold,
         alphaTolerance,
         alphaColorKey,
+        ...(alphaBackgroundDetection !== undefined ? { alphaBackgroundDetection } : {}),
         decontaminateRgb,
         outlineMode,
         outlineSize,
@@ -1903,6 +1906,7 @@ export function App() {
     }),
     [
       alpha,
+      alphaBackgroundDetection,
       alphaColorKey,
       alphaThreshold,
       alphaTolerance,
@@ -2098,6 +2102,7 @@ export function App() {
     setAlphaThreshold(settings.alphaThreshold);
     setAlphaTolerance(settings.alphaTolerance);
     setAlphaColorKey(settings.alphaColorKey);
+    setAlphaBackgroundDetection(settings.alphaBackgroundDetection);
     setDecontaminateRgb(settings.decontaminateRgb);
     setOutlineMode(settings.outlineMode);
     setOutlineSize(settings.outlineSize);
@@ -3440,6 +3445,7 @@ export function App() {
     setAlphaThreshold(settings?.threshold ?? 128);
     setAlphaTolerance(settings?.tolerance ?? 18);
     setAlphaColorKey(settings?.colorKey ?? "#ffffff");
+    setAlphaBackgroundDetection(settings?.backgroundDetection);
     setDecontaminateRgb(settings?.decontaminateRgb ?? true);
   }, []);
 
@@ -4269,7 +4275,8 @@ export function App() {
         tolerance: alphaTolerance,
         colorKey: alphaColorKey,
         decontaminateRgb,
-        transparentRgb: "#000000"
+        transparentRgb: "#000000",
+        ...(alphaBackgroundDetection !== undefined ? { backgroundDetection: alphaBackgroundDetection } : {})
       },
       cleanup: {
         removeOrphans,
@@ -4310,6 +4317,7 @@ export function App() {
   }, [
     activePaletteLockScope,
     alpha,
+    alphaBackgroundDetection,
     alphaColorKey,
     alphaThreshold,
     alphaTolerance,

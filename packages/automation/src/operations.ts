@@ -1019,6 +1019,7 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
     alphaThreshold: suggestion.alphaSettings.threshold ?? 128,
     alphaTolerance: suggestion.alphaSettings.tolerance ?? 18,
     ...(suggestion.alphaSettings.colorKey ? { alphaColorKey: suggestion.alphaSettings.colorKey } : {}),
+    ...(suggestion.alphaSettings.backgroundDetection ? { backgroundDetection: suggestion.alphaSettings.backgroundDetection } : {}),
     decontaminateRgb: suggestion.alphaSettings.decontaminateRgb ?? true,
     transparentRgb: suggestion.alphaSettings.transparentRgb ?? "#000000",
     grid: {
