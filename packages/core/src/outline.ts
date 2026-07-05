@@ -1,5 +1,6 @@
 import type { OutlineCleanupDiagnostics, OutlineMode, RGBAImage } from "@pixelaid/shared";
-import { clampByte, parseHexColor, rgbToHex, unpackRgb } from "./color";
+import { analyzeBackground } from "./backgroundAnalysis";
+import { clampByte, parseHexColor, rgbChannelsToOklab, rgbToHex, unpackRgb } from "./color";
 import { cloneImage } from "./image";
 
 export type OutlineCleanupOptions = {
@@ -28,8 +29,6 @@ export type OutlineColorCandidate = {
 };
 
 const DARK_EDGE_LUMA = 96;
-const OUTLINE_CANDIDATE_LUMA = 168;
-const OUTLINE_BUCKET_DISTANCE = 28;
 const SOURCE_COLOR_MATCH_DISTANCE = 18;
 
 export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options: OutlineCleanupOptions = {}): RGBAImage {
@@ -154,64 +153,100 @@ export function detectOutlineColorCandidates(
 ): OutlineColorCandidate[] {
   const alphaThreshold = options.alphaThreshold ?? 8;
   const backgroundTolerance = options.backgroundTolerance ?? 18;
-  const bucketDistance = options.bucketDistance ?? OUTLINE_BUCKET_DISTANCE;
   const background = estimateCornerBackground(image);
-  const buckets: OutlineCandidateBucket[] = [];
+  const backgroundModel = createExteriorBackgroundModel(image, background, backgroundTolerance);
+  const outsideMask = buildExteriorOutsideMask(image, alphaThreshold, backgroundModel);
+  const bucketCounts = new Uint32Array(4096);
+  const bucketOutsideContact = new Uint32Array(4096);
+  const bucketInteriorCounts = new Uint32Array(4096);
+  const bucketRepresentatives = new Uint32Array(4096);
+  const hasRepresentative = new Uint8Array(4096);
+  let totalBoundary = 0;
+  let totalOutsideContact = 0;
+  let totalInterior = 0;
 
   for (let y = 0; y < image.height; y += 1) {
     for (let x = 0; x < image.width; x += 1) {
-      if (
-        isOutsidePixel(image, x, y, alphaThreshold, background, backgroundTolerance) ||
-        !hasOutsideNeighbor(image, x, y, alphaThreshold, background, backgroundTolerance)
-      ) {
+      const index = y * image.width + x;
+      const offset = index * 4;
+      if (image.data[offset + 3]! <= alphaThreshold || outsideMask[index] === 1) {
         continue;
       }
 
-      const offset = (y * image.width + x) * 4;
       const r = image.data[offset]!;
       const g = image.data[offset + 1]!;
       const b = image.data[offset + 2]!;
-      const luma = luminance(r, g, b);
-      if (luma > OUTLINE_CANDIDATE_LUMA) {
+      const bucket = quantizeOutlineBucket(r, g, b);
+      const outsideContact = countExterior4Neighbors(outsideMask, image.width, image.height, x, y);
+      if (outsideContact === 0) {
+        bucketInteriorCounts[bucket] = bucketInteriorCounts[bucket]! + 1;
+        totalInterior += 1;
         continue;
       }
 
-      addOutlineCandidateBucket(buckets, (r << 16) | (g << 8) | b, countOutsideNeighbors(image, x, y, alphaThreshold, background, backgroundTolerance), bucketDistance);
+      bucketCounts[bucket] = bucketCounts[bucket]! + 1;
+      bucketOutsideContact[bucket] = bucketOutsideContact[bucket]! + outsideContact;
+      totalBoundary += 1;
+      totalOutsideContact += outsideContact;
+      if (hasRepresentative[bucket] === 0) {
+        bucketRepresentatives[bucket] = (r << 16) | (g << 8) | b;
+        hasRepresentative[bucket] = 1;
+      }
     }
   }
 
-  return buckets
-    .map((bucket) => {
-      const representative = getBucketRepresentativeColor(bucket);
-      const [r, g, b] = unpackRgb(representative, 255);
-      const luma = luminance(r, g, b);
-      const score = bucket.count * 10 + bucket.outsideContact * 2 + (255 - luma) / 32;
-      return {
-        color: rgbToHex(representative),
-        count: bucket.count,
-        outsideContact: bucket.outsideContact,
-        luma,
-        score
-      };
-    })
-    .sort((a, b) => b.score - a.score)
+  if (totalBoundary < 4) {
+    return [];
+  }
+
+  const candidates: OutlineColorCandidate[] = [];
+  const contactDenominator = Math.max(1, totalOutsideContact);
+  const interiorDenominator = Math.max(1, totalInterior);
+  for (let bucket = 0; bucket < bucketCounts.length; bucket += 1) {
+    const count = bucketCounts[bucket]!;
+    if (count === 0 || backgroundModel.backgroundLikeBuckets[bucket] === 1) {
+      continue;
+    }
+
+    const representative = bucketRepresentatives[bucket]!;
+    const [r, g, b] = unpackRgb(representative, 255);
+    const outsideContact = bucketOutsideContact[bucket]!;
+    const boundaryCoverage = count / totalBoundary;
+    const outsideContactCoverage = outsideContact / contactDenominator;
+    const interiorCoverage = bucketInteriorCounts[bucket]! / interiorDenominator;
+    const enrichment = boundaryCoverage / Math.max(0.005, interiorCoverage);
+    const rawScore = count * 10 + outsideContact * 4 + enrichment * 3 + outsideContactCoverage * 10;
+    const backgroundSeparation = Math.min(1, Math.max(0, (backgroundModel.backgroundDistance[bucket]! - backgroundModel.backgroundLikeThreshold) / 0.12));
+    const familyPenalty = backgroundModel.backgroundFamilyBuckets[bucket] === 1 ? 0.12 + backgroundSeparation * 0.33 : 1;
+    candidates.push({
+      color: rgbToHex(representative),
+      count,
+      outsideContact,
+      luma: luminance(r, g, b),
+      score: rawScore * familyPenalty
+    });
+  }
+
+  return candidates
+    .sort((a, b) => b.score - a.score || b.count - a.count || b.outsideContact - a.outsideContact || a.color.localeCompare(b.color))
     .slice(0, options.maxCandidates ?? 8);
 }
 
-type OutlineCandidateBucket = {
-  r: number;
-  g: number;
-  b: number;
-  count: number;
-  outsideContact: number;
-  colors: Map<number, number>;
-};
 
 type BackgroundSample = {
   r: number;
   g: number;
   b: number;
   a: number;
+};
+
+type ExteriorBackgroundModel = {
+  corner: BackgroundSample;
+  tolerance: number;
+  backgroundLikeThreshold: number;
+  backgroundLikeBuckets: Uint8Array;
+  backgroundFamilyBuckets: Uint8Array;
+  backgroundDistance: Float32Array;
 };
 
 function detectExistingOutlineColor(
@@ -336,50 +371,141 @@ function buildSubjectMask(
   return mask;
 }
 
-function addOutlineCandidateBucket(buckets: OutlineCandidateBucket[], color: number, outsideContact: number, bucketDistance: number): void {
-  let bestBucket: OutlineCandidateBucket | undefined;
-  let bestDistance = Number.POSITIVE_INFINITY;
-  for (const bucket of buckets) {
-    const bucketColor = (Math.round(bucket.r / bucket.count) << 16) | (Math.round(bucket.g / bucket.count) << 8) | Math.round(bucket.b / bucket.count);
-    const distance = colorDistance(color, bucketColor);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestBucket = bucket;
-    }
-  }
-
-  if (!bestBucket || bestDistance > bucketDistance) {
-    const [r, g, b] = unpackRgb(color, 255);
-    buckets.push({
-      r,
-      g,
-      b,
-      count: 1,
-      outsideContact,
-      colors: new Map([[color, 1]])
-    });
-    return;
-  }
-
-  const [r, g, b] = unpackRgb(color, 255);
-  bestBucket.r += r;
-  bestBucket.g += g;
-  bestBucket.b += b;
-  bestBucket.count += 1;
-  bestBucket.outsideContact += outsideContact;
-  bestBucket.colors.set(color, (bestBucket.colors.get(color) ?? 0) + 1);
+function quantizeOutlineBucket(r: number, g: number, b: number): number {
+  return ((r >> 4) << 8) | ((g >> 4) << 4) | (b >> 4);
 }
 
-function getBucketRepresentativeColor(bucket: OutlineCandidateBucket): number {
-  let representative = 0;
-  let bestCount = -1;
-  for (const [color, count] of bucket.colors) {
-    if (count > bestCount) {
-      representative = color;
-      bestCount = count;
+function createExteriorBackgroundModel(image: RGBAImage, corner: BackgroundSample, tolerance: number): ExteriorBackgroundModel {
+  const analysis = analyzeBackground(image);
+  const backgroundLikeBuckets = new Uint8Array(4096);
+  const backgroundFamilyBuckets = new Uint8Array(4096);
+  const backgroundDistance = new Float32Array(4096);
+  const threshold = Math.max(analysis.thresholdOklab, ...analysis.clusters.map((cluster) => cluster.radiusOklab + 0.035));
+  for (let bucket = 0; bucket < backgroundLikeBuckets.length; bucket += 1) {
+    const r = ((bucket >> 8) & 0xf) * 16 + 8;
+    const g = ((bucket >> 4) & 0xf) * 16 + 8;
+    const b = (bucket & 0xf) * 16 + 8;
+    const lab = rgbChannelsToOklab(r, g, b);
+    const chroma = Math.sqrt(lab.y * lab.y + lab.z * lab.z);
+    let minDistance = Number.POSITIVE_INFINITY;
+    for (const cluster of analysis.clusters) {
+      const dl = lab.x - cluster.centerL;
+      const da = lab.y - cluster.centerA;
+      const db = lab.z - cluster.centerB;
+      const distance = Math.sqrt(dl * dl + da * da + db * db);
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+      if (distance <= threshold) {
+        backgroundLikeBuckets[bucket] = 1;
+      }
+      const clusterChroma = Math.sqrt(cluster.centerA * cluster.centerA + cluster.centerB * cluster.centerB);
+      if (chroma > 0.05 && clusterChroma > 0.05 && (lab.y * cluster.centerA + lab.z * cluster.centerB) / (chroma * clusterChroma) >= 0.9) {
+        backgroundFamilyBuckets[bucket] = 1;
+      }
+      if (backgroundLikeBuckets[bucket] === 1 && backgroundFamilyBuckets[bucket] === 1 && minDistance === 0) {
+        break;
+      }
+    }
+    backgroundDistance[bucket] = Number.isFinite(minDistance) ? minDistance : 1;
+  }
+  return { corner, tolerance, backgroundLikeThreshold: threshold, backgroundLikeBuckets, backgroundFamilyBuckets, backgroundDistance };
+}
+
+function buildExteriorOutsideMask(image: RGBAImage, alphaThreshold: number, background: ExteriorBackgroundModel): Uint8Array {
+  const { width, height } = image;
+  const mask = new Uint8Array(width * height);
+  const queue = new Int32Array(width * height);
+  let read = 0;
+  let write = 0;
+
+  for (let x = 0; x < width; x += 1) {
+    write = enqueueExteriorPixel(image, mask, queue, write, x, 0, alphaThreshold, background);
+    if (height > 1) {
+      write = enqueueExteriorPixel(image, mask, queue, write, x, height - 1, alphaThreshold, background);
     }
   }
-  return representative;
+  for (let y = 1; y < height - 1; y += 1) {
+    write = enqueueExteriorPixel(image, mask, queue, write, 0, y, alphaThreshold, background);
+    if (width > 1) {
+      write = enqueueExteriorPixel(image, mask, queue, write, width - 1, y, alphaThreshold, background);
+    }
+  }
+
+  while (read < write) {
+    const current = queue[read]!;
+    read += 1;
+    const x = current % width;
+    const y = Math.floor(current / width);
+    if (x > 0) {
+      write = enqueueExteriorPixel(image, mask, queue, write, x - 1, y, alphaThreshold, background);
+    }
+    if (x + 1 < width) {
+      write = enqueueExteriorPixel(image, mask, queue, write, x + 1, y, alphaThreshold, background);
+    }
+    if (y > 0) {
+      write = enqueueExteriorPixel(image, mask, queue, write, x, y - 1, alphaThreshold, background);
+    }
+    if (y + 1 < height) {
+      write = enqueueExteriorPixel(image, mask, queue, write, x, y + 1, alphaThreshold, background);
+    }
+  }
+
+  return mask;
+}
+
+function enqueueExteriorPixel(
+  image: RGBAImage,
+  mask: Uint8Array,
+  queue: Int32Array,
+  write: number,
+  x: number,
+  y: number,
+  alphaThreshold: number,
+  background: ExteriorBackgroundModel
+): number {
+  const index = y * image.width + x;
+  if (mask[index] === 1 || !isBackgroundLikePixel(image, index, alphaThreshold, background)) {
+    return write;
+  }
+  mask[index] = 1;
+  queue[write] = index;
+  return write + 1;
+}
+
+function isBackgroundLikePixel(image: RGBAImage, index: number, alphaThreshold: number, background: ExteriorBackgroundModel): boolean {
+  const offset = index * 4;
+  const alpha = image.data[offset + 3]!;
+  if (alpha <= alphaThreshold) {
+    return true;
+  }
+  if (background.backgroundLikeBuckets[quantizeOutlineBucket(image.data[offset]!, image.data[offset + 1]!, image.data[offset + 2]!)] === 1) {
+    return true;
+  }
+  return (
+    Math.abs(image.data[offset]! - background.corner.r) +
+      Math.abs(image.data[offset + 1]! - background.corner.g) +
+      Math.abs(image.data[offset + 2]! - background.corner.b) +
+      Math.abs(alpha - background.corner.a) <=
+    background.tolerance
+  );
+}
+
+function countExterior4Neighbors(mask: Uint8Array, width: number, height: number, x: number, y: number): number {
+  let count = 0;
+  if (x === 0 || mask[y * width + x - 1] === 1) {
+    count += 1;
+  }
+  if (x + 1 === width || mask[y * width + x + 1] === 1) {
+    count += 1;
+  }
+  if (y === 0 || mask[(y - 1) * width + x] === 1) {
+    count += 1;
+  }
+  if (y + 1 === height || mask[(y + 1) * width + x] === 1) {
+    count += 1;
+  }
+  return count;
 }
 
 function removeOrphanComponents(
@@ -619,29 +745,6 @@ function hasOutsideNeighbor(
   }
 
   return false;
-}
-
-function countOutsideNeighbors(
-  image: RGBAImage,
-  x: number,
-  y: number,
-  alphaThreshold: number,
-  background: BackgroundSample,
-  backgroundTolerance: number
-): number {
-  let count = 0;
-  for (let dy = -1; dy <= 1; dy += 1) {
-    for (let dx = -1; dx <= 1; dx += 1) {
-      if (dx === 0 && dy === 0) {
-        continue;
-      }
-      if (isOutsidePixel(image, x + dx, y + dy, alphaThreshold, background, backgroundTolerance)) {
-        count += 1;
-      }
-    }
-  }
-
-  return count;
 }
 
 function isOutsidePixel(
