@@ -9,6 +9,81 @@ import { readGoldenPng } from "./goldenImage.test-utils";
 
 const goldenDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "goldens");
 
+describe("guided outline repair suggestions", () => {
+  test("uses bright deliberate silhouette outline candidates for single-sprite matte cleanup", () => {
+    const source = createLightOutlinedChromaMatteSprite();
+    const suggestion = suggestFixSettings(source);
+    const [candidate] = suggestion.qualityReport.metrics.outline.candidates;
+
+    expect(suggestion.mode).toBe("single");
+    expect(["sprite", "icon"]).toContain(suggestion.assetType);
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(candidate).toEqual(
+      expect.objectContaining({
+        color: "#f8fcff",
+        classification: "deliberate"
+      })
+    );
+    expect(candidate!.confidence).toBeGreaterThanOrEqual(0.8);
+    expect(candidate!.luma).toBeGreaterThan(220);
+    expect(suggestion.qualityReport.metrics.morphology.brokenOutlinePixels).toBeGreaterThan(0);
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: true,
+        reasonCode: "single-sprite-matte-outline-repair-needed"
+      })
+    );
+    expect(suggestion.outlineMode).toBe("repairExisting");
+    expect(suggestion.outlineSourceColors).toEqual(["#f8fcff"]);
+  });
+
+  test("keeps hero-cat guided repair manual when outline candidates do not need repair", () => {
+    const source = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
+    const suggestion = suggestFixSettings(source);
+    const guidedCandidates = suggestion.qualityReport.metrics.outline.candidates.filter(
+      (candidate) => candidate.classification === "deliberate" && (candidate.confidence ?? 0) >= 0.8
+    );
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(guidedCandidates.length).toBeGreaterThan(0);
+    expect(suggestion.qualityReport.metrics.morphology.brokenOutlinePixels).toBe(0);
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: false,
+        reasonCode: "single-sprite-matte-outline-suppressed-no-repair-needed"
+      })
+    );
+    expect(suggestion.outlineMode).toBe("none");
+    expect(suggestion.outlineSourceColors).toEqual([]);
+  });
+
+  test("does not auto-enable guided repair for weak single-sprite matte outline candidates", () => {
+    const source = createWeakLightOutlinedChromaMatteSprite();
+    const suggestion = suggestFixSettings(source);
+    const outlineCandidates = suggestion.qualityReport.metrics.outline.candidates;
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(outlineCandidates.length).toBeGreaterThan(0);
+    expect(outlineCandidates.every((candidate) => candidate.classification !== "deliberate" || (candidate.confidence ?? 0) < 0.8)).toBe(true);
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: false,
+        reasonCode: "single-sprite-matte-outline-suppressed"
+      })
+    );
+    expect(suggestion.outlineMode).toBe("none");
+    expect(suggestion.outlineSourceColors).toEqual([]);
+  });
+});
+
 describe("adaptive background confidence suggestions", () => {
   test("opts high-confidence single sprite/icon solid background cleanup into adaptive detection", () => {
     const source = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
@@ -47,6 +122,15 @@ describe("adaptive background confidence suggestions", () => {
         reasonCode: "adaptive-background-not-applicable"
       })
     );
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: false,
+        reasonCode: "matte-background-outline-suppressed"
+      })
+    );
+    expect(suggestion.outlineMode).toBe("none");
+    expect(suggestion.outlineSourceColors).toEqual([]);
     expect(countVisiblePixels(cleaned)).toBeGreaterThan(320_000);
     expect(countVisibleSourceMagentaPixels(source, cleaned)).toBeLessThan(countVisibleSourceMagentaPixels(source, source) * 0.05);
   });
@@ -104,6 +188,52 @@ function fillRect(image: RGBAImage, x0: number, y0: number, width: number, heigh
       setPixel(image, x, y, r, g, b);
     }
   }
+}
+
+function createLightOutlinedChromaMatteSprite(): RGBAImage {
+  const image = createImage(96, 96);
+  fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
+  fillRect(image, 26, 22, 44, 52, 248, 252, 255);
+  fillRect(image, 30, 26, 36, 44, 42, 68, 180);
+  punchAlphaGap(image, 46, 22, 3);
+  return image;
+}
+
+function punchAlphaGap(image: RGBAImage, x0: number, y: number, width: number): void {
+  for (let x = x0; x < x0 + width; x += 1) {
+    setPixel(image, x, y, 248, 252, 255, 0);
+  }
+}
+
+function createWeakLightOutlinedChromaMatteSprite(): RGBAImage {
+  const image = createImage(96, 96);
+  fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
+  fillRect(image, 30, 26, 36, 44, 42, 68, 180);
+  drawDitheredOutline(image, 26, 22, 44, 52);
+  return image;
+}
+
+function drawDitheredOutline(image: RGBAImage, x0: number, y0: number, width: number, height: number): void {
+  let colorIndex = 0;
+  for (let x = x0; x < x0 + width; x += 1) {
+    setDitheredOutlinePixel(image, x, y0, colorIndex);
+    colorIndex += 1;
+    setDitheredOutlinePixel(image, x, y0 + height - 1, colorIndex);
+    colorIndex += 1;
+  }
+  for (let y = y0 + 1; y < y0 + height - 1; y += 1) {
+    setDitheredOutlinePixel(image, x0, y, colorIndex);
+    colorIndex += 1;
+    setDitheredOutlinePixel(image, x0 + width - 1, y, colorIndex);
+    colorIndex += 1;
+  }
+}
+
+function setDitheredOutlinePixel(image: RGBAImage, x: number, y: number, index: number): void {
+  const r = 96 + ((index * 47) % 144);
+  const g = 80 + ((index * 83) % 152);
+  const b = 72 + ((index * 131) % 168);
+  setPixel(image, x, y, r, g, b);
 }
 
 function createCheckerboardSpriteImage(): RGBAImage {

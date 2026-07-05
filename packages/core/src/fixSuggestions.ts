@@ -695,17 +695,25 @@ function suggestContrastExpansionEnabled(
   return bakedTransparencyDetected || report.recommendations.some((recommendation) => recommendation.id === "use-contrast-downscale");
 }
 
+function isGuidedOutlineCandidate(candidate: QualityReport["metrics"]["outline"]["candidates"][number]): boolean {
+  return candidate.classification === "deliberate" && (candidate.confidence ?? 0) >= 0.8;
+}
+
+function hasSingleSpriteOutlineRepairNeed(report: QualityReport): boolean {
+  return report.metrics.morphology.brokenOutlinePixels > 0;
+}
+
 function suggestOutlineRepair(
   report: QualityReport,
   cleanupEligibility: readonly CleanupEligibilityDecision[],
   bakedTransparencyDetected: boolean
 ): { mode: OutlineMode; size: number; sourceColors: string[] } {
-  if (!isCleanupPassEnabled(cleanupEligibility, "outlineRepair") || (!bakedTransparencyDetected && report.metrics.outline.candidateCount === 0)) {
+  if (!isCleanupPassEnabled(cleanupEligibility, "outlineRepair")) {
     return { mode: "none", size: 1, sourceColors: [] };
   }
 
   const sourceColors = report.metrics.outline.candidates
-    .filter((candidate) => candidate.luma <= 96)
+    .filter(isGuidedOutlineCandidate)
     .slice(0, bakedTransparencyDetected ? 1 : 2)
     .map((candidate) => candidate.color);
 
@@ -735,9 +743,44 @@ function suggestCleanupEligibility(input: {
   const spriteLike = input.assetType === "sprite" || input.assetType === "icon" || input.assetType === "iconSet";
   const sheetLike = input.mode === "spriteSheet" || input.mode === "tileSheet";
   const selectedScale = Math.min(input.candidate?.scaleX ?? 1, input.candidate?.scaleY ?? input.candidate?.scaleX ?? 1);
-  const outlineEvidence = input.bakedTransparencyDetected || input.qualityReport.metrics.outline.candidateCount > 0;
+  const guidedOutlineEvidence = input.qualityReport.metrics.outline.candidates.some(isGuidedOutlineCandidate);
+  const singleSpriteOutlineRepairNeed = hasSingleSpriteOutlineRepairNeed(input.qualityReport);
+  const singleSpriteOutlineRepairEvidence = guidedOutlineEvidence && singleSpriteOutlineRepairNeed;
   const matteCleanupEvidence = input.strictSourceSheetCleanup || matteIssue || input.singleSpriteMatteCleanup || input.sheetChromaMatteCleanup;
   const sourceSizedSheetCleanup = input.strictSourceSheetCleanup && sheetLike && selectedScale <= 1.25;
+  const outlineRepairEvidence = input.singleSpriteMatteCleanup ? singleSpriteOutlineRepairEvidence : guidedOutlineEvidence;
+  const outlineRepairEnabled =
+    cleanupAllowed &&
+    !sourceSizedSheetCleanup &&
+    outlineRepairEvidence &&
+    selectedScale >= 1 &&
+    !input.sheetChromaMatteCleanup;
+  const outlineRepairReasonCode = sourceSizedSheetCleanup
+    ? "source-sized-line-preservation"
+    : input.sheetChromaMatteCleanup
+      ? "matte-background-outline-suppressed"
+      : input.singleSpriteMatteCleanup
+        ? singleSpriteOutlineRepairEvidence
+          ? "single-sprite-matte-outline-repair-needed"
+          : guidedOutlineEvidence
+            ? "single-sprite-matte-outline-suppressed-no-repair-needed"
+            : "single-sprite-matte-outline-suppressed"
+        : guidedOutlineEvidence
+          ? "outline-candidate-evidence"
+          : "no-outline-evidence";
+  const outlineRepairReason = sourceSizedSheetCleanup
+    ? "Source-sized sheet cleanup preserves existing linework instead of rebuilding outlines."
+    : input.sheetChromaMatteCleanup
+      ? "Chroma matte sheet cleanup suppresses outline repair so the background color is not preserved as an outline."
+      : input.singleSpriteMatteCleanup
+        ? singleSpriteOutlineRepairEvidence
+          ? "Single-sprite matte cleanup has deliberate high-confidence outline evidence and broken-outline pixels, so existing outline repair can run."
+          : guidedOutlineEvidence
+            ? "Single-sprite matte cleanup found deliberate high-confidence outline candidates, but no broken-outline repair need was detected."
+            : "Single-sprite matte cleanup suppresses automatic outline repair without deliberate high-confidence outline evidence."
+        : guidedOutlineEvidence
+          ? "Deliberate high-confidence outline-colored edge evidence was detected."
+          : "No deliberate high-confidence outline repair candidates were detected.";
 
   return [
     {
@@ -764,27 +807,9 @@ function suggestCleanupEligibility(input: {
     },
     {
       pass: "outlineRepair",
-      enabled:
-        cleanupAllowed &&
-        !sourceSizedSheetCleanup &&
-        outlineEvidence &&
-        selectedScale >= 1 &&
-        !input.singleSpriteMatteCleanup &&
-        !input.sheetChromaMatteCleanup,
-      reasonCode: sourceSizedSheetCleanup
-        ? "source-sized-line-preservation"
-        : input.sheetChromaMatteCleanup
-          ? "matte-background-outline-suppressed"
-          : outlineEvidence
-            ? "outline-candidate-evidence"
-            : "no-outline-evidence",
-      reason: sourceSizedSheetCleanup
-        ? "Source-sized sheet cleanup preserves existing linework instead of rebuilding outlines."
-        : input.sheetChromaMatteCleanup
-          ? "Chroma matte sheet cleanup suppresses outline repair so the background color is not preserved as an outline."
-          : outlineEvidence
-            ? "Outline-colored edge evidence was detected."
-            : "No outline repair candidates were detected."
+      enabled: outlineRepairEnabled,
+      reasonCode: outlineRepairReasonCode,
+      reason: outlineRepairReason
     },
     {
       pass: "jaggyCleanup",
