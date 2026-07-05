@@ -77,6 +77,8 @@ describe("outline cleanup diagnostics and palette reservation", () => {
     expect(r).toBeGreaterThanOrEqual(220);
     expect(g).toBeGreaterThanOrEqual(220);
     expect(b).toBeGreaterThanOrEqual(220);
+    expect(topCandidate!.classification).toBe("deliberate");
+    expect(topCandidate!.confidence).toBeGreaterThanOrEqual(0.8);
   });
 
   test("keeps strong same-hue silhouette outline candidates even when the background shares their hue family", () => {
@@ -109,6 +111,9 @@ describe("outline cleanup diagnostics and palette reservation", () => {
         candidates.map((candidate) => candidate.color),
         fixture.name
       ).toContain(fixture.expected);
+      const outlineCandidate = candidates.find((candidate) => candidate.color === fixture.expected);
+      expect(outlineCandidate?.classification, fixture.name).toBe("deliberate");
+      expect(outlineCandidate?.confidence ?? 0, fixture.name).toBeGreaterThanOrEqual(0.8);
     }
   });
 
