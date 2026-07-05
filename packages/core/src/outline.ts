@@ -127,9 +127,6 @@ export function applyOutlineCleanupDetailed(image: RGBAImage, mode: OutlineMode,
     }
   }
 
-  if (mode === "repairExisting" && diagnostics.appliedPixels === 0 && selectedSourceColors.length === 0 && options.color === undefined) {
-    diagnostics.warnings.push("No outline candidate found for repairExisting; outline cleanup was skipped.");
-  }
   diagnostics.summary = summarizeOutlineDiagnostics(diagnostics);
   return { image: output, diagnostics };
 }

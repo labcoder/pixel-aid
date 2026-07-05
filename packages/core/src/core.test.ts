@@ -5,6 +5,7 @@ import {
   applyDenoise,
   applyHaloRemoval,
   applyOutlineCleanup,
+  applyOutlineCleanupDetailed,
   assertNotCancelled,
   analyzePaletteDrift,
   createImage,
@@ -1627,6 +1628,22 @@ describe("halo cleanup", () => {
       const repaired = applyOutlineCleanup(source, "repairExisting");
 
       expect(readPixel(repaired, 3, 1)).toEqual([250, 252, 255, 255]);
+    });
+
+    test("repair mode does not warn when an auto-detected outline is already intact", () => {
+      const source = createImage(7, 7);
+      drawBlock(source, 2, 2, 3, 3, 74, 142, 120, 255);
+      drawBlock(source, 1, 1, 5, 1, 250, 252, 255, 255);
+      drawBlock(source, 1, 5, 5, 1, 250, 252, 255, 255);
+      drawBlock(source, 1, 2, 1, 3, 250, 252, 255, 255);
+      drawBlock(source, 5, 2, 1, 3, 250, 252, 255, 255);
+
+      const result = applyOutlineCleanupDetailed(source, "repairExisting");
+
+      expect(result.diagnostics.selectedColor).toBe("#fafcff");
+      expect(result.diagnostics.appliedPixels).toBe(0);
+      expect(result.diagnostics.warnings).toEqual([]);
+      expect(result.diagnostics.summary).toContain("did not need to add pixels");
     });
 
     test("repair mode can use selected source outline colors without thickening existing edges", () => {
