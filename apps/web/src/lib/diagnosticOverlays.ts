@@ -1,3 +1,4 @@
+import type { OutlineColorCandidate } from "@pixelaid/core";
 import type { GridCandidate, RGBAImage, Rect } from "@pixelaid/shared";
 
 export type DiagnosticOverlayMode =
@@ -6,7 +7,8 @@ export type DiagnosticOverlayMode =
   | "removedAlpha"
   | "paletteRemap"
   | "sourceGrid"
-  | "outlineCandidates";
+  | "outlineCandidates"
+  | "outlineFringeSuspects";
 
 export type DiagnosticOverlayMask = {
   width: number;
@@ -51,6 +53,7 @@ export type DiagnosticOverlayInput = {
   palette?: readonly string[];
   alphaThreshold?: number;
   outlineCandidateColors?: readonly string[];
+  outlineSourceCandidates?: readonly OutlineColorCandidate[];
 };
 
 type BackgroundSample = {
@@ -72,7 +75,8 @@ const overlayMeta: Record<DiagnosticOverlayMode, { label: string; color: string 
   removedAlpha: { label: "Removed alpha", color: "#f1c75b" },
   paletteRemap: { label: "Palette remap", color: "#35c6b6" },
   sourceGrid: { label: "Source grid", color: "#f1c75b" },
-  outlineCandidates: { label: "Outline candidates", color: "#b78cff" }
+  outlineCandidates: { label: "Outline candidates", color: "#b78cff" },
+  outlineFringeSuspects: { label: "Outline fringe suspects", color: "#ff8f57" }
 };
 
 export const diagnosticOverlayOptions: ReadonlyArray<{ mode: DiagnosticOverlayMode; label: string }> = [
@@ -81,7 +85,8 @@ export const diagnosticOverlayOptions: ReadonlyArray<{ mode: DiagnosticOverlayMo
   { mode: "removedAlpha", label: overlayMeta.removedAlpha.label },
   { mode: "paletteRemap", label: overlayMeta.paletteRemap.label },
   { mode: "sourceGrid", label: overlayMeta.sourceGrid.label },
-  { mode: "outlineCandidates", label: overlayMeta.outlineCandidates.label }
+  { mode: "outlineCandidates", label: overlayMeta.outlineCandidates.label },
+  { mode: "outlineFringeSuspects", label: overlayMeta.outlineFringeSuspects.label }
 ];
 
 export function createDiagnosticOverlayModel(input: DiagnosticOverlayInput): DiagnosticOverlayModel {
@@ -130,7 +135,7 @@ export function createDiagnosticOverlayModel(input: DiagnosticOverlayInput): Dia
       return inactiveModel(mode, "No outline candidate colors are available for this asset.");
     }
 
-    const sourceMask = createOutlineCandidateMask(input.sourceImage, candidateColors, input.alphaThreshold ?? visibleAlphaThreshold);
+    const sourceMask = createOutlineCandidateMask(input.sourceImage, candidateColors, input.alphaThreshold ?? visibleAlphaThreshold, meta.color);
     const count = countMask(sourceMask.data);
     return {
       mode,
@@ -145,6 +150,32 @@ export function createDiagnosticOverlayModel(input: DiagnosticOverlayInput): Dia
         count > 0
           ? `Highlighting ${count.toLocaleString()} source pixels that match detected outline colors and touch the background.`
           : "Detected outline colors did not match any edge pixels in the current source."
+    };
+  }
+
+  if (mode === "outlineFringeSuspects") {
+    const suspectColors = normalizeHexColors(
+      (input.outlineSourceCandidates ?? []).filter((candidate) => candidate.isFringeSuspect === true).map((candidate) => candidate.color)
+    );
+    if (suspectColors.length === 0) {
+      return inactiveModel(mode, "No suspect outline fringe candidates are available for this asset.");
+    }
+
+    const sourceMask = createOutlineCandidateMask(input.sourceImage, suspectColors, input.alphaThreshold ?? visibleAlphaThreshold, meta.color);
+    const count = countMask(sourceMask.data);
+    return {
+      mode,
+      label: meta.label,
+      active: count > 0,
+      sourceMask,
+      legend: [
+        { label: "Suspect fringe pixels", value: count.toLocaleString(), color: meta.color },
+        { label: "Suspect colors", value: String(suspectColors.length), color: "#35c6b6" }
+      ],
+      summary:
+        count > 0
+          ? `Highlighting ${count.toLocaleString()} source pixels that match suspect exterior fringe colors; these are not recommended repair-safe outline sources.`
+          : "Suspect outline fringe candidates did not match any source-edge pixels in the current source."
     };
   }
 
@@ -360,7 +391,7 @@ function markSourceMask(mask: Uint8Array, width: number, rect: Rect): void {
   }
 }
 
-function createOutlineCandidateMask(source: RGBAImage, colors: readonly number[], alphaThreshold: number): DiagnosticOverlayMask {
+function createOutlineCandidateMask(source: RGBAImage, colors: readonly number[], alphaThreshold: number, color: string): DiagnosticOverlayMask {
   const mask = new Uint8Array(source.width * source.height);
   const background = estimateCornerBackground(source);
 
@@ -372,8 +403,8 @@ function createOutlineCandidateMask(source: RGBAImage, colors: readonly number[]
         continue;
       }
 
-      const color = packRgb(source.data[offset]!, source.data[offset + 1]!, source.data[offset + 2]!);
-      if (!colors.some((candidate) => colorDistance(color, candidate) <= outlineColorDistanceThreshold)) {
+      const sourceColor = packRgb(source.data[offset]!, source.data[offset + 1]!, source.data[offset + 2]!);
+      if (!colors.some((candidate) => colorDistance(sourceColor, candidate) <= outlineColorDistanceThreshold)) {
         continue;
       }
 
@@ -387,7 +418,7 @@ function createOutlineCandidateMask(source: RGBAImage, colors: readonly number[]
     width: source.width,
     height: source.height,
     data: mask,
-    color: overlayMeta.outlineCandidates.color,
+    color,
     alpha: 0.72
   };
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { OutlineColorCandidate } from "@pixelaid/core";
 import type { GridCandidate, RGBAImage } from "@pixelaid/shared";
 import { createDiagnosticOverlayModel } from "./diagnosticOverlays";
 
@@ -20,6 +21,21 @@ function grid(width: number, height: number, scale = 1): GridCandidate {
     phaseY: 0,
     confidence: 0.84,
     reason: "test"
+  };
+}
+
+function outlineCandidate(color: string, isFringeSuspect: boolean): OutlineColorCandidate {
+  return {
+    color,
+    count: 1,
+    outsideContact: 1,
+    luma: 64,
+    score: 1,
+    repairSafeScore: isFringeSuspect ? 0.1 : 0.9,
+    fringeSuspectScore: isFringeSuspect ? 0.8 : 0.05,
+    isFringeSuspect,
+    confidence: 0.9,
+    classification: isFringeSuspect ? "weak" : "deliberate"
   };
 }
 
@@ -149,5 +165,99 @@ describe("diagnostic overlays", () => {
     expect(model.active).toBe(true);
     expect(model.sourceMask!.data[5]).toBe(1);
     expect(model.sourceMask!.data[10]).toBe(0);
+  });
+
+  it("marks only suspect outline fringe candidate colors at source edges", () => {
+    const white = [255, 255, 255, 255] as const;
+    const suspect = [47, 143, 117, 255] as const;
+    const repairSafe = [16, 18, 18, 255] as const;
+    const fill = [90, 140, 130, 255] as const;
+    const source = image(6, [
+      white,
+      white,
+      white,
+      white,
+      white,
+      white,
+      white,
+      suspect,
+      repairSafe,
+      fill,
+      fill,
+      white,
+      white,
+      fill,
+      fill,
+      fill,
+      fill,
+      white,
+      white,
+      fill,
+      fill,
+      suspect,
+      fill,
+      white,
+      white,
+      fill,
+      fill,
+      fill,
+      fill,
+      white,
+      white,
+      white,
+      white,
+      white,
+      white,
+      white
+    ]);
+
+    const model = createDiagnosticOverlayModel({
+      mode: "outlineFringeSuspects",
+      sourceImage: source,
+      fixedImage: null,
+      outlineSourceCandidates: [outlineCandidate("#2f8f75", true), outlineCandidate("#101212", false)]
+    });
+
+    expect(model.active).toBe(true);
+    expect(model.sourceMask!.data[7]).toBe(1);
+    expect(model.sourceMask!.data[8]).toBe(0);
+    expect(model.sourceMask!.data[21]).toBe(0);
+    expect(model.summary).toBe("Highlighting 1 source pixels that match suspect exterior fringe colors; these are not recommended repair-safe outline sources.");
+    expect(model.legend.map((item) => item.label)).toEqual(["Suspect fringe pixels", "Suspect colors"]);
+  });
+
+  it("keeps suspect outline fringe overlays inactive when no suspect candidates exist", () => {
+    const white = [255, 255, 255, 255] as const;
+    const repairSafe = [16, 18, 18, 255] as const;
+    const fill = [90, 140, 130, 255] as const;
+    const source = image(4, [
+      white,
+      white,
+      white,
+      white,
+      white,
+      repairSafe,
+      repairSafe,
+      white,
+      white,
+      repairSafe,
+      fill,
+      white,
+      white,
+      white,
+      white,
+      white
+    ]);
+
+    const model = createDiagnosticOverlayModel({
+      mode: "outlineFringeSuspects",
+      sourceImage: source,
+      fixedImage: null,
+      outlineSourceCandidates: [outlineCandidate("#101212", false)]
+    });
+
+    expect(model.active).toBe(false);
+    expect(model.summary).toBe("No suspect outline fringe candidates are available for this asset.");
+    expect(model.legend).toEqual([]);
   });
 });
