@@ -8,6 +8,7 @@ import {
   analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
   detectMixels,
+  detectOutlineColorCandidates,
   detectPixelScale,
   detectGridCandidates,
   detectSheetLayout,
@@ -17,6 +18,7 @@ import {
   suggestFixSettings as suggestCoreFixSettings,
   suggestFixSettingsForAssetType as suggestCoreFixSettingsForAssetType,
   type FixSettingSuggestion as CoreFixSettingSuggestion,
+  type OutlineColorCandidate,
   type QualityFindingSeverity,
   type QualityReport,
 } from "@pixelaid/core";
@@ -91,6 +93,13 @@ export type AutomationFileRecord = {
   relativePath: string;
 };
 
+export type OutlineCandidateDiagnostics = {
+  candidates: OutlineColorCandidate[];
+  candidateCount: number;
+  repairSafeCount: number;
+  suspectFringeCount: number;
+};
+
 export type ImageInspection = {
   inputPath: string;
   source: ImageFileMetadata;
@@ -109,6 +118,7 @@ export type ImageInspection = {
   sheetLayout?: SheetLayoutDetection;
   suggestion: FixSuggestion;
   diagnostics: {
+    outline: OutlineCandidateDiagnostics;
     sheetConditioning: ReturnType<typeof analyzeSheetConditioning>;
     scene?: ReturnType<typeof analyzeSceneAssetDiagnostics>;
     tilemap?: ReturnType<typeof analyzeTilemapDiagnostics>;
@@ -235,8 +245,10 @@ export async function inspectImage(
     }
 
     const sheetConditioning = analyzeSheetConditioning(image);
+    const outline = summarizeOutlineCandidateDiagnostics(detectOutlineColorCandidates(image, { maxCandidates: 8 }));
     const assetType = suggestion.value.options.assetType;
     const diagnostics: ImageInspection["diagnostics"] = {
+      outline,
       sheetConditioning,
     };
     if (assetType === "background" || assetType === "tilemap") {
@@ -1206,6 +1218,19 @@ function withFallbackGridCandidates(image: RGBAImage): ReturnType<typeof detectG
       reason: "Fallback one-to-one grid",
     },
   ];
+}
+
+function summarizeOutlineCandidateDiagnostics(candidates: OutlineColorCandidate[]): OutlineCandidateDiagnostics {
+  return {
+    candidates,
+    candidateCount: candidates.length,
+    repairSafeCount: candidates.filter(isRepairSafeOutlineCandidate).length,
+    suspectFringeCount: candidates.filter((candidate) => candidate.isFringeSuspect === true).length,
+  };
+}
+
+function isRepairSafeOutlineCandidate(candidate: OutlineColorCandidate): boolean {
+  return candidate.classification === "deliberate" && (candidate.confidence ?? 0) >= 0.8 && candidate.isFringeSuspect !== true;
 }
 
 function countVisibleExactColors(image: RGBAImage): number {
