@@ -53,8 +53,47 @@ describe("automation operations", () => {
       expect(Array.isArray(result.value.mixels.axisX.boundaries)).toBe(true);
       expect(Array.isArray(result.value.mixels.axisY.boundaries)).toBe(true);
       expect(result.value.gridCandidates.length).toBeGreaterThan(0);
+      expect(result.value.diagnostics.outline).toMatchObject({
+        candidateCount: expect.any(Number),
+        repairSafeCount: expect.any(Number),
+        suspectFringeCount: expect.any(Number),
+        candidates: expect.any(Array),
+      });
       expect(result.value.suggestion.options.assetType).toBe("icon");
     });
+  });
+
+  it("exposes outline repair-safety diagnostics from inspect image", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-outline-inspect-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const result = await inspectImage({ inputPath: input, options: { assetType: "sprite" } });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const serialized = JSON.parse(JSON.stringify(result.value.diagnostics.outline)) as typeof result.value.diagnostics.outline;
+      const fringe = serialized.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = serialized.candidates.find((candidate) => candidate.color === "#101112");
+      expect(serialized.candidateCount).toBe(serialized.candidates.length);
+      expect(serialized.suspectFringeCount).toBeGreaterThanOrEqual(1);
+      expect(serialized.repairSafeCount).toBeGreaterThanOrEqual(1);
+      expect(repairSafe).toMatchObject({
+        color: "#101112",
+        classification: "deliberate",
+        isFringeSuspect: false,
+        repairSafeScore: expect.any(Number),
+      });
+      expect(fringe).toMatchObject({
+        color: "#2a6d23",
+        isFringeSuspect: true,
+        fringeSuspectScore: expect.any(Number),
+        repairSafeScore: expect.any(Number),
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("suggests normalized fix options without writing files", async () => {
@@ -235,6 +274,38 @@ describe("automation operations", () => {
         summary: { assetCount: 2 },
       });
     });
+  });
+
+  it("preserves outline repair-safety candidate metadata in quality report JSON", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-outline-report-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const result = await createQualityReport({
+        assets: [{ inputPath: input, options: { assetType: "sprite", maxColors: 8 } }],
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      const serialized = JSON.parse(JSON.stringify(result.value)) as typeof result.value;
+      const candidates = serialized.reports[0]?.metrics.outline.candidates ?? [];
+      const fringe = candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = candidates.find((candidate) => candidate.color === "#101112");
+      expect(repairSafe).toMatchObject({
+        color: "#101112",
+        isFringeSuspect: false,
+        repairSafeScore: expect.any(Number),
+      });
+      expect(fringe).toMatchObject({
+        color: "#2a6d23",
+        isFringeSuspect: true,
+        fringeSuspectScore: expect.any(Number),
+        repairSafeScore: expect.any(Number),
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("fixes a single sprite and writes a manifest", async () => {
@@ -640,6 +711,24 @@ function createLowScaleBakedCheckerboardSprite(): RGBAImage {
   fillScaledRect(image, scale, 43, 37, 5, 3, [22, 20, 31, 255]);
   fillScaledRect(image, scale, 39, 42, 13, 3, [22, 20, 31, 255]);
 
+  return image;
+}
+
+function createOutlineMetadataSprite(): RGBAImage {
+  const image: RGBAImage = {
+    width: 32,
+    height: 32,
+    data: new Uint8ClampedArray(32 * 32 * 4),
+  };
+  fillRect(image, 0, 0, image.width, image.height, [255, 0, 255, 255]);
+  fillRect(image, 7, 5, 18, 2, [42, 109, 35, 255]);
+  fillRect(image, 7, 5, 2, 22, [42, 109, 35, 255]);
+  fillRect(image, 9, 7, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 23, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 23, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 11, 9, 12, 14, [180, 166, 132, 255]);
+  fillRect(image, 16, 7, 2, 1, [16, 17, 18, 0]);
   return image;
 }
 

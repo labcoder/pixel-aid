@@ -42,11 +42,43 @@ describe("pixelaid CLI", () => {
       expect(body.ok).toBe(true);
       expect(body.command).toBe("inspect");
       expect(body.result.image).toMatchObject({ width: 4, height: 4 });
-      const inspection = body.result as { pixelScale: { scaleX: number }; mixels: { hasMixels: boolean; axisX: { boundaries: unknown[] } } };
+      const inspection = body.result as { pixelScale: { scaleX: number }; mixels: { hasMixels: boolean; axisX: { boundaries: unknown[] } }; diagnostics: { outline: { candidates: unknown[]; candidateCount: number } } };
       expect(typeof inspection.pixelScale.scaleX).toBe("number");
       expect(typeof inspection.mixels.hasMixels).toBe("boolean");
       expect(Array.isArray(inspection.mixels.axisX.boundaries)).toBe(true);
+      expect(inspection.diagnostics.outline.candidateCount).toBe(inspection.diagnostics.outline.candidates.length);
     });
+  });
+
+  it("prints inspect JSON with outline repair-safety diagnostics", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-cli-outline-inspect-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const capture = createCapture();
+      const code = await runCli(["inspect", input, "--asset-type", "sprite", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      const inspection = body.result as {
+        diagnostics: {
+          outline: {
+            candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+            repairSafeCount: number;
+            suspectFringeCount: number;
+          };
+        };
+      };
+      const fringe = inspection.diagnostics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = inspection.diagnostics.outline.candidates.find((candidate) => candidate.color === "#101112");
+      expect(inspection.diagnostics.outline.repairSafeCount).toBeGreaterThanOrEqual(1);
+      expect(inspection.diagnostics.outline.suspectFringeCount).toBeGreaterThanOrEqual(1);
+      expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
+      expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("prints detected scale and mixel reports for inspect --detect-scale JSON", async () => {
@@ -180,6 +212,33 @@ describe("pixelaid CLI", () => {
       expect(body.result.summary.assetCount).toBe(1);
       expect(body.result.reports[0]?.findings.some((finding) => finding.id === "palette-over-budget")).toBe(true);
     });
+  });
+
+  it("prints report JSON with outline repair-safety candidate metadata", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-cli-outline-report-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const capture = createCapture();
+      const code = await runCli(["report", input, "--asset-type", "sprite", "--colors", "8", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      const report = body.result.reports?.[0] as {
+        metrics: {
+          outline: {
+            candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+          };
+        };
+      } | undefined;
+      const fringe = report?.metrics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = report?.metrics.outline.candidates.find((candidate) => candidate.color === "#101112");
+      expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
+      expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("fixes a sprite and writes a manifest", async () => {
@@ -801,6 +860,24 @@ function createFixtureImage(): RGBAImage {
       0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255,
     ]),
   };
+}
+
+function createOutlineMetadataSprite(): RGBAImage {
+  const image: RGBAImage = {
+    width: 32,
+    height: 32,
+    data: new Uint8ClampedArray(32 * 32 * 4),
+  };
+  fillRect(image, 0, 0, image.width, image.height, [255, 0, 255, 255]);
+  fillRect(image, 7, 5, 18, 2, [42, 109, 35, 255]);
+  fillRect(image, 7, 5, 2, 22, [42, 109, 35, 255]);
+  fillRect(image, 9, 7, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 23, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 23, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 11, 9, 12, 14, [180, 166, 132, 255]);
+  fillRect(image, 16, 7, 2, 1, [16, 17, 18, 0]);
+  return image;
 }
 
 function createNoOutlineMagentaMatteSprite(): RGBAImage {

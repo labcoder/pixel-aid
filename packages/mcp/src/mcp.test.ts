@@ -119,6 +119,8 @@ describe("PixelAid MCP-ready handlers", () => {
     ]);
     expect(pixelaidMcpTools.every((tool) => tool.inputSchema.type === "object")).toBe(true);
     expect(pixelaidMcpTools[0]?.description).toContain("detected pixel scale");
+    expect(pixelaidMcpTools[0]?.description).toContain("outline repair-safety/fringe candidate diagnostics");
+    expect(pixelaidMcpTools[1]?.description).toContain("outline repair-safety/fringe candidate metadata");
     expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("fixMixels");
     expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("backgroundDetection");
   });
@@ -142,12 +144,43 @@ describe("PixelAid MCP-ready handlers", () => {
         image: { width: number };
         pixelScale: { scaleX: number };
         mixels: { axisX: { boundaries: unknown[] } };
+        diagnostics: { outline: { candidates: unknown[]; candidateCount: number } };
       };
       expect(inspectResult.image.width).toBe(4);
       expect(inspectResult.pixelScale.scaleX).toEqual(expect.any(Number));
       expect(inspectResult.mixels.axisX.boundaries).toEqual(expect.any(Array));
+      expect(inspectResult.diagnostics.outline.candidateCount).toBe(inspectResult.diagnostics.outline.candidates.length);
       expect(suggest.structuredContent.result.options.targetWidth).toBe(2);
     });
+  });
+
+  it("returns outline repair-safety metadata in inspect structured content", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-outline-inspect-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const inspect = await handlePixelAidTool("inspect_image", { inputPath: input, options: { assetType: "sprite" } });
+
+      expect(inspect.isError).toBe(false);
+      const inspectResult = inspect.structuredContent.result as {
+        diagnostics: {
+          outline: {
+            candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+            repairSafeCount: number;
+            suspectFringeCount: number;
+          };
+        };
+      };
+      const fringe = inspectResult.diagnostics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = inspectResult.diagnostics.outline.candidates.find((candidate) => candidate.color === "#101112");
+      expect(inspectResult.diagnostics.outline.repairSafeCount).toBeGreaterThanOrEqual(1);
+      expect(inspectResult.diagnostics.outline.suspectFringeCount).toBeGreaterThanOrEqual(1);
+      expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
+      expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("handles quality report tool", async () => {
@@ -160,6 +193,33 @@ describe("PixelAid MCP-ready handlers", () => {
       expect(report.structuredContent.result.summary.assetCount).toBe(1);
       expect(report.structuredContent.result.reports[0].findings.some((finding: { id: string }) => finding.id === "palette-over-budget")).toBe(true);
     });
+  });
+
+  it("returns outline repair-safety metadata in quality report structured content", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-outline-report-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const report = await handlePixelAidTool("quality_report", {
+        assets: [{ inputPath: input, options: { assetType: "sprite", maxColors: 8 } }],
+      });
+
+      expect(report.isError).toBe(false);
+      const firstReport = report.structuredContent.result.reports[0] as {
+        metrics: {
+          outline: {
+            candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+          };
+        };
+      };
+      const fringe = firstReport.metrics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = firstReport.metrics.outline.candidates.find((candidate) => candidate.color === "#101112");
+      expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
+      expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("handles fix_sprite and fix_sprite_sheet tools", async () => {
@@ -245,4 +305,41 @@ function createFixtureImage(): RGBAImage {
       0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 0, 255, 255, 255, 0, 255,
     ]),
   };
+}
+
+function createOutlineMetadataSprite(): RGBAImage {
+  const image: RGBAImage = {
+    width: 32,
+    height: 32,
+    data: new Uint8ClampedArray(32 * 32 * 4),
+  };
+  fillRect(image, 0, 0, image.width, image.height, [255, 0, 255, 255]);
+  fillRect(image, 7, 5, 18, 2, [42, 109, 35, 255]);
+  fillRect(image, 7, 5, 2, 22, [42, 109, 35, 255]);
+  fillRect(image, 9, 7, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 23, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 23, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 11, 9, 12, 14, [180, 166, 132, 255]);
+  fillRect(image, 16, 7, 2, 1, [16, 17, 18, 0]);
+  return image;
+}
+
+function fillRect(
+  image: RGBAImage,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rgba: readonly [number, number, number, number],
+): void {
+  for (let py = y; py < y + height; py += 1) {
+    for (let px = x; px < x + width; px += 1) {
+      const offset = (py * image.width + px) * 4;
+      image.data[offset] = rgba[0];
+      image.data[offset + 1] = rgba[1];
+      image.data[offset + 2] = rgba[2];
+      image.data[offset + 3] = rgba[3];
+    }
+  }
 }

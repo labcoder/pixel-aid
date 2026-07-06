@@ -46,6 +46,42 @@ function image(): TransferableImage {
   };
 }
 
+function outlineMetadataImage(): TransferableImage {
+  const width = 32;
+  const height = 32;
+  const data = new Uint8ClampedArray(width * height * 4);
+  const image = { width, height, data };
+  fillRect(image, 0, 0, width, height, [255, 0, 255, 255]);
+  fillRect(image, 7, 5, 18, 2, [42, 109, 35, 255]);
+  fillRect(image, 7, 5, 2, 22, [42, 109, 35, 255]);
+  fillRect(image, 9, 7, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 23, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 23, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 11, 9, 12, 14, [180, 166, 132, 255]);
+  fillRect(image, 16, 7, 2, 1, [16, 17, 18, 0]);
+  return { width, height, data: data.buffer };
+}
+
+function fillRect(
+  image: { width: number; data: Uint8ClampedArray },
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  rgba: readonly [number, number, number, number],
+): void {
+  for (let py = y; py < y + height; py += 1) {
+    for (let px = x; px < x + width; px += 1) {
+      const offset = (py * image.width + px) * 4;
+      image.data[offset] = rgba[0];
+      image.data[offset + 1] = rgba[1];
+      image.data[offset + 2] = rgba[2];
+      image.data[offset + 3] = rgba[3];
+    }
+  }
+}
+
 describe("worker fix pipeline", () => {
   test("runs the core fixer and attaches measured duration", () => {
     const request: WorkerRequest = {
@@ -131,6 +167,40 @@ describe("worker fix pipeline", () => {
     expect(response.result.palette.colors).toEqual(["#ff0000", "#fc0200"]);
     expect(response.result.palette.totalColors).toBe(4);
     expect(response.result.outlineCandidates.length).toBeLessThanOrEqual(4);
+  });
+
+  test("serializes outline repair-safety metadata in source analysis candidates", () => {
+    const request: WorkerRequest = {
+      type: "analyze-source",
+      requestId: "outline-metadata-source-analysis-job",
+      image: outlineMetadataImage(),
+      paletteMaxColors: 6,
+      maxUniqueColors: 10,
+      outlineMaxCandidates: 4
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("source-analysis-result");
+    if (response.type !== "source-analysis-result") {
+      throw new Error("Expected source analysis response");
+    }
+    const serialized = JSON.parse(JSON.stringify(response.result.outlineCandidates)) as typeof response.result.outlineCandidates;
+    const fringe = serialized.find((candidate) => candidate.color === "#2a6d23");
+    const repairSafe = serialized.find((candidate) => candidate.color === "#101112");
+    expect(repairSafe).toMatchObject({
+      color: "#101112",
+      classification: "deliberate",
+      isFringeSuspect: false,
+      repairSafeScore: expect.any(Number),
+      fringeSuspectScore: expect.any(Number),
+    });
+    expect(fringe).toMatchObject({
+      color: "#2a6d23",
+      isFringeSuspect: true,
+      repairSafeScore: expect.any(Number),
+      fringeSuspectScore: expect.any(Number),
+    });
   });
 
   test("runs quality analysis in the worker protocol", () => {

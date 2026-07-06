@@ -95,7 +95,7 @@ const commonOptionsSchema = {
 export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   {
     name: "inspect_image",
-    description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, detected pixel scale, mixel boundary map, sheet layout, and suggested PixelAid settings.",
+    description: "Inspect image dimensions, palette count, alpha distribution, grid candidates, detected pixel scale, mixel boundary map, sheet layout, outline repair-safety/fringe candidate diagnostics, and suggested PixelAid settings.",
     inputSchema: objectSchema(["inputPath"], {
       inputPath: stringSchema("Path to a PNG or JPEG image."),
       options: commonOptionsSchema,
@@ -103,7 +103,7 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   },
   {
     name: "quality_report",
-    description: "Create a non-destructive quality report with ranked findings and fix recommendations for one or more PNG/JPEG assets.",
+    description: "Create a non-destructive quality report with ranked findings, fix recommendations, and outline repair-safety/fringe candidate metadata for one or more PNG/JPEG assets.",
     inputSchema: objectSchema([], {
       inputPath: stringSchema("Path to one PNG or JPEG image."),
       inputPaths: { type: "array", items: { type: "string" }, description: "Paths to PNG or JPEG images." },
