@@ -28,6 +28,66 @@ function createSameHueOutlineFixture(background: readonly [number, number, numbe
   return image;
 }
 
+function fillRect(image: ReturnType<typeof createImage>, x0: number, y0: number, width: number, height: number, color: readonly [number, number, number, number]): void {
+  for (let y = y0; y < y0 + height; y += 1) {
+    for (let x = x0; x < x0 + width; x += 1) {
+      writePixel(image, x, y, color[0], color[1], color[2], color[3]);
+    }
+  }
+}
+
+function createOuterFringeWithInnerOutlineFixture(): ReturnType<typeof createImage> {
+  const image = createImage(32, 32);
+  fillRect(image, 0, 0, image.width, image.height, [255, 0, 255, 255]);
+
+  // A thick same-family matte fringe sits outside the actual dark outline on the
+  // top/left, while the true outline is still exposed on the bottom/right.
+  // Current contour scoring over-values the larger fringe; repair-safe ranking
+  // should prefer the inner structural outline without globally banning green.
+  fillRect(image, 7, 5, 18, 2, [42, 109, 35, 255]);
+  fillRect(image, 7, 5, 2, 22, [42, 109, 35, 255]);
+  fillRect(image, 9, 7, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 23, 16, 2, [16, 17, 18, 255]);
+  fillRect(image, 9, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 23, 7, 2, 18, [16, 17, 18, 255]);
+  fillRect(image, 11, 9, 12, 14, [180, 166, 132, 255]);
+  writePixel(image, 16, 7, 16, 17, 18, 0);
+  writePixel(image, 17, 7, 16, 17, 18, 0);
+  return image;
+}
+
+function createBoundaryDetailSameDepthFixture(): ReturnType<typeof createImage> {
+  const image = createImage(28, 28);
+  fillRect(image, 0, 0, image.width, image.height, [255, 0, 255, 255]);
+  fillRect(image, 8, 8, 12, 12, [180, 166, 132, 255]);
+  fillRect(image, 8, 8, 12, 1, [42, 92, 42, 255]);
+  fillRect(image, 8, 19, 12, 1, [42, 92, 42, 255]);
+  fillRect(image, 8, 8, 1, 12, [42, 92, 42, 255]);
+  fillRect(image, 19, 8, 1, 12, [42, 92, 42, 255]);
+
+  for (let x = 9; x <= 18; x += 3) {
+    writePixel(image, x, 8, 16, 17, 18, 255);
+    writePixel(image, x, 19, 16, 17, 18, 255);
+  }
+  for (let y = 9; y <= 18; y += 3) {
+    writePixel(image, 8, y, 16, 17, 18, 255);
+    writePixel(image, 19, y, 16, 17, 18, 255);
+  }
+
+  return image;
+}
+
+function createLowSeparationOuterFringeFixture(): ReturnType<typeof createImage> {
+  const image = createImage(24, 24);
+  fillRect(image, 0, 0, image.width, image.height, [20, 60, 20, 255]);
+  fillRect(image, 8, 8, 8, 8, [180, 166, 132, 255]);
+  fillRect(image, 8, 8, 8, 1, [42, 92, 42, 255]);
+  fillRect(image, 8, 15, 8, 1, [42, 92, 42, 255]);
+  fillRect(image, 8, 8, 1, 8, [42, 92, 42, 255]);
+  fillRect(image, 15, 8, 1, 8, [42, 92, 42, 255]);
+  return image;
+}
+
 describe("outline cleanup diagnostics and palette reservation", () => {
   test("reserves explicit outline source colors during palette remap", () => {
     const fixture = transparentMatteHaloSprites.find((candidate) => candidate.id === "outline-repair-dual-tone");
@@ -79,6 +139,57 @@ describe("outline cleanup diagnostics and palette reservation", () => {
     expect(b).toBeGreaterThanOrEqual(220);
     expect(topCandidate!.classification).toBe("deliberate");
     expect(topCandidate!.confidence).toBeGreaterThanOrEqual(0.8);
+    expect(topCandidate!.fringeSuspectScore ?? 1).toBeLessThan(0.05);
+  });
+
+  test("adds repair-safe metadata and demotes an exterior fringe below the inner outline", () => {
+    const source = createOuterFringeWithInnerOutlineFixture();
+
+    const candidates = detectOutlineColorCandidates(source, { maxCandidates: 4 });
+    const fringe = candidates.find((candidate) => candidate.color === "#2a6d23");
+    const innerOutline = candidates.find((candidate) => candidate.color === "#101112");
+
+    expect(fringe).toBeDefined();
+    expect(innerOutline).toBeDefined();
+    expect(fringe!.fringeSuspectScore).toBeGreaterThanOrEqual(0.2);
+    expect(fringe!.isFringeSuspect).toBe(true);
+    expect(fringe!.repairSafeScore).toBeLessThan(fringe!.score);
+    expect(innerOutline!.fringeSuspectScore ?? 1).toBeLessThan(0.05);
+    expect(innerOutline!.isFringeSuspect ?? false).toBe(false);
+    expect(innerOutline!.repairSafeScore).toBeGreaterThan(fringe!.repairSafeScore!);
+    expect(candidates[0]?.color).toBe("#101112");
+
+    const defaultRepair = applyOutlineCleanupDetailed(source, "repairExisting");
+    expect(defaultRepair.diagnostics.selectedColor).toBe("#101112");
+
+    const manualRepair = applyOutlineCleanupDetailed(source, "repairExisting", { sourceColors: ["#2a6d23", "#101112"] });
+    expect(manualRepair.diagnostics.selectedColor).toBe("#2a6d23");
+  });
+
+  test("does not treat same-depth darker boundary detail as inward fringe evidence", () => {
+    const image = createBoundaryDetailSameDepthFixture();
+    const candidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
+    const greenOutline = candidates.find((candidate) => candidate.color === "#2a5c2a");
+
+    expect(greenOutline).toBeDefined();
+    expect(greenOutline!.distance1Ratio).toBeGreaterThan(0.9);
+    expect(greenOutline!.innerDarkerWithin2Ratio ?? 1).toBeLessThan(0.05);
+    expect(greenOutline!.fringeSuspectScore ?? 1).toBeLessThan(0.05);
+    expect(greenOutline!.isFringeSuspect ?? false).toBe(false);
+  });
+
+  test("marks low-separation outer-only fringe suspect without inner-dark evidence", () => {
+    const image = createLowSeparationOuterFringeFixture();
+    const candidates = detectOutlineColorCandidates(image, { maxCandidates: 4 });
+    const greenFringe = candidates.find((candidate) => candidate.color === "#2a5c2a");
+
+    expect(greenFringe).toBeDefined();
+    expect(greenFringe!.distance1Ratio).toBeGreaterThan(0.9);
+    expect(greenFringe!.interiorSupportRatio ?? 1).toBeLessThan(0.05);
+    expect(greenFringe!.innerDarkerWithin2Ratio ?? 1).toBeLessThan(0.05);
+    expect(greenFringe!.backgroundSeparationOklab ?? 1).toBeLessThanOrEqual(0.18);
+    expect(greenFringe!.fringeSuspectScore ?? 0).toBeGreaterThanOrEqual(0.2);
+    expect(greenFringe!.isFringeSuspect).toBe(true);
   });
 
   test("keeps strong same-hue silhouette outline candidates even when the background shares their hue family", () => {
@@ -114,6 +225,8 @@ describe("outline cleanup diagnostics and palette reservation", () => {
       const outlineCandidate = candidates.find((candidate) => candidate.color === fixture.expected);
       expect(outlineCandidate?.classification, fixture.name).toBe("deliberate");
       expect(outlineCandidate?.confidence ?? 0, fixture.name).toBeGreaterThanOrEqual(0.8);
+      expect(outlineCandidate?.fringeSuspectScore ?? 1, fixture.name).toBeLessThan(0.05);
+      expect(outlineCandidate?.isFringeSuspect ?? false, fixture.name).toBe(false);
     }
   });
 

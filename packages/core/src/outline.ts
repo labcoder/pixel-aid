@@ -26,16 +26,26 @@ export type OutlineColorCandidate = {
   outsideContact: number;
   luma: number;
   score: number;
+  repairSafeScore?: number;
   boundaryCoverage?: number;
   outsideContactCoverage?: number;
   boundaryEnrichment?: number;
   backgroundSeparationOklab?: number;
+  distance1Ratio?: number;
+  distance2Ratio?: number;
+  distance3PlusRatio?: number;
+  interiorSupportRatio?: number;
+  innerDarkerRatio?: number;
+  innerDarkerWithin2Ratio?: number;
+  fringeSuspectScore?: number;
+  isFringeSuspect?: boolean;
   confidence?: number;
   classification?: "deliberate" | "partial" | "weak";
 };
 
 const DARK_EDGE_LUMA = 96;
 const SOURCE_COLOR_MATCH_DISTANCE = 18;
+const FRINGE_SUSPECT_THRESHOLD = 0.2;
 
 export function applyOutlineCleanup(image: RGBAImage, mode: OutlineMode, options: OutlineCleanupOptions = {}): RGBAImage {
   return applyOutlineCleanupDetailed(image, mode, options).image;
@@ -163,9 +173,14 @@ export function detectOutlineColorCandidates(
   const background = estimateCornerBackground(image);
   const backgroundModel = createExteriorBackgroundModel(image, background, backgroundTolerance);
   const outsideMask = buildExteriorOutsideMask(image, alphaThreshold, backgroundModel);
+  const exteriorDepth = buildExteriorDepthMap(outsideMask, image.width, image.height);
   const bucketCounts = new Uint32Array(4096);
   const bucketOutsideContact = new Uint32Array(4096);
   const bucketInteriorCounts = new Uint32Array(4096);
+  const bucketDistance2Counts = new Uint32Array(4096);
+  const bucketDistance3PlusCounts = new Uint32Array(4096);
+  const bucketInnerDarkerCounts = new Uint32Array(4096);
+  const bucketInnerDarkerWithin2Counts = new Uint32Array(4096);
   const bucketRepresentatives = new Uint32Array(4096);
   const hasRepresentative = new Uint8Array(4096);
   let totalBoundary = 0;
@@ -187,12 +202,25 @@ export function detectOutlineColorCandidates(
       const outsideContact = countExterior4Neighbors(outsideMask, image.width, image.height, x, y);
       if (outsideContact === 0) {
         bucketInteriorCounts[bucket] = bucketInteriorCounts[bucket]! + 1;
+        const interiorDepth = exteriorDepth[index]!;
+        if (interiorDepth <= 2) {
+          bucketDistance2Counts[bucket] = bucketDistance2Counts[bucket]! + 1;
+        } else {
+          bucketDistance3PlusCounts[bucket] = bucketDistance3PlusCounts[bucket]! + 1;
+        }
         totalInterior += 1;
         continue;
       }
 
       bucketCounts[bucket] = bucketCounts[bucket]! + 1;
       bucketOutsideContact[bucket] = bucketOutsideContact[bucket]! + outsideContact;
+      const candidateLuma = luminance(r, g, b);
+      if (hasInnerDarkerNeighbor(image, outsideMask, exteriorDepth, alphaThreshold, bucket, x, y, candidateLuma, 1)) {
+        bucketInnerDarkerCounts[bucket] = bucketInnerDarkerCounts[bucket]! + 1;
+      }
+      if (hasInnerDarkerNeighbor(image, outsideMask, exteriorDepth, alphaThreshold, bucket, x, y, candidateLuma, 2)) {
+        bucketInnerDarkerWithin2Counts[bucket] = bucketInnerDarkerWithin2Counts[bucket]! + 1;
+      }
       totalBoundary += 1;
       totalOutsideContact += outsideContact;
       if (hasRepresentative[bucket] === 0) {
@@ -226,24 +254,49 @@ export function detectOutlineColorCandidates(
     const backgroundSeparationOklab = backgroundModel.backgroundDistance[bucket]!;
     const normalizedBackgroundSeparation = Math.min(1, Math.max(0, (backgroundSeparationOklab - backgroundModel.backgroundLikeThreshold) / 0.12));
     const familyPenalty = backgroundModel.backgroundFamilyBuckets[bucket] === 1 ? 0.12 + normalizedBackgroundSeparation * 0.33 : 1;
+    const score = rawScore * familyPenalty;
     const confidence = outlineCandidateConfidence(boundaryCoverage, outsideContactCoverage, boundaryEnrichment, backgroundSeparationOklab);
+    const totalBucketPixels = Math.max(1, count + bucketInteriorCounts[bucket]!);
+    const distance2Count = bucketDistance2Counts[bucket]!;
+    const distance3PlusCount = bucketDistance3PlusCounts[bucket]!;
+    const distance1Ratio = count / totalBucketPixels;
+    const distance2Ratio = distance2Count / totalBucketPixels;
+    const distance3PlusRatio = distance3PlusCount / totalBucketPixels;
+    const interiorSupportRatio = distance3PlusCount / Math.max(1, count + distance2Count);
+    const innerDarkerRatio = bucketInnerDarkerCounts[bucket]! / Math.max(1, count);
+    const innerDarkerWithin2Ratio = bucketInnerDarkerWithin2Counts[bucket]! / Math.max(1, count);
+    const lowInteriorSupport = 1 - Math.min(1, interiorSupportRatio);
+    const outerFringeScore = distance1Ratio * Math.max(innerDarkerRatio, innerDarkerWithin2Ratio) * lowInteriorSupport;
+    const lowBackgroundSeparation = Math.max(0, (0.22 - backgroundSeparationOklab) / 0.22);
+    const lowSeparationOuterScore = distance1Ratio * lowInteriorSupport * lowBackgroundSeparation;
+    const fringeSuspectScore = Math.max(outerFringeScore, lowSeparationOuterScore);
+    const repairSafeScore = score * (1 - Math.min(0.95, fringeSuspectScore));
     candidates.push({
       color: rgbToHex(representative),
       count,
       outsideContact,
       luma: luminance(r, g, b),
-      score: rawScore * familyPenalty,
+      score,
+      repairSafeScore,
       boundaryCoverage,
       outsideContactCoverage,
       boundaryEnrichment,
       backgroundSeparationOklab,
+      distance1Ratio,
+      distance2Ratio,
+      distance3PlusRatio,
+      interiorSupportRatio,
+      innerDarkerRatio,
+      innerDarkerWithin2Ratio,
+      fringeSuspectScore,
+      isFringeSuspect: fringeSuspectScore >= FRINGE_SUSPECT_THRESHOLD,
       confidence,
       classification: classifyOutlineCandidate(confidence)
     });
   }
 
   return candidates
-    .sort((a, b) => b.score - a.score || b.count - a.count || b.outsideContact - a.outsideContact || a.color.localeCompare(b.color))
+    .sort((a, b) => (b.repairSafeScore ?? b.score) - (a.repairSafeScore ?? a.score) || b.score - a.score || b.count - a.count || b.outsideContact - a.outsideContact || a.color.localeCompare(b.color))
     .slice(0, options.maxCandidates ?? 8);
 }
 
@@ -267,7 +320,25 @@ type ExteriorBackgroundModel = {
 function detectExistingOutlineColor(image: RGBAImage, alphaThreshold: number, backgroundTolerance: number): number | null {
   const candidates = detectOutlineColorCandidates(image, { alphaThreshold, backgroundTolerance });
   const selected = candidates.find((candidate) => candidate.classification === "deliberate" && (candidate.confidence ?? 0) >= 0.8);
-  return selected ? Number.parseInt(selected.color.slice(1), 16) : null;
+  const tinyDarkEdgeFallback = selectTinyDarkEdgeRepairCandidate(candidates, selected);
+  const repairCandidate = tinyDarkEdgeFallback ?? selected;
+  return repairCandidate ? Number.parseInt(repairCandidate.color.slice(1), 16) : null;
+}
+
+function selectTinyDarkEdgeRepairCandidate(candidates: readonly OutlineColorCandidate[], selected: OutlineColorCandidate | undefined): OutlineColorCandidate | undefined {
+  if (!selected || selected.luma <= DARK_EDGE_LUMA || candidates.reduce((sum, candidate) => sum + candidate.count, 0) > 2) {
+    return undefined;
+  }
+
+  const darkCandidates = candidates.filter(
+    (candidate) =>
+      candidate.luma <= DARK_EDGE_LUMA &&
+      candidate.classification === "deliberate" &&
+      (candidate.confidence ?? 0) >= 0.8 &&
+      candidate.count === 1 &&
+      candidate.outsideContact >= 2
+  );
+  return darkCandidates.length === 1 ? darkCandidates[0] : undefined;
 }
 
 function detectDarkExistingOutlineColor(
@@ -545,6 +616,115 @@ function countExterior4Neighbors(mask: Uint8Array, width: number, height: number
     count += 1;
   }
   return count;
+}
+
+const UNREACHABLE_EXTERIOR_DEPTH = 0xffff;
+
+function buildExteriorDepthMap(outsideMask: Uint8Array, width: number, height: number): Uint16Array {
+  const depth = new Uint16Array(width * height);
+  depth.fill(UNREACHABLE_EXTERIOR_DEPTH);
+  const queue = new Int32Array(width * height);
+  let read = 0;
+  let write = 0;
+
+  for (let index = 0; index < outsideMask.length; index += 1) {
+    if (outsideMask[index] === 1) {
+      depth[index] = 0;
+      queue[write] = index;
+      write += 1;
+    }
+  }
+
+  while (read < write) {
+    const current = queue[read]!;
+    read += 1;
+    const nextDepth = depth[current]! + 1;
+    const x = current % width;
+    const y = Math.floor(current / width);
+    if (x > 0) {
+      write = enqueueDepthNeighbor(outsideMask, depth, queue, write, current - 1, nextDepth);
+    }
+    if (x + 1 < width) {
+      write = enqueueDepthNeighbor(outsideMask, depth, queue, write, current + 1, nextDepth);
+    }
+    if (y > 0) {
+      write = enqueueDepthNeighbor(outsideMask, depth, queue, write, current - width, nextDepth);
+    }
+    if (y + 1 < height) {
+      write = enqueueDepthNeighbor(outsideMask, depth, queue, write, current + width, nextDepth);
+    }
+  }
+
+  return depth;
+}
+
+function enqueueDepthNeighbor(
+  outsideMask: Uint8Array,
+  depth: Uint16Array,
+  queue: Int32Array,
+  write: number,
+  index: number,
+  nextDepth: number
+): number {
+  if (outsideMask[index] === 1 || depth[index] !== UNREACHABLE_EXTERIOR_DEPTH) {
+    return write;
+  }
+  depth[index] = Math.min(UNREACHABLE_EXTERIOR_DEPTH - 1, nextDepth);
+  queue[write] = index;
+  return write + 1;
+}
+
+function hasInnerDarkerNeighbor(
+  image: RGBAImage,
+  outsideMask: Uint8Array,
+  exteriorDepth: Uint16Array,
+  alphaThreshold: number,
+  candidateBucket: number,
+  x: number,
+  y: number,
+  candidateLuma: number,
+  distance: number
+): boolean {
+  const candidateDepth = exteriorDepth[y * image.width + x]!;
+  if (candidateDepth === UNREACHABLE_EXTERIOR_DEPTH) {
+    return false;
+  }
+
+  for (let dy = -distance; dy <= distance; dy += 1) {
+    for (let dx = -distance; dx <= distance; dx += 1) {
+      if (dx === 0 && dy === 0) {
+        continue;
+      }
+      const nx = x + dx;
+      const ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= image.width || ny >= image.height) {
+        continue;
+      }
+      const index = ny * image.width + nx;
+      if (outsideMask[index] === 1) {
+        continue;
+      }
+      const neighborDepth = exteriorDepth[index]!;
+      if (neighborDepth <= candidateDepth || neighborDepth > candidateDepth + distance) {
+        continue;
+      }
+      const offset = index * 4;
+      if (image.data[offset + 3]! <= alphaThreshold) {
+        continue;
+      }
+      const r = image.data[offset]!;
+      const g = image.data[offset + 1]!;
+      const b = image.data[offset + 2]!;
+      if (quantizeOutlineBucket(r, g, b) === candidateBucket) {
+        continue;
+      }
+      const neighborLuma = luminance(r, g, b);
+      if (neighborLuma + 12 < candidateLuma || neighborLuma <= 64) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 function removeOrphanComponents(
