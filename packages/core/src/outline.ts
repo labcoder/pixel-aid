@@ -1,4 +1,5 @@
 import type { OutlineCleanupDiagnostics, OutlineMode, RGBAImage } from "@pixelaid/shared";
+import { applyAlphaMode } from "./alpha";
 import { analyzeBackground } from "./backgroundAnalysis";
 import { clampByte, parseHexColor, rgbChannelsToOklab, rgbToHex, unpackRgb } from "./color";
 import { cloneImage } from "./image";
@@ -41,6 +42,14 @@ export type OutlineColorCandidate = {
   isFringeSuspect?: boolean;
   confidence?: number;
   classification?: "deliberate" | "partial" | "weak";
+  role?: "outline-source" | "fringe-matte" | "ambiguous";
+  analysisStage?: "raw" | "alpha-cleaned" | "semantic-silhouette";
+  semanticScore?: number;
+};
+
+export type OutlineSemanticAnalysis = {
+  outlineCandidates: OutlineColorCandidate[];
+  fringeCandidates: OutlineColorCandidate[];
 };
 
 const DARK_EDGE_LUMA = 96;
@@ -298,6 +307,123 @@ export function detectOutlineColorCandidates(
   return candidates
     .sort((a, b) => (b.repairSafeScore ?? b.score) - (a.repairSafeScore ?? a.score) || b.score - a.score || b.count - a.count || b.outsideContact - a.outsideContact || a.color.localeCompare(b.color))
     .slice(0, options.maxCandidates ?? 8);
+}
+
+export function analyzeOutlineSemantics(
+  image: RGBAImage,
+  options: Pick<OutlineCleanupOptions, "alphaThreshold" | "backgroundTolerance"> & { maxCandidates?: number; bucketDistance?: number } = {}
+): OutlineSemanticAnalysis {
+  const alphaThreshold = options.alphaThreshold ?? 8;
+  const backgroundTolerance = options.backgroundTolerance ?? 18;
+  const maxCandidates = options.maxCandidates ?? 8;
+  const rawCandidateLimit = Math.max(maxCandidates * 3, 12);
+  const detectionOptions = {
+    alphaThreshold,
+    backgroundTolerance,
+    maxCandidates: rawCandidateLimit,
+    ...(options.bucketDistance !== undefined ? { bucketDistance: options.bucketDistance } : {})
+  };
+  const rawCandidates = detectOutlineColorCandidates(image, detectionOptions);
+  const fringeBuckets = new Uint8Array(4096);
+  for (const candidate of rawCandidates) {
+    if (isSemanticFringeCandidate(candidate)) {
+      fringeBuckets[outlineCandidateBucket(candidate)] = 1;
+    }
+  }
+  const semanticInput = cloneImage(image);
+  const alphaCleaned = applyAlphaMode(image, "backgroundFloodFill", {
+    threshold: alphaThreshold,
+    tolerance: backgroundTolerance,
+    decontaminateRgb: false,
+    backgroundDetection: "classic"
+  }).image;
+  const alphaCleanedCandidates = detectOutlineColorCandidates(alphaCleaned, detectionOptions);
+  const preserveDarkSourceAlpha = !alphaCleanedCandidates.some((candidate) => candidate.luma <= 64);
+
+  for (let offset = 3; offset < semanticInput.data.length; offset += 4) {
+    const colorOffset = offset - 3;
+    const sourceAlpha = image.data[offset]!;
+    const sourceLuma = luminance(image.data[colorOffset]!, image.data[colorOffset + 1]!, image.data[colorOffset + 2]!);
+    const sourceBucket = quantizeOutlineBucket(image.data[colorOffset]!, image.data[colorOffset + 1]!, image.data[colorOffset + 2]!);
+    semanticInput.data[offset] =
+      preserveDarkSourceAlpha && sourceAlpha > alphaThreshold && sourceLuma <= 64 && fringeBuckets[sourceBucket] !== 1 ? sourceAlpha : alphaCleaned.data[offset]!;
+  }
+
+  if (fringeBuckets.some((value) => value === 1)) {
+    for (let offset = 0; offset < semanticInput.data.length; offset += 4) {
+      if (semanticInput.data[offset + 3]! <= alphaThreshold) {
+        continue;
+      }
+      const bucket = quantizeOutlineBucket(semanticInput.data[offset]!, semanticInput.data[offset + 1]!, semanticInput.data[offset + 2]!);
+      if (fringeBuckets[bucket] === 1) {
+        semanticInput.data[offset + 3] = 0;
+      }
+    }
+  }
+
+  const outlineCandidates = detectOutlineColorCandidates(semanticInput, detectionOptions)
+    .map((candidate) => semanticOutlineCandidate(candidate))
+    .filter((candidate) => isSemanticOutlineSourceCandidate(candidate))
+    .slice(0, maxCandidates);
+  const outlineBuckets = new Uint8Array(4096);
+  for (const candidate of outlineCandidates) {
+    outlineBuckets[outlineCandidateBucket(candidate)] = 1;
+  }
+
+  const fringeCandidates = rawCandidates
+    .filter((candidate) => outlineBuckets[outlineCandidateBucket(candidate)] === 0)
+    .map((candidate) => semanticFringeCandidate(candidate))
+    .slice(0, maxCandidates);
+
+  return { outlineCandidates, fringeCandidates };
+}
+
+function isSemanticFringeCandidate(candidate: OutlineColorCandidate): boolean {
+  return (
+    candidate.isFringeSuspect === true ||
+    ((candidate.distance1Ratio ?? 0) >= 0.9 &&
+      (candidate.interiorSupportRatio ?? 1) <= 0.08 &&
+      ((candidate.innerDarkerRatio ?? 0) >= 0.08 || (candidate.innerDarkerWithin2Ratio ?? 0) >= 0.08))
+  );
+}
+
+function isSemanticOutlineSourceCandidate(candidate: OutlineColorCandidate): boolean {
+  if (candidate.luma <= 64) {
+    return true;
+  }
+  if (candidate.isFringeSuspect === true || candidate.classification === "weak") {
+    return false;
+  }
+  const distance1Ratio = candidate.distance1Ratio ?? 0;
+  const distance3PlusRatio = candidate.distance3PlusRatio ?? 0;
+  const interiorSupportRatio = candidate.interiorSupportRatio ?? 0;
+  const backgroundSeparationOklab = candidate.backgroundSeparationOklab ?? 1;
+  const outerOnlyBackgroundMatte =
+    distance1Ratio >= 0.8 && distance3PlusRatio <= 0.02 && interiorSupportRatio <= 0.04 && backgroundSeparationOklab <= 0.36;
+  return !outerOnlyBackgroundMatte;
+}
+
+function semanticOutlineCandidate(candidate: OutlineColorCandidate): OutlineColorCandidate {
+  return {
+    ...candidate,
+    role: "outline-source",
+    analysisStage: "semantic-silhouette",
+    semanticScore: candidate.repairSafeScore ?? candidate.score
+  };
+}
+
+function semanticFringeCandidate(candidate: OutlineColorCandidate): OutlineColorCandidate {
+  return {
+    ...candidate,
+    role: "fringe-matte",
+    analysisStage: "raw",
+    semanticScore: 0
+  };
+}
+
+function outlineCandidateBucket(candidate: OutlineColorCandidate): number {
+  const rgb = Number.parseInt(candidate.color.slice(1), 16);
+  return quantizeOutlineBucket((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff);
 }
 
 
