@@ -39,6 +39,21 @@ describe("guided outline repair suggestions", () => {
     expect(suggestion.outlineSourceColors).toEqual(["#f8fcff"]);
   });
 
+  test("uses repair-safe outline ranking for fringe-contaminated detected source colors", () => {
+    const source = createFringeContaminatedChromaMatteSprite();
+    const suggestion = suggestFixSettings(source);
+    const fringe = suggestion.qualityReport.metrics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+    const innerOutline = suggestion.qualityReport.metrics.outline.candidates.find((candidate) => candidate.color === "#101112");
+
+    expect(fringe).toBeDefined();
+    expect(innerOutline).toBeDefined();
+    expect(fringe!.isFringeSuspect).toBe(true);
+    expect(innerOutline!.isFringeSuspect ?? false).toBe(false);
+    expect(suggestion.qualityReport.metrics.outline.candidates[0]?.color).toBe("#101112");
+    expect(suggestion.outlineMode).toBe("repairExisting");
+    expect(suggestion.outlineSourceColors[0]).toBe("#101112");
+  });
+
   test("keeps hero-cat guided repair manual when outline candidates do not need repair", () => {
     const source = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
     const suggestion = suggestFixSettings(source);
@@ -195,6 +210,20 @@ function createLightOutlinedChromaMatteSprite(): RGBAImage {
   fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
   fillRect(image, 26, 22, 44, 52, 248, 252, 255);
   fillRect(image, 30, 26, 36, 44, 42, 68, 180);
+  punchAlphaGap(image, 46, 22, 3);
+  return image;
+}
+
+function createFringeContaminatedChromaMatteSprite(): RGBAImage {
+  const image = createImage(96, 96);
+  fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
+  fillRect(image, 24, 20, 48, 2, 42, 109, 35);
+  fillRect(image, 24, 20, 2, 58, 42, 109, 35);
+  fillRect(image, 26, 22, 42, 2, 16, 17, 18);
+  fillRect(image, 26, 68, 42, 2, 16, 17, 18);
+  fillRect(image, 26, 22, 2, 48, 16, 17, 18);
+  fillRect(image, 66, 22, 2, 48, 16, 17, 18);
+  fillRect(image, 28, 24, 38, 44, 180, 166, 132);
   punchAlphaGap(image, 46, 22, 3);
   return image;
 }
