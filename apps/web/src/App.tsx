@@ -2640,7 +2640,8 @@ export function App() {
         outlineCandidateColors:
           outlineSourceMode === "manual" && selectedOutlineSourceColors.length > 0
             ? selectedOutlineSourceColors
-            : outlineSourceCandidates.slice(0, 3).map((candidate) => candidate.color)
+            : outlineSourceCandidates.slice(0, 3).map((candidate) => candidate.color),
+        outlineSourceCandidates
       }),
     [
       alphaThreshold,
