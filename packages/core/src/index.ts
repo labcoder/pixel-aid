@@ -82,8 +82,8 @@ export type {
 } from "./fixSuggestions";
 export { cloneImage, createImage, pixelOffset, readPixel, writePixel } from "./image";
 export type { RgbaTuple } from "./image";
-export { applyOutlineCleanup, applyOutlineCleanupDetailed, detectOutlineColorCandidates } from "./outline";
-export type { OutlineCleanupOptions, OutlineCleanupResult, OutlineColorCandidate } from "./outline";
+export { applyOutlineCleanup, applyOutlineCleanupDetailed, analyzeOutlineSemantics, detectOutlineColorCandidates } from "./outline";
+export type { OutlineCleanupOptions, OutlineCleanupResult, OutlineColorCandidate, OutlineSemanticAnalysis } from "./outline";
 export { analyzePaletteDrift, extractAutoPalette, extractPalette, remapToPalette, resolveAutoColorCount, resolvePalette } from "./palette";
 export type { AnalyzePaletteDriftOptions, PaletteAnalysis, PaletteRemapOptions, ResolvedPalette, ResolvePaletteOptions } from "./palette";
 export {
