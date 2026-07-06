@@ -216,6 +216,7 @@ import {
   resizeWithAspectLock,
   targetSizePresets
 } from "./lib/fixControls";
+import { createOutlineCandidateView, hasManualSuspectOutlineSource } from "./lib/outlineCandidateView";
 import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
 import { selectCachedGridCandidates } from "./lib/gridCandidateCache";
 import { animationTagsToManifestAnimations } from "./lib/exportAnimations";
@@ -2190,6 +2191,8 @@ export function App() {
   const outlineSourceCandidates = selectedSourceAnalysis?.outlineCandidates ?? [];
   const outlineSourcePreviewCandidates = outlineSourceCandidates.slice(0, 12);
   const outlineSourceHiddenCount = Math.max(0, outlineSourceCandidates.length - outlineSourcePreviewCandidates.length);
+  const showManualSuspectOutlineSourceWarning =
+    outlineSourceMode === "manual" && hasManualSuspectOutlineSource(selectedOutlineSourceColors, outlineSourceCandidates);
   useEffect(() => {
     if (!selectedAsset) {
       return;
@@ -7516,16 +7519,20 @@ export function App() {
                     outlineSourceMode === "auto"
                       ? outlineSourceCandidates.slice(0, 3).some((item) => item.color === candidate.color)
                       : selectedOutlineSourceColors.includes(candidate.color);
+                  const candidateView = createOutlineCandidateView(candidate);
                   return (
                     <button
                       key={candidate.color}
                       type="button"
-                      className={active ? "active" : ""}
-                      title={`${candidate.color} (${candidate.count} edge pixels)`}
-                      aria-label={`Use outline source ${candidate.color}`}
+                      className={`${candidateView.className}${active ? " active" : ""}`}
+                      title={candidateView.title}
+                      aria-label={candidateView.ariaLabel}
                       onClick={() => toggleOutlineSourceColor(candidate.color)}
                     >
-                      <span style={{ background: candidate.color }} />
+                      <span className="outline-source-swatch" style={{ background: candidate.color }} />
+                      <span className="outline-source-candidate-badge" aria-hidden="true">
+                        {candidateView.kind === "suspect-fringe" ? "!" : candidateView.kind === "repair-safe" ? "✓" : "·"}
+                      </span>
                     </button>
                   );
                 })}
@@ -7542,7 +7549,7 @@ export function App() {
                 ) : null}
               </div>
             ) : (
-              <p className="field-note">No dark edge colors detected.</p>
+              <p className="field-note">No outline source candidates detected.</p>
             )}
             {outlineSourceMode === "manual" ? (
               <>
@@ -7576,6 +7583,11 @@ export function App() {
                 ) : (
                   <p className="field-note">Choose one or more outline colors from the source image, or add a color manually.</p>
                 )}
+                {showManualSuspectOutlineSourceWarning ? (
+                  <p className="field-note outline-source-warning">
+                    Selected source includes suspect exterior fringe. Repair may promote matte residue into line art.
+                  </p>
+                ) : null}
               </>
             ) : null}
           </div>
