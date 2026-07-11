@@ -108,6 +108,7 @@ export type FixSettingSuggestion = {
   outlineMode: OutlineMode;
   outlineSize: number;
   outlineSourceColors: string[];
+  semanticFringeColors?: string[];
   cleanupEligibility: CleanupEligibilityDecision[];
   sheetLayout?: SheetLayoutDetection;
   reason: string;
@@ -298,6 +299,14 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     candidate
   );
   const outline = suggestOutlineRepair(qualityReport, cleanupEligibility, bakedTransparencyDetected);
+  const semanticFringeColors = suggestSemanticFringeColors({
+    mode,
+    assetType: classification.assetType,
+    alpha: suggestedAlpha,
+    singleSpriteMatteCleanup,
+    cleanupEligibility,
+    qualityReport
+  });
   const paletteStrategy = suggestPaletteStrategy({
     mode,
     assetType: classification.assetType,
@@ -355,6 +364,7 @@ export function suggestFixSettings(image: RGBAImage): FixSettingSuggestion {
     outlineMode: outline.mode,
     outlineSize: outline.size,
     outlineSourceColors: outline.sourceColors,
+    ...(semanticFringeColors ? { semanticFringeColors } : {}),
     cleanupEligibility,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason,
@@ -439,6 +449,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     sourceSizedSheetPreservation
   });
   const preserveSuggestedSingleCleanup = assetType === "sprite" || assetType === "icon";
+  const { semanticFringeColors: suggestedSemanticFringeColors, ...baseSuggestion } = suggestion;
   const alpha = strictSourceSheetCleanup
     ? "binary"
     : sheetChromaMatteCleanup
@@ -449,7 +460,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
   const matteCleanup = strictSourceSheetCleanup ? true : sourceSizedSheetPreservation ? false : suggestion.matteCleanup;
 
   return {
-    ...suggestion,
+    ...baseSuggestion,
     assetType,
     mode,
     classificationCandidates: [
@@ -481,6 +492,9 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     contrastExpansionEnabled: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.contrastExpansionEnabled : false,
     outlineMode: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineMode : "none",
     outlineSourceColors: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineSourceColors : [],
+    ...(isCleanupPassEnabled(cleanupEligibility, "outlineRepair") && suggestedSemanticFringeColors
+      ? { semanticFringeColors: suggestedSemanticFringeColors }
+      : {}),
     cleanupEligibility,
     ...(sheetLayout ? { sheetLayout } : {}),
     reason: `Manual asset type override applied. ${mode === "spriteSheet" && sheetLayout ? "Reprocessed source for sheet rows and frames. " : ""}${suggestion.reason}`,
@@ -722,6 +736,29 @@ function suggestOutlineRepair(
   }
 
   return { mode: "repairExisting", size: 1, sourceColors };
+}
+
+function suggestSemanticFringeColors(input: {
+  mode: AssetMode;
+  assetType: AssetType;
+  alpha: AlphaMode;
+  singleSpriteMatteCleanup: boolean;
+  cleanupEligibility: readonly CleanupEligibilityDecision[];
+  qualityReport: QualityReport;
+}): string[] | undefined {
+  if (
+    input.mode !== "single" ||
+    (input.assetType !== "sprite" && input.assetType !== "icon") ||
+    input.alpha !== "backgroundFloodFill" ||
+    !input.singleSpriteMatteCleanup ||
+    !isCleanupPassEnabled(input.cleanupEligibility, "outlineRepair") ||
+    input.qualityReport.metrics.outline.fringeCandidates.length === 0
+  ) {
+    return undefined;
+  }
+
+  const colors = [...new Set(input.qualityReport.metrics.outline.fringeCandidates.map((candidate) => candidate.color))];
+  return colors.length > 0 ? colors : undefined;
 }
 
 function suggestCleanupEligibility(input: {

@@ -445,6 +445,9 @@ function normalizeCleanup(
   if (input?.outlineSourceColors) {
     cleanup.outlineSourceColors = normalizeHexColors(input.outlineSourceColors);
   }
+  if (input?.semanticFringeColors) {
+    cleanup.semanticFringeColors = normalizeHexColors(input.semanticFringeColors);
+  }
   const contrastExpansion = normalizeContrastExpansion(input?.contrastExpansion ?? fallback.contrastExpansion);
   if (contrastExpansion) {
     cleanup.contrastExpansion = contrastExpansion;

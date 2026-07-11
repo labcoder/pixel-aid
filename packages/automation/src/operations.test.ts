@@ -130,6 +130,35 @@ describe("automation operations", () => {
     }
   });
 
+  it("carries semantic fringe colors through guided options without replacing manual outline sources", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-semantic-fringe-suggest-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const result = await suggestFixSettings({
+        inputPath: input,
+        options: {
+          assetType: "sprite",
+          cleanup: {
+            outlineMode: "repairExisting",
+            outlineSourceColors: ["#abcdef"]
+          }
+        }
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.options.cleanup.outlineSourceColors).toEqual(["#abcdef"]);
+      expect(result.value.options.cleanup.semanticFringeColors).toEqual(["#2a6d23"]);
+      const serialized = JSON.parse(JSON.stringify(result.value.options)) as { cleanup?: { semanticFringeColors?: string[]; outlineSourceColors?: string[] } };
+      expect(serialized.cleanup?.outlineSourceColors).toEqual(["#abcdef"]);
+      expect(serialized.cleanup?.semanticFringeColors).toEqual(["#2a6d23"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("suggests normalized fix options without writing files", async () => {
     await withFixture(async ({ input }) => {
       const result = await suggestFixSettings({ inputPath: input, options: { assetType: "icon", target: "2x2", maxColors: 4 } });

@@ -63,6 +63,7 @@ export type {
   Rect,
   RGBAImage,
   SceneAssetDiagnostics,
+  SemanticFringeCleanupDiagnostics,
   SheetConfidenceDetail,
   SheetConfidenceLabel,
   SheetConditioningDiagnostics,

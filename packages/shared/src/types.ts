@@ -378,6 +378,7 @@ export type PixelFixDiagnostics = {
   alpha?: AlphaCleanupDiagnostics;
   halo?: HaloRemovalDiagnostics;
   morphology?: MorphologyDiagnostics;
+  semanticFringe?: SemanticFringeCleanupDiagnostics;
   outline?: OutlineCleanupDiagnostics;
   palette?: PaletteDiagnostics;
   contrastExpansion?: ContrastExpansionDiagnostics;
@@ -436,6 +437,12 @@ export type OutlineCleanupDiagnostics = {
   appliedPixels: number;
   warnings: string[];
   summary: string;
+};
+
+export type SemanticFringeCleanupDiagnostics = {
+  enabled: boolean;
+  colorCount: number;
+  clearedPixels: number;
 };
 
 export type MorphologyCleanupSettings = {
@@ -614,6 +621,7 @@ export type FixOptions = {
     outlineSize?: number;
     outlineColor?: string;
     outlineSourceColors?: string[];
+    semanticFringeColors?: string[];
     outlineAlpha?: number;
     contrastExpansion?: ContrastExpansionSettings;
     lineCleanup?: LineCleanupStrength;

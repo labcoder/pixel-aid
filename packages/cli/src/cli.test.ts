@@ -118,6 +118,25 @@ describe("pixelaid CLI", () => {
     }
   });
 
+  it("prints suggest JSON with semantic fringe cleanup colors", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-cli-fringe-suggest-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+      const capture = createCapture();
+      const code = await runCli(["suggest", input, "--asset-type", "sprite", "--json"], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      const options = body.result.options as SuggestedOptionsJson & { cleanup?: SuggestedOptionsJson["cleanup"] & { outlineSourceColors?: string[]; semanticFringeColors?: string[] } };
+      expect(options.cleanup?.outlineSourceColors).toContain("#101112");
+      expect(options.cleanup?.outlineSourceColors).not.toContain("#2a6d23");
+      expect(options.cleanup?.semanticFringeColors).toEqual(["#2a6d23"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("prints detected scale and mixel reports for inspect --detect-scale JSON", async () => {
     await withFixture(async ({ input }) => {
       const capture = createCapture();
