@@ -323,14 +323,19 @@ describe("automation operations", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) return;
       const serialized = JSON.parse(JSON.stringify(result.value)) as typeof result.value;
-      const candidates = serialized.reports[0]?.metrics.outline.candidates ?? [];
-      const fringe = candidates.find((candidate) => candidate.color === "#2a6d23");
+      const outline = serialized.reports[0]?.metrics.outline;
+      const candidates = outline?.candidates ?? [];
+      const fringeCandidates = outline?.fringeCandidates ?? [];
+      const fringe = fringeCandidates.find((candidate) => candidate.color === "#2a6d23");
       const repairSafe = candidates.find((candidate) => candidate.color === "#101112");
+      expect(outline?.candidateCount).toBe(candidates.length);
+      expect(outline?.fringeCandidateCount).toBe(fringeCandidates.length);
       expect(repairSafe).toMatchObject({
         color: "#101112",
         isFringeSuspect: false,
         repairSafeScore: expect.any(Number),
       });
+      expect(candidates.map((candidate) => candidate.color)).not.toContain("#2a6d23");
       expect(fringe).toMatchObject({
         color: "#2a6d23",
         isFringeSuspect: true,

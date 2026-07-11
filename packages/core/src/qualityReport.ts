@@ -2,7 +2,7 @@ import { assetTypeToMode, getAssetTypeDefinition } from "@pixelaid/shared";
 import type { AlphaMode, AssetType, FixOptions, GridCandidate, RGBAImage, SheetLayoutDetection } from "@pixelaid/shared";
 import { detectGridCandidates } from "./grid";
 import { analyzeMaskArtifacts } from "./morphology";
-import { detectOutlineColorCandidates, type OutlineColorCandidate } from "./outline";
+import { analyzeOutlineSemantics, type OutlineColorCandidate } from "./outline";
 import { detectSheetLayout } from "./sheet";
 import { analyzeTilesetSeams } from "./tileDiagnostics";
 import { analyzeTilemapDiagnostics } from "./tilemapDiagnostics";
@@ -78,6 +78,8 @@ export type QualityReport = {
     outline: {
       candidateCount: number;
       candidates: OutlineColorCandidate[];
+      fringeCandidateCount: number;
+      fringeCandidates: OutlineColorCandidate[];
     };
     morphology: ReturnType<typeof analyzeMaskArtifacts>;
     tilemap: {
@@ -131,7 +133,9 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       })
     : emptyMorphologyArtifacts();
   const sheetLayout = shouldAnalyzeSheetLayout ? options.sheetLayout ?? detectSheetLayout(image) : emptySheetLayoutDetection();
-  const outlineCandidates = shouldAnalyzeOutline ? detectOutlineColorCandidates(image, { maxCandidates: 4 }) : [];
+  const outlineSemantics = shouldAnalyzeOutline ? analyzeOutlineSemantics(image, { maxCandidates: 4 }) : { outlineCandidates: [], fringeCandidates: [] };
+  const outlineCandidates = outlineSemantics.outlineCandidates;
+  const fringeCandidates = outlineSemantics.fringeCandidates;
   const detailAnalysis = shouldAnalyzeDetail ? analyzeDetailDensityLinework(image) : emptyDetailDensityLinework();
   const tilemapDiagnostics = assetType === "tilemap" ? analyzeTilemapDiagnostics(image) : undefined;
   const tilesetDiagnostics = assetType === "tileset" ? analyzeTilesetSeams(image, resolveTileOptions(image, options, sheetLayout)) : undefined;
@@ -427,7 +431,9 @@ export function analyzeQualityReport(image: RGBAImage, options: QualityReportOpt
       },
       outline: {
         candidateCount: outlineCandidates.length,
-        candidates: outlineCandidates
+        candidates: outlineCandidates,
+        fringeCandidateCount: fringeCandidates.length,
+        fringeCandidates
       },
       morphology: morphologyArtifacts,
       tilemap: {
