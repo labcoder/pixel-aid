@@ -2189,6 +2189,7 @@ export function App() {
   const sourcePalette = sourcePaletteAnalysis?.colors ?? [];
   const sourceColorCount = sourcePaletteAnalysis?.totalColors ?? 0;
   const outlineSourceCandidates = selectedSourceAnalysis?.outlineCandidates ?? [];
+  const outlineFringeCandidates = selectedSourceAnalysis?.fringeCandidates ?? [];
   const outlineSourcePreviewCandidates = outlineSourceCandidates.slice(0, 12);
   const outlineSourceHiddenCount = Math.max(0, outlineSourceCandidates.length - outlineSourcePreviewCandidates.length);
   const showManualSuspectOutlineSourceWarning =
@@ -2641,7 +2642,8 @@ export function App() {
           outlineSourceMode === "manual" && selectedOutlineSourceColors.length > 0
             ? selectedOutlineSourceColors
             : outlineSourceCandidates.slice(0, 3).map((candidate) => candidate.color),
-        outlineSourceCandidates
+        outlineSourceCandidates,
+        outlineFringeCandidates
       }),
     [
       alphaThreshold,
@@ -2650,6 +2652,7 @@ export function App() {
       fixResult?.image,
       fixResult?.palette,
       gridCandidates,
+      outlineFringeCandidates,
       outlineSourceCandidates,
       outlineSourceMode,
       selectedAsset?.image,
