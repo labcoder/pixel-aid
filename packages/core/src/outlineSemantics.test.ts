@@ -44,6 +44,19 @@ function isPinkOrPurpleMatteFamily(color: string): boolean {
   return r >= 190 && b >= 180 && g <= 210;
 }
 
+function hasFringeMatteEvidence(candidate: { luma?: number; distance1Ratio?: number; distance3PlusRatio?: number; interiorSupportRatio?: number; backgroundSeparationOklab?: number; innerDarkerRatio?: number; innerDarkerWithin2Ratio?: number; isFringeSuspect?: boolean }): boolean {
+  const distance1Ratio = candidate.distance1Ratio ?? 0;
+  const distance3PlusRatio = candidate.distance3PlusRatio ?? 0;
+  const interiorSupportRatio = candidate.interiorSupportRatio ?? 0;
+  const backgroundSeparationOklab = candidate.backgroundSeparationOklab ?? 1;
+  const hasInwardDarkerEvidence =
+    distance1Ratio >= 0.9 &&
+    interiorSupportRatio <= 0.08 &&
+    ((candidate.innerDarkerRatio ?? 0) >= 0.08 || (candidate.innerDarkerWithin2Ratio ?? 0) >= 0.08);
+  const hasOuterOnlyMatteEvidence = (candidate.luma ?? 255) > 24 && distance1Ratio >= 0.8 && distance3PlusRatio <= 0.02 && interiorSupportRatio <= 0.04 && backgroundSeparationOklab <= 0.36;
+  return candidate.isFringeSuspect === true || hasInwardDarkerEvidence || hasOuterOnlyMatteEvidence;
+}
+
 function createAstroLikeMatteShellFixture(): TestImage {
   const image = createImage(40, 40);
 
@@ -66,6 +79,19 @@ function createSameHueSemanticOutlineFixture(): TestImage {
   fillRect(image, 0, 0, image.width, image.height, [0, 240, 80, 255]);
   strokeRect(image, 8, 8, 12, 12, 1, [38, 96, 72, 255]);
   fillRect(image, 9, 9, 10, 10, [184, 168, 132, 255]);
+  return image;
+}
+
+function createDarkExteriorMatteFixture(): TestImage {
+  const image = createImage(34, 34);
+
+  strokeRect(image, 8, 8, 18, 18, 1, [230, 230, 222, 255]);
+  fillRect(image, 9, 9, 16, 16, [252, 252, 248, 255]);
+
+  // Low-luma, exterior-contact matte shell. It is deliberately only on the
+  // outermost silhouette ring; the light line remains the semantic outline.
+  fillRect(image, 7, 7, 20, 1, [32, 36, 41, 255]);
+  fillRect(image, 7, 7, 1, 20, [32, 36, 41, 255]);
   return image;
 }
 
@@ -96,6 +122,21 @@ describe("semantic outline/fringe analysis", () => {
     expect(analysis.fringeCandidates.some((candidate) => isPinkOrPurpleMatteFamily(candidate.color))).toBe(true);
   });
 
+  test("does not promote a dark exterior matte shell as the semantic outline source", () => {
+    const source = createDarkExteriorMatteFixture();
+
+    const analysis = analyzeOutlineSemantics(source, { maxCandidates: 4 });
+    const darkMatteOutline = analysis.outlineCandidates.find((candidate) => candidate.color === "#202429");
+    const darkMatteFringe = analysis.fringeCandidates.find((candidate) => candidate.color === "#202429");
+
+    expect(darkMatteOutline).toBeUndefined();
+    expect(darkMatteFringe).toBeDefined();
+    expect(darkMatteFringe!.role).toBe("fringe-matte");
+    expect(hasFringeMatteEvidence(darkMatteFringe!)).toBe(true);
+    expect(analysis.outlineCandidates[0]).toBeDefined();
+    expect(isLightFamily(analysis.outlineCandidates[0]!.color)).toBe(true);
+  });
+
   test("preserves valid same-hue semantic outlines instead of treating hue alone as fringe", () => {
     const source = createSameHueSemanticOutlineFixture();
 
@@ -116,6 +157,19 @@ describe("semantic outline/fringe analysis", () => {
     const analysis = analyzeOutlineSemantics(source, { maxCandidates: 4 });
 
     expect(analysis.outlineCandidates.filter((candidate) => candidate.classification === "deliberate")).toEqual([]);
+  });
+
+  test("limits fringe candidates to raw colors with fringe or matte evidence", () => {
+    const source = createDarkExteriorMatteFixture();
+
+    const rawCandidates = detectOutlineColorCandidates(source, { maxCandidates: 4 });
+    const analysis = analyzeOutlineSemantics(source, { maxCandidates: 1 });
+    const ordinaryLightCandidate = rawCandidates.find((candidate) => candidate.color === "#e6e6de");
+
+    expect(ordinaryLightCandidate).toBeDefined();
+    expect(hasFringeMatteEvidence(ordinaryLightCandidate!)).toBe(false);
+    expect(analysis.fringeCandidates.map((candidate) => candidate.color)).not.toContain("#e6e6de");
+    expect(analysis.fringeCandidates.every((candidate) => candidate.role === "fringe-matte" && hasFringeMatteEvidence(candidate))).toBe(true);
   });
 
   test("does not change explicit repairExisting source color precedence", () => {

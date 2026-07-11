@@ -1,9 +1,14 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { bench, describe } from "vitest";
 import { createSingleSpriteCleanupFixture } from "@pixelaid/fixtures";
 import type { FixOptions } from "@pixelaid/shared";
-import { detectGridCandidates, fixImage } from "./index";
+import { analyzeOutlineSemantics, detectGridCandidates, fixImage } from "./index";
+import { readGoldenPng } from "./goldenImage.test-utils";
 
 const fixture = createSingleSpriteCleanupFixture();
+const goldenDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "goldens");
+const heroCat = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
 
 const autoCleanupOptions: FixOptions = {
   mode: "single",
@@ -30,5 +35,9 @@ describe("single sprite cleanup fixture", () => {
 
   bench("fixes cropped adaptive single sprite", () => {
     fixImage(fixture.image, autoCleanupOptions);
+  });
+
+  bench("analyzes semantic outline candidates on hero-cat", () => {
+    analyzeOutlineSemantics(heroCat, { maxCandidates: 6 });
   });
 });
