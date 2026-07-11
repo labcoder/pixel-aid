@@ -102,6 +102,7 @@ describe("guided semantic fringe cleanup colors", () => {
         assetType: "sprite",
         alpha: "backgroundFloodFill",
         outlineMode: "repairExisting",
+        matteCleanup: false,
         fringeCandidates: [{ color: "#2A6D23" }, { color: "2a6d23" }, { color: "#183f3c" }]
       })
     ).toEqual(["#2a6d23", "#183f3c"]);
@@ -112,9 +113,23 @@ describe("guided semantic fringe cleanup colors", () => {
         assetType: "icon",
         alpha: "backgroundFloodFill",
         outlineMode: "add",
+        matteCleanup: false,
         fringeCandidates: [{ color: "#64676f" }]
       })
     ).toEqual(["#64676f"]);
+  });
+
+  test("returns semantic fringe colors for matte cleanup when outline repair is suppressed", () => {
+    expect(
+      getSemanticFringeColorsForGuidedCleanup({
+        mode: "single",
+        assetType: "sprite",
+        alpha: "backgroundFloodFill",
+        outlineMode: "none",
+        matteCleanup: true,
+        fringeCandidates: [{ color: "#2A6D23" }, { color: "2a6d23" }]
+      })
+    ).toEqual(["#2a6d23"]);
   });
 
   test("returns no semantic fringe colors outside the conservative guided cleanup path", () => {
@@ -123,13 +138,14 @@ describe("guided semantic fringe cleanup colors", () => {
       assetType: "sprite" as const,
       alpha: "backgroundFloodFill" as const,
       outlineMode: "repairExisting" as const,
+      matteCleanup: false,
       fringeCandidates: [{ color: "#2a6d23" }]
     };
 
     expect(getSemanticFringeColorsForGuidedCleanup({ ...base, mode: "spriteSheet" })).toEqual([]);
     expect(getSemanticFringeColorsForGuidedCleanup({ ...base, assetType: "portrait" })).toEqual([]);
     expect(getSemanticFringeColorsForGuidedCleanup({ ...base, alpha: "preserve" })).toEqual([]);
-    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, outlineMode: "none" })).toEqual([]);
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, outlineMode: "none", matteCleanup: false })).toEqual([]);
     expect(getSemanticFringeColorsForGuidedCleanup({ ...base, fringeCandidates: [] })).toEqual([]);
   });
 });

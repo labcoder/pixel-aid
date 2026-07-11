@@ -4244,6 +4244,7 @@ export function App() {
       assetType,
       alpha,
       outlineMode,
+      matteCleanup,
       fringeCandidates: outlineFringeCandidates
     });
     const autoMatteCleanup = isSheetLikeMode(mode) && alpha === "binary" && inferNativeScale && maxColors <= 16;

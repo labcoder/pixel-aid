@@ -38,6 +38,7 @@ export type GuidedSemanticFringeCleanupInput = {
   assetType: AssetType;
   alpha: AlphaMode;
   outlineMode: OutlineMode;
+  matteCleanup: boolean;
   fringeCandidates: readonly SemanticFringeCandidate[];
 };
 
@@ -61,7 +62,7 @@ export function getSemanticFringeColorsForGuidedCleanup(input: GuidedSemanticFri
     input.mode !== "single" ||
     (input.assetType !== "sprite" && input.assetType !== "icon") ||
     input.alpha !== "backgroundFloodFill" ||
-    input.outlineMode === "none" ||
+    (input.outlineMode === "none" && !input.matteCleanup) ||
     input.fringeCandidates.length === 0
   ) {
     return [];
