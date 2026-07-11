@@ -11,6 +11,7 @@ import type {
   PixelFixResult,
   Rect,
   RGBAImage,
+  SemanticFringeCleanupDiagnostics,
   SpriteFrame
 } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
@@ -25,6 +26,7 @@ import { createImage } from "./image";
 import { applyLineCleanup } from "./lineCleanup";
 import { detectMixels, regularizeMixels } from "./mixels";
 import { snapToGrid } from "./snap";
+import { applySemanticFringeCleanup } from "./semanticFringeCleanup";
 import { applyMorphologyCleanup } from "./morphology";
 import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
@@ -144,8 +146,13 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const denoised = measurePhase(phaseTimer, "denoise", () => applyDenoise(haloCleaned, { strength: options.cleanup.denoiseStrength ?? 0 }));
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
+  const semanticFringeColors = options.cleanup.semanticFringeColors;
+  const semanticFringeResult = semanticFringeColors !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, { colors: semanticFringeColors }))
+    : undefined;
+  const semanticFringeCleaned = semanticFringeResult?.image ?? morphologyCleaned;
   const outlineResult = measurePhase(phaseTimer, "outline-cleanup", () =>
-    applyOutlineCleanupDetailed(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
+    applyOutlineCleanupDetailed(semanticFringeCleaned, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
       sourceColors: options.cleanup.outlineSourceColors,
       alpha: options.cleanup.outlineAlpha,
@@ -213,6 +220,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       contrastExpansion: contrastExpanded.diagnostics,
       ...(mixelDiagnostics ? { mixels: mixelDiagnostics } : {}),
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
+      ...(semanticFringeResult ? { semanticFringe: semanticFringeResult.diagnostics } : {}),
       ...((options.cleanup.outlineMode ?? "none") !== "none" ? { outline: outlineResult.diagnostics } : {}),
       ...(lineCleanupResult ? { lineCleanup: lineCleanupResult.diagnostics } : {}),
       palette: paletteDiagnostics,
@@ -300,6 +308,7 @@ function fixSheetFrames(
   const phaseY = options.grid.phaseY ?? 0;
   let alphaDiagnostics: AlphaCleanupDiagnostics | undefined;
   let morphologyDiagnostics: MorphologyDiagnostics | undefined;
+  let semanticFringeDiagnostics: SemanticFringeCleanupDiagnostics | undefined;
   const contrastExpanded = measurePhase(phaseTimer, "contrast-expansion", () => applyContrastExpansion(image, options.cleanup.contrastExpansion));
 
   reportProgress(runtime, "frame-slicing", 15, "Sheet frames ready");
@@ -323,6 +332,7 @@ function fixSheetFrames(
       const restoredFrame = frameFix.sourceReference ? restoreSubjectPixelsFromSource(cleanedFrame.image, frameFix.sourceReference) : cleanedFrame.image;
       alphaDiagnostics = mergeAlphaDiagnostics(alphaDiagnostics, refreshAlphaDiagnosticsFromImage(cleanedFrame.alpha, restoredFrame));
       morphologyDiagnostics = mergeMorphologyDiagnostics(morphologyDiagnostics, cleanedFrame.morphology);
+      semanticFringeDiagnostics = mergeSemanticFringeDiagnostics(semanticFringeDiagnostics, cleanedFrame.semanticFringe);
       pasteImage(restoredFrame, packed, frame.rect);
       reportProgress(runtime, "downsampling", frameEndPercent, `Fixed frame ${index + 1} of ${frames.length}`);
       assertNotCancelled(runtime?.signal);
@@ -392,6 +402,7 @@ function fixSheetFrames(
       ...(alphaDiagnostics ? { alpha: alphaDiagnostics } : {}),
       contrastExpansion: contrastExpanded.diagnostics,
       ...(morphologyDiagnostics ? { morphology: morphologyDiagnostics } : {}),
+      ...(semanticFringeDiagnostics ? { semanticFringe: semanticFringeDiagnostics } : {}),
       palette: paletteDiagnostics,
       ...(phaseTimings ? { phaseTimings } : {})
     }
@@ -1098,6 +1109,7 @@ type CleanFixedImageResult = {
   image: RGBAImage;
   alpha: AlphaCleanupDiagnostics;
   morphology?: MorphologyDiagnostics;
+  semanticFringe?: SemanticFringeCleanupDiagnostics;
 };
 
 function getAlphaSettingsForPreCleanup(options: FixOptions): AlphaCleanupSettings | undefined {
@@ -1166,8 +1178,13 @@ function cleanFixedImage(
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   assertNotCancelled(runtime?.signal);
   const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
+  const semanticFringeColors = options.cleanup.semanticFringeColors;
+  const semanticFringeResult = semanticFringeColors !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, { colors: semanticFringeColors }))
+    : undefined;
+  const semanticFringeCleaned = semanticFringeResult?.image ?? morphologyCleaned;
   const outlined = measurePhase(phaseTimer, "outline-cleanup", () =>
-    applyOutlineCleanup(morphologyCleaned, options.cleanup.outlineMode ?? "none", {
+    applyOutlineCleanup(semanticFringeCleaned, options.cleanup.outlineMode ?? "none", {
       color: options.cleanup.outlineColor,
       sourceColors: options.cleanup.outlineSourceColors,
       alpha: options.cleanup.outlineAlpha,
@@ -1185,7 +1202,8 @@ function cleanFixedImage(
   return {
     image: lineCleaned,
     alpha: refreshAlphaDiagnosticsFromImage(alphaResult.diagnostics, lineCleaned),
-    ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {})
+    ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
+    ...(semanticFringeResult ? { semanticFringe: semanticFringeResult.diagnostics } : {})
   };
 }
 
@@ -1258,6 +1276,24 @@ function mergeMorphologyDiagnostics(
     tinyComponentPixels: current.tinyComponentPixels + next.tinyComponentPixels,
     brokenOutlinePixels: current.brokenOutlinePixels + next.brokenOutlinePixels,
     warnings: [...new Set([...current.warnings, ...next.warnings])]
+  };
+}
+
+function mergeSemanticFringeDiagnostics(
+  current: SemanticFringeCleanupDiagnostics | undefined,
+  next: SemanticFringeCleanupDiagnostics | undefined
+): SemanticFringeCleanupDiagnostics | undefined {
+  if (!next) {
+    return current;
+  }
+  if (!current) {
+    return next;
+  }
+
+  return {
+    enabled: current.enabled || next.enabled,
+    colorCount: Math.max(current.colorCount, next.colorCount),
+    clearedPixels: current.clearedPixels + next.clearedPixels
   };
 }
 

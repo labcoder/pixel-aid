@@ -74,6 +74,7 @@ describe("guided outline repair suggestions", () => {
     );
     expect(suggestion.outlineMode).toBe("repairExisting");
     expect(suggestion.outlineSourceColors[0]).toBe("#101112");
+    expect(suggestion.semanticFringeColors).toEqual(["#2a6d23"]);
   });
 
   test("keeps hero-cat guided repair manual when outline candidates do not need repair", () => {
@@ -97,6 +98,7 @@ describe("guided outline repair suggestions", () => {
     );
     expect(suggestion.outlineMode).toBe("none");
     expect(suggestion.outlineSourceColors).toEqual([]);
+    expect(suggestion.semanticFringeColors).toBeUndefined();
   });
 
   test("does not auto-enable guided repair for weak single-sprite matte outline candidates", () => {

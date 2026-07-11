@@ -46,6 +46,8 @@ export { snapToGrid } from "./snap";
 export type { SnapToGridOptions, SnapToGridResult } from "./snap";
 export { applyLineCleanup } from "./lineCleanup";
 export type { LineCleanupOptions, LineCleanupResult } from "./lineCleanup";
+export { applySemanticFringeCleanup } from "./semanticFringeCleanup";
+export type { SemanticFringeCleanupOptions, SemanticFringeCleanupResult } from "./semanticFringeCleanup";
 export { applyDenoise } from "./denoise";
 export type { DenoiseOptions } from "./denoise";
 export { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";

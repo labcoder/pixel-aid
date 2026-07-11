@@ -1061,6 +1061,7 @@ function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestio
       outlineMode: usesEdgeCleanup ? suggestion.outlineMode : "none",
       outlineSize: suggestion.outlineSize,
       ...(usesEdgeCleanup && suggestion.outlineSourceColors.length > 0 ? { outlineSourceColors: suggestion.outlineSourceColors } : {}),
+      ...(usesEdgeCleanup && suggestion.semanticFringeColors ? { semanticFringeColors: suggestion.semanticFringeColors } : {}),
       ...(suggestion.matteCleanup
         ? {
             morphology: {

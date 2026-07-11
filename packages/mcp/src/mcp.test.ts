@@ -232,6 +232,26 @@ describe("PixelAid MCP-ready handlers", () => {
     });
   });
 
+  it("returns semantic fringe cleanup colors in suggest structured content", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-fringe-suggest-"));
+    const input = path.join(dir, "outline.png");
+    try {
+      await encodePngFile(createOutlineMetadataSprite(), input);
+
+      const suggest = await handlePixelAidTool("suggest_fix_settings", { inputPath: input, options: { assetType: "sprite" } });
+
+      expect(suggest.isError).toBe(false);
+      const result = suggest.structuredContent.result as {
+        options: { cleanup: { outlineSourceColors?: string[]; semanticFringeColors?: string[] } };
+      };
+      expect(result.options.cleanup.outlineSourceColors).toContain("#101112");
+      expect(result.options.cleanup.outlineSourceColors).not.toContain("#2a6d23");
+      expect(result.options.cleanup.semanticFringeColors).toEqual(["#2a6d23"]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it("returns outline repair-safety metadata in quality report structured content", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-outline-report-"));
     const input = path.join(dir, "outline.png");
