@@ -265,7 +265,7 @@ import { startEngineFixJob, type EngineFixJob } from "./lib/engineFixJobAdapter"
 import { candidateMatchesSettings, formatGridCandidatePreview } from "./lib/gridCandidatePreview";
 import { getImportViewMode } from "./lib/importViewMode";
 import { decodeImageBlob, decodeImageFile, type ImportedImageAsset } from "./lib/imageDecode";
-import { getGuidedFixPanelState, getGuidedFixSummary, type GuidedFixSummary } from "./lib/guidedFix";
+import { getGuidedFixPanelState, getGuidedFixSummary, getSemanticFringeColorsForGuidedCleanup, type GuidedFixSummary } from "./lib/guidedFix";
 import { getGuidedFixDefaultSettings } from "./lib/guidedFixDefaults";
 import { shouldEnableGuidedMatteCleanup, shouldUseMatteAwareMorphology, supportsMatteCleanupAlpha } from "./lib/matteCleanup";
 import {
@@ -4239,6 +4239,13 @@ export function App() {
       selectedColors: selectedOutlineSourceColors,
       candidates: outlineSourceCandidates
     });
+    const semanticFringeColors = getSemanticFringeColorsForGuidedCleanup({
+      mode,
+      assetType,
+      alpha,
+      outlineMode,
+      fringeCandidates: outlineFringeCandidates
+    });
     const autoMatteCleanup = isSheetLikeMode(mode) && alpha === "binary" && inferNativeScale && maxColors <= 16;
     const useMatteAwareMorphology = shouldUseMatteAwareMorphology({ alpha, matteCleanup, autoMatteCleanup });
     const useMorphologyCleanup = morphologyCleanup || useMatteAwareMorphology;
@@ -4315,6 +4322,7 @@ export function App() {
         outlineSize,
         ...(outlineMode !== "none" ? { outlineAlpha } : {}),
         ...(outlineSourceColors.length > 0 ? { outlineSourceColors } : {}),
+        ...(semanticFringeColors.length > 0 ? { semanticFringeColors } : {}),
         ...(useCustomOutlineColor ? { outlineColor } : {})
       },
       ...(sheetMode ? { sheet: sheetOptions, sheetFrames: createSheetFixFramePlan(sheetFrames) } : {})
@@ -4355,6 +4363,7 @@ export function App() {
     outlineColorEdited,
     outlineMode,
     outlineSourceCandidates,
+    outlineFringeCandidates,
     outlineSourceMode,
     selectedOutlineSourceColors,
     outlineSize,
