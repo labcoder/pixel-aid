@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import type { RGBAImage } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
 import { analyzeBackground } from "./backgroundAnalysis";
-import { suggestFixSettings } from "./fixSuggestions";
+import { suggestFixSettings, suggestFixSettingsForAssetType } from "./fixSuggestions";
 import { readGoldenPng } from "./goldenImage.test-utils";
 
 const goldenDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "goldens");
@@ -75,6 +75,35 @@ describe("guided outline repair suggestions", () => {
     expect(suggestion.outlineMode).toBe("repairExisting");
     expect(suggestion.outlineSourceColors[0]).toBe("#101112");
     expect(suggestion.semanticFringeColors).toEqual(["#2a6d23"]);
+  });
+
+  test("suggests semantic fringe colors for matte cleanup even when outline repair is suppressed", () => {
+    const source = createIntactGreenFringeShellAroundDarkOutlineSprite();
+    const suggestion = suggestFixSettings(source);
+    const outlineColors = suggestion.qualityReport.metrics.outline.candidates.map((candidate) => candidate.color);
+    const fringeColors = suggestion.qualityReport.metrics.outline.fringeCandidates.map((candidate) => candidate.color);
+
+    expect(suggestion.mode).toBe("single");
+    expect(["sprite", "icon"]).toContain(suggestion.assetType);
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(outlineColors[0]).toBe("#101112");
+    expect(fringeColors).toContain("#2a6d23");
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: false,
+        reasonCode: "single-sprite-matte-outline-suppressed-no-repair-needed"
+      })
+    );
+    expect(suggestion.outlineMode).toBe("none");
+    expect(suggestion.outlineSourceColors).toEqual([]);
+    expect(suggestion.semanticFringeColors).toEqual(["#2a6d23"]);
+
+    const forcedSpriteSuggestion = suggestFixSettingsForAssetType(source, "sprite");
+    expect(forcedSpriteSuggestion.outlineMode).toBe("none");
+    expect(forcedSpriteSuggestion.outlineSourceColors).toEqual([]);
+    expect(forcedSpriteSuggestion.semanticFringeColors).toEqual(["#2a6d23"]);
   });
 
   test("keeps hero-cat guided repair manual when outline candidates do not need repair", () => {
@@ -253,6 +282,12 @@ function createFringeContaminatedChromaMatteSprite(): RGBAImage {
 }
 
 function createGreenFringeShellAroundDarkOutlineSprite(): RGBAImage {
+  const image = createIntactGreenFringeShellAroundDarkOutlineSprite();
+  punchAlphaGap(image, 46, 22, 3);
+  return image;
+}
+
+function createIntactGreenFringeShellAroundDarkOutlineSprite(): RGBAImage {
   const image = createImage(96, 96);
   fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
   fillRect(image, 24, 20, 48, 2, 42, 109, 35);
@@ -264,7 +299,6 @@ function createGreenFringeShellAroundDarkOutlineSprite(): RGBAImage {
   fillRect(image, 26, 22, 2, 52, 16, 17, 18);
   fillRect(image, 68, 22, 2, 52, 16, 17, 18);
   fillRect(image, 28, 24, 40, 48, 180, 166, 132);
-  punchAlphaGap(image, 46, 22, 3);
   return image;
 }
 

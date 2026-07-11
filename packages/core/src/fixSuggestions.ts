@@ -492,7 +492,7 @@ export function suggestFixSettingsForAssetType(image: RGBAImage, assetType: Asse
     contrastExpansionEnabled: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.contrastExpansionEnabled : false,
     outlineMode: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineMode : "none",
     outlineSourceColors: isCleanupPassEnabled(cleanupEligibility, "outlineRepair") ? suggestion.outlineSourceColors : [],
-    ...(isCleanupPassEnabled(cleanupEligibility, "outlineRepair") && suggestedSemanticFringeColors
+    ...(preserveSuggestedSingleCleanup && alpha === "backgroundFloodFill" && matteCleanup && suggestedSemanticFringeColors
       ? { semanticFringeColors: suggestedSemanticFringeColors }
       : {}),
     cleanupEligibility,
@@ -751,13 +751,19 @@ function suggestSemanticFringeColors(input: {
     (input.assetType !== "sprite" && input.assetType !== "icon") ||
     input.alpha !== "backgroundFloodFill" ||
     !input.singleSpriteMatteCleanup ||
-    !isCleanupPassEnabled(input.cleanupEligibility, "outlineRepair") ||
+    !isCleanupPassEnabled(input.cleanupEligibility, "matteCleanup") ||
     input.qualityReport.metrics.outline.fringeCandidates.length === 0
   ) {
     return undefined;
   }
 
-  const colors = [...new Set(input.qualityReport.metrics.outline.fringeCandidates.map((candidate) => candidate.color))];
+  const colors = [
+    ...new Set(
+      input.qualityReport.metrics.outline.fringeCandidates
+        .filter((candidate) => candidate.isFringeSuspect === true)
+        .map((candidate) => candidate.color)
+    )
+  ];
   return colors.length > 0 ? colors : undefined;
 }
 
