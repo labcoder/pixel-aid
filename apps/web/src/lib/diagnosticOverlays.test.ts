@@ -226,6 +226,44 @@ describe("diagnostic overlays", () => {
     expect(model.legend.map((item) => item.label)).toEqual(["Suspect fringe pixels", "Suspect colors"]);
   });
 
+  it("routes separately analyzed fringe candidates into the suspect overlay", () => {
+    const white = [255, 255, 255, 255] as const;
+    const fringe = [42, 109, 35, 255] as const;
+    const repairSafe = [16, 18, 18, 255] as const;
+    const fill = [90, 140, 130, 255] as const;
+    const source = image(4, [
+      white,
+      white,
+      white,
+      white,
+      white,
+      fringe,
+      repairSafe,
+      white,
+      white,
+      fill,
+      fill,
+      white,
+      white,
+      white,
+      white,
+      white
+    ]);
+
+    const model = createDiagnosticOverlayModel({
+      mode: "outlineFringeSuspects",
+      sourceImage: source,
+      fixedImage: null,
+      outlineSourceCandidates: [outlineCandidate("#101212", false)],
+      outlineFringeCandidates: [outlineCandidate("#2a6d23", true)]
+    });
+
+    expect(model.active).toBe(true);
+    expect(model.sourceMask!.data[5]).toBe(1);
+    expect(model.sourceMask!.data[6]).toBe(0);
+    expect(model.legend).toContainEqual({ label: "Suspect colors", value: "1", color: "#35c6b6" });
+  });
+
   it("keeps suspect outline fringe overlays inactive when no suspect candidates exist", () => {
     const white = [255, 255, 255, 255] as const;
     const repairSafe = [16, 18, 18, 255] as const;

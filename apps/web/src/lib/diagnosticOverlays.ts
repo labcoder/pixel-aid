@@ -54,6 +54,7 @@ export type DiagnosticOverlayInput = {
   alphaThreshold?: number;
   outlineCandidateColors?: readonly string[];
   outlineSourceCandidates?: readonly OutlineColorCandidate[];
+  outlineFringeCandidates?: readonly OutlineColorCandidate[];
 };
 
 type BackgroundSample = {
@@ -154,8 +155,12 @@ export function createDiagnosticOverlayModel(input: DiagnosticOverlayInput): Dia
   }
 
   if (mode === "outlineFringeSuspects") {
+    const routedFringeCandidates = input.outlineFringeCandidates ?? [];
+    const legacySuspectSourceCandidates = (input.outlineSourceCandidates ?? []).filter(
+      (candidate) => candidate.isFringeSuspect === true
+    );
     const suspectColors = normalizeHexColors(
-      (input.outlineSourceCandidates ?? []).filter((candidate) => candidate.isFringeSuspect === true).map((candidate) => candidate.color)
+      [...routedFringeCandidates, ...legacySuspectSourceCandidates].map((candidate) => candidate.color)
     );
     if (suspectColors.length === 0) {
       return inactiveModel(mode, "No suspect outline fringe candidates are available for this asset.");
