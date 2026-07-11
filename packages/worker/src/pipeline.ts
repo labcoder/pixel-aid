@@ -1,4 +1,4 @@
-import { FixCancelledError, analyzeQualityReport, detectOutlineColorCandidates, fixImage, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
+import { FixCancelledError, analyzeOutlineSemantics, analyzeQualityReport, fixImage, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
 import type { FixCancellationSignal, FixProgressEvent } from "@pixelaid/core";
 import type { RGBAImage } from "@pixelaid/shared";
 import type {
@@ -82,12 +82,14 @@ export function runWorkerRequest(
 
 function runAnalyzeSourceRequest(request: AnalyzeSourceWorkerRequest): WorkerResponse {
   const image = transferableToImage(request);
+  const outlineAnalysis = analyzeOutlineSemantics(image, { maxCandidates: request.outlineMaxCandidates ?? 64 });
   return {
     type: "source-analysis-result",
     requestId: request.requestId,
     result: {
       palette: analyzeVisiblePalettePreview(image, request.paletteMaxColors, request.maxUniqueColors),
-      outlineCandidates: detectOutlineColorCandidates(image, { maxCandidates: request.outlineMaxCandidates ?? 64 })
+      outlineCandidates: outlineAnalysis.outlineCandidates,
+      fringeCandidates: outlineAnalysis.fringeCandidates
     }
   };
 }
