@@ -371,7 +371,7 @@ export function analyzeOutlineSemantics(
   }
 
   const fringeCandidates = rawCandidates
-    .filter((candidate) => outlineBuckets[outlineCandidateBucket(candidate)] === 0)
+    .filter((candidate) => outlineBuckets[outlineCandidateBucket(candidate)] === 0 && isSemanticFringeCandidate(candidate))
     .map((candidate) => semanticFringeCandidate(candidate))
     .slice(0, maxCandidates);
 
@@ -383,24 +383,29 @@ function isSemanticFringeCandidate(candidate: OutlineColorCandidate): boolean {
     candidate.isFringeSuspect === true ||
     ((candidate.distance1Ratio ?? 0) >= 0.9 &&
       (candidate.interiorSupportRatio ?? 1) <= 0.08 &&
-      ((candidate.innerDarkerRatio ?? 0) >= 0.08 || (candidate.innerDarkerWithin2Ratio ?? 0) >= 0.08))
+      ((candidate.innerDarkerRatio ?? 0) >= 0.08 || (candidate.innerDarkerWithin2Ratio ?? 0) >= 0.08)) ||
+    isOuterOnlyBackgroundMatte(candidate)
   );
 }
 
 function isSemanticOutlineSourceCandidate(candidate: OutlineColorCandidate): boolean {
+  if (candidate.isFringeSuspect === true || candidate.classification === "weak" || isOuterOnlyBackgroundMatte(candidate)) {
+    return false;
+  }
   if (candidate.luma <= 64) {
     return true;
   }
-  if (candidate.isFringeSuspect === true || candidate.classification === "weak") {
-    return false;
-  }
+  return true;
+}
+
+function isOuterOnlyBackgroundMatte(candidate: OutlineColorCandidate): boolean {
   const distance1Ratio = candidate.distance1Ratio ?? 0;
   const distance3PlusRatio = candidate.distance3PlusRatio ?? 0;
   const interiorSupportRatio = candidate.interiorSupportRatio ?? 0;
   const backgroundSeparationOklab = candidate.backgroundSeparationOklab ?? 1;
-  const outerOnlyBackgroundMatte =
-    distance1Ratio >= 0.8 && distance3PlusRatio <= 0.02 && interiorSupportRatio <= 0.04 && backgroundSeparationOklab <= 0.36;
-  return !outerOnlyBackgroundMatte;
+  // Preserve near-black line art that becomes outermost only after matte removal;
+  // the reviewer risk is low-luma-but-not-near-black exterior matte buckets.
+  return candidate.luma > 24 && distance1Ratio >= 0.8 && distance3PlusRatio <= 0.02 && interiorSupportRatio <= 0.04 && backgroundSeparationOklab <= 0.36;
 }
 
 function semanticOutlineCandidate(candidate: OutlineColorCandidate): OutlineColorCandidate {
