@@ -2,15 +2,15 @@ import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { performance } from "node:perf_hooks";
 import {
+  analyzeOutlineSemantics,
+  analyzeQualityReport,
   analyzeSceneAssetDiagnostics,
   analyzeSheetConditioning,
-  analyzeQualityReport,
   analyzeTilemapDiagnostics,
   analyzeTilesetSeams,
-  detectMixels,
-  detectOutlineColorCandidates,
-  detectPixelScale,
   detectGridCandidates,
+  detectMixels,
+  detectPixelScale,
   detectSheetLayout,
   extractPalette,
   fixImage,
@@ -95,7 +95,9 @@ export type AutomationFileRecord = {
 
 export type OutlineCandidateDiagnostics = {
   candidates: OutlineColorCandidate[];
+  fringeCandidates?: OutlineColorCandidate[];
   candidateCount: number;
+  fringeCandidateCount?: number;
   repairSafeCount: number;
   suspectFringeCount: number;
 };
@@ -245,7 +247,11 @@ export async function inspectImage(
     }
 
     const sheetConditioning = analyzeSheetConditioning(image);
-    const outline = summarizeOutlineCandidateDiagnostics(detectOutlineColorCandidates(image, { maxCandidates: 8 }));
+    const outlineSemantics = analyzeOutlineSemantics(image, { maxCandidates: 8 });
+    const outline = summarizeOutlineCandidateDiagnostics(
+      outlineSemantics.outlineCandidates,
+      outlineSemantics.fringeCandidates,
+    );
     const assetType = suggestion.value.options.assetType;
     const diagnostics: ImageInspection["diagnostics"] = {
       outline,
@@ -1220,12 +1226,24 @@ function withFallbackGridCandidates(image: RGBAImage): ReturnType<typeof detectG
   ];
 }
 
-function summarizeOutlineCandidateDiagnostics(candidates: OutlineColorCandidate[]): OutlineCandidateDiagnostics {
+function summarizeOutlineCandidateDiagnostics(
+  candidates: OutlineColorCandidate[],
+  fringeCandidates?: OutlineColorCandidate[],
+): OutlineCandidateDiagnostics {
   return {
     candidates,
+    ...(fringeCandidates !== undefined
+      ? {
+          fringeCandidates,
+          fringeCandidateCount: fringeCandidates.length,
+        }
+      : {}),
     candidateCount: candidates.length,
     repairSafeCount: candidates.filter(isRepairSafeOutlineCandidate).length,
-    suspectFringeCount: candidates.filter((candidate) => candidate.isFringeSuspect === true).length,
+    suspectFringeCount:
+      fringeCandidates !== undefined
+        ? fringeCandidates.length
+        : candidates.filter((candidate) => candidate.isFringeSuspect === true).length,
   };
 }
 

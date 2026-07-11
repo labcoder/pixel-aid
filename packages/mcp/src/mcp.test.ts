@@ -3,13 +3,38 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RGBAImage, SpriteFrame } from "@pixelaid/shared";
-import { encodePngFile } from "@pixelaid/automation";
+import { encodePngFile, inspectImage } from "@pixelaid/automation";
 import {
   handlePixelAidMcpRequest,
   handlePixelAidTool,
   pixelaidMcpTools,
   validateToolInput,
 } from "./index";
+
+type OutlineDiagnosticsJson = {
+  candidates: Array<{
+    color: string;
+    role?: string;
+    analysisStage?: string;
+    semanticScore?: number;
+    isFringeSuspect?: boolean;
+    repairSafeScore?: number;
+    fringeSuspectScore?: number;
+  }>;
+  fringeCandidates?: Array<{
+    color: string;
+    role?: string;
+    analysisStage?: string;
+    semanticScore?: number;
+    isFringeSuspect?: boolean;
+    repairSafeScore?: number;
+    fringeSuspectScore?: number;
+  }>;
+  candidateCount: number;
+  fringeCandidateCount?: number;
+  repairSafeCount: number;
+  suspectFringeCount: number;
+};
 
 async function withFixture<T>(run: (paths: { dir: string; input: string; frames: SpriteFrame[] }) => Promise<T>): Promise<T> {
   const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-"));
@@ -154,30 +179,42 @@ describe("PixelAid MCP-ready handlers", () => {
     });
   });
 
-  it("returns outline repair-safety metadata in inspect structured content", async () => {
+  it("returns semantic outline diagnostics matching automation in inspect structured content", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-mcp-outline-inspect-"));
     const input = path.join(dir, "outline.png");
     try {
       await encodePngFile(createOutlineMetadataSprite(), input);
+      const automation = await inspectImage({ inputPath: input, options: { assetType: "sprite" } });
+      expect(automation.ok).toBe(true);
+      if (!automation.ok) return;
+      const expectedOutline = JSON.parse(JSON.stringify(automation.value.diagnostics.outline)) as OutlineDiagnosticsJson;
 
       const inspect = await handlePixelAidTool("inspect_image", { inputPath: input, options: { assetType: "sprite" } });
 
       expect(inspect.isError).toBe(false);
       const inspectResult = inspect.structuredContent.result as {
-        diagnostics: {
-          outline: {
-            candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
-            repairSafeCount: number;
-            suspectFringeCount: number;
-          };
-        };
+        diagnostics: { outline: OutlineDiagnosticsJson };
       };
-      const fringe = inspectResult.diagnostics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
-      const repairSafe = inspectResult.diagnostics.outline.candidates.find((candidate) => candidate.color === "#101112");
-      expect(inspectResult.diagnostics.outline.repairSafeCount).toBeGreaterThanOrEqual(1);
-      expect(inspectResult.diagnostics.outline.suspectFringeCount).toBeGreaterThanOrEqual(1);
-      expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
-      expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
+      const outline = JSON.parse(JSON.stringify(inspectResult.diagnostics.outline)) as OutlineDiagnosticsJson;
+      expect(outline).toEqual(expectedOutline);
+      expect(outline.candidates.map((candidate) => candidate.color)).toContain("#101112");
+      expect(outline.candidates.map((candidate) => candidate.color)).not.toContain("#2a6d23");
+      expect(outline.fringeCandidates?.map((candidate) => candidate.color)).toContain("#2a6d23");
+      expect(outline.fringeCandidates?.map((candidate) => candidate.color)).not.toContain("#101112");
+      expect(outline.candidates.find((candidate) => candidate.color === "#101112")).toMatchObject({
+        role: "outline-source",
+        analysisStage: "semantic-silhouette",
+        semanticScore: expect.any(Number),
+        repairSafeScore: expect.any(Number),
+      });
+      expect(outline.fringeCandidates?.find((candidate) => candidate.color === "#2a6d23")).toMatchObject({
+        role: "fringe-matte",
+        analysisStage: "raw",
+        semanticScore: expect.any(Number),
+        isFringeSuspect: true,
+        fringeSuspectScore: expect.any(Number),
+        repairSafeScore: expect.any(Number),
+      });
     } finally {
       await rm(dir, { recursive: true, force: true });
     }

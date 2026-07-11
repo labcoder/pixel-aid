@@ -18,6 +18,26 @@ import {
   type AutomationProgressEvent,
 } from "./operations";
 
+type OutlineDiagnosticCandidateJson = {
+  color: string;
+  role?: string;
+  analysisStage?: string;
+  semanticScore?: number;
+  classification?: string;
+  isFringeSuspect?: boolean;
+  repairSafeScore?: number;
+  fringeSuspectScore?: number;
+};
+
+type OutlineDiagnosticsJson = {
+  candidates: OutlineDiagnosticCandidateJson[];
+  fringeCandidates?: OutlineDiagnosticCandidateJson[];
+  candidateCount: number;
+  fringeCandidateCount?: number;
+  repairSafeCount: number;
+  suspectFringeCount: number;
+};
+
 const automationTestDir = path.dirname(fileURLToPath(import.meta.url));
 const heroCatFixturePath = path.resolve(automationTestDir, "../../core/src/goldens/hero-cat-ai.png");
 
@@ -63,7 +83,7 @@ describe("automation operations", () => {
     });
   });
 
-  it("exposes outline repair-safety diagnostics from inspect image", async () => {
+  it("exposes semantic outline and fringe diagnostics from inspect image", async () => {
     const dir = await mkdtemp(path.join(tmpdir(), "pixelaid-outline-inspect-"));
     const input = path.join(dir, "outline.png");
     try {
@@ -73,20 +93,34 @@ describe("automation operations", () => {
 
       expect(result.ok).toBe(true);
       if (!result.ok) return;
-      const serialized = JSON.parse(JSON.stringify(result.value.diagnostics.outline)) as typeof result.value.diagnostics.outline;
-      const fringe = serialized.candidates.find((candidate) => candidate.color === "#2a6d23");
+      const serialized = JSON.parse(JSON.stringify(result.value.diagnostics.outline)) as OutlineDiagnosticsJson;
+      const outlineColors = serialized.candidates.map((candidate) => candidate.color);
+      const fringeCandidates = serialized.fringeCandidates ?? [];
+      const fringeColors = fringeCandidates.map((candidate) => candidate.color);
+      const fringe = fringeCandidates.find((candidate) => candidate.color === "#2a6d23");
       const repairSafe = serialized.candidates.find((candidate) => candidate.color === "#101112");
       expect(serialized.candidateCount).toBe(serialized.candidates.length);
-      expect(serialized.suspectFringeCount).toBeGreaterThanOrEqual(1);
+      expect(serialized.fringeCandidateCount).toBe(fringeCandidates.length);
+      expect(outlineColors).toContain("#101112");
+      expect(outlineColors).not.toContain("#2a6d23");
+      expect(fringeColors).toContain("#2a6d23");
+      expect(fringeColors).not.toContain("#101112");
+      expect(serialized.suspectFringeCount).toBe(fringeCandidates.length);
       expect(serialized.repairSafeCount).toBeGreaterThanOrEqual(1);
       expect(repairSafe).toMatchObject({
         color: "#101112",
+        role: "outline-source",
+        analysisStage: "semantic-silhouette",
+        semanticScore: expect.any(Number),
         classification: "deliberate",
         isFringeSuspect: false,
         repairSafeScore: expect.any(Number),
       });
       expect(fringe).toMatchObject({
         color: "#2a6d23",
+        role: "fringe-matte",
+        analysisStage: "raw",
+        semanticScore: expect.any(Number),
         isFringeSuspect: true,
         fringeSuspectScore: expect.any(Number),
         repairSafeScore: expect.any(Number),
