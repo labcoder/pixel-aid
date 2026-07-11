@@ -1,5 +1,5 @@
 import { getAssetTypeDefinition } from "@pixelaid/shared";
-import type { AlphaMode, AssetMode, AssetType, AssetTypeWarning, DownscaleMethod } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, AssetType, AssetTypeWarning, DownscaleMethod, OutlineMode } from "@pixelaid/shared";
 
 export type GuidedFixSummaryInput = {
   assetType: AssetType;
@@ -29,6 +29,18 @@ export type GuidedFixPanelState = {
   advancedLabel: "Advanced" | "Guided";
 };
 
+export type SemanticFringeCandidate = {
+  color: string;
+};
+
+export type GuidedSemanticFringeCleanupInput = {
+  mode: AssetMode;
+  assetType: AssetType;
+  alpha: AlphaMode;
+  outlineMode: OutlineMode;
+  fringeCandidates: readonly SemanticFringeCandidate[];
+};
+
 export function getGuidedFixPanelState({
   selected,
   advancedOpen
@@ -42,6 +54,30 @@ export function getGuidedFixPanelState({
     showCompactRecommendation: compact,
     advancedLabel: compact ? "Guided" : "Advanced"
   };
+}
+
+export function getSemanticFringeColorsForGuidedCleanup(input: GuidedSemanticFringeCleanupInput): string[] {
+  if (
+    input.mode !== "single" ||
+    (input.assetType !== "sprite" && input.assetType !== "icon") ||
+    input.alpha !== "backgroundFloodFill" ||
+    input.outlineMode === "none" ||
+    input.fringeCandidates.length === 0
+  ) {
+    return [];
+  }
+
+  const colors: string[] = [];
+  const seen = new Set<string>();
+  for (const candidate of input.fringeCandidates) {
+    const color = normalizeHexColor(candidate.color);
+    if (!color || seen.has(color)) {
+      continue;
+    }
+    seen.add(color);
+    colors.push(color);
+  }
+  return colors;
 }
 
 export function getGuidedFixSummary(input: GuidedFixSummaryInput): GuidedFixSummary {
@@ -125,4 +161,13 @@ function formatAlphaMode(alpha: AlphaMode): string {
     return "binary alpha";
   }
   return "preserve alpha";
+}
+
+function normalizeHexColor(color: string): string | null {
+  const trimmed = color.trim();
+  const withHash = trimmed.startsWith("#") ? trimmed : `#${trimmed}`;
+  if (!/^#[0-9a-fA-F]{6}$/.test(withHash)) {
+    return null;
+  }
+  return withHash.toLowerCase();
 }

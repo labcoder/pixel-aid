@@ -2,7 +2,6 @@ import { describe, expect, test } from "vitest";
 import { createImage, fixImage, readPixel, writePixel } from "./index";
 import type { FixOptions, RGBAImage } from "@pixelaid/shared";
 
-const MAGENTA = [255, 0, 255, 255] as const;
 const FRINGE_GREEN = [42, 109, 35, 255] as const;
 const NEAR_FRINGE_GREEN = [48, 116, 40, 255] as const;
 const OUTLINE_BLACK = [16, 17, 18, 255] as const;

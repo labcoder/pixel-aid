@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { getGuidedFixPanelState, getGuidedFixSummary } from "./guidedFix";
+import { getGuidedFixPanelState, getGuidedFixSummary, getSemanticFringeColorsForGuidedCleanup } from "./guidedFix";
 
 describe("guided fix summary", () => {
   test("collapses simple recommendation controls while advanced settings are open", () => {
@@ -91,5 +91,45 @@ describe("guided fix summary", () => {
     expect(summary.intent).toContain("repeat preview");
     expect(summary.intent).toContain("seam risk");
     expect(summary.metrics).not.toContain("Inspect-only");
+  });
+});
+
+describe("guided semantic fringe cleanup colors", () => {
+  test("returns deduplicated semantic fringe colors for conservative single-sprite background cleanup", () => {
+    expect(
+      getSemanticFringeColorsForGuidedCleanup({
+        mode: "single",
+        assetType: "sprite",
+        alpha: "backgroundFloodFill",
+        outlineMode: "repairExisting",
+        fringeCandidates: [{ color: "#2A6D23" }, { color: "2a6d23" }, { color: "#183f3c" }]
+      })
+    ).toEqual(["#2a6d23", "#183f3c"]);
+
+    expect(
+      getSemanticFringeColorsForGuidedCleanup({
+        mode: "single",
+        assetType: "icon",
+        alpha: "backgroundFloodFill",
+        outlineMode: "add",
+        fringeCandidates: [{ color: "#64676f" }]
+      })
+    ).toEqual(["#64676f"]);
+  });
+
+  test("returns no semantic fringe colors outside the conservative guided cleanup path", () => {
+    const base = {
+      mode: "single" as const,
+      assetType: "sprite" as const,
+      alpha: "backgroundFloodFill" as const,
+      outlineMode: "repairExisting" as const,
+      fringeCandidates: [{ color: "#2a6d23" }]
+    };
+
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, mode: "spriteSheet" })).toEqual([]);
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, assetType: "portrait" })).toEqual([]);
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, alpha: "preserve" })).toEqual([]);
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, outlineMode: "none" })).toEqual([]);
+    expect(getSemanticFringeColorsForGuidedCleanup({ ...base, fringeCandidates: [] })).toEqual([]);
   });
 });
