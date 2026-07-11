@@ -247,12 +247,19 @@ describe("PixelAid MCP-ready handlers", () => {
         metrics: {
           outline: {
             candidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+            candidateCount: number;
+            fringeCandidates: Array<{ color: string; isFringeSuspect?: boolean; repairSafeScore?: number; fringeSuspectScore?: number }>;
+            fringeCandidateCount: number;
           };
         };
       };
-      const fringe = firstReport.metrics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
-      const repairSafe = firstReport.metrics.outline.candidates.find((candidate) => candidate.color === "#101112");
+      const outline = firstReport.metrics.outline;
+      const fringe = outline.fringeCandidates.find((candidate) => candidate.color === "#2a6d23");
+      const repairSafe = outline.candidates.find((candidate) => candidate.color === "#101112");
+      expect(outline.candidateCount).toBe(outline.candidates.length);
+      expect(outline.fringeCandidateCount).toBe(outline.fringeCandidates.length);
       expect(repairSafe).toMatchObject({ color: "#101112", isFringeSuspect: false, repairSafeScore: expect.any(Number) });
+      expect(outline.candidates.map((candidate) => candidate.color)).not.toContain("#2a6d23");
       expect(fringe).toMatchObject({ color: "#2a6d23", isFringeSuspect: true, repairSafeScore: expect.any(Number), fringeSuspectScore: expect.any(Number) });
     } finally {
       await rm(dir, { recursive: true, force: true });

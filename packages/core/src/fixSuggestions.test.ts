@@ -42,7 +42,7 @@ describe("guided outline repair suggestions", () => {
   test("uses repair-safe outline ranking for fringe-contaminated detected source colors", () => {
     const source = createFringeContaminatedChromaMatteSprite();
     const suggestion = suggestFixSettings(source);
-    const fringe = suggestion.qualityReport.metrics.outline.candidates.find((candidate) => candidate.color === "#2a6d23");
+    const fringe = suggestion.qualityReport.metrics.outline.fringeCandidates.find((candidate) => candidate.color === "#2a6d23");
     const innerOutline = suggestion.qualityReport.metrics.outline.candidates.find((candidate) => candidate.color === "#101112");
 
     expect(fringe).toBeDefined();
@@ -50,6 +50,28 @@ describe("guided outline repair suggestions", () => {
     expect(fringe!.isFringeSuspect).toBe(true);
     expect(innerOutline!.isFringeSuspect ?? false).toBe(false);
     expect(suggestion.qualityReport.metrics.outline.candidates[0]?.color).toBe("#101112");
+    expect(suggestion.qualityReport.metrics.outline.fringeCandidates.map((candidate) => candidate.color)).not.toContain("#101112");
+    expect(suggestion.outlineMode).toBe("repairExisting");
+    expect(suggestion.outlineSourceColors[0]).toBe("#101112");
+  });
+
+  test("uses semantic outline candidates when exterior green fringe hides the true outline", () => {
+    const source = createGreenFringeShellAroundDarkOutlineSprite();
+    const suggestion = suggestFixSettings(source);
+    const outlineColors = suggestion.qualityReport.metrics.outline.candidates.map((candidate) => candidate.color);
+
+    expect(suggestion.mode).toBe("single");
+    expect(suggestion.alpha).toBe("backgroundFloodFill");
+    expect(suggestion.matteCleanup).toBe(true);
+    expect(outlineColors[0]).toBe("#101112");
+    expect(outlineColors).not.toContain("#2a6d23");
+    expect(suggestion.cleanupEligibility).toContainEqual(
+      expect.objectContaining({
+        pass: "outlineRepair",
+        enabled: true,
+        reasonCode: "single-sprite-matte-outline-repair-needed"
+      })
+    );
     expect(suggestion.outlineMode).toBe("repairExisting");
     expect(suggestion.outlineSourceColors[0]).toBe("#101112");
   });
@@ -224,6 +246,22 @@ function createFringeContaminatedChromaMatteSprite(): RGBAImage {
   fillRect(image, 26, 22, 2, 48, 16, 17, 18);
   fillRect(image, 66, 22, 2, 48, 16, 17, 18);
   fillRect(image, 28, 24, 38, 44, 180, 166, 132);
+  punchAlphaGap(image, 46, 22, 3);
+  return image;
+}
+
+function createGreenFringeShellAroundDarkOutlineSprite(): RGBAImage {
+  const image = createImage(96, 96);
+  fillRect(image, 0, 0, image.width, image.height, 255, 0, 255);
+  fillRect(image, 24, 20, 48, 2, 42, 109, 35);
+  fillRect(image, 24, 76, 48, 2, 42, 109, 35);
+  fillRect(image, 24, 20, 2, 58, 42, 109, 35);
+  fillRect(image, 70, 20, 2, 58, 42, 109, 35);
+  fillRect(image, 26, 22, 44, 2, 16, 17, 18);
+  fillRect(image, 26, 72, 44, 2, 16, 17, 18);
+  fillRect(image, 26, 22, 2, 52, 16, 17, 18);
+  fillRect(image, 68, 22, 2, 52, 16, 17, 18);
+  fillRect(image, 28, 24, 40, 48, 180, 166, 132);
   punchAlphaGap(image, 46, 22, 3);
   return image;
 }
