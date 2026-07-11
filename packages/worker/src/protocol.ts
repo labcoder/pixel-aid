@@ -23,6 +23,7 @@ export type SourcePaletteAnalysis = {
 export type SourceAssetAnalysisResult = {
   palette: SourcePaletteAnalysis;
   outlineCandidates: OutlineColorCandidate[];
+  fringeCandidates?: OutlineColorCandidate[];
 };
 
 export type AnalyzeSourceWorkerRequest = {

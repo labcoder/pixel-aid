@@ -169,7 +169,40 @@ describe("worker fix pipeline", () => {
     expect(response.result.outlineCandidates.length).toBeLessThanOrEqual(4);
   });
 
-  test("serializes outline repair-safety metadata in source analysis candidates", () => {
+  test("returns semantic outline source candidates and separates fringe matte candidates", () => {
+    const request: WorkerRequest = {
+      type: "analyze-source",
+      requestId: "semantic-outline-source-analysis-job",
+      image: outlineMetadataImage(),
+      paletteMaxColors: 6,
+      maxUniqueColors: 10,
+      outlineMaxCandidates: 4
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("source-analysis-result");
+    if (response.type !== "source-analysis-result") {
+      throw new Error("Expected source analysis response");
+    }
+    const outlineColors = response.result.outlineCandidates.map((candidate) => candidate.color);
+    expect(response.result.outlineCandidates[0]).toMatchObject({
+      color: "#101112",
+      role: "outline-source",
+      analysisStage: "semantic-silhouette",
+      semanticScore: expect.any(Number)
+    });
+    expect(outlineColors).not.toContain("#2a6d23");
+    expect(response.result.fringeCandidates).toEqual(expect.any(Array));
+    expect(response.result.fringeCandidates?.map((candidate) => candidate.color)).toContain("#2a6d23");
+    expect(response.result.fringeCandidates?.map((candidate) => candidate.color)).not.toContain("#101112");
+    expect(response.result.fringeCandidates?.find((candidate) => candidate.color === "#2a6d23")).toMatchObject({
+      role: "fringe-matte",
+      isFringeSuspect: true
+    });
+  });
+
+  test("serializes semantic outline and fringe repair-safety metadata in source analysis", () => {
     const request: WorkerRequest = {
       type: "analyze-source",
       requestId: "outline-metadata-source-analysis-job",
@@ -185,22 +218,50 @@ describe("worker fix pipeline", () => {
     if (response.type !== "source-analysis-result") {
       throw new Error("Expected source analysis response");
     }
-    const serialized = JSON.parse(JSON.stringify(response.result.outlineCandidates)) as typeof response.result.outlineCandidates;
-    const fringe = serialized.find((candidate) => candidate.color === "#2a6d23");
-    const repairSafe = serialized.find((candidate) => candidate.color === "#101112");
+    const serialized = JSON.parse(JSON.stringify(response.result)) as typeof response.result;
+    const repairSafe = serialized.outlineCandidates.find((candidate) => candidate.color === "#101112");
+    const fringe = serialized.fringeCandidates?.find((candidate) => candidate.color === "#2a6d23");
     expect(repairSafe).toMatchObject({
       color: "#101112",
+      role: "outline-source",
+      analysisStage: "semantic-silhouette",
+      semanticScore: expect.any(Number),
       classification: "deliberate",
       isFringeSuspect: false,
       repairSafeScore: expect.any(Number),
-      fringeSuspectScore: expect.any(Number),
+      fringeSuspectScore: expect.any(Number)
     });
     expect(fringe).toMatchObject({
       color: "#2a6d23",
+      role: "fringe-matte",
+      analysisStage: "raw",
+      semanticScore: expect.any(Number),
       isFringeSuspect: true,
       repairSafeScore: expect.any(Number),
-      fringeSuspectScore: expect.any(Number),
+      fringeSuspectScore: expect.any(Number)
     });
+  });
+
+  test("caps semantic outline and fringe source-analysis arrays independently", () => {
+    const request: WorkerRequest = {
+      type: "analyze-source",
+      requestId: "semantic-outline-cap-source-analysis-job",
+      image: outlineMetadataImage(),
+      paletteMaxColors: 6,
+      maxUniqueColors: 10,
+      outlineMaxCandidates: 1
+    };
+
+    const response = runWorkerRequest(request, () => 0);
+
+    expect(response.type).toBe("source-analysis-result");
+    if (response.type !== "source-analysis-result") {
+      throw new Error("Expected source analysis response");
+    }
+    expect(response.result.outlineCandidates).toHaveLength(1);
+    expect(response.result.fringeCandidates).toHaveLength(1);
+    expect(response.result.outlineCandidates[0]?.color).toBe("#101112");
+    expect(response.result.fringeCandidates?.[0]?.color).toBe("#2a6d23");
   });
 
   test("runs quality analysis in the worker protocol", () => {
