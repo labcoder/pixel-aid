@@ -150,6 +150,14 @@ export function applyOutlineCleanupDetailed(image: RGBAImage, mode: OutlineMode,
   return { image: output, diagnostics };
 }
 
+export function resolveRepairOutlineColor(image: RGBAImage, options: OutlineCleanupOptions = {}): number | null {
+  if (options.color !== undefined) {
+    return parseHexColor(options.color);
+  }
+  const selectedSourceColors = normalizeSourceColors(options.sourceColors);
+  return selectedSourceColors[0] ?? detectExistingOutlineColor(image, options.alphaThreshold ?? 8, options.backgroundTolerance ?? 18);
+}
+
 function createOutlineDiagnostics(mode: OutlineMode, explicitSourceColorCount: number, detectedCandidateCount: number): OutlineCleanupDiagnostics {
   return {
     mode,
