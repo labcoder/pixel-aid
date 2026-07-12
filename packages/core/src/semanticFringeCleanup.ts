@@ -82,7 +82,9 @@ function clearExteriorConnectedFringe(image: RGBAImage, matcher: Uint8Array, alp
   const { width, height, data } = image;
   const pixelCount = width * height;
   const exterior = new Uint8Array(pixelCount);
+  const fringeState = new Uint8Array(pixelCount);
   const queue = new Int32Array(pixelCount);
+  const component = new Int32Array(pixelCount);
   let read = 0;
   let write = 0;
   let clearedPixels = 0;
@@ -100,6 +102,75 @@ function clearExteriorConnectedFringe(image: RGBAImage, matcher: Uint8Array, alp
     write += 1;
   };
 
+  const bucketForOffset = (offset: number): number =>
+    ((data[offset]! >> 4) << 8) | ((data[offset + 1]! >> 4) << 4) | (data[offset + 2]! >> 4);
+
+  const processFringeComponent = (start: number): void => {
+    if (fringeState[start] !== 0) {
+      return;
+    }
+
+    let componentRead = 0;
+    let componentWrite = 0;
+    let touchesRetainedOpaque = false;
+    fringeState[start] = 1;
+    component[componentWrite] = start;
+    componentWrite += 1;
+
+    while (componentRead < componentWrite) {
+      const current = component[componentRead]!;
+      componentRead += 1;
+      const x = current % width;
+      const y = Math.floor(current / width);
+
+      for (let dy = -1; dy <= 1; dy += 1) {
+        for (let dx = -1; dx <= 1; dx += 1) {
+          if (dx === 0 && dy === 0) {
+            continue;
+          }
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= width || ny >= height) {
+            continue;
+          }
+          const neighbor = ny * width + nx;
+          const offset = neighbor * 4;
+          if (data[offset + 3]! < alphaThreshold) {
+            continue;
+          }
+          const bucket = bucketForOffset(offset);
+          if (matcher[bucket] === 1) {
+            if (fringeState[neighbor] === 0) {
+              fringeState[neighbor] = 1;
+              component[componentWrite] = neighbor;
+              componentWrite += 1;
+            }
+            continue;
+          }
+          touchesRetainedOpaque = true;
+        }
+      }
+    }
+
+    if (touchesRetainedOpaque) {
+      return;
+    }
+
+    for (let index = 0; index < componentWrite; index += 1) {
+      const pixel = component[index]!;
+      const offset = pixel * 4;
+      data[offset] = 0;
+      data[offset + 1] = 0;
+      data[offset + 2] = 0;
+      data[offset + 3] = 0;
+      exterior[pixel] = 1;
+      fringeState[pixel] = 2;
+      queue[write] = pixel;
+      write += 1;
+    }
+    clearedPixels += componentWrite;
+  };
+
   for (let x = 0; x < width; x += 1) {
     enqueueTransparentExterior(x);
     enqueueTransparentExterior((height - 1) * width + x);
@@ -110,8 +181,8 @@ function clearExteriorConnectedFringe(image: RGBAImage, matcher: Uint8Array, alp
   }
 
   // Connectivity invariant: the queue contains only pixels proven connected to the exterior transparent
-  // region. Matching visible fringe pixels are cleared before enqueueing, so the flood can peel a fringe
-  // shell but can never cross through non-matching outline/body pixels to enclosed same-hue details.
+  // region. Matching fringe components are cleared only after confirming that the whole component is
+  // detached from retained opaque subject pixels, so semantic cleanup cannot open subject-boundary gaps.
   while (read < write) {
     const current = queue[read]!;
     read += 1;
@@ -139,18 +210,11 @@ function clearExteriorConnectedFringe(image: RGBAImage, matcher: Uint8Array, alp
           write += 1;
           continue;
         }
-        const bucket = ((data[offset]! >> 4) << 8) | ((data[offset + 1]! >> 4) << 4) | (data[offset + 2]! >> 4);
+        const bucket = bucketForOffset(offset);
         if (matcher[bucket] !== 1) {
           continue;
         }
-        data[offset] = 0;
-        data[offset + 1] = 0;
-        data[offset + 2] = 0;
-        data[offset + 3] = 0;
-        exterior[neighbor] = 1;
-        queue[write] = neighbor;
-        write += 1;
-        clearedPixels += 1;
+        processFringeComponent(neighbor);
       }
     }
   }
