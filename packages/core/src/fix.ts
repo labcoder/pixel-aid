@@ -26,12 +26,16 @@ import { createImage } from "./image";
 import { applyLineCleanup } from "./lineCleanup";
 import { detectMixels, regularizeMixels } from "./mixels";
 import { snapToGrid } from "./snap";
-import { applySemanticFringeCleanup } from "./semanticFringeCleanup";
+import { applySemanticFringeCleanup, applySourceCoordinateSemanticFringeReplacement } from "./semanticFringeCleanup";
+import type { SemanticFringeCleanupOptions } from "./semanticFringeCleanup";
 import { applyMorphologyCleanup } from "./morphology";
-import { applyOutlineCleanup, applyOutlineCleanupDetailed } from "./outline";
+import { normalizeExteriorNeutralGrayShell } from "./neutralGrayShellCleanup";
+import { applyOutlineCleanup, applyOutlineCleanupDetailed, resolveRepairOutlineColor } from "./outline";
 import { remapToPalette, resolvePalette } from "./palette";
 import { assertNotCancelled, collectedPhaseTimings, createFixPhaseTimer, measurePhase, phasePercent, reportProgress } from "./runtime";
 import type { FixPhaseTimer, FixRuntimeOptions } from "./runtime";
+
+const REPAIR_POST_PALETTE_SEMANTIC_FRINGE_BUCKET_DISTANCE = 37;
 
 export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): PixelFixResult {
   assertNotCancelled(runtime?.signal);
@@ -147,8 +151,9 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const morphologyResult = measurePhase(phaseTimer, "morphology", () => applyMorphologyCleanup(denoised, options.cleanup.morphology));
   const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
   const semanticFringeColors = options.cleanup.semanticFringeColors;
-  const semanticFringeResult = semanticFringeColors !== undefined
-    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, { colors: semanticFringeColors }))
+  const semanticFringeCleanupOptions = repairSemanticFringeCleanupOptions(morphologyCleaned, options, semanticFringeColors);
+  const semanticFringeResult = semanticFringeCleanupOptions !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, semanticFringeCleanupOptions))
     : undefined;
   const semanticFringeCleaned = semanticFringeResult?.image ?? morphologyCleaned;
   const outlineResult = measurePhase(phaseTimer, "outline-cleanup", () =>
@@ -193,7 +198,35 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       ...(paletteDiagnostics.colorSpace ? { colorSpace: paletteDiagnostics.colorSpace } : {})
     })
   );
-  assertNotCancelled(runtime?.signal);
+  const postPaletteSemanticFringeOptions = repairPostPaletteSemanticFringeCleanupOptions(remapped, options, semanticFringeColors);
+  const postPaletteSemanticFringeResult = postPaletteSemanticFringeOptions !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(remapped, postPaletteSemanticFringeOptions))
+    : undefined;
+  const postSemanticImage = postPaletteSemanticFringeResult?.image ?? remapped;
+  const sourceCoordinateSemanticFringeResult = repairSourceCoordinateSemanticFringeReplacement(
+    postSemanticImage,
+    image,
+    options,
+    gridWithDrift.sourceRect,
+    outlinePadding,
+    outlineResult.diagnostics.selectedColor
+  );
+  const postSourceSemanticImage = sourceCoordinateSemanticFringeResult?.image ?? postSemanticImage;
+  const grayShellResult = repairNeutralGrayShellNormalization(
+    postSourceSemanticImage,
+    image,
+    semanticFringeCleaned,
+    options,
+    gridWithDrift.sourceRect,
+    outlinePadding,
+    outlineResult.diagnostics.selectedColor
+  );
+  const finalImage = grayShellResult?.image ?? postSourceSemanticImage;
+  const semanticFringeDiagnostics = mergeSemanticFringeDiagnostics(
+    semanticFringeResult?.diagnostics,
+    postPaletteSemanticFringeResult?.diagnostics
+  );
+
   reportProgress(runtime, "export-prep", 95, "Preparing fix result");
   assertNotCancelled(runtime?.signal);
   const resultGridBase = mixelDiagnostics ? attachMixelDiagnostics(gridWithDrift, mixelDiagnostics) : gridWithDrift;
@@ -201,15 +234,15 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const phaseTimings = collectedPhaseTimings(phaseTimer);
 
   const result = {
-    image: remapped,
+    image: finalImage,
     palette: effectivePalette,
     grid: resultGrid,
     metrics: {
       durationMs: 0,
       sourceWidth: image.width,
       sourceHeight: image.height,
-      outputWidth: remapped.width,
-      outputHeight: remapped.height,
+      outputWidth: finalImage.width,
+      outputHeight: finalImage.height,
       paletteCount: effectivePalette.length,
       gridConfidence: resultGrid.confidence
     },
@@ -220,7 +253,7 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       contrastExpansion: contrastExpanded.diagnostics,
       ...(mixelDiagnostics ? { mixels: mixelDiagnostics } : {}),
       ...(options.cleanup.morphology?.enabled ? { morphology: morphologyResult.diagnostics } : {}),
-      ...(semanticFringeResult ? { semanticFringe: semanticFringeResult.diagnostics } : {}),
+      ...(semanticFringeDiagnostics ? { semanticFringe: semanticFringeDiagnostics } : {}),
       ...((options.cleanup.outlineMode ?? "none") !== "none" ? { outline: outlineResult.diagnostics } : {}),
       ...(lineCleanupResult ? { lineCleanup: lineCleanupResult.diagnostics } : {}),
       palette: paletteDiagnostics,
@@ -366,12 +399,18 @@ function fixSheetFrames(
       ...(paletteDiagnostics.colorSpace ? { colorSpace: paletteDiagnostics.colorSpace } : {})
     })
   );
+  const postPaletteSemanticFringeOptions = repairPostPaletteSemanticFringeCleanupOptions(remapped, options, options.cleanup.semanticFringeColors);
+  const postPaletteSemanticFringeResult = postPaletteSemanticFringeOptions !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(remapped, postPaletteSemanticFringeOptions))
+    : undefined;
+  const finalImage = postPaletteSemanticFringeResult?.image ?? remapped;
+  semanticFringeDiagnostics = mergeSemanticFringeDiagnostics(semanticFringeDiagnostics, postPaletteSemanticFringeResult?.diagnostics);
   assertNotCancelled(runtime?.signal);
   reportProgress(runtime, "export-prep", 95, "Preparing sheet fix result");
   assertNotCancelled(runtime?.signal);
   const grid: GridCandidate = {
-    outputWidth: remapped.width,
-    outputHeight: remapped.height,
+    outputWidth: finalImage.width,
+    outputHeight: finalImage.height,
     scaleX: gridScaleX,
     scaleY: gridScaleY,
     phaseX,
@@ -385,15 +424,15 @@ function fixSheetFrames(
   const phaseTimings = collectedPhaseTimings(phaseTimer);
 
   const result = {
-    image: remapped,
+    image: finalImage,
     palette: effectivePalette,
     grid,
     metrics: {
       durationMs: 0,
       sourceWidth: image.width,
       sourceHeight: image.height,
-      outputWidth: remapped.width,
-      outputHeight: remapped.height,
+      outputWidth: finalImage.width,
+      outputHeight: finalImage.height,
       paletteCount: effectivePalette.length,
       gridConfidence: grid.confidence
     },
@@ -929,6 +968,98 @@ function adaptiveCoverageOption(options: FixOptions): { adaptiveCoverage?: numbe
   return adaptiveCoverage === undefined ? {} : { adaptiveCoverage };
 }
 
+function repairSemanticFringeReplacementColor(image: RGBAImage, options: FixOptions): string | undefined {
+  if ((options.cleanup.outlineMode ?? "none") !== "repairExisting") {
+    return undefined;
+  }
+  const color = resolveRepairOutlineColor(image, {
+    color: options.cleanup.outlineColor,
+    sourceColors: options.cleanup.outlineSourceColors
+  });
+  return color === null ? undefined : rgbToHex(color);
+}
+
+function repairSemanticFringeCleanupOptions(
+  image: RGBAImage,
+  options: FixOptions,
+  colors: readonly string[] | undefined
+): SemanticFringeCleanupOptions | undefined {
+  if (colors === undefined) {
+    return undefined;
+  }
+  const replacementColor = repairSemanticFringeReplacementColor(image, options);
+  if ((options.cleanup.outlineMode ?? "none") === "repairExisting" && replacementColor === undefined) {
+    return undefined;
+  }
+  return {
+    colors,
+    ...(replacementColor !== undefined ? { replacementColor } : {})
+  };
+}
+
+function repairPostPaletteSemanticFringeCleanupOptions(
+  image: RGBAImage,
+  options: FixOptions,
+  colors: readonly string[] | undefined
+): SemanticFringeCleanupOptions | undefined {
+  if (colors === undefined || (options.cleanup.outlineMode ?? "none") !== "repairExisting") {
+    return undefined;
+  }
+  const replacementColor = repairSemanticFringeReplacementColor(image, options);
+  if (replacementColor === undefined) {
+    return undefined;
+  }
+  return {
+    colors,
+    replacementColor,
+    bucketDistance: REPAIR_POST_PALETTE_SEMANTIC_FRINGE_BUCKET_DISTANCE
+  };
+}
+
+function repairSourceCoordinateSemanticFringeReplacement(
+  image: RGBAImage,
+  source: RGBAImage,
+  options: FixOptions,
+  sourceRect: Rect | undefined,
+  outlinePadding: number,
+  selectedOutlineColor: string | undefined
+): { image: RGBAImage; changedPixels: number } | undefined {
+  const colors = options.cleanup.semanticFringeColors;
+  if ((options.cleanup.outlineMode ?? "none") !== "repairExisting" || selectedOutlineColor === undefined || colors === undefined || colors.length === 0 || options.mode !== "single") {
+    return undefined;
+  }
+  return applySourceCoordinateSemanticFringeReplacement(image, {
+    source,
+    ...(sourceRect !== undefined ? { sourceRect } : {}),
+    finalOffsetX: outlinePadding,
+    finalOffsetY: outlinePadding,
+    colors,
+    replacementColor: selectedOutlineColor
+  });
+}
+
+function repairNeutralGrayShellNormalization(
+  image: RGBAImage,
+  source: RGBAImage,
+  preOutline: RGBAImage,
+  options: FixOptions,
+  sourceRect: Rect | undefined,
+  outlinePadding: number,
+  selectedOutlineColor: string | undefined
+): { image: RGBAImage; changedPixels: number } | undefined {
+  if ((options.cleanup.outlineMode ?? "none") !== "repairExisting" || selectedOutlineColor === undefined || options.mode !== "single") {
+    return undefined;
+  }
+  return normalizeExteriorNeutralGrayShell(image, {
+    outlineColor: selectedOutlineColor,
+    source,
+    preOutline,
+    ...(sourceRect !== undefined ? { sourceRect } : {}),
+    finalOffsetX: outlinePadding,
+    finalOffsetY: outlinePadding
+  });
+}
+
 const BACKGROUND_REMOVAL_FOREGROUND_ALPHA_COVERAGE = 0.08;
 
 function foregroundAlphaThresholdOption(
@@ -1179,8 +1310,9 @@ function cleanFixedImage(
   assertNotCancelled(runtime?.signal);
   const morphologyCleaned = decontaminateTransparentRgbAfterMatteCleanup(morphologyResult.image, options);
   const semanticFringeColors = options.cleanup.semanticFringeColors;
-  const semanticFringeResult = semanticFringeColors !== undefined
-    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, { colors: semanticFringeColors }))
+  const semanticFringeCleanupOptions = repairSemanticFringeCleanupOptions(morphologyCleaned, options, semanticFringeColors);
+  const semanticFringeResult = semanticFringeCleanupOptions !== undefined
+    ? measurePhase(phaseTimer, "alpha-cleanup", () => applySemanticFringeCleanup(morphologyCleaned, semanticFringeCleanupOptions))
     : undefined;
   const semanticFringeCleaned = semanticFringeResult?.image ?? morphologyCleaned;
   const outlined = measurePhase(phaseTimer, "outline-cleanup", () =>
