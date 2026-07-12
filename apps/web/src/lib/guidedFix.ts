@@ -31,6 +31,7 @@ export type GuidedFixPanelState = {
 
 export type SemanticFringeCandidate = {
   color: string;
+  isFringeSuspect?: boolean;
 };
 
 export type GuidedSemanticFringeCleanupInput = {
@@ -71,6 +72,9 @@ export function getSemanticFringeColorsForGuidedCleanup(input: GuidedSemanticFri
   const colors: string[] = [];
   const seen = new Set<string>();
   for (const candidate of input.fringeCandidates) {
+    if (candidate.isFringeSuspect !== true) {
+      continue;
+    }
     const color = normalizeHexColor(candidate.color);
     if (!color || seen.has(color)) {
       continue;

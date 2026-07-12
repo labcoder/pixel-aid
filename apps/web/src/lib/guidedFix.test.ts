@@ -95,7 +95,7 @@ describe("guided fix summary", () => {
 });
 
 describe("guided semantic fringe cleanup colors", () => {
-  test("returns deduplicated semantic fringe colors for conservative single-sprite background cleanup", () => {
+  test("returns deduplicated semantic fringe colors for approved suspect candidates", () => {
     expect(
       getSemanticFringeColorsForGuidedCleanup({
         mode: "single",
@@ -103,7 +103,12 @@ describe("guided semantic fringe cleanup colors", () => {
         alpha: "backgroundFloodFill",
         outlineMode: "repairExisting",
         matteCleanup: false,
-        fringeCandidates: [{ color: "#2A6D23" }, { color: "2a6d23" }, { color: "#183f3c" }]
+        fringeCandidates: [
+          { color: "#2A6D23", isFringeSuspect: true },
+          { color: "2a6d23", isFringeSuspect: true },
+          { color: "#183f3c", isFringeSuspect: true },
+          { color: "not-a-color", isFringeSuspect: true }
+        ]
       })
     ).toEqual(["#2a6d23", "#183f3c"]);
 
@@ -114,9 +119,27 @@ describe("guided semantic fringe cleanup colors", () => {
         alpha: "backgroundFloodFill",
         outlineMode: "add",
         matteCleanup: false,
-        fringeCandidates: [{ color: "#64676f" }]
+        fringeCandidates: [{ color: "#64676f", isFringeSuspect: true }]
       })
     ).toEqual(["#64676f"]);
+  });
+
+  test("excludes deliberate semantic fringe candidates that analysis did not flag as suspects", () => {
+    expect(
+      getSemanticFringeColorsForGuidedCleanup({
+        mode: "single",
+        assetType: "sprite",
+        alpha: "backgroundFloodFill",
+        outlineMode: "repairExisting",
+        matteCleanup: false,
+        fringeCandidates: [
+          { color: "#f99bfb", isFringeSuspect: false },
+          { color: "#2A6D23", isFringeSuspect: true },
+          { color: "#fdc0fd", isFringeSuspect: false },
+          { color: "#fdb4fd", isFringeSuspect: false }
+        ]
+      })
+    ).toEqual(["#2a6d23"]);
   });
 
   test("returns semantic fringe colors for matte cleanup when outline repair is suppressed", () => {
@@ -127,7 +150,11 @@ describe("guided semantic fringe cleanup colors", () => {
         alpha: "backgroundFloodFill",
         outlineMode: "none",
         matteCleanup: true,
-        fringeCandidates: [{ color: "#2A6D23" }, { color: "2a6d23" }]
+        fringeCandidates: [
+          { color: "#2A6D23", isFringeSuspect: true },
+          { color: "2a6d23", isFringeSuspect: true },
+          { color: "#f99bfb", isFringeSuspect: false }
+        ]
       })
     ).toEqual(["#2a6d23"]);
   });
@@ -139,7 +166,7 @@ describe("guided semantic fringe cleanup colors", () => {
       alpha: "backgroundFloodFill" as const,
       outlineMode: "repairExisting" as const,
       matteCleanup: false,
-      fringeCandidates: [{ color: "#2a6d23" }]
+      fringeCandidates: [{ color: "#2a6d23", isFringeSuspect: true }]
     };
 
     expect(getSemanticFringeColorsForGuidedCleanup({ ...base, mode: "spriteSheet" })).toEqual([]);
