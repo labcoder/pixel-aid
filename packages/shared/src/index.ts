@@ -1,5 +1,5 @@
 export const PIXELAID_APP_NAME = "PixelAid";
-export const PIXELAID_VERSION = "0.1.1";
+export const PIXELAID_VERSION = "0.2.0";
 
 export type {
   AlphaMode,

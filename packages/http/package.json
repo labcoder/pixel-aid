@@ -1,6 +1,6 @@
 {
   "name": "@pixelaid/http",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "exports": {
@@ -15,8 +15,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@pixelaid/automation": "0.1.1",
-    "@pixelaid/shared": "0.1.1"
+    "@pixelaid/automation": "0.2.0",
+    "@pixelaid/shared": "0.2.0"
   },
   "devDependencies": {
     "@types/node": "^25.6.0"
