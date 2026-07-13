@@ -176,6 +176,8 @@ pixelaid fix robot.png --out robot-fixed.png --outline-mode repairExisting --out
 
 This prevents automation from treating only black as the existing outline.
 
+There is no separate CLI flag or default switch for the repair-only post-palette source-coordinate semantic fringe and neutral-gray shell passes. They are controlled by the existing outline settings plus serialized `FixOptions`/manifest cleanup settings: `cleanup.outlineMode: "repairExisting"`, a resolved repair outline color from `outlineColor`, `outlineSourceColors`, or detection, and `cleanup.semanticFringeColors` for the source-coordinate semantic fringe pass. Guided flows and explicit automation/manifest callers can serialize `cleanup.semanticFringeColors` under `meta.operation.settings.cleanup`; `none` and `add` remain unchanged.
+
 For quick visual regression loops against AI outputs with baked backgrounds, use the compiled CLI directly and write into an ignored scratch folder:
 
 ```powershell
