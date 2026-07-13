@@ -2,7 +2,7 @@
 
 Sprite sheets use the frame-aware branch of `fixImage()` when `options.mode !== "single"` and `options.sheetFrames` contains at least one frame (`packages/core/src/fix.ts:280 isSheetFrameFix()`). The branch is implemented by `fixSheetFrames()` at `fix.ts:284`. Instead of resolving one crop grid and downsampling the whole source, PixelAid computes output packing, fixes each frame into its destination rectangle, then resolves one shared sheet palette.
 
-The sheet path moves most cleanup inside a per-frame loop. It does not run the single-image grid-resolution or mixel branch. It uses the explicit frame plan supplied by the UI, CLI, automation, or suggestions, and it keeps palette locking, drift diagnostics, matte filtering, and final remap at sheet scope.
+The sheet path moves most cleanup inside a per-frame loop. It does not run the single-image grid-resolution or mixel branch. It uses the explicit frame plan supplied by the UI, CLI, automation, or suggestions, and it keeps palette locking, drift diagnostics, matte filtering, palette remap, and the existing repair-only post-palette semantic-fringe cleanup at sheet scope. It does not run the single-image source-coordinate semantic fringe replacement or neutral-gray shell normalization passes.
 
 ## Main flow
 
@@ -40,7 +40,10 @@ flowchart TD
   Z -->|"no"| AA["resolve sheet palette with frames"]
   AA --> AB["refine palette"]
   AB --> AC["remapToPalette"]
-  AC --> AD["sheet PixelFixResult"]
+  AC --> AD{"repairExisting semantic colors"}
+  AD -->|"yes"| AE["post-palette semantic fringe cleanup<br/>fix.ts:402-407"]
+  AD -->|"no"| AF["sheet PixelFixResult"]
+  AE --> AF
 ```
 
 ## Frame preparation and output size
@@ -99,7 +102,7 @@ If `fixSheetFrameSource()` supplied a `sourceReference`, the cleaned frame is pa
 
 ## Shared sheet-level tail
 
-Once all frames are packed, PixelAid resolves and applies one palette for the whole sheet:
+Once all frames are packed, PixelAid resolves one palette for the whole sheet, remaps the packed image, and may run the existing repair-only post-palette semantic-fringe cleanup. The sheet tail does not run `repairSourceCoordinateSemanticFringeReplacement()` or `repairNeutralGrayShellNormalization()`:
 
 | Stage | Code anchors | Composition details |
 | --- | --- | --- |
@@ -108,8 +111,9 @@ Once all frames are packed, PixelAid resolves and applies one palette for the wh
 | Palette resolve | `fix.ts:339-346`, `palette.ts:124 resolvePalette()` | Frames are passed to `resolvePalette()` so lock-scope source selection, dithering safety, and drift diagnostics can inspect per-frame rects (`fix.ts:344`). |
 | Palette drift | `palette.ts:159-169`, `palette.ts:1512 analyzePaletteDrift()` | For each frame, PixelAid computes a frame-local auto palette and counts colors that are outside the active sheet palette. Diagnostics include stability score and warnings. |
 | Palette refinement | `fix.ts:347-348`, `fix.ts:959 refinePaletteForCleanup()` | Non-single matte cleanup can filter magenta matte palette artifacts (`fix.ts:968-988`). Non-single binary outputs with high denoise can merge nearby auto palette colors (`fix.ts:998-1005`). |
-| Remap | `fix.ts:349-358`, `palette.ts: remapToPalette()` | Applies the effective sheet palette to the packed image with the resolved dithering and color space. |
-| Result assembly | `fix.ts:360-401` | Returns packed image, palette, synthetic frame-aware grid, metrics, settings, and diagnostics. |
+| Remap | `fix.ts:392-400`, `palette.ts: remapToPalette()` | Applies the effective sheet palette to the packed image with the resolved dithering and color space. |
+| Post-palette semantic fringe cleanup | `fix.ts:402-407`, `fix.ts:1000-1016` | Runs only when `outlineMode` is `repairExisting`, `cleanup.semanticFringeColors` is non-empty, and a repair outline color is resolved. This is the existing sheet-safe semantic cleanup, not the single-image source-coordinate or neutral-gray shell repairs. |
+| Result assembly | `fix.ts:424-451` | Returns packed image, palette, synthetic frame-aware grid, metrics, settings, and diagnostics. |
 
 ## Sheet conditioning and frame proposals
 
@@ -123,17 +127,18 @@ Guided suggestions use sheet analysis before the fix runs; this is not a separat
 
 ## Diagnostics and metadata
 
-`fixSheetFrames()` assembles diagnostics at `fix.ts:391-397`:
+`fixSheetFrames()` assembles diagnostics at `fix.ts:440-447`:
 
 | Diagnostic key | Source | Included when |
 | --- | --- | --- |
 | `alpha` | merged per-frame alpha diagnostics | At least one frame produced alpha diagnostics, normally yes |
 | `contrastExpansion` | whole-sheet `applyContrastExpansion()` | Always included |
 | `morphology` | merged per-frame morphology diagnostics | Only if at least one frame had morphology diagnostics |
+| `semanticFringe` | merged per-frame and optional post-palette semantic cleanup diagnostics | Only if `cleanup.semanticFringeColors` caused a semantic cleanup pass |
 | `palette` | sheet-level `resolvePalette()` and refinement | Always included |
 | `phaseTimings` | runtime phase timer | Only with a phase timer |
 
-The sheet path does **not** include `halo`, `outline`, or `lineCleanup` diagnostics in the result even if those edits occurred inside `cleanFixedImage()`, because the helper does not return those detailed diagnostic records (`fix.ts:1151-1190`). The result grid is synthetic: output size is the final sheet size, scale and phase come from options, confidence is 1, and `sourceRect` is the union of all frame source rects (`fix.ts:362-374`).
+The sheet path does **not** include `halo`, `outline`, or `lineCleanup` diagnostics in the result even if those edits occurred inside `cleanFixedImage()`, because the helper does not return those detailed diagnostic records (`fix.ts:1294-1340`). The result grid is synthetic: output size is the final sheet size, scale and phase come from options, confidence is 1, and `sourceRect` is the union of all frame source rects (`fix.ts:411-423`).
 
 ## Where the knobs live
 
@@ -148,6 +153,6 @@ The sheet path does **not** include `halo`, `outline`, or `lineCleanup` diagnost
 | `cleanup.morphology` | Enables matte precleanup in native-scale branch and per-frame morphology (`fix.ts:472-478`, `fix.ts:1166-1168`). |
 | `cleanup.removeHalos` | Enables per-frame halo removal (`fix.ts:1161-1163`). |
 | `cleanup.denoiseStrength` | Controls per-frame denoise; capped for inferred-native cleanup (`fix.ts:895-907`). |
-| `cleanup.outlineMode`, `outlineColor`, `outlineSourceColors`, `outlineAlpha`, `outlineSize` | Control per-frame outline cleanup (`fix.ts:1169-1179`). |
-| `cleanup.jaggyCleanup`, `lineCleanup`, `preserveSinglePixelDetails`, `removeOrphans` | Feed per-frame outline and line cleanup (`fix.ts:1175-1183`). |
-| `palette`, `paletteSettings`, `maxColors` | Control one sheet-level palette and remap (`fix.ts:337-358`). |
+| `cleanup.outlineMode`, `outlineColor`, `outlineSourceColors`, `outlineAlpha`, `outlineSize`, `semanticFringeColors` | Control per-frame outline cleanup and the existing sheet-safe semantic fringe cleanup; they do not enable the single-image source-coordinate or neutral-gray shell repairs (`fix.ts:402-407`, `fix.ts:1312-1328`). |
+| `cleanup.jaggyCleanup`, `lineCleanup`, `preserveSinglePixelDetails`, `removeOrphans` | Feed per-frame outline and line cleanup (`fix.ts:1324-1331`). |
+| `palette`, `paletteSettings`, `maxColors` | Control one sheet-level palette, remap, and sheet-safe post-palette semantic cleanup (`fix.ts:380-407`). |

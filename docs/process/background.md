@@ -35,7 +35,10 @@ flowchart TD
   V --> W["outline normally none"]
   W --> X["palette resolve maxColors 64"]
   X --> Y["remapToPalette"]
-  Y --> Z["PixelFixResult"]
+  Y --> YA{"manual repairExisting<br/>resolved color"}
+  YA -->|"yes"| YB["same post-palette repairs<br/>see single-sprite.md"]
+  YA -->|"no"| Z["PixelFixResult"]
+  YB --> Z
 ```
 
 ## Background defaults
@@ -70,8 +73,8 @@ flowchart TD
 | 10 | Halo and denoise | `fix.ts:142-144` | Halo removal is disabled by default and omitted from diagnostics unless explicitly enabled. Denoise strength is 0 for backgrounds. |
 | 11 | Morphology and decontamination | `fix.ts:145-146`, `fix.ts:1130-1149` | No morphology is included by the background preset. If a user enables matte morphology, deferred decontamination only applies when alpha is not `preserve` and decontamination is requested. |
 | 12 | Outline and line cleanup | `fix.ts:147-163`, `fixSuggestions.ts:679-698` | Guided background override sets outline to `none` unless cleanup eligibility allows outline repair; preservation assets usually fail cleanup eligibility (`fixSuggestions.ts:700-789`). Line cleanup runs only when explicitly configured. |
-| 13 | Palette | `fix.ts:166-188`, `palette.ts:124-201` | Backgrounds default to `maxColors: 64` and `medianCut` unless options override. Salient-color protection defaults true for all single-mode auto palettes through `resolvePaletteSettings()` (`fix.ts:955-957`), but background suggestions also carry preservation warnings and a larger budget. |
-| 14 | Result | `fix.ts:190-224` | Same `PixelFixResult` shape as sprites, with diagnostics reflecting which conservative passes actually ran. |
+| 13 | Palette and optional repair post-palette | `fix.ts:166-224`, `palette.ts:124-201` | Backgrounds default to `maxColors: 64`, `medianCut`, and `outlineMode: "none"`, so the guided default stops after remap. If a manual single-mode background is explicitly set to `repairExisting` and resolves an outline color, it follows the same post-palette source-coordinate semantic fringe and neutral-gray shell order documented in `single-sprite.md`. |
+| 14 | Result | `fix.ts:230-265` | Same `PixelFixResult` shape as sprites, with diagnostics reflecting which conservative passes actually ran. |
 
 ## Branches skipped by default
 

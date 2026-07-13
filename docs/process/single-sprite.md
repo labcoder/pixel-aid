@@ -44,7 +44,12 @@ flowchart TD
   AC --> AE["palette stage"]
   AD --> AE
   AE --> AF["remapToPalette"]
-  AF --> AG["PixelFixResult diagnostics"]
+  AF --> AG{"repairExisting<br/>resolved color"}
+  AG -->|"semantic colors"| AH["source-coordinate semantic fringe<br/>fix.ts:206-214"]
+  AG -->|"no semantic colors"| AI["neutral-gray shell normalization<br/>fix.ts:215-224"]
+  AG -->|"no"| AJ["PixelFixResult diagnostics"]
+  AH --> AI
+  AI --> AJ
 ```
 
 ## Stage-by-stage walkthrough
@@ -66,8 +71,12 @@ flowchart TD
 | 13 | Outline cleanup | `fix.ts:147-157`, `outline.ts: applyOutlineCleanupDetailed()` | `outlineMode`, `outlineColor`, `outlineSourceColors`, `outlineAlpha`, `outlineSize`, `removeOrphans`, and `preserveSinglePixelDetails` are wired through. `closeGaps` comes from `lineCleanup !== "off"` when `lineCleanup` is set, otherwise from `jaggyCleanup` (`fix.ts:154`). Outline candidate detection assumes dark outlines; `outline.ts` defines `OUTLINE_CANDIDATE_LUMA = 168`. |
 | 14 | Line cleanup | `fix.ts:159-163`, `lineCleanup.ts: applyLineCleanup()` | Runs only when `cleanup.lineCleanup` is defined, including non-`off` strengths. The phase name is recorded as `alpha-cleanup` in this code path (`fix.ts:161`). |
 | 15 | Palette reserve, resolve, refine | `fix.ts:166-178`, `fix.ts:1485 reservedPaletteForCleanup()`, `palette.ts:124 resolvePalette()` | Builds reserved colors, resolves an auto/fixed/preset palette, then filters or merges colors for cleanup-sensitive cases. See palette diagram below. |
-| 16 | Palette remap | `fix.ts:179-188`, `palette.ts: remapToPalette()` | Remaps visible pixels to the effective palette with selected dithering and color space. |
-| 17 | Result assembly | `fix.ts:190-224` | Adds image, palette, grid, metrics, settings, and diagnostics. Mixel and padding changes are reflected in the result grid (`fix.ts:192-193`). |
+| 16 | Palette remap | `fix.ts:191-200`, `palette.ts: remapToPalette()` | Remaps visible pixels to the effective palette with selected dithering and color space. This is not always the final image for single-image `repairExisting`. |
+| 17 | Source-coordinate semantic fringe replacement | `fix.ts:201-214`, `fix.ts:1019-1038`, `semanticFringeCleanup.ts:39-92`, `semanticFringeCleanup.ts:178-324` | Runs only for `options.mode === "single"`, `cleanup.outlineMode === "repairExisting"`, a resolved repair outline color, and non-empty `cleanup.semanticFringeColors`. It derives raw-source exterior semantic evidence from the whole source-image border while flood traversal is limited to `sourceRect`, maps final pixels through outline padding and `sourceRect`, recolors RGB to the resolved repair outline, and preserves alpha. If no repair color is resolved, it skips. |
+| 18 | Neutral-gray shell normalization | `fix.ts:215-224`, `fix.ts:1041-1059`, `neutralGrayShellCleanup.ts:28-65`, `neutralGrayShellCleanup.ts:142-177`, `neutralGrayShellCleanup.ts:314-346` | Runs only for single-image `repairExisting` with a resolved repair outline color. It uses raw source plus pre-outline exterior evidence, narrow neutral-gray candidate selection, and padded coordinate mapping to recolor exterior shell RGB to the resolved outline while preserving alpha. |
+| 19 | Result assembly | `fix.ts:230-265` | Adds image, palette, grid, metrics, settings, and diagnostics. Mixel and padding changes are reflected in the result grid (`fix.ts:232-233`). |
+
+The post-palette order is always `remapToPalette()` -> repair-only source-coordinate semantic fringe replacement -> repair-only neutral-gray shell normalization -> result assembly. `none` and `add` do not run these repair-only passes, and sheet-frame fixes stay on their own packed-sheet remap/result path.
 
 ### Downsample method variants
 
@@ -109,7 +118,8 @@ flowchart TD
   J --> P["merge reserved colors"]
   O --> P
   P --> Q["refinePaletteForCleanup<br/>fix.ts:959"]
-  Q --> R["remapToPalette<br/>fix.ts:179"]
+  Q --> R["remapToPalette<br/>fix.ts:191"]
+  R --> S["repairExisting-only post-palette passes<br/>fix.ts:201-224"]
 ```
 
 Palette details:
@@ -133,6 +143,7 @@ For single sprites and icons:
 - Palette strategy becomes `familyFirst` for single sprites/icons when flood-fill alpha or matte cleanup is active; otherwise it is `medianCut` (`fixSuggestions.ts:484-500`). Because `familyFirst` seats vivid families natively, the subject-detail reservation and salient protected-color bolt-ons are skipped for it (`fix.ts:1617-1625`, `palette.ts:145-149`, `palette.ts:299-309 resolveFamilyFirstProtectedColors`).
 - Denoise, halo removal, orphan removal, jaggy cleanup, and preservation of single-pixel details come from asset presets unless special low-scale or matte-cleanup branches override them (`assetTypePresets.ts:72-86`, `fixSuggestions.ts:796-888`).
 - Outline defaults are enabled only when cleanup eligibility and outline evidence agree; selected source colors are dark candidate colors, typically one or two (`fixSuggestions.ts:679-698`).
+- Semantic fringe colors live in `cleanup.semanticFringeColors`. Guided or explicit callers can serialize them in `FixOptions` and export manifests; there is no separate post-palette repair flag. In `repairExisting`, those colors enable the source-coordinate semantic fringe pass only when a repair outline color is also resolved.
 
 ## Diagnostics and metadata
 
@@ -171,6 +182,7 @@ Grid diagnostics are attached to `result.grid`, not `diagnostics`: local drift i
 | `cleanup.denoiseStrength` | Controls denoise strength (`fix.ts:144`). |
 | `cleanup.morphology` | Controls morphology and deferred transparent-RGB cleanup (`fix.ts:145-146`, `fix.ts:1142-1149`). |
 | `cleanup.outlineMode`, `outlineColor`, `outlineSourceColors`, `outlineAlpha`, `outlineSize` | Control outline repair/add passes and optional auto padding (`fix.ts:140-157`). |
+| `cleanup.semanticFringeColors` | Supplies the semantic color family for fringe cleanup and the single-image `repairExisting` source-coordinate post-palette replacement; the latter also requires a resolved repair outline color (`fix.ts:201-214`, `fix.ts:1019-1038`). |
 | `cleanup.removeOrphans`, `jaggyCleanup`, `preserveSinglePixelDetails` | Feed outline cleanup and gap closing (`fix.ts:153-155`). |
 | `cleanup.lineCleanup` | Controls outline gap closing and optional `applyLineCleanup()` pass (`fix.ts:154`, `fix.ts:159-163`). |
 | `palette`, `paletteSettings`, `maxColors` | Fixed, preset, or auto palette resolution and remap (`fix.ts:168-188`, `palette.ts:124-201`). |

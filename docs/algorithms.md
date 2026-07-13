@@ -205,8 +205,14 @@ Fixture coverage now includes white matte, gray haze matte, baked checkerboard m
 `applyOutlineCleanup` is an optional post-alpha cleanup pass. It never resizes the image.
 
 - `none`: clone the image unchanged.
-- `repairExisting`: detect an existing dark edge color and fill transparent or background-colored gaps around visible pixels. If no dark edge exists, the image is left unchanged.
 - `add`: add an outline around visible pixels. It reuses a detected dark edge color when possible, otherwise it uses the darkest visible color or a supplied outline color.
+- `repairExisting`: resolve an existing repair outline color and fill transparent or background-colored gaps around visible pixels. The resolved color uses the same repair precedence as the code path: explicit `outlineColor`, explicit `outlineSourceColors`, then detected existing outline (`fix.ts:971-979`). If no repair color is resolvable, repair-only fringe and shell normalization are skipped.
+
+The single-image `repairExisting` path also has repair-only post-palette passes after `remapToPalette`: source-coordinate semantic fringe replacement, then neutral-gray shell normalization, then result assembly (`fix.ts:191-224`, helpers at `fix.ts:1019-1059`). `none`, `add`, and sheet-frame fixes do not receive these source-coordinate passes.
+
+Source-coordinate semantic fringe replacement is gated to single-image `repairExisting`, a resolved repair color, and non-empty `cleanup.semanticFringeColors` (`fix.ts:1019-1038`). `applySourceCoordinateSemanticFringeReplacement()` uses exact RGB Euclidean semantic matching with threshold 50, learns background from the whole raw source border, limits flood traversal to `sourceRect`, and maps final pixels back through `sourceRect` plus final outline padding (`semanticFringeCleanup.ts:39-92`, `semanticFringeCleanup.ts:178-324`). It catches semantic fringe pixels that are visually outside the silhouette but enclosed by final gray/black alpha topology, recolors RGB only to the resolved repair outline, and preserves alpha bytes. Source-interior/enclosed details and unrelated cyan, white, gray, or non-matching colors remain protected.
+
+Neutral-gray shell normalization is a separate `repairExisting` post-palette pass that requires a resolved repair color but not semantic fringe colors (`fix.ts:1041-1059`). `normalizeExteriorNeutralGrayShell()` uses raw source plus pre-outline exterior evidence, narrow neutral-gray candidate selection, nearest/exterior-side outline checks, and padded coordinate mapping before recoloring RGB to the resolved outline while preserving alpha (`neutralGrayShellCleanup.ts:28-65`, `neutralGrayShellCleanup.ts:142-177`, `neutralGrayShellCleanup.ts:180-229`, `neutralGrayShellCleanup.ts:314-346`).
 
 The pass treats transparent pixels and detected corner-background pixels as drawable outside space. This lets it work when alpha is preserved and the source still has an opaque white or flat-color background.
 
@@ -239,6 +245,8 @@ The current single-sprite fixture covers a high-resolution fake-pixel character 
 7. Apply optional outline cleanup, with crop padding when an added or repaired outline needs room outside the detected bounds.
 8. Remove orphan mask components and close one-pixel gaps when cleanup options are enabled.
 9. Reserve explicit outline colors before palette remapping.
+10. Remap to the resolved palette.
+11. For single-image `repairExisting` only, run the post-palette repair passes in order: source-coordinate semantic fringe replacement when a resolved outline color and `cleanup.semanticFringeColors` are present, then neutral-gray shell normalization when a resolved outline color is present.
 
 Remaining quality targets:
 
