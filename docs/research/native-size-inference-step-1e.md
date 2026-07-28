@@ -1,7 +1,7 @@
 # Native-size inference: Step 1E implementation
 
-Status: opt-in core implementation complete on local branch `pixel-bench`;
-full pixel-bench rerun pending
+Status: opt-in core implementation and unchanged-corpus replay complete on
+local branch `pixel-bench`
 
 Step 1E improves robust native-size inference for blurred and ambiguous
 pseudo-pixel inputs. It does not change PixelAid's classic default, expose a new
@@ -45,7 +45,7 @@ size was absent from five candidates, present but ranked below the incumbent, or
 selected exactly with low pixel-match quality.
 
 Candidate absence dominated drift and kitchen-sink failures. Development
-soft-bilinear failures often had the correct candidate at ranks 2–5, while
+soft-bilinear failures often had the correct candidate at ranks 2-5, while
 prior-validation soft-bilinear failures more often lacked one or both axes.
 That evidence required both additional boundary evidence and reranking; either
 mechanism alone was insufficient.
@@ -113,10 +113,36 @@ Development gains were six soft-bilinear, seven non-square, one kitchen-sink,
 one drift, and one clean-nearest case. Prior-validation gains were one
 soft-bilinear, one non-square, and one fractional case.
 
-These are detector replays against frozen ground-truth dimensions, not the
-final public pixel-bench result. The unchanged benchmark must still be rerun to
-measure reconstruction, color, placement, timing, and aggregate comparisons
-with Pixel Art Fixer.
+The official local adapter then completed every case in primary and repeat
+runs. Repeat-run non-timing fields matched in 7,200 of 7,200 comparisons, and
+the unchanged guided-PixelAid and Pixel Art Fixer controls matched Step 1D in
+4,800 of 4,800 comparisons.
+
+| Cohort | PixelAid Step 1D exact | PixelAid Step 1E exact | Pixel Art Fixer exact |
+| --- | ---: | ---: | ---: |
+| Development | 40.0% | 53.3% | 64.2% |
+| Prior validation | 44.2% | 46.7% | 58.3% |
+
+PixelAid therefore improved without an observed exact-size regression but did
+not win this benchmark. On prior validation, the PixelAid-minus-Fixer exact
+recovery gap was -11.7 percentage points with a 95% image-clustered interval
+from -20.0 to -2.5 points.
+
+Prior-validation category results localize the remaining gap: PixelAid led
+clean nearest-neighbor (+5 points), drift (+5), and non-square (+10), while
+trailing fractional scaling (-10), kitchen-sink distortion (-25), and soft
+bilinear distortion (-55).
+
+Exact size also did not erase the reconstruction gap. Across the 46
+prior-validation inputs where both tools selected the authored size,
+PixelAid's pixel match was 92.5% versus 97.8% for Pixel Art Fixer.
+
+Raw results, hashes, repeatability analysis, and the paired failure gallery
+remain outside this repository under:
+
+```text
+C:\dev\Mighty\pixel-aid-benchmark-lab\step1e
+```
 
 ## Performance
 
