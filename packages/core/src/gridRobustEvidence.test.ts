@@ -15,6 +15,8 @@ describe("robust grid evidence", () => {
     expect(first.axisY.length).toBe(source.height);
     expect(first.axisX.transitionTotal).toBeGreaterThan(0);
     expect(first.axisY.transitionTotal).toBeGreaterThan(0);
+    expect(first.axisX.curvatureTotal).toBeGreaterThan(0);
+    expect(first.axisY.curvatureTotal).toBeGreaterThan(0);
     expect(sum(first.axisX.runHistogram)).toBeGreaterThan(0);
     expect(sum(first.axisY.runHistogram)).toBeGreaterThan(0);
   });

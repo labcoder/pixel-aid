@@ -4,6 +4,7 @@ export type RobustAxisHypothesis = {
   cellCount: number;
   period: number;
   phase: number;
+  boundaryOffset: number;
   score: number;
   boundaryCoverage: number;
   boundaryDensity: number;
@@ -47,64 +48,138 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
   const period = evidence.length / cellCount;
   const boundaryCount = Math.max(0, cellCount - 1);
   const radius = Math.max(0, Math.min(3, Math.floor((period - 1) / 2), Math.ceil(period * 0.3)));
-  let coveredEnergy = 0;
-  let normalizedBoundaryEnergy = 0;
-  let activeBoundaries = 0;
-  const activeThreshold = Math.max(evidence.transitionMean * 1.35, evidence.transitionMaximum * 0.06);
-
-  for (let boundary = 1; boundary < cellCount; boundary += 1) {
-    const position = boundary * period;
-    const center = Math.round(position);
-    let localMaximum = 0;
-    let localEnergy = 0;
-    for (let offset = -radius; offset <= radius; offset += 1) {
-      const index = center + offset;
-      if (index <= 0 || index >= evidence.transitionProfile.length) {
-        continue;
-      }
-      const value = evidence.transitionProfile[index]!;
-      localEnergy += value;
-      localMaximum = Math.max(localMaximum, value);
-    }
-    coveredEnergy += localEnergy;
-    normalizedBoundaryEnergy += evidence.transitionMaximum > 0 ? localMaximum / evidence.transitionMaximum : 0;
-    if (localMaximum >= activeThreshold) {
-      activeBoundaries += 1;
-    }
-  }
-
-  const boundaryCoverage =
-    evidence.transitionTotal > 0 ? clampScore(coveredEnergy / evidence.transitionTotal) : 0;
-  const boundaryDensity = boundaryCount > 0 ? normalizedBoundaryEnergy / boundaryCount : 0;
-  const activeBoundaryRatio = boundaryCount > 0 ? activeBoundaries / boundaryCount : 0;
+  const boundary = findBestBoundaryOffset(evidence, cellCount, period, radius);
   const run = scoreRunEvidence(evidence.runHistogram, period);
   const detectorAgreement = geometricAgreement([
-    boundaryCoverage,
-    boundaryDensity,
+    boundary.coverage,
+    boundary.density,
     run.agreement
   ]);
   const rawScore =
-    boundaryCoverage * 0.31 +
-    boundaryDensity * 0.27 +
-    activeBoundaryRatio * 0.1 +
+    boundary.coverage * 0.31 +
+    boundary.density * 0.27 +
+    boundary.activeRatio * 0.1 +
     run.agreement * 0.17 +
     run.fundamentalSupport * 0.15;
-  const oversegmentationPenalty = oversegmentationPenaltyFor(period, boundaryDensity, run.fundamentalSupport);
+  const oversegmentationPenalty = oversegmentationPenaltyFor(period, boundary.density, run.fundamentalSupport);
   const score = clampScore(rawScore * (1 - oversegmentationPenalty));
 
   return {
     cellCount,
     period,
     phase: 0,
+    boundaryOffset: boundary.offset,
     score,
-    boundaryCoverage,
-    boundaryDensity,
-    activeBoundaryRatio,
+    boundaryCoverage: boundary.coverage,
+    boundaryDensity: boundary.density,
+    activeBoundaryRatio: boundary.activeRatio,
     runAgreement: run.agreement,
     fundamentalRunSupport: run.fundamentalSupport,
     detectorAgreement,
     harmonicAdvantage: 0
   };
+}
+
+function findBestBoundaryOffset(
+  evidence: RobustAxisEvidence,
+  cellCount: number,
+  period: number,
+  radius: number
+): { offset: number; coverage: number; density: number; activeRatio: number } {
+  const searchRadius = Math.min(3, period / 2);
+  let best = scoreCombinedBoundaries(evidence, cellCount, period, radius, 0);
+  for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.25) {
+    const scored = scoreCombinedBoundaries(evidence, cellCount, period, radius, offset);
+    if (boundaryQuality(scored) > boundaryQuality(best)) {
+      best = scored;
+    }
+  }
+  return best;
+}
+
+function scoreCombinedBoundaries(
+  evidence: RobustAxisEvidence,
+  cellCount: number,
+  period: number,
+  radius: number,
+  offset: number
+): { offset: number; coverage: number; density: number; activeRatio: number } {
+  const transition = scoreProfileBoundaries(
+    evidence.transitionProfile,
+    evidence.transitionTotal,
+    evidence.transitionMaximum,
+    evidence.transitionMean,
+    cellCount,
+    period,
+    radius,
+    offset
+  );
+  const curvature = scoreProfileBoundaries(
+    evidence.curvatureProfile,
+    evidence.curvatureTotal,
+    evidence.curvatureMaximum,
+    evidence.curvatureMean,
+    cellCount,
+    period,
+    Math.min(radius, 2),
+    offset
+  );
+  return {
+    offset,
+    coverage: transition.coverage * 0.42 + curvature.coverage * 0.58,
+    density: transition.density * 0.42 + curvature.density * 0.58,
+    activeRatio: transition.activeRatio * 0.42 + curvature.activeRatio * 0.58
+  };
+}
+
+function scoreProfileBoundaries(
+  profile: Float64Array,
+  total: number,
+  maximum: number,
+  mean: number,
+  cellCount: number,
+  period: number,
+  radius: number,
+  offset: number
+): { coverage: number; density: number; activeRatio: number } {
+  const boundaryCount = Math.max(0, cellCount - 1);
+  let coveredEnergy = 0;
+  let normalizedBoundaryEnergy = 0;
+  let activeBoundaries = 0;
+  const activeThreshold = Math.max(mean * 1.35, maximum * 0.06);
+
+  for (let boundary = 1; boundary < cellCount; boundary += 1) {
+    const position = boundary * period + offset;
+    const center = Math.round(position);
+    let localMaximum = 0;
+    let localEnergy = 0;
+    for (let offset = -radius; offset <= radius; offset += 1) {
+      const index = center + offset;
+      if (index <= 0 || index >= profile.length) {
+        continue;
+      }
+      const value = profile[index]!;
+      localEnergy += value;
+      localMaximum = Math.max(localMaximum, value);
+    }
+    coveredEnergy += localEnergy;
+    normalizedBoundaryEnergy += maximum > 0 ? localMaximum / maximum : 0;
+    if (localMaximum >= activeThreshold) {
+      activeBoundaries += 1;
+    }
+  }
+
+  const coverage =
+    total > 0 ? clampScore(coveredEnergy / total) : 0;
+  return {
+    coverage,
+    density: boundaryCount > 0 ? normalizedBoundaryEnergy / boundaryCount : 0,
+    activeRatio: boundaryCount > 0 ? activeBoundaries / boundaryCount : 0
+  };
+}
+
+function boundaryQuality(input: { coverage: number; density: number; activeRatio: number }): number {
+  return input.coverage * 0.5 + input.density * 0.38 + input.activeRatio * 0.12;
 }
 
 function applyHarmonicArbitration(hypotheses: RobustAxisHypothesis[]): void {
@@ -213,6 +288,7 @@ function nativeFallback(length: number): RobustAxisHypothesis {
     cellCount: length,
     period: 1,
     phase: 0,
+    boundaryOffset: 0,
     score: 0.2,
     boundaryCoverage: 0,
     boundaryDensity: 0,

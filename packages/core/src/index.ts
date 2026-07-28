@@ -9,6 +9,8 @@ export type {
   FixOptions,
   GridAutoStrategy,
   GridCandidate,
+  GridRobustAxisDiagnostics,
+  GridRobustDiagnostics,
   HaloRemovalDiagnostics,
   LineCleanupDiagnostics,
   LineCleanupStrength,

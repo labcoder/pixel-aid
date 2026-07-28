@@ -7,6 +7,10 @@ export type RobustAxisEvidence = {
   transitionTotal: number;
   transitionMaximum: number;
   transitionMean: number;
+  curvatureProfile: Float64Array;
+  curvatureTotal: number;
+  curvatureMaximum: number;
+  curvatureMean: number;
   runHistogram: Float64Array;
   runSampleCount: number;
 };
@@ -34,14 +38,16 @@ export function buildRobustGridEvidence(
   const maxRunLength = Math.max(2, Math.min(Math.max(sourceRect.w, sourceRect.h), maxPeriod * 8));
   const xProfile = new Float64Array(sourceRect.w);
   const yProfile = new Float64Array(sourceRect.h);
+  const xCurvature = new Float64Array(sourceRect.w);
+  const yCurvature = new Float64Array(sourceRect.h);
   const xRuns = new Float64Array(maxRunLength + 1);
   const yRuns = new Float64Array(maxRunLength + 1);
-  const xSamples = accumulateXEvidence(image, sourceRect, sampleStep, xProfile, xRuns);
-  const ySamples = accumulateYEvidence(image, sourceRect, sampleStep, yProfile, yRuns);
+  const xSamples = accumulateXEvidence(image, sourceRect, sampleStep, xProfile, xCurvature, xRuns);
+  const ySamples = accumulateYEvidence(image, sourceRect, sampleStep, yProfile, yCurvature, yRuns);
 
   return {
-    axisX: summarizeAxis(sourceRect.x, xProfile, xRuns, xSamples),
-    axisY: summarizeAxis(sourceRect.y, yProfile, yRuns, ySamples),
+    axisX: summarizeAxis(sourceRect.x, xProfile, xCurvature, xRuns, xSamples),
+    axisY: summarizeAxis(sourceRect.y, yProfile, yCurvature, yRuns, ySamples),
     sampleStep,
     sourceRect
   };
@@ -52,6 +58,7 @@ function accumulateXEvidence(
   rect: Rect,
   sampleStep: number,
   profile: Float64Array,
+  curvature: Float64Array,
   runs: Float64Array
 ): number {
   let sampleCount = 0;
@@ -64,6 +71,10 @@ function accumulateXEvidence(
       const offset = (y * image.width + x) * 4;
       const previousOffset = offset - 4;
       profile[localX] = profile[localX]! + transitionStrength(image.data, previousOffset, offset);
+      if (localX < rect.w - 1) {
+        curvature[localX] =
+          curvature[localX]! + curvatureStrength(image.data, previousOffset, offset, offset + 4);
+      }
       const label = quantizedLabel(image.data, offset);
       if (label === previousLabel) {
         runLength += 1;
@@ -77,6 +88,7 @@ function accumulateXEvidence(
     sampleCount += 1;
   }
   normalizeProfile(profile, sampleCount);
+  normalizeProfile(curvature, sampleCount);
   return sampleCount;
 }
 
@@ -85,6 +97,7 @@ function accumulateYEvidence(
   rect: Rect,
   sampleStep: number,
   profile: Float64Array,
+  curvature: Float64Array,
   runs: Float64Array
 ): number {
   let sampleCount = 0;
@@ -97,6 +110,16 @@ function accumulateYEvidence(
       const offset = (y * image.width + x) * 4;
       const previousOffset = offset - image.width * 4;
       profile[localY] = profile[localY]! + transitionStrength(image.data, previousOffset, offset);
+      if (localY < rect.h - 1) {
+        curvature[localY] =
+          curvature[localY]! +
+          curvatureStrength(
+            image.data,
+            previousOffset,
+            offset,
+            offset + image.width * 4
+          );
+      }
       const label = quantizedLabel(image.data, offset);
       if (label === previousLabel) {
         runLength += 1;
@@ -110,6 +133,7 @@ function accumulateYEvidence(
     sampleCount += 1;
   }
   normalizeProfile(profile, sampleCount);
+  normalizeProfile(curvature, sampleCount);
   return sampleCount;
 }
 
@@ -127,6 +151,23 @@ function transitionStrength(data: Uint8ClampedArray, first: number, second: numb
   const blue = Math.abs(data[first + 2]! - data[second + 2]!);
   const weightedColor = (red * 77 + green * 150 + blue * 29) / 256;
   return weightedColor * (visibleAlpha / 255) + alphaDifference * 0.75;
+}
+
+function curvatureStrength(
+  data: Uint8ClampedArray,
+  first: number,
+  center: number,
+  third: number
+): number {
+  const alpha = Math.max(data[first + 3]!, data[center + 3]!, data[third + 3]!);
+  if (alpha <= 8) {
+    return 0;
+  }
+  const red = Math.abs(data[first]! - 2 * data[center]! + data[third]!);
+  const green = Math.abs(data[first + 1]! - 2 * data[center + 1]! + data[third + 1]!);
+  const blue = Math.abs(data[first + 2]! - 2 * data[center + 2]! + data[third + 2]!);
+  const alphaCurve = Math.abs(data[first + 3]! - 2 * data[center + 3]! + data[third + 3]!);
+  return ((red * 77 + green * 150 + blue * 29) / 256) * (alpha / 255) + alphaCurve * 0.75;
 }
 
 function quantizedLabel(data: Uint8ClampedArray, offset: number): number {
@@ -162,15 +203,21 @@ function normalizeProfile(profile: Float64Array, sampleCount: number): void {
 function summarizeAxis(
   start: number,
   profile: Float64Array,
+  curvature: Float64Array,
   runHistogram: Float64Array,
   runSampleCount: number
 ): RobustAxisEvidence {
   let transitionTotal = 0;
   let transitionMaximum = 0;
+  let curvatureTotal = 0;
+  let curvatureMaximum = 0;
   for (let index = 1; index < profile.length; index += 1) {
     const value = profile[index]!;
     transitionTotal += value;
     transitionMaximum = Math.max(transitionMaximum, value);
+    const curve = curvature[index]!;
+    curvatureTotal += curve;
+    curvatureMaximum = Math.max(curvatureMaximum, curve);
   }
 
   return {
@@ -180,6 +227,10 @@ function summarizeAxis(
     transitionTotal,
     transitionMaximum,
     transitionMean: profile.length > 1 ? transitionTotal / (profile.length - 1) : 0,
+    curvatureProfile: curvature,
+    curvatureTotal,
+    curvatureMaximum,
+    curvatureMean: curvature.length > 1 ? curvatureTotal / (curvature.length - 1) : 0,
     runHistogram,
     runSampleCount
   };

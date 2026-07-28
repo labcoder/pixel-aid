@@ -15,15 +15,14 @@ import { readGoldenPng } from "./goldenImage.test-utils";
 const goldenDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "goldens");
 
 describe("native-size inference improvement targets", () => {
-  // These assertions describe the intended result, not the current classic
-  // detector. When an opt-in robust strategy exists, route this table through
-  // that strategy and convert each recovered case to a normal passing test.
-  test.fails.each(nativeSizeInferenceFixtures)(
+  test.each(nativeSizeInferenceFixtures)(
     "recovers the authored native size for $failureClass input ($id)",
     (fixture) => {
       const [candidate] = detectGridCandidates(fixture.createImage(), {
         maxScale: 32,
-        sampling: "full"
+        sampling: "full",
+        strategy: "robust",
+        cropToBounds: false
       });
 
       expect(candidate).toBeDefined();

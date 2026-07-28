@@ -509,8 +509,32 @@ export type GridCandidateDiagnostics = {
   confidenceLabel: "low" | "medium" | "high";
   notes: string[];
   sobelTileVoting?: GridSobelTileVotingDiagnostics;
+  robust?: GridRobustDiagnostics;
   drift?: GridDriftDiagnostics;
   mixels?: MixelNormalizationDiagnostics;
+};
+
+export type GridRobustAxisDiagnostics = {
+  cellCount: number;
+  period: number;
+  boundaryOffset: number;
+  score: number;
+  boundaryCoverage: number;
+  boundaryDensity: number;
+  runAgreement: number;
+  detectorAgreement: number;
+  harmonicAdvantage: number;
+};
+
+export type GridRobustDiagnostics = {
+  strategy: "robust";
+  axisX: GridRobustAxisDiagnostics;
+  axisY: GridRobustAxisDiagnostics;
+  candidateMargin: number;
+  detectorAgreement: number;
+  harmonicDecision: string;
+  fullCanvasCellCount: { columns: number; rows: number };
+  cropPolicy: "bounds" | "full-canvas";
 };
 
 export type GridSobelTileVotingDiagnostics = {
