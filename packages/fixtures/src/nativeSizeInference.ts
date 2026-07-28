@@ -20,13 +20,22 @@ export type NativeSizeInferenceFixture = {
   createImage: () => RGBAImage;
 };
 
-type DistortionOptions = {
+export type NativeSizeDistortionOptions = {
   scaleX: number;
   scaleY: number;
   resample: "nearest" | "bilinear";
   blurPasses?: number;
   noiseAmplitude?: number;
   driftAmplitude?: number;
+};
+
+export type NativeSizeInferenceFixtureInput = {
+  id: string;
+  failureClass: NativeSizeFailureClass;
+  description: string;
+  nativeWidth: number;
+  nativeHeight: number;
+  distortion: NativeSizeDistortionOptions;
 };
 
 const BACKGROUND = [222, 184, 232, 255] as const;
@@ -37,7 +46,7 @@ const LIGHT = [116, 199, 91, 255] as const;
 const HIGHLIGHT = [237, 239, 211, 255] as const;
 
 export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] = [
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "harmonic-clean-nearest",
     failureClass: "harmonic",
     description: "Clean 8x nearest-neighbor blocks with broad same-color runs that expose divisor harmonics.",
@@ -45,7 +54,7 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
     nativeHeight: 16,
     distortion: { scaleX: 8, scaleY: 8, resample: "nearest" }
   }),
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "fractional-nearest",
     failureClass: "fractional",
     description: "Nearest-neighbor reconstruction with alternating three/four-pixel source blocks.",
@@ -53,7 +62,7 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
     nativeHeight: 20,
     distortion: { scaleX: 3.92, scaleY: 3.9, resample: "nearest" }
   }),
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "non-square-nearest",
     failureClass: "non-square",
     description: "Independent horizontal and vertical pseudo-pixel scales.",
@@ -61,7 +70,7 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
     nativeHeight: 24,
     distortion: { scaleX: 3.75, scaleY: 6.625, resample: "nearest" }
   }),
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "soft-bilinear",
     failureClass: "softened",
     description: "Fractional bilinear upscale followed by one deterministic box-blur pass.",
@@ -69,7 +78,7 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
     nativeHeight: 16,
     distortion: { scaleX: 6.8125, scaleY: 6.8125, resample: "bilinear", blurPasses: 1 }
   }),
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "row-local-drift",
     failureClass: "local-drift",
     description: "Nominal six-pixel blocks whose horizontal boundaries drift by row.",
@@ -77,7 +86,7 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
     nativeHeight: 24,
     distortion: { scaleX: 6.04, scaleY: 6.04, resample: "nearest", driftAmplitude: 2 }
   }),
-  createFixture({
+  createNativeSizeInferenceFixture({
     id: "combined-soft-drift-noise",
     failureClass: "combined",
     description: "Fractional non-square upscale with bilinear softening, drift, blur, and deterministic color noise.",
@@ -94,14 +103,9 @@ export const nativeSizeInferenceFixtures: readonly NativeSizeInferenceFixture[] 
   })
 ];
 
-function createFixture(input: {
-  id: string;
-  failureClass: NativeSizeFailureClass;
-  description: string;
-  nativeWidth: number;
-  nativeHeight: number;
-  distortion: DistortionOptions;
-}): NativeSizeInferenceFixture {
+export function createNativeSizeInferenceFixture(
+  input: NativeSizeInferenceFixtureInput
+): NativeSizeInferenceFixture {
   const outputWidth = Math.round(input.nativeWidth * input.distortion.scaleX);
   const outputHeight = Math.round(input.nativeHeight * input.distortion.scaleY);
   return {
@@ -141,7 +145,7 @@ function createNativeSprite(width: number, height: number): RGBAImage {
   return image;
 }
 
-function distortNativeSprite(native: RGBAImage, options: DistortionOptions): RGBAImage {
+function distortNativeSprite(native: RGBAImage, options: NativeSizeDistortionOptions): RGBAImage {
   const width = Math.round(native.width * options.scaleX);
   const height = Math.round(native.height * options.scaleY);
   let output = createImage(width, height, BACKGROUND);

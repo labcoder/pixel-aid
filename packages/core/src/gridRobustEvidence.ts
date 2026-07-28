@@ -13,6 +13,8 @@ export type RobustAxisEvidence = {
   curvatureMean: number;
   runHistogram: Float64Array;
   runSampleCount: number;
+  exactFlatPairRatio: number;
+  hardTransitionRatio: number;
 };
 
 export type RobustGridEvidence = {
@@ -26,6 +28,14 @@ export type RobustGridEvidenceOptions = {
   sampleStep?: number;
   maxPeriod?: number;
   sourceRect?: Rect;
+};
+
+type AxisSampleStats = {
+  sampleCount: number;
+  pairCount: number;
+  exactFlatPairs: number;
+  changedPairs: number;
+  hardChangedPairs: number;
 };
 
 export function buildRobustGridEvidence(
@@ -60,8 +70,12 @@ function accumulateXEvidence(
   profile: Float64Array,
   curvature: Float64Array,
   runs: Float64Array
-): number {
+): AxisSampleStats {
   let sampleCount = 0;
+  let pairCount = 0;
+  let exactFlatPairs = 0;
+  let changedPairs = 0;
+  let hardChangedPairs = 0;
   const yOffset = Math.floor(sampleStep / 2);
   for (let y = rect.y + yOffset; y < rect.y + rect.h; y += sampleStep) {
     let previousLabel = quantizedLabel(image.data, (y * image.width + rect.x) * 4);
@@ -70,7 +84,18 @@ function accumulateXEvidence(
       const x = rect.x + localX;
       const offset = (y * image.width + x) * 4;
       const previousOffset = offset - 4;
-      profile[localX] = profile[localX]! + transitionStrength(image.data, previousOffset, offset);
+      const strength = transitionStrength(image.data, previousOffset, offset);
+      profile[localX] = profile[localX]! + strength;
+      pairCount += 1;
+      if (strength > 0.5) {
+        changedPairs += 1;
+        if (strength >= 18) {
+          hardChangedPairs += 1;
+        }
+      }
+      if (pixelsEqual(image.data, previousOffset, offset)) {
+        exactFlatPairs += 1;
+      }
       if (localX < rect.w - 1) {
         curvature[localX] =
           curvature[localX]! + curvatureStrength(image.data, previousOffset, offset, offset + 4);
@@ -89,7 +114,7 @@ function accumulateXEvidence(
   }
   normalizeProfile(profile, sampleCount);
   normalizeProfile(curvature, sampleCount);
-  return sampleCount;
+  return { sampleCount, pairCount, exactFlatPairs, changedPairs, hardChangedPairs };
 }
 
 function accumulateYEvidence(
@@ -99,8 +124,12 @@ function accumulateYEvidence(
   profile: Float64Array,
   curvature: Float64Array,
   runs: Float64Array
-): number {
+): AxisSampleStats {
   let sampleCount = 0;
+  let pairCount = 0;
+  let exactFlatPairs = 0;
+  let changedPairs = 0;
+  let hardChangedPairs = 0;
   const xOffset = Math.floor(sampleStep / 2);
   for (let x = rect.x + xOffset; x < rect.x + rect.w; x += sampleStep) {
     let previousLabel = quantizedLabel(image.data, (rect.y * image.width + x) * 4);
@@ -109,7 +138,18 @@ function accumulateYEvidence(
       const y = rect.y + localY;
       const offset = (y * image.width + x) * 4;
       const previousOffset = offset - image.width * 4;
-      profile[localY] = profile[localY]! + transitionStrength(image.data, previousOffset, offset);
+      const strength = transitionStrength(image.data, previousOffset, offset);
+      profile[localY] = profile[localY]! + strength;
+      pairCount += 1;
+      if (strength > 0.5) {
+        changedPairs += 1;
+        if (strength >= 18) {
+          hardChangedPairs += 1;
+        }
+      }
+      if (pixelsEqual(image.data, previousOffset, offset)) {
+        exactFlatPairs += 1;
+      }
       if (localY < rect.h - 1) {
         curvature[localY] =
           curvature[localY]! +
@@ -134,7 +174,16 @@ function accumulateYEvidence(
   }
   normalizeProfile(profile, sampleCount);
   normalizeProfile(curvature, sampleCount);
-  return sampleCount;
+  return { sampleCount, pairCount, exactFlatPairs, changedPairs, hardChangedPairs };
+}
+
+function pixelsEqual(data: Uint8ClampedArray, first: number, second: number): boolean {
+  return (
+    data[first] === data[second] &&
+    data[first + 1] === data[second + 1] &&
+    data[first + 2] === data[second + 2] &&
+    data[first + 3] === data[second + 3]
+  );
 }
 
 function transitionStrength(data: Uint8ClampedArray, first: number, second: number): number {
@@ -205,7 +254,7 @@ function summarizeAxis(
   profile: Float64Array,
   curvature: Float64Array,
   runHistogram: Float64Array,
-  runSampleCount: number
+  sampleStats: AxisSampleStats
 ): RobustAxisEvidence {
   let transitionTotal = 0;
   let transitionMaximum = 0;
@@ -232,7 +281,15 @@ function summarizeAxis(
     curvatureMaximum,
     curvatureMean: curvature.length > 1 ? curvatureTotal / (curvature.length - 1) : 0,
     runHistogram,
-    runSampleCount
+    runSampleCount: sampleStats.sampleCount,
+    exactFlatPairRatio:
+      sampleStats.pairCount > 0
+        ? sampleStats.exactFlatPairs / sampleStats.pairCount
+        : 0,
+    hardTransitionRatio:
+      sampleStats.changedPairs > 0
+        ? sampleStats.hardChangedPairs / sampleStats.changedPairs
+        : 0
   };
 }
 

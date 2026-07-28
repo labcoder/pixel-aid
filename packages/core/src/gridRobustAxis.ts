@@ -11,6 +11,7 @@ export type RobustAxisHypothesis = {
   activeBoundaryRatio: number;
   runAgreement: number;
   fundamentalRunSupport: number;
+  runReliability: number;
   detectorAgreement: number;
   harmonicAdvantage: number;
 };
@@ -46,21 +47,51 @@ export function inferRobustAxisHypotheses(
 
 function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): RobustAxisHypothesis {
   const period = evidence.length / cellCount;
-  const boundaryCount = Math.max(0, cellCount - 1);
-  const radius = Math.max(0, Math.min(3, Math.floor((period - 1) / 2), Math.ceil(period * 0.3)));
-  const boundary = findBestBoundaryOffset(evidence, cellCount, period, radius);
+  const flatPairReliability = clampScore((evidence.exactFlatPairRatio - 0.05) / 0.45);
+  const hardEdgeReliability = clampScore((evidence.hardTransitionRatio - 0.2) / 0.7);
+  const runReliability = flatPairReliability * hardEdgeReliability;
+  const softCurvatureRadius = Math.max(
+    0,
+    Math.min(
+      2,
+      Math.floor((period - 1) / 2),
+      Math.floor((period * 0.5 - 1) / 2),
+      Math.ceil(period * 0.18)
+    )
+  );
+  const hardEdgeRadius = Math.max(
+    0,
+    Math.min(
+      2,
+      Math.floor((period - 1) / 2),
+      Math.round(period * 0.18)
+    )
+  );
+  const curvatureRadius = runReliability >= 0.25 ? hardEdgeRadius : softCurvatureRadius;
+  const softenedRadius = Math.max(
+    softCurvatureRadius,
+    Math.min(3, Math.floor((period - 1) / 2), Math.ceil(period * 0.3))
+  );
+  const boundary = findBestBoundaryOffset(
+    evidence,
+    cellCount,
+    period,
+    runReliability < 0.25 ? softenedRadius : hardEdgeRadius,
+    curvatureRadius
+  );
   const run = scoreRunEvidence(evidence.runHistogram, period);
   const detectorAgreement = geometricAgreement([
     boundary.coverage,
     boundary.density,
     run.agreement
   ]);
-  const rawScore =
-    boundary.coverage * 0.31 +
-    boundary.density * 0.27 +
-    boundary.activeRatio * 0.1 +
-    run.agreement * 0.17 +
-    run.fundamentalSupport * 0.15;
+  const structuralScore =
+    boundary.coverage * 0.46 +
+    boundary.density * 0.4 +
+    boundary.activeRatio * 0.14;
+  const runScore = run.agreement * 0.55 + run.fundamentalSupport * 0.45;
+  const runWeight = 0.58 * runReliability;
+  const rawScore = structuralScore * (1 - runWeight) + runScore * runWeight;
   const oversegmentationPenalty = oversegmentationPenaltyFor(period, boundary.density, run.fundamentalSupport);
   const score = clampScore(rawScore * (1 - oversegmentationPenalty));
 
@@ -75,6 +106,7 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
     activeBoundaryRatio: boundary.activeRatio,
     runAgreement: run.agreement,
     fundamentalRunSupport: run.fundamentalSupport,
+    runReliability,
     detectorAgreement,
     harmonicAdvantage: 0
   };
@@ -84,12 +116,27 @@ function findBestBoundaryOffset(
   evidence: RobustAxisEvidence,
   cellCount: number,
   period: number,
-  radius: number
+  transitionRadius: number,
+  curvatureRadius: number
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const searchRadius = Math.min(3, period / 2);
-  let best = scoreCombinedBoundaries(evidence, cellCount, period, radius, 0);
+  let best = scoreCombinedBoundaries(
+    evidence,
+    cellCount,
+    period,
+    transitionRadius,
+    curvatureRadius,
+    0
+  );
   for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.25) {
-    const scored = scoreCombinedBoundaries(evidence, cellCount, period, radius, offset);
+    const scored = scoreCombinedBoundaries(
+      evidence,
+      cellCount,
+      period,
+      transitionRadius,
+      curvatureRadius,
+      offset
+    );
     if (boundaryQuality(scored) > boundaryQuality(best)) {
       best = scored;
     }
@@ -101,7 +148,8 @@ function scoreCombinedBoundaries(
   evidence: RobustAxisEvidence,
   cellCount: number,
   period: number,
-  radius: number,
+  transitionRadius: number,
+  curvatureRadius: number,
   offset: number
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const transition = scoreProfileBoundaries(
@@ -111,7 +159,7 @@ function scoreCombinedBoundaries(
     evidence.transitionMean,
     cellCount,
     period,
-    radius,
+    transitionRadius,
     offset
   );
   const curvature = scoreProfileBoundaries(
@@ -121,7 +169,7 @@ function scoreCombinedBoundaries(
     evidence.curvatureMean,
     cellCount,
     period,
-    Math.min(radius, 2),
+    curvatureRadius,
     offset
   );
   return {
@@ -184,9 +232,13 @@ function boundaryQuality(input: { coverage: number; density: number; activeRatio
 
 function applyHarmonicArbitration(hypotheses: RobustAxisHypothesis[]): void {
   const byCellCount = new Map(hypotheses.map((item) => [item.cellCount, item]));
+  const maximumRunAgreement = Math.max(
+    0,
+    ...hypotheses.map((item) => item.runAgreement)
+  );
   for (const hypothesis of hypotheses) {
     const divisor = byCellCount.get(hypothesis.cellCount * 2);
-    if (!divisor || hypothesis.period < 3.5 || hypothesis.boundaryCoverage < 0.72) {
+    if (!divisor || hypothesis.period < 3.5 || hypothesis.boundaryCoverage < 0.68) {
       continue;
     }
     const retainedCoverage = hypothesis.boundaryCoverage / Math.max(0.001, divisor.boundaryCoverage);
@@ -194,10 +246,28 @@ function applyHarmonicArbitration(hypotheses: RobustAxisHypothesis[]): void {
     if (retainedCoverage < 0.68 || retainedDensity < 0.72) {
       continue;
     }
+    const retainedRunAgreement = hypothesis.runAgreement / Math.max(0.001, divisor.runAgreement);
+    const strongerFundamentalSupport =
+      hypothesis.fundamentalRunSupport >= divisor.fundamentalRunSupport * 1.1;
+    if (
+      hypothesis.runReliability >= 0.2 &&
+      divisor.runAgreement >= 0.15 &&
+      retainedRunAgreement < 0.75 &&
+      !strongerFundamentalSupport
+    ) {
+      continue;
+    }
 
     const evidenceStrength = Math.min(1, retainedCoverage) * Math.min(1, retainedDensity);
     const periodStrength = Math.min(1, hypothesis.period / 8);
-    const advantage = Math.min(0.18, evidenceStrength * periodStrength * 0.18);
+    const relativeRunSupport =
+      hypothesis.runReliability >= 0.5 && maximumRunAgreement >= 0.25
+        ? clampScore(hypothesis.runAgreement / maximumRunAgreement)
+        : 1;
+    const advantage = Math.min(
+      0.18,
+      evidenceStrength * periodStrength * relativeRunSupport * 0.18
+    );
     hypothesis.harmonicAdvantage = advantage;
     hypothesis.score = clampScore(hypothesis.score + advantage);
   }
@@ -295,6 +365,7 @@ function nativeFallback(length: number): RobustAxisHypothesis {
     activeBoundaryRatio: 0,
     runAgreement: 0,
     fundamentalRunSupport: 0,
+    runReliability: 0,
     detectorAgreement: 0,
     harmonicAdvantage: 0
   };

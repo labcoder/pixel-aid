@@ -5,8 +5,13 @@ export { compareGoldenSignatures, createGoldenSignature } from "./goldenSignatur
 export type { GoldenSignatureOptions } from "./goldenSignature";
 export { highResolutionPseudoPixelSprites } from "./highResolutionPseudoPixelSprites";
 export { largeBackgroundFixtures } from "./largeBackgrounds";
-export { nativeSizeInferenceFixtures } from "./nativeSizeInference";
-export type { NativeSizeFailureClass, NativeSizeInferenceFixture } from "./nativeSizeInference";
+export { createNativeSizeInferenceFixture, nativeSizeInferenceFixtures } from "./nativeSizeInference";
+export type {
+  NativeSizeDistortionOptions,
+  NativeSizeFailureClass,
+  NativeSizeInferenceFixture,
+  NativeSizeInferenceFixtureInput
+} from "./nativeSizeInference";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";

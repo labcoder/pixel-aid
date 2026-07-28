@@ -522,6 +522,7 @@ export type GridRobustAxisDiagnostics = {
   boundaryCoverage: number;
   boundaryDensity: number;
   runAgreement: number;
+  runReliability: number;
   detectorAgreement: number;
   harmonicAdvantage: number;
 };

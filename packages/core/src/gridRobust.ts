@@ -74,15 +74,23 @@ function pairAxisHypotheses(
     axisX[0] !== undefined &&
     axisY[0] !== undefined &&
     periodAgreementScore(axisX[0].period, axisY[0].period) >= 0.78;
+  const reliableRunEvidence =
+    Math.max(...axisX.map((item) => item.runAgreement)) >= 0.35 &&
+    Math.max(...axisY.map((item) => item.runAgreement)) >= 0.35;
   for (const x of axisX) {
     for (const y of axisY) {
       const axisScore = (x.score + y.score) / 2;
       const detectorAgreement = (x.detectorAgreement + y.detectorAgreement) / 2;
       const periodAgreement = periodAgreementScore(x.period, y.period);
-      const commonSizeScore = (commonNativeSizeScore(x.cellCount) + commonNativeSizeScore(y.cellCount)) / 2;
+      const commonSizeScore = Math.min(
+        commonNativeSizeScore(x.cellCount),
+        commonNativeSizeScore(y.cellCount)
+      );
       const harmonicStrength = Math.min(1, (x.harmonicAdvantage + y.harmonicAdvantage) / 0.24);
       const supportedPeriodScale = Math.min(1, Math.min(x.period, y.period) / 8);
-      const score = preferMatchingPeriods
+      const score = reliableRunEvidence
+        ? axisScore * 0.9 + detectorAgreement * 0.1
+        : preferMatchingPeriods
         ? axisScore * 0.55 +
           detectorAgreement * 0.07 +
           periodAgreement * 0.19 +
@@ -198,6 +206,7 @@ function axisDiagnostics(axis: RobustAxisHypothesis): GridRobustAxisDiagnostics 
     boundaryCoverage: roundScore(axis.boundaryCoverage),
     boundaryDensity: roundScore(axis.boundaryDensity),
     runAgreement: roundScore(axis.runAgreement),
+    runReliability: roundScore(axis.runReliability),
     detectorAgreement: roundScore(axis.detectorAgreement),
     harmonicAdvantage: roundScore(axis.harmonicAdvantage)
   };
@@ -226,15 +235,6 @@ function selectDistinctPairs(pairs: readonly CandidatePair[], maxCandidates: num
 function commonNativeSizeScore(value: number): number {
   if (COMMON_NATIVE_SIZES.has(value)) {
     return 1;
-  }
-  if (COMMON_NATIVE_SIZES.has(value - 1) || COMMON_NATIVE_SIZES.has(value + 1)) {
-    return 0.45;
-  }
-  if (value % 8 === 0) {
-    return 0.7;
-  }
-  if (value % 4 === 0) {
-    return 0.35;
   }
   return 0;
 }
