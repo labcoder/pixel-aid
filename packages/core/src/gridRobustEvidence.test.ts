@@ -31,6 +31,30 @@ describe("robust grid evidence", () => {
     expect(sampled.axisX.runSampleCount).toBeLessThan(full.axisX.runSampleCount);
     expect(sampled.axisY.runSampleCount).toBeLessThan(full.axisY.runSampleCount);
   });
+
+  test("activates centered ramp evidence for softened boundaries but not crisp blocks", () => {
+    const crisp = nativeSizeInferenceFixtures.find(
+      (fixture) => fixture.id === "harmonic-clean-nearest"
+    )!;
+    const softened = nativeSizeInferenceFixtures.find(
+      (fixture) => fixture.id === "soft-bilinear"
+    )!;
+    const crispEvidence = buildRobustGridEvidence(crisp.createImage(), {
+      maxPeriod: 32
+    });
+    const softenedEvidence = buildRobustGridEvidence(softened.createImage(), {
+      maxPeriod: 32
+    });
+
+    expect(crispEvidence.axisX.broadTransitionRatio).toBe(0);
+    expect(crispEvidence.axisY.broadTransitionRatio).toBe(0);
+    expect(crispEvidence.axisX.rampTotal).toBe(0);
+    expect(crispEvidence.axisY.rampTotal).toBe(0);
+    expect(softenedEvidence.axisX.broadTransitionRatio).toBeGreaterThan(0.08);
+    expect(softenedEvidence.axisY.broadTransitionRatio).toBeGreaterThan(0.08);
+    expect(softenedEvidence.axisX.rampTotal).toBeGreaterThan(0);
+    expect(softenedEvidence.axisY.rampTotal).toBeGreaterThan(0);
+  });
 });
 
 function sum(values: Float64Array): number {

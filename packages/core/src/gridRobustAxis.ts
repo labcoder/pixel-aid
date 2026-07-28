@@ -14,6 +14,11 @@ export type RobustAxisHypothesis = {
   runReliability: number;
   detectorAgreement: number;
   harmonicAdvantage: number;
+  blurScore: number;
+  blurBoundaryCoverage: number;
+  blurBoundaryDensity: number;
+  blurActiveBoundaryRatio: number;
+  blurEvidenceWeight: number;
 };
 
 export type RobustAxisInferenceOptions = {
@@ -77,7 +82,16 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
     cellCount,
     period,
     runReliability < 0.25 ? softenedRadius : hardEdgeRadius,
-    curvatureRadius
+    curvatureRadius,
+    false
+  );
+  const blurBoundary = findBestBoundaryOffset(
+    evidence,
+    cellCount,
+    period,
+    runReliability < 0.25 ? softenedRadius : hardEdgeRadius,
+    curvatureRadius,
+    true
   );
   const run = scoreRunEvidence(evidence.runHistogram, period);
   const detectorAgreement = geometricAgreement([
@@ -94,6 +108,16 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
   const rawScore = structuralScore * (1 - runWeight) + runScore * runWeight;
   const oversegmentationPenalty = oversegmentationPenaltyFor(period, boundary.density, run.fundamentalSupport);
   const score = clampScore(rawScore * (1 - oversegmentationPenalty));
+  const blurStructuralScore =
+    blurBoundary.coverage * 0.46 +
+    blurBoundary.density * 0.4 +
+    blurBoundary.activeRatio * 0.14;
+  const blurRawScore =
+    blurStructuralScore * (1 - runWeight) + runScore * runWeight;
+  const blurScore = clampScore(
+    blurRawScore * (1 - oversegmentationPenalty)
+  );
+  const blurEvidenceWeight = resolveBlurEvidenceWeight(evidence);
 
   return {
     cellCount,
@@ -108,7 +132,12 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
     fundamentalRunSupport: run.fundamentalSupport,
     runReliability,
     detectorAgreement,
-    harmonicAdvantage: 0
+    harmonicAdvantage: 0,
+    blurScore,
+    blurBoundaryCoverage: blurBoundary.coverage,
+    blurBoundaryDensity: blurBoundary.density,
+    blurActiveBoundaryRatio: blurBoundary.activeRatio,
+    blurEvidenceWeight
   };
 }
 
@@ -117,7 +146,8 @@ function findBestBoundaryOffset(
   cellCount: number,
   period: number,
   transitionRadius: number,
-  curvatureRadius: number
+  curvatureRadius: number,
+  includeRampEvidence: boolean
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const searchRadius = Math.min(3, period / 2);
   let best = scoreCombinedBoundaries(
@@ -126,7 +156,8 @@ function findBestBoundaryOffset(
     period,
     transitionRadius,
     curvatureRadius,
-    0
+    0,
+    includeRampEvidence
   );
   for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.25) {
     const scored = scoreCombinedBoundaries(
@@ -135,7 +166,8 @@ function findBestBoundaryOffset(
       period,
       transitionRadius,
       curvatureRadius,
-      offset
+      offset,
+      includeRampEvidence
     );
     if (boundaryQuality(scored) > boundaryQuality(best)) {
       best = scored;
@@ -150,7 +182,8 @@ function scoreCombinedBoundaries(
   period: number,
   transitionRadius: number,
   curvatureRadius: number,
-  offset: number
+  offset: number,
+  includeRampEvidence: boolean
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const transition = scoreProfileBoundaries(
     evidence.transitionProfile,
@@ -172,12 +205,39 @@ function scoreCombinedBoundaries(
     curvatureRadius,
     offset
   );
+  const ramp = scoreProfileBoundaries(
+    evidence.rampProfile,
+    evidence.rampTotal,
+    evidence.rampMaximum,
+    evidence.rampMean,
+    cellCount,
+    period,
+    Math.min(1, Math.floor((period - 1) / 2)),
+    offset
+  );
+  const rampWeight = includeRampEvidence
+    ? resolveBlurEvidenceWeight(evidence)
+    : 0;
+  const baseCoverage = transition.coverage * 0.42 + curvature.coverage * 0.58;
+  const baseDensity = transition.density * 0.42 + curvature.density * 0.58;
+  const baseActiveRatio = transition.activeRatio * 0.42 + curvature.activeRatio * 0.58;
   return {
     offset,
-    coverage: transition.coverage * 0.42 + curvature.coverage * 0.58,
-    density: transition.density * 0.42 + curvature.density * 0.58,
-    activeRatio: transition.activeRatio * 0.42 + curvature.activeRatio * 0.58
+    coverage: baseCoverage * (1 - rampWeight) + ramp.coverage * rampWeight,
+    density: baseDensity * (1 - rampWeight) + ramp.density * rampWeight,
+    activeRatio:
+      baseActiveRatio * (1 - rampWeight) + ramp.activeRatio * rampWeight
   };
+}
+
+function resolveBlurEvidenceWeight(evidence: RobustAxisEvidence): number {
+  if (evidence.broadRampCount <= 0) {
+    return 0;
+  }
+  return Math.min(
+    0.42,
+    clampScore((evidence.broadTransitionRatio - 0.04) / 0.36) * 0.42
+  );
 }
 
 function scoreProfileBoundaries(
@@ -270,6 +330,7 @@ function applyHarmonicArbitration(hypotheses: RobustAxisHypothesis[]): void {
     );
     hypothesis.harmonicAdvantage = advantage;
     hypothesis.score = clampScore(hypothesis.score + advantage);
+    hypothesis.blurScore = clampScore(hypothesis.blurScore + advantage);
   }
 }
 
@@ -367,7 +428,12 @@ function nativeFallback(length: number): RobustAxisHypothesis {
     fundamentalRunSupport: 0,
     runReliability: 0,
     detectorAgreement: 0,
-    harmonicAdvantage: 0
+    harmonicAdvantage: 0,
+    blurScore: 0.2,
+    blurBoundaryCoverage: 0,
+    blurBoundaryDensity: 0,
+    blurActiveBoundaryRatio: 0,
+    blurEvidenceWeight: 0
   };
 }
 
