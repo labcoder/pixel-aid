@@ -483,6 +483,8 @@ export type QualityProfileId =
   | "tilesetSafe"
   | "preserveBackground";
 
+export type GridAutoStrategy = "classic" | "robust";
+
 export type GridCandidate = {
   outputWidth: number;
   outputHeight: number;
@@ -595,6 +597,7 @@ export type FixOptions = {
   paletteSettings?: PaletteSettings;
   grid: {
     detect: "auto" | "manual";
+    autoStrategy?: GridAutoStrategy;
     scale?: number;
     scaleX?: number;
     scaleY?: number;

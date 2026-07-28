@@ -36,6 +36,14 @@ describe("native-size inference improvement targets", () => {
 });
 
 describe("native-size inference compatibility boundaries", () => {
+  test("keeps omitted and explicit classic detection bit-for-bit equivalent", () => {
+    const source = nativeSizeInferenceFixtures[0]!.createImage();
+
+    expect(detectGridCandidates(source, { maxScale: 32, sampling: "full", strategy: "classic" })).toEqual(
+      detectGridCandidates(source, { maxScale: 32, sampling: "full" })
+    );
+  });
+
   test("keeps the hero-cat single-sprite classification and adaptive background removal stable", () => {
     const source = readGoldenPng(path.join(goldenDir, "hero-cat-ai.png"));
     const suggestion = suggestFixSettings(source);

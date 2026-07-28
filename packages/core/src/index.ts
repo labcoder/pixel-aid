@@ -7,6 +7,7 @@ export type {
   FixPhaseTiming,
   FixPhaseTimingName,
   FixOptions,
+  GridAutoStrategy,
   GridCandidate,
   HaloRemovalDiagnostics,
   LineCleanupDiagnostics,

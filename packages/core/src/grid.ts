@@ -1,13 +1,18 @@
-import type { GridCandidate, GridCandidateDiagnostics, GridSobelTileVotingDiagnostics, Rect, RGBAImage } from "@pixelaid/shared";
+import type { GridAutoStrategy, GridCandidate, GridCandidateDiagnostics, GridSobelTileVotingDiagnostics, Rect, RGBAImage } from "@pixelaid/shared";
 import { detectSpriteBounds } from "./bounds";
 
 export type GridDetectionOptions = {
   maxScale?: number;
   sampling?: "full" | "sampled";
   sampleStep?: number;
+  strategy?: GridAutoStrategy;
 };
 
 export function detectGridCandidates(image: RGBAImage, options: GridDetectionOptions = {}): GridCandidate[] {
+  return detectClassicGridCandidates(image, options);
+}
+
+function detectClassicGridCandidates(image: RGBAImage, options: GridDetectionOptions): GridCandidate[] {
   const maxScale = Math.max(1, Math.min(options.maxScale ?? 32, image.width, image.height));
   const sampleStep = resolveSampleStep(image, options);
   const bounds = detectSpriteBounds(image);

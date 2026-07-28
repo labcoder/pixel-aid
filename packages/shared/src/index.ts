@@ -30,6 +30,7 @@ export type {
   FrameStabilitySeverity,
   GridCandidate,
   GridCandidateDiagnostics,
+  GridAutoStrategy,
   GridDriftDiagnostics,
   GridSobelTileVotingDiagnostics,
   HaloRemovalDiagnostics,
