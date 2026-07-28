@@ -39,6 +39,11 @@ export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
+export { scoreGridHypotheses } from "./gridHypothesisScore";
+export type {
+  GridHypothesisScore,
+  GridHypothesisScoringOptions
+} from "./gridHypothesisScore";
 export { detectPixelScale } from "./pixelScale";
 export type { PixelScaleDetectionOptions } from "./pixelScale";
 export { planLocalGridDrift } from "./gridDrift";
