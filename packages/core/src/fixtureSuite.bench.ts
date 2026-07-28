@@ -1,5 +1,9 @@
 import { bench, describe } from "vitest";
-import { benchmarkFixtureCatalog, cleanupFixtureCatalog } from "@pixelaid/fixtures";
+import {
+  benchmarkFixtureCatalog,
+  cleanupFixtureCatalog,
+  nativeSizeInferenceFixtures
+} from "@pixelaid/fixtures";
 import type { BenchmarkFixture, CleanupFixture } from "@pixelaid/fixtures";
 import { detectGridCandidates, fixImage, remapToPalette, sliceSheetFrames } from "./index";
 
@@ -13,6 +17,8 @@ describe("large cleanup fixtures", () => {
   const largeSheet = requiredBenchmark("fake-pixel-large-sheet");
   const paletteHeavy = requiredCleanupFixture("large-landscape-bands");
   const paletteHeavyImage = paletteHeavy.createImage();
+  const robustNativeSizeImages = nativeSizeInferenceFixtures.map((fixture) => fixture.createImage());
+  const fake720pRobustSource = fake720p.createImage();
   let cachedFake720pGridCandidates: ReturnType<typeof detectGridCandidates> | undefined;
 
   bench(`${fake720p.id}: grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
@@ -21,6 +27,26 @@ describe("large cleanup fixtures", () => {
 
   bench(`${fake720p.id}: sampled grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
     detectGridCandidates(fake720p.createImage(), { maxScale: 16, sampling: "sampled" });
+  });
+
+  bench(`${fake720p.id}: robust sampled grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
+    detectGridCandidates(fake720pRobustSource, {
+      strategy: "robust",
+      maxScale: 16,
+      sampling: "sampled",
+      cropToBounds: false
+    });
+  });
+
+  bench("robust native-size acceptance matrix: 6 sources", () => {
+    for (const image of robustNativeSizeImages) {
+      detectGridCandidates(image, {
+        strategy: "robust",
+        maxScale: 32,
+        sampling: "full",
+        cropToBounds: false
+      });
+    }
   });
 
   bench(`${fake720p.id}: full cleanup ${formatPixels(fake720p.sourcePixels)}`, () => {
