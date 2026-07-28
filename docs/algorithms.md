@@ -33,6 +33,21 @@ When a meaningful background crop is found, candidates include a grid-aligned `s
 
 Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a crop-used flag; source coverage; a low/medium/high label; and short notes. The editor uses these diagnostics to explain confidence without parsing prose.
 
+### Opt-in robust grid detection
+
+Automatic grid detection has two strategies:
+
+- `classic` is the default and preserves the existing product behavior.
+- `robust` is an explicit reconstruction-only strategy for eligible single-image `sprite` and `icon` inputs.
+
+Callers can request robust candidates directly with `detectGridCandidates(image, { strategy: "robust" })`. Eligible `fixImage` calls can select the same path with `grid: { detect: "auto", autoStrategy: "robust" }`. Manual grids, manual target dimensions, and runtime-supplied grid candidates remain authoritative. Sheet, tile, portrait, background, and UI workflows do not route through robust inference.
+
+The robust detector builds deterministic, alpha-aware transition and curvature profiles plus coarse color-run histograms. It estimates X and Y cell counts independently, scores floating-point periods and boundary offsets, and arbitrates divisor harmonics using both structural evidence and run reliability. Pair scoring allows non-square pixels to win when the axes support them. Conventional output sizes are only a weak pair-level prior; they cannot override reliable run evidence.
+
+Robust diagnostics remain bounded and serializable. They include per-axis period, cell count, boundary offset, boundary coverage/density, run agreement and reliability, harmonic advantage, pair margin, confidence label, crop policy, and full-canvas cell count. A heavily blurred, drifted, noisy source may still be ambiguous. In that case the detector is expected to report low confidence and a small candidate margin rather than claim a reliable exact size.
+
+This strategy does not classify assets, remove backgrounds, choose alpha cleanup, change palette settings, or alter cleanup passes. It only supplies a candidate reconstruction grid after the caller has established an eligible asset type and mode.
+
 ### Local Drift Correction
 
 `grid.localCorrection` enables an opt-in pass for mildly uneven AI-generated pseudo-pixel grids. The global grid candidate still owns the reproducible scale, phase, crop, and target size. Local correction only searches a small pixel radius around the candidate's interior block boundaries and returns corrected absolute source-boundary arrays for `downsampleBlocks`.

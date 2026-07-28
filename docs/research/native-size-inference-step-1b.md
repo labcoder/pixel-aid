@@ -2,6 +2,8 @@
 
 Status: design and regression coverage complete on local branch `pixel-bench`
 
+Implementation follow-up: [native-size-inference-step-1c.md](./native-size-inference-step-1c.md)
+
 This step does not change PixelAid's detector, fixer, CLI, web editor, asset classification, background removal, or defaults. It turns the Step 1A findings into deterministic core fixtures, explicit compatibility gates, and a guarded implementation design.
 
 ## Decision
