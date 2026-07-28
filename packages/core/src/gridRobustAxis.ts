@@ -25,6 +25,7 @@ export type RobustAxisInferenceOptions = {
   maxPeriod?: number;
   minPeriod?: number;
   maxCandidates?: number;
+  maxBlurCandidates?: number;
 };
 
 export function inferRobustAxisHypotheses(
@@ -44,10 +45,37 @@ export function inferRobustAxisHypotheses(
   applyHarmonicArbitration(hypotheses);
   hypotheses.sort(compareHypotheses);
   const selected = selectDistinctHypotheses(hypotheses, options.maxCandidates ?? 12);
+  const blurCandidates = [...hypotheses].sort(compareBlurHypotheses);
+  appendDistinctBlurHypotheses(
+    selected,
+    blurCandidates,
+    options.maxBlurCandidates ?? 4
+  );
   if (selected.length === 0 || selected.every((item) => item.period > 1.25)) {
     selected.push(nativeFallback(evidence.length));
   }
   return selected;
+}
+
+function appendDistinctBlurHypotheses(
+  selected: RobustAxisHypothesis[],
+  blurCandidates: readonly RobustAxisHypothesis[],
+  maximumAdditions: number
+): void {
+  let additions = 0;
+  for (const candidate of blurCandidates) {
+    if (
+      candidate.blurEvidenceWeight <= 0 ||
+      selected.some((item) => item.cellCount === candidate.cellCount)
+    ) {
+      continue;
+    }
+    selected.push(candidate);
+    additions += 1;
+    if (additions >= maximumAdditions) {
+      return;
+    }
+  }
 }
 
 function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): RobustAxisHypothesis {
@@ -411,6 +439,17 @@ function compareHypotheses(first: RobustAxisHypothesis, second: RobustAxisHypoth
     second.detectorAgreement - first.detectorAgreement ||
     second.period - first.period ||
     first.cellCount - second.cellCount
+  );
+}
+
+function compareBlurHypotheses(
+  first: RobustAxisHypothesis,
+  second: RobustAxisHypothesis
+): number {
+  return (
+    second.blurScore - first.blurScore ||
+    second.blurEvidenceWeight - first.blurEvidenceWeight ||
+    compareHypotheses(first, second)
   );
 }
 

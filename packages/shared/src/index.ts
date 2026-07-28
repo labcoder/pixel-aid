@@ -34,6 +34,8 @@ export type {
   GridDriftDiagnostics,
   GridRobustAxisDiagnostics,
   GridRobustDiagnostics,
+  GridRobustHypothesisDiagnostics,
+  GridRobustRerankDiagnostics,
   GridSobelTileVotingDiagnostics,
   HaloRemovalDiagnostics,
   LineCleanupDiagnostics,

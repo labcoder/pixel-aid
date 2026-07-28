@@ -84,9 +84,9 @@ export function scoreGridHypotheses(
       const complexityPenalty =
         relativeComplexity * 0.015 + tinyCellPenalty * 0.08;
       const reconstructionEvidence =
-        item.withinCellCompactness * 0.34 +
-        item.crossCellSeparation * 0.38 +
-        item.blurTolerantResidualFit * 0.28;
+        item.withinCellCompactness * 0.4 +
+        item.crossCellSeparation * 0.2 +
+        item.blurTolerantResidualFit * 0.4;
       const totalScore = clampScore(
         item.detectorPrior * 0.24 +
           reconstructionEvidence * 0.76 -

@@ -36,6 +36,12 @@ describe("robust grid candidates", () => {
     expect(first).toEqual(second);
     expect(first.length).toBeLessThanOrEqual(5);
     expect(JSON.stringify(first).length).toBeLessThan(20_000);
+    expect(first[0]!.diagnostics?.robust?.reconstructionRerank).toMatchObject({
+      switchThreshold: 0.03
+    });
+    expect(
+      first[0]!.diagnostics?.robust?.reconstructionRerank?.hypotheses
+    ).toHaveLength(3);
   });
 
   test("retains the existing foreground-bounds crop policy unless explicitly disabled", () => {

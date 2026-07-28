@@ -525,6 +525,29 @@ export type GridRobustAxisDiagnostics = {
   runReliability: number;
   detectorAgreement: number;
   harmonicAdvantage: number;
+  blurScore: number;
+  blurEvidenceWeight: number;
+};
+
+export type GridRobustHypothesisDiagnostics = {
+  inputRank: number;
+  source: "detector" | "blur";
+  outputWidth: number;
+  outputHeight: number;
+  totalScore: number;
+  detectorPrior: number;
+  withinCellCompactness: number;
+  crossCellSeparation: number;
+  blurTolerantResidualFit: number;
+  complexityPenalty: number;
+};
+
+export type GridRobustRerankDiagnostics = {
+  decision: "kept-incumbent" | "switched" | "ambiguous";
+  selectedInputRank: number;
+  scoreMargin: number;
+  switchThreshold: number;
+  hypotheses: GridRobustHypothesisDiagnostics[];
 };
 
 export type GridRobustDiagnostics = {
@@ -536,6 +559,7 @@ export type GridRobustDiagnostics = {
   harmonicDecision: string;
   fullCanvasCellCount: { columns: number; rows: number };
   cropPolicy: "bounds" | "full-canvas";
+  reconstructionRerank?: GridRobustRerankDiagnostics;
 };
 
 export type GridSobelTileVotingDiagnostics = {

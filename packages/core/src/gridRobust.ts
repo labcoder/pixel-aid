@@ -2,10 +2,15 @@ import type {
   GridCandidate,
   GridCandidateDiagnostics,
   GridRobustAxisDiagnostics,
+  GridRobustRerankDiagnostics,
   Rect,
   RGBAImage
 } from "@pixelaid/shared";
 import { detectSpriteBounds } from "./bounds";
+import {
+  scoreGridHypotheses,
+  type GridHypothesisScore
+} from "./gridHypothesisScore";
 import { inferRobustAxisHypotheses, type RobustAxisHypothesis } from "./gridRobustAxis";
 import { buildRobustGridEvidence } from "./gridRobustEvidence";
 
@@ -20,11 +25,14 @@ type CandidatePair = {
   axisX: RobustAxisHypothesis;
   axisY: RobustAxisHypothesis;
   score: number;
+  blurScore: number;
+  blurEvidenceWeight: number;
   detectorAgreement: number;
   commonSizeScore: number;
 };
 
 const COMMON_NATIVE_SIZES = new Set([8, 12, 16, 20, 24, 32, 40, 48, 64, 96, 128, 192, 256]);
+const RECONSTRUCTION_SWITCH_THRESHOLD = 0.03;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -52,8 +60,7 @@ export function detectRobustGridCandidates(
   });
   const pairs = pairAxisHypotheses(axisX, axisY);
   const selectedPairs = selectDistinctPairs(pairs, 5);
-
-  return selectedPairs.map((pair, index) =>
+  const detectorCandidates = selectedPairs.map((pair, index) =>
     createGridCandidate(
       pair,
       selectedPairs[index + 1],
@@ -62,6 +69,34 @@ export function detectRobustGridCandidates(
       cropUsed,
       sampleStep
     )
+  );
+  const scoringPairs = selectScoringPairs(pairs, selectedPairs);
+  const scoringCandidates = scoringPairs.map((item, index) => {
+    const detectorCandidate = detectorCandidates.find(
+      (candidate) =>
+        candidate.outputWidth === item.pair.axisX.cellCount &&
+        candidate.outputHeight === item.pair.axisY.cellCount
+    );
+    if (detectorCandidate) {
+      return detectorCandidate;
+    }
+    const candidate = createGridCandidate(
+      item.pair,
+      scoringPairs[index + 1]?.pair,
+      sourceRect,
+      image,
+      cropUsed,
+      sampleStep
+    );
+    return item.source === "blur"
+      ? attachBlurScoringPrior(candidate, item.pair)
+      : candidate;
+  });
+  return rerankWithReconstructionEvidence(
+    image,
+    detectorCandidates,
+    scoringCandidates,
+    scoringPairs.map((item) => item.source)
   );
 }
 
@@ -80,6 +115,7 @@ function pairAxisHypotheses(
   for (const x of axisX) {
     for (const y of axisY) {
       const axisScore = (x.score + y.score) / 2;
+      const blurAxisScore = (x.blurScore + y.blurScore) / 2;
       const detectorAgreement = (x.detectorAgreement + y.detectorAgreement) / 2;
       const periodAgreement = periodAgreementScore(x.period, y.period);
       const commonSizeScore = Math.min(
@@ -101,10 +137,26 @@ function pairAxisHypotheses(
           detectorAgreement * 0.1 +
           commonSizeScore * 0.1 +
           harmonicStrength * 0.03;
+      const blurScore = reliableRunEvidence
+        ? blurAxisScore * 0.9 + detectorAgreement * 0.1
+        : preferMatchingPeriods
+        ? blurAxisScore * 0.55 +
+          detectorAgreement * 0.07 +
+          periodAgreement * 0.19 +
+          commonSizeScore * 0.1 +
+          harmonicStrength * 0.03 +
+          supportedPeriodScale * 0.06
+        : blurAxisScore * 0.77 +
+          detectorAgreement * 0.1 +
+          commonSizeScore * 0.1 +
+          harmonicStrength * 0.03;
       pairs.push({
         axisX: x,
         axisY: y,
         score,
+        blurScore,
+        blurEvidenceWeight:
+          (x.blurEvidenceWeight + y.blurEvidenceWeight) / 2,
         detectorAgreement,
         commonSizeScore
       });
@@ -118,6 +170,66 @@ function pairAxisHypotheses(
       second.axisX.period * second.axisY.period - first.axisX.period * first.axisY.period
   );
   return pairs;
+}
+
+function selectScoringPairs(
+  pairs: readonly CandidatePair[],
+  selectedPairs: readonly CandidatePair[]
+): { pair: CandidatePair; source: "detector" | "blur" }[] {
+  const selected: { pair: CandidatePair; source: "detector" | "blur" }[] = [];
+  for (const pair of selectedPairs.slice(0, 2)) {
+    selected.push({ pair, source: "detector" });
+  }
+  const incumbent = selectedPairs[0];
+  const hasBroadBlurEvidence =
+    incumbent !== undefined && incumbent.blurEvidenceWeight >= 0.04;
+  if (hasBroadBlurEvidence) {
+    const blurAlternative = [...pairs]
+      .sort(
+        (first, second) =>
+          second.blurScore - first.blurScore ||
+          second.blurEvidenceWeight - first.blurEvidenceWeight ||
+          second.score - first.score
+      )
+      .find(
+        (pair) =>
+          pair.blurEvidenceWeight >= 0.04 &&
+          !selected.some(
+            (item) =>
+              item.pair.axisX.cellCount === pair.axisX.cellCount &&
+              item.pair.axisY.cellCount === pair.axisY.cellCount
+          )
+      );
+    if (blurAlternative) {
+      selected.push({ pair: blurAlternative, source: "blur" });
+    }
+  }
+  if (selected.length < 3 && selectedPairs[2]) {
+    selected.push({ pair: selectedPairs[2], source: "detector" });
+  }
+  return selected.slice(0, 3);
+}
+
+function attachBlurScoringPrior(
+  candidate: GridCandidate,
+  pair: CandidatePair
+): GridCandidate {
+  const diagnostics = candidate.diagnostics;
+  if (!diagnostics) {
+    return candidate;
+  }
+  return {
+    ...candidate,
+    reason: `Blur-aware hypothesis. ${candidate.reason}`,
+    diagnostics: {
+      ...diagnostics,
+      scaleScore: roundScore(pair.blurScore),
+      notes: [
+        ...diagnostics.notes,
+        "Broad transition ramps supplied this scoring hypothesis"
+      ]
+    }
+  };
 }
 
 function createGridCandidate(
@@ -208,7 +320,132 @@ function axisDiagnostics(axis: RobustAxisHypothesis): GridRobustAxisDiagnostics 
     runAgreement: roundScore(axis.runAgreement),
     runReliability: roundScore(axis.runReliability),
     detectorAgreement: roundScore(axis.detectorAgreement),
-    harmonicAdvantage: roundScore(axis.harmonicAdvantage)
+    harmonicAdvantage: roundScore(axis.harmonicAdvantage),
+    blurScore: roundScore(axis.blurScore),
+    blurEvidenceWeight: roundScore(axis.blurEvidenceWeight)
+  };
+}
+
+function rerankWithReconstructionEvidence(
+  image: RGBAImage,
+  candidates: readonly GridCandidate[],
+  scoringCandidates: readonly GridCandidate[],
+  hypothesisSources: readonly ("detector" | "blur")[]
+): GridCandidate[] {
+  if (scoringCandidates.length <= 1) {
+    return [...candidates];
+  }
+  const scores = scoreGridHypotheses(image, scoringCandidates, {
+    maxHypotheses: 3
+  });
+  const incumbent = scores.find((item) => item.inputIndex === 0)!;
+  const best = scores[0]!;
+  const scoreMargin = Math.max(0, best.totalScore - incumbent.totalScore);
+  const shouldSwitch =
+    best.inputIndex !== 0 &&
+    scoreMargin >= RECONSTRUCTION_SWITCH_THRESHOLD;
+  const decision: GridRobustRerankDiagnostics["decision"] = shouldSwitch
+    ? "switched"
+    : best.inputIndex !== 0
+      ? "ambiguous"
+      : "kept-incumbent";
+  const selectedIndex = shouldSwitch ? best.inputIndex : 0;
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    selectedIndex,
+    decision,
+    scoreMargin,
+    hypothesisSources
+  );
+  const selectedCandidate = scoringCandidates[selectedIndex]!;
+  const selected = attachRerankDiagnostics(
+    selectedCandidate,
+    diagnostics,
+    decision === "ambiguous"
+  );
+  const ordered = [selected];
+  for (let index = 0; index < candidates.length; index += 1) {
+    if (
+      candidates[index]!.outputWidth === selected.outputWidth &&
+      candidates[index]!.outputHeight === selected.outputHeight
+    ) {
+      continue;
+    }
+    ordered.push(candidates[index]!);
+  }
+  return ordered.slice(0, 5);
+}
+
+function createRerankDiagnostics(
+  scores: readonly GridHypothesisScore[],
+  selectedInputRank: number,
+  decision: GridRobustRerankDiagnostics["decision"],
+  scoreMargin: number,
+  hypothesisSources: readonly ("detector" | "blur")[]
+): GridRobustRerankDiagnostics {
+  return {
+    decision,
+    selectedInputRank,
+    scoreMargin: roundScore(scoreMargin),
+    switchThreshold: RECONSTRUCTION_SWITCH_THRESHOLD,
+    hypotheses: [...scores]
+      .sort((first, second) => first.inputIndex - second.inputIndex)
+      .slice(0, 3)
+      .map((item) => ({
+        inputRank: item.inputIndex,
+        source: hypothesisSources[item.inputIndex] ?? "detector",
+        outputWidth: item.candidate.outputWidth,
+        outputHeight: item.candidate.outputHeight,
+        totalScore: roundScore(item.totalScore),
+        detectorPrior: roundScore(item.detectorPrior),
+        withinCellCompactness: roundScore(item.withinCellCompactness),
+        crossCellSeparation: roundScore(item.crossCellSeparation),
+        blurTolerantResidualFit: roundScore(
+          item.blurTolerantResidualFit
+        ),
+        complexityPenalty: roundScore(item.complexityPenalty)
+      }))
+  };
+}
+
+function attachRerankDiagnostics(
+  candidate: GridCandidate,
+  rerank: GridRobustRerankDiagnostics,
+  ambiguous: boolean
+): GridCandidate {
+  const confidence = ambiguous
+    ? Math.min(candidate.confidence, 0.549)
+    : candidate.confidence;
+  const diagnostics = candidate.diagnostics;
+  if (!diagnostics?.robust) {
+    return { ...candidate, confidence };
+  }
+  const notes = [...diagnostics.notes];
+  if (rerank.decision === "switched") {
+    notes.push(
+      `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
+    );
+  } else if (rerank.decision === "ambiguous") {
+    notes.push(
+      "Provisional reconstruction margin was below the conservative switch threshold"
+    );
+  }
+  return {
+    ...candidate,
+    confidence,
+    reason:
+      rerank.decision === "switched"
+        ? `Conservative reconstruction rerank. ${candidate.reason}`
+        : candidate.reason,
+    diagnostics: {
+      ...diagnostics,
+      confidenceLabel: confidenceLabel(confidence),
+      notes,
+      robust: {
+        ...diagnostics.robust,
+        reconstructionRerank: rerank
+      }
+    }
   };
 }
 

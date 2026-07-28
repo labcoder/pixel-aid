@@ -11,6 +11,8 @@ export type {
   GridCandidate,
   GridRobustAxisDiagnostics,
   GridRobustDiagnostics,
+  GridRobustHypothesisDiagnostics,
+  GridRobustRerankDiagnostics,
   HaloRemovalDiagnostics,
   LineCleanupDiagnostics,
   LineCleanupStrength,
