@@ -1,9 +1,10 @@
 import {
+  createSingleSpriteCleanupFixture,
   createGoldenSignature,
   nativeSizeInferenceFixtures,
   tilesetSeamFixtures
 } from "@pixelaid/fixtures";
-import type { FixOptions, GridCandidate } from "@pixelaid/shared";
+import type { AssetMode, AssetType, FixOptions, GridCandidate } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
 import { fixImage } from "./fix";
 
@@ -57,6 +58,42 @@ describe("opt-in robust fix routing", () => {
     );
   });
 
+  test.each([
+    ["spriteSheet", "spriteSheet"],
+    ["animationSheet", "spriteSheet"],
+    ["characterSheet", "spriteSheet"],
+    ["tileset", "tileSheet"],
+    ["tilemap", "tileSheet"],
+    ["portrait", "single"],
+    ["iconSet", "spriteSheet"],
+    ["uiElement", "single"],
+    ["background", "single"]
+  ] satisfies readonly [AssetType, AssetMode][])(
+    "keeps robust requests bit-identical to classic output for excluded %s assets",
+    (assetType, mode) => {
+      const source = nativeSizeInferenceFixtures[0]!.createImage();
+      const classic = fixImage(source, {
+        ...robustOptions({ autoStrategy: "classic" }),
+        assetType,
+        mode
+      });
+      const robustRequest = fixImage(source, {
+        ...robustOptions({ autoStrategy: "robust" }),
+        assetType,
+        mode
+      });
+
+      expect(createGoldenSignature(robustRequest.image)).toEqual(
+        createGoldenSignature(classic.image)
+      );
+      expect(robustRequest.palette).toEqual(classic.palette);
+      expect(gridSamplingSignature(robustRequest.grid)).toEqual(
+        gridSamplingSignature(classic.grid)
+      );
+      expect(robustRequest.grid.diagnostics?.robust).toBeUndefined();
+    }
+  );
+
   test("keeps explicit target dimensions authoritative over robust candidates", () => {
     const source = nativeSizeInferenceFixtures[0]!.createImage();
     const result = fixImage(source, {
@@ -109,7 +146,86 @@ describe("opt-in robust fix routing", () => {
     expect(result.image.width).toBe(10);
     expect(result.image.height).toBe(8);
   });
+
+  test("keeps downstream alpha, palette, halo, outline, and cleanup behavior unchanged for the same grid", () => {
+    const fixture = createSingleSpriteCleanupFixture();
+    const supplied: GridCandidate = {
+      outputWidth: fixture.expected.nativeWidth,
+      outputHeight: fixture.expected.nativeHeight,
+      scaleX: fixture.expected.scale,
+      scaleY: fixture.expected.scale,
+      phaseX: fixture.expected.phaseX,
+      phaseY: fixture.expected.phaseY,
+      confidence: 1,
+      reason: "Supplied product-surface regression grid"
+    };
+    const sharedOptions: Omit<FixOptions, "grid"> = {
+      mode: "single",
+      assetType: "sprite",
+      maxColors: 16,
+      paletteSettings: {
+        mode: "auto",
+        maxColors: 16,
+        lockScope: "asset"
+      },
+      downscale: "adaptive",
+      alpha: "backgroundFloodFill",
+      alphaSettings: {
+        threshold: 96,
+        backgroundDetection: "adaptive",
+        decontaminate: true
+      },
+      cleanup: {
+        removeOrphans: true,
+        jaggyCleanup: true,
+        preserveSinglePixelDetails: true,
+        removeHalos: true,
+        denoiseStrength: 12,
+        outlineMode: "repairExisting",
+        outlineSize: 1,
+        morphology: {
+          enabled: true,
+          fillTinyHoles: true,
+          matteCleanup: true,
+          removeTinyComponents: true,
+          maxHolePixels: 1,
+          maxComponentPixels: 1,
+          preserveSinglePixelDetails: true,
+          connectivity: 4
+        }
+      }
+    };
+    const classic = fixImage(
+      fixture.image,
+      {
+        ...sharedOptions,
+        grid: { detect: "auto", autoStrategy: "classic", cropToBounds: false }
+      },
+      { gridCandidates: [supplied] }
+    );
+    const robustRequest = fixImage(
+      fixture.image,
+      {
+        ...sharedOptions,
+        grid: { detect: "auto", autoStrategy: "robust", cropToBounds: false }
+      },
+      { gridCandidates: [supplied] }
+    );
+
+    expect(createGoldenSignature(robustRequest.image)).toEqual(
+      createGoldenSignature(classic.image)
+    );
+    expect(robustRequest.palette).toEqual(classic.palette);
+    expect(gridSamplingSignature(robustRequest.grid)).toEqual(
+      gridSamplingSignature(classic.grid)
+    );
+  });
 });
+
+function gridSamplingSignature(candidate: GridCandidate): Omit<GridCandidate, "reason" | "diagnostics"> {
+  const { reason: _reason, diagnostics: _diagnostics, ...sampling } = candidate;
+  return sampling;
+}
 
 function robustOptions(
   grid: Partial<FixOptions["grid"]> & {

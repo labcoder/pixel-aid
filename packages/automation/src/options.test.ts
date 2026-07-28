@@ -2,6 +2,22 @@ import { describe, expect, it } from "vitest";
 import { normalizeFixOptions, parseAutomationAssetType } from "./options";
 
 describe("automation option normalization", () => {
+  it("keeps robust native-size inference out of automation defaults and inputs", () => {
+    const defaultResult = normalizeFixOptions({});
+    const requestedResult = normalizeFixOptions({
+      grid: {
+        detect: "auto",
+        autoStrategy: "robust",
+      },
+    });
+
+    expect(defaultResult.ok).toBe(true);
+    expect(requestedResult.ok).toBe(true);
+    if (!defaultResult.ok || !requestedResult.ok) return;
+    expect(defaultResult.value.grid.autoStrategy).toBeUndefined();
+    expect(requestedResult.value.grid.autoStrategy).toBeUndefined();
+  });
+
   it.each([
     ["sprite", "sprite", "single"],
     ["sprite-sheet", "spriteSheet", "spriteSheet"],
