@@ -5,7 +5,13 @@ import {
   nativeSizeInferenceFixtures
 } from "@pixelaid/fixtures";
 import type { BenchmarkFixture, CleanupFixture } from "@pixelaid/fixtures";
-import { detectGridCandidates, fixImage, remapToPalette, sliceSheetFrames } from "./index";
+import {
+  detectGridCandidates,
+  fixImage,
+  remapToPalette,
+  scoreGridHypotheses,
+  sliceSheetFrames
+} from "./index";
 
 const fixtureById = new Map(benchmarkFixtureCatalog.map((fixture) => [fixture.id, fixture]));
 const cleanupFixtureById = new Map(cleanupFixtureCatalog.map((fixture) => [fixture.id, fixture]));
@@ -19,6 +25,15 @@ describe("large cleanup fixtures", () => {
   const paletteHeavyImage = paletteHeavy.createImage();
   const robustNativeSizeImages = nativeSizeInferenceFixtures.map((fixture) => fixture.createImage());
   const fake720pRobustSource = fake720p.createImage();
+  const fake720pRobustCandidates = detectGridCandidates(
+    fake720pRobustSource,
+    {
+      strategy: "robust",
+      maxScale: 16,
+      sampling: "sampled",
+      cropToBounds: false
+    }
+  );
   let cachedFake720pGridCandidates: ReturnType<typeof detectGridCandidates> | undefined;
 
   bench(`${fake720p.id}: grid detection ${formatPixels(fake720p.sourcePixels)}`, () => {
@@ -47,6 +62,10 @@ describe("large cleanup fixtures", () => {
         cropToBounds: false
       });
     }
+  });
+
+  bench(`${fake720p.id}: robust hypothesis scoring ${formatPixels(fake720p.sourcePixels)}`, () => {
+    scoreGridHypotheses(fake720pRobustSource, fake720pRobustCandidates);
   });
 
   bench(`${fake720p.id}: full cleanup ${formatPixels(fake720p.sourcePixels)}`, () => {

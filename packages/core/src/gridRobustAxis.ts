@@ -110,17 +110,17 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
     cellCount,
     period,
     runReliability < 0.25 ? softenedRadius : hardEdgeRadius,
-    curvatureRadius,
-    false
+    curvatureRadius
   );
-  const blurBoundary = findBestBoundaryOffset(
-    evidence,
-    cellCount,
-    period,
-    runReliability < 0.25 ? softenedRadius : hardEdgeRadius,
-    curvatureRadius,
-    true
-  );
+  const blurEvidenceWeight = resolveBlurEvidenceWeight(evidence);
+  const blurBoundary =
+    blurEvidenceWeight > 0
+      ? blendBoundaryEvidence(
+          boundary,
+          findBestRampBoundaryOffset(evidence, cellCount, period),
+          blurEvidenceWeight
+        )
+      : boundary;
   const run = scoreRunEvidence(evidence.runHistogram, period);
   const detectorAgreement = geometricAgreement([
     boundary.coverage,
@@ -145,7 +145,6 @@ function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): Robust
   const blurScore = clampScore(
     blurRawScore * (1 - oversegmentationPenalty)
   );
-  const blurEvidenceWeight = resolveBlurEvidenceWeight(evidence);
 
   return {
     cellCount,
@@ -174,8 +173,7 @@ function findBestBoundaryOffset(
   cellCount: number,
   period: number,
   transitionRadius: number,
-  curvatureRadius: number,
-  includeRampEvidence: boolean
+  curvatureRadius: number
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const searchRadius = Math.min(3, period / 2);
   let best = scoreCombinedBoundaries(
@@ -184,18 +182,16 @@ function findBestBoundaryOffset(
     period,
     transitionRadius,
     curvatureRadius,
-    0,
-    includeRampEvidence
+    0
   );
-  for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.25) {
+  for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.5) {
     const scored = scoreCombinedBoundaries(
       evidence,
       cellCount,
       period,
       transitionRadius,
       curvatureRadius,
-      offset,
-      includeRampEvidence
+      offset
     );
     if (boundaryQuality(scored) > boundaryQuality(best)) {
       best = scored;
@@ -210,8 +206,7 @@ function scoreCombinedBoundaries(
   period: number,
   transitionRadius: number,
   curvatureRadius: number,
-  offset: number,
-  includeRampEvidence: boolean
+  offset: number
 ): { offset: number; coverage: number; density: number; activeRatio: number } {
   const transition = scoreProfileBoundaries(
     evidence.transitionProfile,
@@ -233,28 +228,63 @@ function scoreCombinedBoundaries(
     curvatureRadius,
     offset
   );
-  const ramp = scoreProfileBoundaries(
+  return {
+    offset,
+    coverage: transition.coverage * 0.42 + curvature.coverage * 0.58,
+    density: transition.density * 0.42 + curvature.density * 0.58,
+    activeRatio:
+      transition.activeRatio * 0.42 + curvature.activeRatio * 0.58
+  };
+}
+
+function findBestRampBoundaryOffset(
+  evidence: RobustAxisEvidence,
+  cellCount: number,
+  period: number
+): { offset: number; coverage: number; density: number; activeRatio: number } {
+  const radius = Math.min(1, Math.floor((period - 1) / 2));
+  const searchRadius = Math.min(3, period / 2);
+  let best = scoreProfileBoundaries(
     evidence.rampProfile,
     evidence.rampTotal,
     evidence.rampMaximum,
     evidence.rampMean,
     cellCount,
     period,
-    Math.min(1, Math.floor((period - 1) / 2)),
-    offset
+    radius,
+    0
   );
-  const rampWeight = includeRampEvidence
-    ? resolveBlurEvidenceWeight(evidence)
-    : 0;
-  const baseCoverage = transition.coverage * 0.42 + curvature.coverage * 0.58;
-  const baseDensity = transition.density * 0.42 + curvature.density * 0.58;
-  const baseActiveRatio = transition.activeRatio * 0.42 + curvature.activeRatio * 0.58;
+  let bestOffset = 0;
+  for (let offset = -searchRadius; offset <= searchRadius + 0.001; offset += 0.25) {
+    const scored = scoreProfileBoundaries(
+      evidence.rampProfile,
+      evidence.rampTotal,
+      evidence.rampMaximum,
+      evidence.rampMean,
+      cellCount,
+      period,
+      radius,
+      offset
+    );
+    if (boundaryQuality(scored) > boundaryQuality(best)) {
+      best = scored;
+      bestOffset = offset;
+    }
+  }
+  return { offset: bestOffset, ...best };
+}
+
+function blendBoundaryEvidence(
+  base: { offset: number; coverage: number; density: number; activeRatio: number },
+  ramp: { offset: number; coverage: number; density: number; activeRatio: number },
+  rampWeight: number
+): { offset: number; coverage: number; density: number; activeRatio: number } {
   return {
-    offset,
-    coverage: baseCoverage * (1 - rampWeight) + ramp.coverage * rampWeight,
-    density: baseDensity * (1 - rampWeight) + ramp.density * rampWeight,
+    offset: rampWeight > 0 ? ramp.offset : base.offset,
+    coverage: base.coverage * (1 - rampWeight) + ramp.coverage * rampWeight,
+    density: base.density * (1 - rampWeight) + ramp.density * rampWeight,
     activeRatio:
-      baseActiveRatio * (1 - rampWeight) + ramp.activeRatio * rampWeight
+      base.activeRatio * (1 - rampWeight) + ramp.activeRatio * rampWeight
   };
 }
 

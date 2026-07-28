@@ -223,8 +223,10 @@ describe("opt-in robust fix routing", () => {
 });
 
 function gridSamplingSignature(candidate: GridCandidate): Omit<GridCandidate, "reason" | "diagnostics"> {
-  const { reason: _reason, diagnostics: _diagnostics, ...sampling } = candidate;
-  return sampling;
+  const sampling = { ...candidate };
+  delete (sampling as Partial<GridCandidate>).reason;
+  delete (sampling as Partial<GridCandidate>).diagnostics;
+  return sampling as Omit<GridCandidate, "reason" | "diagnostics">;
 }
 
 function robustOptions(
