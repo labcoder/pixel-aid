@@ -19,6 +19,7 @@ import { colorDistanceSq, parseHexColor, rgbToHex } from "./color";
 import { applyContrastExpansion } from "./contrastExpansion";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
+import type { GridDetectionOptions } from "./grid";
 import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
@@ -1847,7 +1848,31 @@ function isPaletteArtifactChromaColor(r: number, g: number, b: number): boolean 
 
 function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {
   if (options.grid.detect === "auto") {
-    const candidates = runtime?.gridCandidates && runtime.gridCandidates.length > 0 ? runtime.gridCandidates : detectGridCandidates(image);
+    const runtimeCandidates =
+      runtime?.gridCandidates && runtime.gridCandidates.length > 0
+        ? runtime.gridCandidates
+        : undefined;
+    const robustEligible =
+      options.grid.autoStrategy === "robust" &&
+      options.mode === "single" &&
+      (options.assetType === "sprite" || options.assetType === "icon");
+    const detectionOptions: GridDetectionOptions = {
+      strategy: robustEligible ? "robust" : "classic"
+    };
+    if (robustEligible) {
+      detectionOptions.cropToBounds =
+        options.grid.cropToBounds ?? options.mode === "single";
+    }
+    const detectedCandidates =
+      runtimeCandidates ?? detectGridCandidates(image, detectionOptions);
+    const candidates =
+      !runtimeCandidates &&
+      options.grid.autoStrategy === "robust" &&
+      !robustEligible
+        ? detectedCandidates.map((item, index) =>
+            index === 0 ? attachRobustEligibilityFallback(item, options) : item
+          )
+        : detectedCandidates;
     const [candidate] = candidates;
     if (options.targetWidth && options.targetHeight) {
       const closest = candidates.reduce(
@@ -1904,5 +1929,24 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
     phaseY,
     confidence: 1,
     reason: "Manual grid settings"
+  };
+}
+
+function attachRobustEligibilityFallback(
+  candidate: GridCandidate,
+  options: FixOptions
+): GridCandidate {
+  const note = `Robust grid inference is limited to single sprite/icon assets; ${options.assetType} uses the classic detector.`;
+  return {
+    ...candidate,
+    reason: `${note} ${candidate.reason}`,
+    ...(candidate.diagnostics
+      ? {
+          diagnostics: {
+            ...candidate.diagnostics,
+            notes: [...candidate.diagnostics.notes, note]
+          }
+        }
+      : {})
   };
 }
