@@ -12,6 +12,19 @@ export type {
   NativeSizeInferenceFixture,
   NativeSizeInferenceFixtureInput
 } from "./nativeSizeInference";
+export {
+  applyBicubicLikeRinging,
+  applyBoundaryWarp,
+  applyBoxBlur,
+  applyCellArtifact,
+  applyChromaNoise,
+  applyLowFrequencyColorField,
+  upscaleNativeImage
+} from "./nativeSizeDegradations";
+export type {
+  NativeSizeCellArtifact,
+  NativeSizeResample
+} from "./nativeSizeDegradations";
 export { nativeSizeSourceFamilies } from "./nativeSizeSourceFamilies";
 export type {
   NativeSizeSourceFamily,

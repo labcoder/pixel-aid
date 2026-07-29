@@ -2,10 +2,12 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname } from "node:path";
 import decodeWebp, { init as initWebpDecode } from "@jsquash/webp/decode";
+import encodeWebp, { init as initWebpEncode } from "@jsquash/webp/encode";
 import { PNG } from "pngjs";
 import type { RGBAImage } from "@pixelaid/shared";
 
 let webpDecoderReady: Promise<void> | undefined;
+let webpEncoderReady: Promise<void> | undefined;
 
 export type GoldenCompareMode =
   | { mode: "exact" }
@@ -46,6 +48,36 @@ export async function readGoldenWebp(path: string): Promise<RGBAImage> {
     width: decoded.width,
     height: decoded.height,
     data: new Uint8ClampedArray(decoded.data.buffer.slice(decoded.data.byteOffset, decoded.data.byteOffset + decoded.data.byteLength))
+  };
+}
+
+export async function roundTripWebp(
+  image: RGBAImage,
+  options: { quality?: number; method?: number } = {}
+): Promise<RGBAImage> {
+  await Promise.all([ensureWebpEncoder(), ensureWebpDecoder()]);
+  const encoded = await encodeWebp(
+    {
+      width: image.width,
+      height: image.height,
+      data: new Uint8ClampedArray(image.data),
+      colorSpace: "srgb"
+    },
+    {
+      quality: options.quality ?? 35,
+      method: options.method ?? 4
+    }
+  );
+  const decoded = await decodeWebp(encoded);
+  return {
+    width: decoded.width,
+    height: decoded.height,
+    data: new Uint8ClampedArray(
+      decoded.data.buffer.slice(
+        decoded.data.byteOffset,
+        decoded.data.byteOffset + decoded.data.byteLength
+      )
+    )
   };
 }
 
@@ -130,4 +162,15 @@ async function ensureWebpDecoder(): Promise<void> {
     await initWithModule(wasmModule);
   })();
   return webpDecoderReady;
+}
+
+async function ensureWebpEncoder(): Promise<void> {
+  webpEncoderReady ??= (async () => {
+    const moduleRequire = createRequire(`${process.cwd()}/package.json`);
+    const wasmPath = moduleRequire.resolve("@jsquash/webp/codec/enc/webp_enc_simd.wasm");
+    const wasmModule = await WebAssembly.compile(readFileSync(wasmPath));
+    const initWithModule = initWebpEncode as unknown as (module: WebAssembly.Module) => Promise<void>;
+    await initWithModule(wasmModule);
+  })();
+  return webpEncoderReady;
 }
