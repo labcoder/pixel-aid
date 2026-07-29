@@ -43,6 +43,12 @@ export type {
   Step1KFailureClass,
   Step1KNativeSizeFixture
 } from "./step1kNativeSizeCorpus";
+export { step1mNativeSizeCorpus } from "./step1mNativeSizeCorpus";
+export type {
+  Step1MAcceptance,
+  Step1MFailureClass,
+  Step1MNativeSizeFixture
+} from "./step1mNativeSizeCorpus";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
