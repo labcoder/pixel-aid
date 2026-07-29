@@ -67,12 +67,12 @@ const definitions: readonly Step1KFixtureDefinition[] = [
     protects: ["adjacent count arbitration", "fractional scale", "dense boundaries"]
   },
   {
-    id: "step1k-adjacent-wide-47x31",
+    id: "step1k-adjacent-wide-33x25",
     failureClass: "adjacent-count",
     description:
       "Wide nonstandard native dimensions with fractional softening and weak one-cell alternatives.",
-    nativeWidth: 47,
-    nativeHeight: 31,
+    nativeWidth: 33,
+    nativeHeight: 25,
     scaleX: 3.72,
     scaleY: 4.17,
     resample: "bilinear",
@@ -272,12 +272,15 @@ function createDenseNativeImage(
   height: number
 ): RGBAImage {
   const image = createImage(width, height, BACKGROUND);
-  for (let y = 1; y < height - 1; y += 3) {
-    const offset = (y * 5) % 7;
-    for (let x = 1 - offset; x < width - 1; x += 7) {
-      const color = ((x + y) & 1) === 0 ? MID : DARK;
-      fillRect(image.data, width, height, x, y, 5, 2, color);
-      fillRect(image.data, width, height, x + 1, y, 2, 1, LIGHT);
+  const palette = [DARK, MID, LIGHT, INK] as const;
+  for (let y = 1; y < height - 1; y += 1) {
+    for (let x = 1; x < width - 1; x += 1) {
+      const mixed =
+        Math.imul(x + 5, 73_856_093) ^
+        Math.imul(y + 11, 19_349_663) ^
+        Math.imul(x + y, 83_492_791);
+      const color = palette[(mixed >>> 0) % palette.length]!;
+      setPixel(image, x, y, color);
     }
   }
   fillRect(image.data, width, height, 0, 0, width, 1, INK);
