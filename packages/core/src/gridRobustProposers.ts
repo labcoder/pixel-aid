@@ -136,6 +136,63 @@ export function proposeRunSpacingAxisHypotheses(
 }
 
 /**
+ * Recover latent grid boundaries from the centers of broad color-transition
+ * bands. Unlike the integrated scorer, this path ignores the original spread
+ * of the blur ramp and evaluates only the center locations accumulated across
+ * scanlines.
+ */
+export function proposeBlurBandAxisHypotheses(
+  evidence: RobustAxisEvidence,
+  options: RobustAxisProposerOptions = {}
+): RobustAxisProposal[] {
+  if (
+    evidence.rampTotal <= 0 ||
+    evidence.rampMaximum <= 0 ||
+    evidence.broadRampCount < 2 ||
+    evidence.broadTransitionRatio < 0.035
+  ) {
+    return [];
+  }
+  const range = candidateRange(evidence.length, options);
+  const raw: RawProposal[] = [];
+
+  for (
+    let cellCount = range.minCount;
+    cellCount <= range.maxCount;
+    cellCount += 1
+  ) {
+    const period = evidence.length / cellCount;
+    const fit = bestBlurBandFit(
+      evidence.rampProfile,
+      evidence.rampTotal,
+      evidence.rampMaximum,
+      cellCount,
+      period
+    );
+    const phase = phaseConcentration(
+      evidence.rampProfile,
+      evidence.rampTotal,
+      period
+    );
+    const rawScore =
+      fit.coverage * 0.5 +
+      fit.density * 0.24 +
+      fit.activeRatio * 0.16 +
+      phase * 0.1;
+    raw.push({
+      proposer: "blur-band",
+      independenceGroup: "blur-band-center",
+      evidenceFamilies: ["blur-band-center"],
+      cellCount,
+      period,
+      rawScore
+    });
+  }
+
+  return rankProposals(raw, options.maxCandidates ?? 10);
+}
+
+/**
  * Propose cell counts from Fourier phase concentration in the boundary
  * profiles. Missing boundaries do not erase the common grid phase, which
  * makes this proposer useful for sparse silhouettes and weak axes.
@@ -330,6 +387,125 @@ function phaseConcentration(
   return Math.min(
     1,
     Math.sqrt(cosine * cosine + sine * sine) / total
+  );
+}
+
+function bestBlurBandFit(
+  profile: Float64Array,
+  total: number,
+  maximum: number,
+  cellCount: number,
+  period: number
+): {
+  coverage: number;
+  density: number;
+  activeRatio: number;
+} {
+  const searchRadius = Math.min(3, period / 2);
+  let best = blurBandFitAtOffset(
+    profile,
+    total,
+    maximum,
+    cellCount,
+    period,
+    0
+  );
+  for (
+    let offset = -searchRadius;
+    offset <= searchRadius + 0.001;
+    offset += 0.25
+  ) {
+    const fit = blurBandFitAtOffset(
+      profile,
+      total,
+      maximum,
+      cellCount,
+      period,
+      offset
+    );
+    if (blurBandFitQuality(fit) > blurBandFitQuality(best)) {
+      best = fit;
+    }
+  }
+  return best;
+}
+
+function blurBandFitAtOffset(
+  profile: Float64Array,
+  total: number,
+  maximum: number,
+  cellCount: number,
+  period: number,
+  offset: number
+): {
+  coverage: number;
+  density: number;
+  activeRatio: number;
+} {
+  const boundaryCount = Math.max(0, cellCount - 1);
+  const radius = Math.min(
+    1,
+    Math.floor((period - 1) / 2)
+  );
+  const activeThreshold = maximum * 0.045;
+  let coveredEnergy = 0;
+  let normalizedEnergy = 0;
+  let activeBoundaries = 0;
+
+  for (
+    let boundary = 1;
+    boundary < cellCount;
+    boundary += 1
+  ) {
+    const center = Math.round(
+      boundary * period + offset
+    );
+    let localEnergy = 0;
+    let localMaximum = 0;
+    for (
+      let localOffset = -radius;
+      localOffset <= radius;
+      localOffset += 1
+    ) {
+      const index = center + localOffset;
+      if (index <= 0 || index >= profile.length) {
+        continue;
+      }
+      const value = profile[index]!;
+      localEnergy += value;
+      localMaximum = Math.max(localMaximum, value);
+    }
+    coveredEnergy += localEnergy;
+    normalizedEnergy +=
+      maximum > 0 ? localMaximum / maximum : 0;
+    if (localMaximum >= activeThreshold) {
+      activeBoundaries += 1;
+    }
+  }
+
+  return {
+    coverage:
+      total > 0 ? clamp01(coveredEnergy / total) : 0,
+    density:
+      boundaryCount > 0
+        ? normalizedEnergy / boundaryCount
+        : 0,
+    activeRatio:
+      boundaryCount > 0
+        ? activeBoundaries / boundaryCount
+        : 0
+  };
+}
+
+function blurBandFitQuality(fit: {
+  coverage: number;
+  density: number;
+  activeRatio: number;
+}): number {
+  return (
+    fit.coverage * 0.56 +
+    fit.density * 0.28 +
+    fit.activeRatio * 0.16
   );
 }
 

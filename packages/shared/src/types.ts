@@ -558,12 +558,14 @@ export type GridRobustRerankDiagnostics = {
 export type GridRobustProposerId =
   | "integrated"
   | "autocorrelation"
+  | "blur-band"
   | "phase-spectrum"
   | "run-spacing";
 
 export type GridRobustIndependenceGroup =
   | "integrated-profile"
   | "autocorrelation"
+  | "blur-band-center"
   | "phase-spectrum"
   | "run-spacing";
 
@@ -572,6 +574,7 @@ export type GridRobustEvidenceFamily =
   | "curvature"
   | "quantized-run"
   | "blur-ramp"
+  | "blur-band-center"
   | "autocorrelation"
   | "phase-spectrum"
   | "cell-coherence"

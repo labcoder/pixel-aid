@@ -1,12 +1,14 @@
 import {
   nativeSizeInferenceFixtures,
   step1gNativeSizeCorpus,
-  step1kNativeSizeCorpus
+  step1kNativeSizeCorpus,
+  step1mNativeSizeCorpus
 } from "@pixelaid/fixtures";
 import { describe, expect, test } from "vitest";
 import { buildRobustGridEvidence } from "./gridRobustEvidence";
 import {
   proposeAutocorrelationAxisHypotheses,
+  proposeBlurBandAxisHypotheses,
   proposeIndependentAxisHypotheses,
   proposePhaseSpectrumAxisHypotheses,
   proposeRunSpacingAxisHypotheses
@@ -91,6 +93,53 @@ describe("robust independent axis proposers", () => {
     expect(y.map((item) => item.cellCount)).toContain(
       fixture.nativeHeight
     );
+  });
+
+  test.each(
+    step1mNativeSizeCorpus.filter(
+      (fixture) => fixture.failureClass === "grid-soften"
+    )
+  )(
+    "$id exposes authored axes through centered blur bands",
+    (fixture) => {
+      const evidence = buildRobustGridEvidence(
+        fixture.createInputImage(),
+        { maxPeriod: 32, sampleStep: 1 }
+      );
+      const x = proposeBlurBandAxisHypotheses(
+        evidence.axisX,
+        { maxPeriod: 32, maxCandidates: 16 }
+      );
+      const y = proposeBlurBandAxisHypotheses(
+        evidence.axisY,
+        { maxPeriod: 32, maxCandidates: 16 }
+      );
+
+      expect(x.map((item) => item.cellCount)).toContain(
+        fixture.nativeWidth
+      );
+      expect(y.map((item) => item.cellCount)).toContain(
+        fixture.nativeHeight
+      );
+    }
+  );
+
+  test("does not invent blur-band proposals for a crisp grid", () => {
+    const fixture = step1mNativeSizeCorpus.find(
+      (item) =>
+        item.id === "step1m-control-crisp-grid-26x22"
+    )!;
+    const evidence = buildRobustGridEvidence(
+      fixture.createInputImage(),
+      { maxPeriod: 32, sampleStep: 1 }
+    );
+
+    expect(
+      proposeBlurBandAxisHypotheses(evidence.axisX)
+    ).toEqual([]);
+    expect(
+      proposeBlurBandAxisHypotheses(evidence.axisY)
+    ).toEqual([]);
   });
 
   test("the three proposers expose separate independence groups", () => {
