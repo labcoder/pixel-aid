@@ -1,12 +1,14 @@
 import {
   nativeSizeInferenceFixtures,
-  step1gNativeSizeCorpus
+  step1gNativeSizeCorpus,
+  step1kNativeSizeCorpus
 } from "@pixelaid/fixtures";
 import { describe, expect, test } from "vitest";
 import { buildRobustGridEvidence } from "./gridRobustEvidence";
 import {
   proposeAutocorrelationAxisHypotheses,
   proposeIndependentAxisHypotheses,
+  proposePhaseSpectrumAxisHypotheses,
   proposeRunSpacingAxisHypotheses
 } from "./gridRobustProposers";
 
@@ -28,12 +30,15 @@ describe("robust independent axis proposers", () => {
       );
 
       expect(firstX).toEqual(secondX);
-      expect(firstX).toHaveLength(20);
+      expect(firstX).toHaveLength(30);
       expect(
         firstX.filter((item) => item.proposer === "autocorrelation")
       ).toHaveLength(10);
       expect(
         firstX.filter((item) => item.proposer === "run-spacing")
+      ).toHaveLength(10);
+      expect(
+        firstX.filter((item) => item.proposer === "phase-spectrum")
       ).toHaveLength(10);
       for (const proposal of firstX) {
         expect(proposal.cellCount).toBeGreaterThan(0);
@@ -88,7 +93,7 @@ describe("robust independent axis proposers", () => {
     );
   });
 
-  test("the two proposers expose separate independence groups", () => {
+  test("the three proposers expose separate independence groups", () => {
     const fixture = nativeSizeInferenceFixtures[0]!;
     const evidence = buildRobustGridEvidence(
       fixture.createImage(),
@@ -97,16 +102,52 @@ describe("robust independent axis proposers", () => {
     const autocorrelation = proposeAutocorrelationAxisHypotheses(
       evidence.axisX
     );
+    const phaseSpectrum = proposePhaseSpectrumAxisHypotheses(
+      evidence.axisX
+    );
     const runs = proposeRunSpacingAxisHypotheses(evidence.axisX);
 
     expect(
       new Set(
-        [...autocorrelation, ...runs].map(
+        [...autocorrelation, ...phaseSpectrum, ...runs].map(
           (item) => item.independenceGroup
         )
       )
     ).toEqual(
-      new Set(["autocorrelation", "run-spacing"])
+      new Set([
+        "autocorrelation",
+        "phase-spectrum",
+        "run-spacing"
+      ])
+    );
+  });
+
+  test.each([
+    "step1k-sparse-harmonic-36x28",
+    "step1k-anisotropic-portrait-22x38",
+    "step1k-anisotropic-banner-48x20"
+  ])("%s retains the authored axes through phase concentration", (id) => {
+    const fixture = step1kNativeSizeCorpus.find(
+      (item) => item.id === id
+    )!;
+    const evidence = buildRobustGridEvidence(
+      fixture.createInputImage(),
+      { maxPeriod: 32, sampleStep: 1 }
+    );
+    const x = proposePhaseSpectrumAxisHypotheses(
+      evidence.axisX,
+      { maxPeriod: 32, maxCandidates: 16 }
+    );
+    const y = proposePhaseSpectrumAxisHypotheses(
+      evidence.axisY,
+      { maxPeriod: 32, maxCandidates: 16 }
+    );
+
+    expect(x.map((item) => item.cellCount)).toContain(
+      fixture.nativeWidth
+    );
+    expect(y.map((item) => item.cellCount)).toContain(
+      fixture.nativeHeight
     );
   });
 });

@@ -55,6 +55,7 @@ export function buildRobustAxisCandidateUnion(
 
   for (const proposer of [
     "autocorrelation",
+    "phase-spectrum",
     "run-spacing"
   ] as const) {
     const proposals = independent
@@ -248,6 +249,7 @@ export function pairProposerSupport(
   const proposers = [
     "integrated",
     "autocorrelation",
+    "phase-spectrum",
     "run-spacing"
   ].filter(
     (proposer): proposer is GridRobustProposerId =>

@@ -88,7 +88,7 @@ describe("robust provenance-aware candidate union", () => {
 
     expect(support.proposers).toContain("integrated");
     expect(support.independentSupport).toBeGreaterThanOrEqual(1);
-    expect(support.independentSupport).toBeLessThanOrEqual(3);
+    expect(support.independentSupport).toBeLessThanOrEqual(4);
   });
 });
 

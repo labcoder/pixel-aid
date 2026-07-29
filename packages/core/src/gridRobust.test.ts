@@ -50,9 +50,10 @@ describe("robust grid candidates", () => {
       pairProposers: [
         "integrated",
         "autocorrelation",
+        "phase-spectrum",
         "run-spacing"
       ],
-      independentSupport: 3,
+      independentSupport: 4,
       ambiguityPreserved: false
     });
     expect(
@@ -73,6 +74,11 @@ describe("robust grid candidates", () => {
         expect.objectContaining({
           proposer: "run-spacing",
           independenceGroup: "run-spacing",
+          cellCount: 16
+        }),
+        expect.objectContaining({
+          proposer: "phase-spectrum",
+          independenceGroup: "phase-spectrum",
           cellCount: 16
         })
       ])

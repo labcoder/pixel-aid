@@ -306,6 +306,7 @@ function selectScoringPairs(
   }
   for (const proposer of [
     "autocorrelation",
+    "phase-spectrum",
     "run-spacing"
   ] as const) {
     const alternatives = pairs
@@ -373,6 +374,7 @@ function strongestJointIndependentProposal(
 ): number {
   return Math.max(
     jointProposalStrength(pair, "autocorrelation"),
+    jointProposalStrength(pair, "phase-spectrum"),
     jointProposalStrength(pair, "run-spacing")
   );
 }
@@ -685,6 +687,9 @@ function selectIndependentChallengers(
     );
   });
   const selected: number[] = [];
+  // Phase concentration broadens the candidate set, but a spectral peak can
+  // also be a visual harmonic. It may corroborate another proposer; it does
+  // not independently authorize a reconstruction switch.
   for (const proposer of [
     "autocorrelation",
     "run-spacing"

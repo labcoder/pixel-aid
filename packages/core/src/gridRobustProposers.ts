@@ -135,12 +135,69 @@ export function proposeRunSpacingAxisHypotheses(
   return rankProposals(raw, options.maxCandidates ?? 10);
 }
 
+/**
+ * Propose cell counts from Fourier phase concentration in the boundary
+ * profiles. Missing boundaries do not erase the common grid phase, which
+ * makes this proposer useful for sparse silhouettes and weak axes.
+ */
+export function proposePhaseSpectrumAxisHypotheses(
+  evidence: RobustAxisEvidence,
+  options: RobustAxisProposerOptions = {}
+): RobustAxisProposal[] {
+  const range = candidateRange(evidence.length, options);
+  const raw: RawProposal[] = [];
+
+  for (
+    let cellCount = range.minCount;
+    cellCount <= range.maxCount;
+    cellCount += 1
+  ) {
+    const period = evidence.length / cellCount;
+    const transition = phaseConcentration(
+      evidence.transitionProfile,
+      evidence.transitionTotal,
+      period
+    );
+    const curvature = phaseConcentration(
+      evidence.curvatureProfile,
+      evidence.curvatureTotal,
+      period
+    );
+    const ramp =
+      evidence.rampTotal > 0
+        ? phaseConcentration(
+            evidence.rampProfile,
+            evidence.rampTotal,
+            period
+          )
+        : 0;
+    const agreement =
+      1 - Math.min(1, Math.abs(transition - curvature));
+    const rawScore =
+      Math.max(transition, curvature) * 0.5 +
+      Math.min(transition, curvature) * 0.27 +
+      agreement * 0.15 +
+      ramp * 0.08;
+    raw.push({
+      proposer: "phase-spectrum",
+      independenceGroup: "phase-spectrum",
+      evidenceFamilies: ["phase-spectrum"],
+      cellCount,
+      period,
+      rawScore
+    });
+  }
+
+  return rankProposals(raw, options.maxCandidates ?? 10);
+}
+
 export function proposeIndependentAxisHypotheses(
   evidence: RobustAxisEvidence,
   options: RobustAxisProposerOptions = {}
 ): RobustAxisProposal[] {
   const proposals = [
     ...proposeAutocorrelationAxisHypotheses(evidence, options),
+    ...proposePhaseSpectrumAxisHypotheses(evidence, options),
     ...proposeRunSpacingAxisHypotheses(evidence, options)
   ];
   return proposals.sort(
@@ -174,6 +231,31 @@ function candidateRange(
     ),
     maxPeriod
   };
+}
+
+function phaseConcentration(
+  profile: Float64Array,
+  total: number,
+  period: number
+): number {
+  if (total <= 0 || period <= 0) {
+    return 0;
+  }
+  let cosine = 0;
+  let sine = 0;
+  for (let index = 1; index < profile.length; index += 1) {
+    const value = profile[index]!;
+    if (value <= 0) {
+      continue;
+    }
+    const angle = (2 * Math.PI * index) / period;
+    cosine += value * Math.cos(angle);
+    sine += value * Math.sin(angle);
+  }
+  return Math.min(
+    1,
+    Math.sqrt(cosine * cosine + sine * sine) / total
+  );
 }
 
 function normalizedAutocorrelation(

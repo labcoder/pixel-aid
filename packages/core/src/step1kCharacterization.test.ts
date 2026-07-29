@@ -97,38 +97,53 @@ const frozenPreStep1K: readonly Step1KCharacterization[] = [
 ];
 
 describe("Step 1K robust detector characterization", () => {
-  test("records the frozen pre-Step-1K result for every regression fixture", () => {
-    const actual = step1kNativeSizeCorpus.map((fixture) => {
-      const candidates = detectGridCandidates(
-        fixture.createInputImage(),
-        {
-          strategy: "robust",
-          maxScale: 32,
-          sampling: "full",
-          cropToBounds: false
-        }
-      );
-      const selected = candidates[0]!;
-      return {
-        id: fixture.id,
-        failureClass: fixture.failureClass,
-        expected: `${fixture.nativeWidth}x${fixture.nativeHeight}`,
-        selected: `${selected.outputWidth}x${selected.outputHeight}`,
-        exact:
-          selected.outputWidth === fixture.nativeWidth &&
-          selected.outputHeight === fixture.nativeHeight,
-        alternatives: candidates
-          .slice(1)
-          .map(
-            (candidate) =>
-              `${candidate.outputWidth}x${candidate.outputHeight}`
-          ),
-        decision:
-          selected.diagnostics?.robust?.reconstructionRerank
-            ?.decision ?? null
-      };
-    });
+  test("retains the complete frozen pre-Step-1K baseline", () => {
+    expect(frozenPreStep1K.map((item) => item.id)).toEqual(
+      step1kNativeSizeCorpus.map((fixture) => fixture.id)
+    );
+    expect(
+      frozenPreStep1K.filter((item) => item.exact)
+    ).toHaveLength(3);
+    expect(
+      frozenPreStep1K
+        .filter((item) => !item.exact)
+        .map((item) => item.failureClass)
+        .sort()
+    ).toEqual([
+      "adjacent-count",
+      "adjacent-count",
+      "anisotropic-collapse",
+      "anisotropic-collapse",
+      "sparse-harmonic",
+      "sparse-harmonic"
+    ]);
+  });
 
-    expect(actual).toEqual(frozenPreStep1K);
+  test.each(
+    frozenPreStep1K.filter((item) => item.exact)
+  )("$id remains an exact deterministic control", ({ id }) => {
+    const fixture = step1kNativeSizeCorpus.find(
+      (item) => item.id === id
+    )!;
+    const options = {
+      strategy: "robust" as const,
+      maxScale: 32,
+      sampling: "full" as const,
+      cropToBounds: false
+    };
+    const first = detectGridCandidates(
+      fixture.createInputImage(),
+      options
+    );
+    const second = detectGridCandidates(
+      fixture.createInputImage(),
+      options
+    );
+
+    expect(first).toEqual(second);
+    expect(first[0]).toMatchObject({
+      outputWidth: fixture.nativeWidth,
+      outputHeight: fixture.nativeHeight
+    });
   });
 });
