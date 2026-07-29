@@ -31,6 +31,54 @@ export type RobustGridDetectionOptions = {
   cropToBounds?: boolean;
 };
 
+export type RobustGridIndependentProposerId = Exclude<
+  GridRobustProposerId,
+  "integrated"
+>;
+
+export type RobustGridResearchOptions = {
+  disabledIndependentProposers?: readonly RobustGridIndependentProposerId[];
+};
+
+export type RobustGridResearchAxisCandidate = {
+  cellCount: number;
+  period: number;
+  integrated: boolean;
+  aggregateScore: number;
+  independentSupport: number;
+  proposers: GridRobustProposerId[];
+};
+
+export type RobustGridResearchPair = {
+  outputWidth: number;
+  outputHeight: number;
+  source: ScoringPairSource;
+  pairProposers: GridRobustProposerId[];
+  independentSupport: number;
+  detectorScore: number;
+  blurScore: number;
+};
+
+export type RobustGridResearchTrace = {
+  disabledIndependentProposers: RobustGridIndependentProposerId[];
+  axisX: RobustGridResearchAxisCandidate[];
+  axisY: RobustGridResearchAxisCandidate[];
+  scoringPairs: RobustGridResearchPair[];
+  selected: {
+    outputWidth: number;
+    outputHeight: number;
+    decision: GridRobustRerankDiagnostics["decision"] | null;
+    decisionBasis:
+      | GridRobustRerankDiagnostics["decisionBasis"]
+      | null;
+  };
+};
+
+export type RobustGridResearchResult = {
+  candidates: GridCandidate[];
+  trace: RobustGridResearchTrace;
+};
+
 type CandidatePair = {
   axisX: RobustAxisHypothesis;
   axisY: RobustAxisHypothesis;
@@ -71,6 +119,46 @@ export function detectRobustGridCandidates(
   image: RGBAImage,
   options: RobustGridDetectionOptions = {}
 ): GridCandidate[] {
+  return runRobustGridDetection(
+    image,
+    options,
+    undefined,
+    false
+  ).candidates;
+}
+
+/**
+ * Internal research entrypoint for PixelAid-owned regression experiments.
+ *
+ * This function is intentionally not exported from the core package index and
+ * cannot be selected through FixOptions, the CLI, or the editor.
+ */
+export function researchRobustGridCandidates(
+  image: RGBAImage,
+  options: RobustGridDetectionOptions = {},
+  research: RobustGridResearchOptions = {}
+): RobustGridResearchResult {
+  const result = runRobustGridDetection(
+    image,
+    options,
+    research,
+    true
+  );
+  return {
+    candidates: result.candidates,
+    trace: result.trace!
+  };
+}
+
+function runRobustGridDetection(
+  image: RGBAImage,
+  options: RobustGridDetectionOptions,
+  research: RobustGridResearchOptions | undefined,
+  collectTrace: boolean
+): {
+  candidates: GridCandidate[];
+  trace: RobustGridResearchTrace | undefined;
+} {
   const maxScale = Math.max(2, Math.min(options.maxScale ?? 32, image.width, image.height));
   const cropPolicy = options.cropToBounds ?? true;
   const detectedBounds = cropPolicy ? detectSpriteBounds(image) : undefined;
@@ -91,21 +179,29 @@ export function detectRobustGridCandidates(
     maxPeriod: maxScale,
     maxCandidates: 12
   });
-  const unionX = buildRobustAxisCandidateUnion(
-    evidence.axisX,
-    axisX,
+  const independentX = filterIndependentProposals(
     proposeIndependentAxisHypotheses(evidence.axisX, {
       maxPeriod: maxScale,
       maxCandidates: 10
-    })
+    }),
+    research
+  );
+  const independentY = filterIndependentProposals(
+    proposeIndependentAxisHypotheses(evidence.axisY, {
+      maxPeriod: maxScale,
+      maxCandidates: 10
+    }),
+    research
+  );
+  const unionX = buildRobustAxisCandidateUnion(
+    evidence.axisX,
+    axisX,
+    independentX
   );
   const unionY = buildRobustAxisCandidateUnion(
     evidence.axisY,
     axisY,
-    proposeIndependentAxisHypotheses(evidence.axisY, {
-      maxPeriod: maxScale,
-      maxCandidates: 10
-    })
+    independentY
   );
   const pairs = pairAxisHypotheses(unionX, unionY);
   const integratedPairs = pairs.filter((pair) =>
@@ -148,13 +244,97 @@ export function detectRobustGridCandidates(
       ? attachBlurScoringPrior(candidate, item.pair)
       : candidate;
   });
-  return rerankWithReconstructionEvidence(
+  const candidates = rerankWithReconstructionEvidence(
     image,
     detectorCandidates,
     scoringCandidates,
     scoringPairs.map((item) => item.pair),
     scoringPairs.map((item) => item.source)
   );
+  return {
+    candidates,
+    trace: collectTrace
+      ? createResearchTrace(
+          research,
+          unionX,
+          unionY,
+          scoringPairs,
+          candidates
+        )
+      : undefined
+  };
+}
+
+function filterIndependentProposals(
+  proposals: ReturnType<
+    typeof proposeIndependentAxisHypotheses
+  >,
+  research: RobustGridResearchOptions | undefined
+) {
+  const disabled =
+    research?.disabledIndependentProposers;
+  if (!disabled || disabled.length === 0) {
+    return proposals;
+  }
+  const disabledSet =
+    new Set<RobustGridIndependentProposerId>(disabled);
+  return proposals.filter(
+    (proposal) =>
+      !disabledSet.has(
+        proposal.proposer as RobustGridIndependentProposerId
+      )
+  );
+}
+
+function createResearchTrace(
+  research: RobustGridResearchOptions | undefined,
+  axisX: readonly RobustAxisUnionCandidate[],
+  axisY: readonly RobustAxisUnionCandidate[],
+  scoringPairs: readonly ScoringPair[],
+  candidates: readonly GridCandidate[]
+): RobustGridResearchTrace {
+  const selected = candidates[0]!;
+  const rerank =
+    selected.diagnostics?.robust?.reconstructionRerank;
+  return {
+    disabledIndependentProposers: [
+      ...(research?.disabledIndependentProposers ?? [])
+    ],
+    axisX: axisX.map(axisResearchCandidate),
+    axisY: axisY.map(axisResearchCandidate),
+    scoringPairs: scoringPairs.map((item) => ({
+      outputWidth: item.pair.axisX.cellCount,
+      outputHeight: item.pair.axisY.cellCount,
+      source: item.source,
+      pairProposers: [...item.pair.pairProposers],
+      independentSupport: item.pair.independentSupport,
+      detectorScore: roundScore(item.pair.score),
+      blurScore: roundScore(item.pair.blurScore)
+    })),
+    selected: {
+      outputWidth: selected.outputWidth,
+      outputHeight: selected.outputHeight,
+      decision: rerank?.decision ?? null,
+      decisionBasis: rerank?.decisionBasis ?? null
+    }
+  };
+}
+
+function axisResearchCandidate(
+  candidate: RobustAxisUnionCandidate
+): RobustGridResearchAxisCandidate {
+  return {
+    cellCount: candidate.hypothesis.cellCount,
+    period: roundNumber(candidate.hypothesis.period),
+    integrated: candidate.proposals.some(
+      (proposal) => proposal.proposer === "integrated"
+    ),
+    aggregateScore: roundScore(candidate.aggregateScore),
+    independentSupport: candidate.independentSupport,
+    proposers: candidate.proposals.map(
+      (proposal) => proposal.proposer
+    )
+  };
 }
 
 function pairAxisHypotheses(
