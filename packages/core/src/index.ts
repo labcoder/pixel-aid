@@ -47,6 +47,15 @@ export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
+export {
+  proposeAutocorrelationAxisHypotheses,
+  proposeIndependentAxisHypotheses,
+  proposeRunSpacingAxisHypotheses
+} from "./gridRobustProposers";
+export type {
+  RobustAxisProposal,
+  RobustAxisProposerOptions
+} from "./gridRobustProposers";
 export { scoreGridHypotheses } from "./gridHypothesisScore";
 export type {
   GridHypothesisScore,
