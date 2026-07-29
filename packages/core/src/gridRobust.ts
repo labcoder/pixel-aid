@@ -58,6 +58,10 @@ const INDEPENDENT_CELL_EVIDENCE_THRESHOLD = 0.04;
 const STRONG_INDEPENDENT_PROPOSAL_SCORE = 0.65;
 const MIN_INDEPENDENT_PERIOD = 3;
 const MAX_EARLY_SCORING_PAIRS = 12;
+const ADJACENT_BOUNDARY_MARGIN = 0.045;
+const ADJACENT_PROPOSAL_SCORE_FLOOR = 0.8;
+const ADJACENT_PROPOSAL_TOLERANCE = 0.14;
+const ADJACENT_RECONSTRUCTION_TOLERANCE = 0.025;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -329,6 +333,14 @@ function compareIndependentPairs(
   second: CandidatePair,
   proposer: Exclude<GridRobustProposerId, "integrated">
 ): number {
+  const adjacentPreference = adjacentBoundaryPreference(
+    first,
+    second,
+    proposer
+  );
+  if (adjacentPreference !== 0) {
+    return adjacentPreference;
+  }
   const firstRank = jointProposalRank(first, proposer);
   const secondRank = jointProposalRank(second, proposer);
   const firstStrength = jointProposalStrength(first, proposer);
@@ -599,8 +611,16 @@ function rerankWithReconstructionEvidence(
       independentChallengers
     );
     if (independentResult) {
+      const adjacentResult =
+        resolveAdjacentBoundaryCandidate(
+          image,
+          independentResult.selected,
+          scoringCandidates,
+          scoringPairs,
+          hypothesisSources
+        );
       return orderRobustCandidates(
-        independentResult.selected,
+        adjacentResult ?? independentResult.selected,
         candidates,
         scoringCandidates,
         earlyScores,
@@ -658,6 +678,157 @@ function rerankWithReconstructionEvidence(
     earlyScores,
     scoringPairs,
     hypothesisSources
+  );
+}
+
+function resolveAdjacentBoundaryCandidate(
+  image: RGBAImage,
+  selected: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[]
+): GridCandidate | undefined {
+  const selectedIndex = scoringCandidates.findIndex(
+    (candidate) =>
+      candidate.outputWidth === selected.outputWidth &&
+      candidate.outputHeight === selected.outputHeight
+  );
+  const selectedPair = scoringPairs[selectedIndex];
+  if (selectedIndex < 0 || !selectedPair) {
+    return undefined;
+  }
+  const alternatives = scoringPairs
+    .map((pair, index) => ({ pair, index }))
+    .filter(
+      ({ pair, index }) =>
+        index !== selectedIndex &&
+        isAdjacentPair(pair, selectedPair) &&
+        hasAdjacentBoundaryPreference(pair, selectedPair)
+    )
+    .sort((first, second) =>
+      compareAdjacentAlternatives(
+        first.pair,
+        second.pair,
+        selectedPair
+      )
+    );
+  const alternative = alternatives[0];
+  if (!alternative) {
+    return undefined;
+  }
+  const alternativeCandidate =
+    scoringCandidates[alternative.index]!;
+  const scores = scoreGridHypotheses(
+    image,
+    [selected, alternativeCandidate],
+    { maxHypotheses: 2 }
+  );
+  const incumbent = scores.find(
+    (item) => item.inputIndex === 0
+  )!;
+  const challenger = scores.find(
+    (item) => item.inputIndex === 1
+  )!;
+  const reconstructionMargin =
+    reconstructionEvidence(challenger) -
+    reconstructionEvidence(incumbent);
+  if (
+    reconstructionMargin <
+    -ADJACENT_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const boundaryMargin = adjacentBoundaryAdvantage(
+    alternative.pair,
+    selectedPair
+  );
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    boundaryMargin,
+    "adjacent-boundary-evidence",
+    ADJACENT_BOUNDARY_MARGIN,
+    [
+      hypothesisSources[selectedIndex] ?? "independent",
+      hypothesisSources[alternative.index] ?? "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    alternativeCandidate,
+    diagnostics,
+    false
+  );
+}
+
+function isAdjacentPair(
+  first: CandidatePair,
+  second: CandidatePair
+): boolean {
+  const xDifference = Math.abs(
+    first.axisX.cellCount - second.axisX.cellCount
+  );
+  const yDifference = Math.abs(
+    first.axisY.cellCount - second.axisY.cellCount
+  );
+  return (
+    (xDifference === 1 && yDifference === 0) ||
+    (xDifference === 0 && yDifference === 1)
+  );
+}
+
+function hasAdjacentBoundaryPreference(
+  challenger: CandidatePair,
+  incumbent: CandidatePair
+): boolean {
+  const proposers: readonly Exclude<
+    GridRobustProposerId,
+    "integrated"
+  >[] = [
+    "autocorrelation",
+    "run-spacing"
+  ];
+  return proposers.some(
+    (proposer) =>
+      adjacentBoundaryPreference(
+        challenger,
+        incumbent,
+        proposer
+      ) < 0
+  );
+}
+
+function compareAdjacentAlternatives(
+  first: CandidatePair,
+  second: CandidatePair,
+  incumbent: CandidatePair
+): number {
+  return (
+    adjacentBoundaryAdvantage(second, incumbent) -
+      adjacentBoundaryAdvantage(first, incumbent) ||
+    second.independentSupport - first.independentSupport ||
+    second.score - first.score
+  );
+}
+
+function adjacentBoundaryAdvantage(
+  challenger: CandidatePair,
+  incumbent: CandidatePair
+): number {
+  if (
+    challenger.axisX.cellCount !==
+    incumbent.axisX.cellCount
+  ) {
+    return Math.max(
+      0,
+      axisBoundaryDecisionScore(challenger.axisX) -
+        axisBoundaryDecisionScore(incumbent.axisX)
+    );
+  }
+  return Math.max(
+    0,
+    axisBoundaryDecisionScore(challenger.axisY) -
+      axisBoundaryDecisionScore(incumbent.axisY)
   );
 }
 
@@ -726,6 +897,14 @@ function compareIndependentScores(
 ): number {
   const firstPair = pairs[first.inputIndex]!;
   const secondPair = pairs[second.inputIndex]!;
+  const adjacentPreference = adjacentBoundaryPreference(
+    firstPair,
+    secondPair,
+    proposer
+  );
+  if (adjacentPreference !== 0) {
+    return adjacentPreference;
+  }
   return (
     jointProposalRank(firstPair, proposer) -
       jointProposalRank(secondPair, proposer) ||
@@ -742,6 +921,87 @@ function compareIndependentScores(
     reconstructionEvidence(second) -
       reconstructionEvidence(first) ||
     first.inputIndex - second.inputIndex
+  );
+}
+
+function adjacentBoundaryPreference(
+  first: CandidatePair,
+  second: CandidatePair,
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  const sameX =
+    first.axisX.cellCount === second.axisX.cellCount;
+  const sameY =
+    first.axisY.cellCount === second.axisY.cellCount;
+  if (sameX === sameY) {
+    return 0;
+  }
+  const firstAxis = sameX ? first.axisY : first.axisX;
+  const secondAxis = sameX ? second.axisY : second.axisX;
+  if (
+    Math.abs(
+      firstAxis.cellCount - secondAxis.cellCount
+    ) !== 1
+  ) {
+    return 0;
+  }
+  const firstProposal = axisProposalStrength(
+    sameX ? first.axisYUnion : first.axisXUnion,
+    proposer
+  );
+  const secondProposal = axisProposalStrength(
+    sameX ? second.axisYUnion : second.axisXUnion,
+    proposer
+  );
+  if (
+    firstProposal < ADJACENT_PROPOSAL_SCORE_FLOOR ||
+    secondProposal < ADJACENT_PROPOSAL_SCORE_FLOOR
+  ) {
+    return 0;
+  }
+  const firstBoundary = axisBoundaryDecisionScore(firstAxis);
+  const secondBoundary =
+    axisBoundaryDecisionScore(secondAxis);
+  const margin = firstBoundary - secondBoundary;
+  if (Math.abs(margin) < ADJACENT_BOUNDARY_MARGIN) {
+    return 0;
+  }
+  if (
+    margin > 0 &&
+    firstProposal + ADJACENT_PROPOSAL_TOLERANCE <
+      secondProposal
+  ) {
+    return 0;
+  }
+  if (
+    margin < 0 &&
+    secondProposal + ADJACENT_PROPOSAL_TOLERANCE <
+      firstProposal
+  ) {
+    return 0;
+  }
+  return margin > 0 ? -1 : 1;
+}
+
+function axisProposalStrength(
+  candidate: RobustAxisUnionCandidate,
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  return (
+    candidate.proposals.find(
+      (proposal) => proposal.proposer === proposer
+    )?.score ?? 0
+  );
+}
+
+function axisBoundaryDecisionScore(
+  axis: RobustAxisHypothesis
+): number {
+  return (
+    axis.score * 0.5 +
+    axis.boundaryCoverage * 0.15 +
+    axis.boundaryDensity * 0.2 +
+    axis.activeBoundaryRatio * 0.15
   );
 }
 
