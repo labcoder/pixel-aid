@@ -55,6 +55,11 @@ export type {
   Step1OFailureMechanism,
   Step1ONativeSizeFixture
 } from "./step1oNativeSizeCorpus";
+export { step1pAdjacentNativeSizeCorpus } from "./step1pAdjacentNativeSizeCorpus";
+export type {
+  Step1PAdjacentFixtureRole,
+  Step1PAdjacentNativeSizeFixture
+} from "./step1pAdjacentNativeSizeCorpus";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
