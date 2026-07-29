@@ -131,21 +131,25 @@ const definitions: readonly Step1OFixtureDefinition[] = [
     ]
   },
   {
-    id: "step1o-harmonic-asymmetric-probe-23x19",
+    id: "step1o-harmonic-wide-probe-44x15",
     failureMechanism: "harmonic-sparse-undersegmentation",
     description:
-      "Asymmetric sparse probe using non-common native dimensions and softened isolated accents.",
-    nativeWidth: 23,
-    nativeHeight: 19,
-    scaleX: 4.63,
-    scaleY: 4.71,
+      "Very wide sparse probe whose short source period can disappear before pair construction.",
+    nativeWidth: 44,
+    nativeHeight: 15,
+    scaleX: 3.73,
+    scaleY: 6.11,
     resample: "bilinear",
     motifVariant: 3,
-    blurPasses: 2,
+    blurPasses: 1,
+    boundaryWarp: {
+      amplitude: 1,
+      period: 31
+    },
     protects: [
-      "non-common native dimensions",
-      "asymmetric sparse evidence",
-      "independent-axis harmonic rejection"
+      "missing-axis proposal coverage",
+      "very wide sparse evidence",
+      "small horizontal source period"
     ]
   },
   {
