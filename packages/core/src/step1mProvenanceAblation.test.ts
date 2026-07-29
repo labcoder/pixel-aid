@@ -16,13 +16,13 @@ const independentProposers = [
 const phaseDependentSelections = [
   "step1m-grid-soften-totem-18x30",
   "step1m-sparse-beacon-28x40",
+  "step1m-sparse-drone-36x24",
   "step1m-weak-axis-portrait-22x38"
 ] as const;
 
 const blurBandDependentSelections = [
   "step1m-grid-soften-emblem-24x24",
-  "step1m-weak-axis-landscape-30x18",
-  "step1m-weak-axis-ribbon-42x14"
+  "step1m-weak-axis-landscape-30x18"
 ] as const;
 
 describe("Step 1M robust proposer provenance and ablation", () => {

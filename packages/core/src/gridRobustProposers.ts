@@ -26,6 +26,11 @@ type RawProposal = Omit<RobustAxisProposal, "rank" | "score"> & {
   rawScore: number;
 };
 
+type BlurBandPhaseCache = {
+  concentrations: Float64Array;
+  offsets: Float64Array;
+};
+
 /**
  * Propose native cell counts from the periodic self-agreement of PixelAid's
  * axis profiles. This is intentionally a separate candidate path from the
@@ -143,13 +148,14 @@ export function proposeRunSpacingAxisHypotheses(
  */
 export function proposeBlurBandAxisHypotheses(
   evidence: RobustAxisEvidence,
-  options: RobustAxisProposerOptions = {}
+  options: RobustAxisProposerOptions = {},
+  phaseCache?: BlurBandPhaseCache
 ): RobustAxisProposal[] {
   if (
     evidence.rampTotal <= 0 ||
     evidence.rampMaximum <= 0 ||
     evidence.broadRampCount < 2 ||
-    evidence.broadTransitionRatio < 0.035
+    evidence.broadTransitionRatio < 0.4
   ) {
     return [];
   }
@@ -162,23 +168,30 @@ export function proposeBlurBandAxisHypotheses(
     cellCount += 1
   ) {
     const period = evidence.length / cellCount;
+    const phase = phaseCache
+      ? {
+          concentration:
+            phaseCache.concentrations[cellCount]!,
+          offset: phaseCache.offsets[cellCount]!
+        }
+      : phaseVector(
+          evidence.rampProfile,
+          evidence.rampTotal,
+          period
+        );
     const fit = bestBlurBandFit(
       evidence.rampProfile,
       evidence.rampTotal,
       evidence.rampMaximum,
       cellCount,
-      period
-    );
-    const phase = phaseConcentration(
-      evidence.rampProfile,
-      evidence.rampTotal,
-      period
+      period,
+      phase.offset
     );
     const rawScore =
       fit.coverage * 0.5 +
       fit.density * 0.24 +
       fit.activeRatio * 0.16 +
-      phase * 0.1;
+      phase.concentration * 0.1;
     raw.push({
       proposer: "blur-band",
       independenceGroup: "blur-band-center",
@@ -199,7 +212,8 @@ export function proposeBlurBandAxisHypotheses(
  */
 export function proposePhaseSpectrumAxisHypotheses(
   evidence: RobustAxisEvidence,
-  options: RobustAxisProposerOptions = {}
+  options: RobustAxisProposerOptions = {},
+  blurBandPhaseCache?: BlurBandPhaseCache
 ): RobustAxisProposal[] {
   const range = candidateRange(evidence.length, options);
   const raw: RawProposal[] = [];
@@ -224,10 +238,15 @@ export function proposePhaseSpectrumAxisHypotheses(
     );
     const ramp =
       evidence.rampTotal > 0
-        ? phaseConcentration(
-            evidence.rampProfile,
-            evidence.rampTotal,
-            period
+        ? (
+            blurBandPhaseCache
+              ? blurBandPhaseCache
+                  .concentrations[cellCount]!
+              : phaseConcentration(
+                  evidence.rampProfile,
+                  evidence.rampTotal,
+                  period
+                )
           )
         : 0;
     const agreement =
@@ -254,10 +273,20 @@ export function proposeIndependentAxisHypotheses(
   evidence: RobustAxisEvidence,
   options: RobustAxisProposerOptions = {}
 ): RobustAxisProposal[] {
+  const blurBandPhaseCache =
+    createBlurBandPhaseCache(evidence, options);
   const proposals = [
     ...proposeAutocorrelationAxisHypotheses(evidence, options),
-    ...proposeBlurBandAxisHypotheses(evidence, options),
-    ...proposePhaseSpectrumAxisHypotheses(evidence, options),
+    ...proposeBlurBandAxisHypotheses(
+      evidence,
+      options,
+      blurBandPhaseCache
+    ),
+    ...proposePhaseSpectrumAxisHypotheses(
+      evidence,
+      options,
+      blurBandPhaseCache
+    ),
     ...proposeRunSpacingAxisHypotheses(evidence, options)
   ];
   return proposals.sort(
@@ -265,6 +294,39 @@ export function proposeIndependentAxisHypotheses(
       first.proposer.localeCompare(second.proposer) ||
       first.rank - second.rank
   );
+}
+
+function createBlurBandPhaseCache(
+  evidence: RobustAxisEvidence,
+  options: RobustAxisProposerOptions
+): BlurBandPhaseCache | undefined {
+  if (
+    evidence.rampTotal <= 0 ||
+    evidence.rampMaximum <= 0 ||
+    evidence.broadRampCount < 2 ||
+    evidence.broadTransitionRatio < 0.4
+  ) {
+    return undefined;
+  }
+  const range = candidateRange(evidence.length, options);
+  const concentrations = new Float64Array(
+    range.maxCount + 1
+  );
+  const offsets = new Float64Array(range.maxCount + 1);
+  for (
+    let cellCount = range.minCount;
+    cellCount <= range.maxCount;
+    cellCount += 1
+  ) {
+    const phase = phaseVector(
+      evidence.rampProfile,
+      evidence.rampTotal,
+      evidence.length / cellCount
+    );
+    concentrations[cellCount] = phase.concentration;
+    offsets[cellCount] = phase.offset;
+  }
+  return { concentrations, offsets };
 }
 
 function candidateRange(
@@ -396,26 +458,26 @@ function bestBlurBandFit(
   total: number,
   maximum: number,
   cellCount: number,
-  period: number
+  period: number,
+  estimatedOffset: number
 ): {
   coverage: number;
   density: number;
   activeRatio: number;
 } {
-  const searchRadius = Math.min(3, period / 2);
   let best = blurBandFitAtOffset(
     profile,
     total,
     maximum,
     cellCount,
     period,
-    0
+    estimatedOffset
   );
-  for (
-    let offset = -searchRadius;
-    offset <= searchRadius + 0.001;
-    offset += 0.25
-  ) {
+  for (let step = -1; step <= 1; step += 1) {
+    const offset = clampBlurBandOffset(
+      estimatedOffset + step * 0.25,
+      period
+    );
     const fit = blurBandFitAtOffset(
       profile,
       total,
@@ -428,7 +490,85 @@ function bestBlurBandFit(
       best = fit;
     }
   }
+  const zeroOffset = blurBandFitAtOffset(
+    profile,
+    total,
+    maximum,
+    cellCount,
+    period,
+    0
+  );
+  if (
+    blurBandFitQuality(zeroOffset) >
+    blurBandFitQuality(best)
+  ) {
+    best = zeroOffset;
+  }
   return best;
+}
+
+function phaseVector(
+  profile: Float64Array,
+  total: number,
+  period: number
+): {
+  concentration: number;
+  offset: number;
+} {
+  if (total <= 0 || period <= 0) {
+    return { concentration: 0, offset: 0 };
+  }
+  let cosine = 0;
+  let sine = 0;
+  const step = (2 * Math.PI) / period;
+  const cosineStep = Math.cos(step);
+  const sineStep = Math.sin(step);
+  let phaseCosine = cosineStep;
+  let phaseSine = sineStep;
+  for (
+    let index = 1;
+    index < profile.length;
+    index += 1
+  ) {
+    const value = profile[index]!;
+    if (value > 0) {
+      cosine += value * phaseCosine;
+      sine += value * phaseSine;
+    }
+    const nextCosine =
+      phaseCosine * cosineStep -
+      phaseSine * sineStep;
+    phaseSine =
+      phaseSine * cosineStep +
+      phaseCosine * sineStep;
+    phaseCosine = nextCosine;
+  }
+  const angle = Math.atan2(sine, cosine);
+  return {
+    concentration: Math.min(
+      1,
+      Math.sqrt(cosine * cosine + sine * sine) / total
+    ),
+    offset: clampBlurBandOffset(
+      (angle * period) / (2 * Math.PI),
+      period
+    )
+  };
+}
+
+function clampBlurBandOffset(
+  offset: number,
+  period: number
+): number {
+  const halfPeriod = period / 2;
+  let wrapped = offset;
+  while (wrapped > halfPeriod) {
+    wrapped -= period;
+  }
+  while (wrapped < -halfPeriod) {
+    wrapped += period;
+  }
+  return Math.max(-3, Math.min(3, wrapped));
 }
 
 function blurBandFitAtOffset(

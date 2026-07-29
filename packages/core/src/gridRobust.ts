@@ -105,7 +105,7 @@ const RECONSTRUCTION_SWITCH_THRESHOLD = 0.03;
 const INDEPENDENT_CELL_EVIDENCE_THRESHOLD = 0.04;
 const STRONG_INDEPENDENT_PROPOSAL_SCORE = 0.65;
 const MIN_INDEPENDENT_PERIOD = 3;
-const MAX_EARLY_SCORING_PAIRS = 16;
+const MAX_EARLY_SCORING_PAIRS = 9;
 const ADJACENT_BOUNDARY_MARGIN = 0.045;
 const ADJACENT_PROPOSAL_SCORE_FLOOR = 0.8;
 const ADJACENT_PROPOSAL_TOLERANCE = 0.14;
@@ -498,17 +498,24 @@ function selectScoringPairs(
     selected.push({ pair: selectedPairs[2], source: "detector" });
   }
   for (const proposer of [
+    "blur-band",
     "autocorrelation",
     "phase-spectrum",
-    "run-spacing",
-    "blur-band"
+    "run-spacing"
   ] as const) {
     const alternatives = pairs
       .filter((pair) => pair.pairProposers.includes(proposer))
       .sort((first, second) =>
         compareIndependentPairs(first, second, proposer)
       );
-    for (const pair of alternatives.slice(0, 4)) {
+    const maximumAlternatives =
+      proposer === "blur-band" ? 1 : 4;
+    for (
+      const pair of alternatives.slice(
+        0,
+        maximumAlternatives
+      )
+    ) {
       appendScoringPair(selected, {
         pair,
         source: "independent"
@@ -523,11 +530,14 @@ function compareIndependentPairs(
   second: CandidatePair,
   proposer: Exclude<GridRobustProposerId, "integrated">
 ): number {
-  const adjacentPreference = adjacentBoundaryPreference(
-    first,
-    second,
-    proposer
-  );
+  const adjacentPreference =
+    proposer === "blur-band"
+      ? 0
+      : adjacentBoundaryPreference(
+          first,
+          second,
+          proposer
+        );
   if (adjacentPreference !== 0) {
     return adjacentPreference;
   }

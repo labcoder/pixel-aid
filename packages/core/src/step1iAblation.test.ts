@@ -23,15 +23,18 @@ const step1iRecovered = [
   "step1g-chroma-noise-ui-glyph"
 ] as const;
 
-const remainingFailures = [
-  "step1g-bicubic-micro-tile",
-  "step1g-mush-warp-tall-character",
-  "step1g-blur-small-prop",
+const step1mRecovered = [
   "step1g-grid-soften-flat-panel"
 ] as const;
 
+const remainingFailures = [
+  "step1g-bicubic-micro-tile",
+  "step1g-mush-warp-tall-character",
+  "step1g-blur-small-prop"
+] as const;
+
 describe("Step 1I independent-proposer ablation", () => {
-  test("improves the frozen 18-case development matrix from 11 to 14 exact top-size passes", async () => {
+  test("retains Step 1I and records the Step 1M recovery from 14 to 15 exact top-size passes", async () => {
     const characterizations = [];
     for (const fixture of step1gNativeSizeCorpus) {
       characterizations.push(
@@ -44,7 +47,8 @@ describe("Step 1I independent-proposer ablation", () => {
       .sort();
     const expectedAccepted = [
       ...baselineAccepted,
-      ...step1iRecovered
+      ...step1iRecovered,
+      ...step1mRecovered
     ].sort();
     const failed = characterizations
       .filter((item) => !item.passesAcceptance)
@@ -55,7 +59,7 @@ describe("Step 1I independent-proposer ablation", () => {
     expect(failed).toEqual([...remainingFailures].sort());
     expect(
       nativeSizeInferenceFixtures.length + accepted.length
-    ).toBe(14);
+    ).toBe(15);
   });
 
   test.each(step1iRecovered)(
