@@ -42,7 +42,8 @@ export type RobustGridResearchOptions = {
 };
 
 export type RobustGridResearchRerankerId =
-  "multi-proposer-consensus";
+  | "multi-proposer-consensus"
+  | "adjacent-period-coherence";
 
 export type RobustGridResearchAxisCandidate = {
   cellCount: number;
@@ -146,6 +147,14 @@ const MULTI_PROPOSER_MIN_PERIOD = 3.5;
 const MULTI_PROPOSER_DETECTOR_TOLERANCE = 0.1;
 const MULTI_PROPOSER_BOUNDARY_TOLERANCE = 0.15;
 const MULTI_PROPOSER_RECONSTRUCTION_TOLERANCE = 0.025;
+const ADJACENT_PERIOD_COHERENCE_FLOOR = 0.975;
+const ADJACENT_PERIOD_SUPPORT_GAIN = 0.005;
+const ADJACENT_PERIOD_EQUAL_SUPPORT_GAIN = 0.04;
+const ADJACENT_PERIOD_STRONG_SUPPORT = 3;
+const ADJACENT_PERIOD_MIN_PERIOD = 3.5;
+const ADJACENT_PERIOD_DETECTOR_TOLERANCE = 0.04;
+const ADJACENT_PERIOD_BOUNDARY_TOLERANCE = 0.15;
+const ADJACENT_PERIOD_RECONSTRUCTION_TOLERANCE = 0.025;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -906,7 +915,7 @@ function rerankWithReconstructionEvidence(
           scoringPairs,
           hypothesisSources
         );
-      const selected = applyMultiProposerConsensus(
+      const selected = applyLateConsensusRerankers(
         adjacentResult ?? independentResult.selected,
         scoringCandidates,
         scoringPairs,
@@ -931,7 +940,7 @@ function rerankWithReconstructionEvidence(
     hypothesisSources
   );
   if (phaseConsensus) {
-    const selected = applyMultiProposerConsensus(
+    const selected = applyLateConsensusRerankers(
       phaseConsensus,
       scoringCandidates,
       scoringPairs,
@@ -956,7 +965,7 @@ function rerankWithReconstructionEvidence(
       hypothesisSources
     );
   if (blurBandConsensus) {
-    const selected = applyMultiProposerConsensus(
+    const selected = applyLateConsensusRerankers(
       blurBandConsensus,
       scoringCandidates,
       scoringPairs,
@@ -1015,7 +1024,7 @@ function rerankWithReconstructionEvidence(
     diagnostics,
     decision === "ambiguous"
   );
-  const selected = applyMultiProposerConsensus(
+  const selected = applyLateConsensusRerankers(
     fallbackSelected,
     scoringCandidates,
     scoringPairs,
@@ -1030,6 +1039,32 @@ function rerankWithReconstructionEvidence(
     earlyScores,
     scoringPairs,
     hypothesisSources
+  );
+}
+
+function applyLateConsensusRerankers(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[],
+  research: RobustGridResearchOptions | undefined
+): GridCandidate {
+  const consensus = applyMultiProposerConsensus(
+    incumbent,
+    scoringCandidates,
+    scoringPairs,
+    hypothesisSources,
+    earlyScores,
+    research
+  );
+  return applyAdjacentPeriodCoherence(
+    consensus,
+    scoringCandidates,
+    scoringPairs,
+    hypothesisSources,
+    earlyScores,
+    research
   );
 }
 
@@ -1056,6 +1091,182 @@ function applyMultiProposerConsensus(
       hypothesisSources,
       earlyScores
     ) ?? incumbent
+  );
+}
+
+function applyAdjacentPeriodCoherence(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[],
+  research: RobustGridResearchOptions | undefined
+): GridCandidate {
+  if (
+    research?.disabledRerankers?.includes(
+      "adjacent-period-coherence"
+    )
+  ) {
+    return incumbent;
+  }
+  return (
+    resolveAdjacentPeriodCoherenceCandidate(
+      incumbent,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      earlyScores
+    ) ?? incumbent
+  );
+}
+
+function resolveAdjacentPeriodCoherenceCandidate(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[]
+): GridCandidate | undefined {
+  const incumbentIndex = scoringCandidates.findIndex(
+    (candidate) =>
+      candidate.outputWidth === incumbent.outputWidth &&
+      candidate.outputHeight === incumbent.outputHeight
+  );
+  const incumbentPair = scoringPairs[incumbentIndex];
+  if (incumbentIndex < 0 || !incumbentPair) {
+    return undefined;
+  }
+  const incumbentCoherence = periodAgreementScore(
+    incumbentPair.axisX.period,
+    incumbentPair.axisY.period
+  );
+  const incumbentBoundaryX =
+    axisBoundaryDecisionScore(incumbentPair.axisX);
+  const incumbentBoundaryY =
+    axisBoundaryDecisionScore(incumbentPair.axisY);
+  let challengerIndex = -1;
+  let challengerGain = 0;
+  for (
+    let index = 0;
+    index < scoringPairs.length;
+    index += 1
+  ) {
+    if (index === incumbentIndex) {
+      continue;
+    }
+    const pair = scoringPairs[index]!;
+    if (
+      !isAdjacentPair(pair, incumbentPair) ||
+      pair.independentSupport < 2 ||
+      pair.axisX.period < ADJACENT_PERIOD_MIN_PERIOD ||
+      pair.axisY.period < ADJACENT_PERIOD_MIN_PERIOD ||
+      pair.score <
+        incumbentPair.score -
+          ADJACENT_PERIOD_DETECTOR_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisX) <
+        incumbentBoundaryX -
+          ADJACENT_PERIOD_BOUNDARY_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisY) <
+        incumbentBoundaryY -
+          ADJACENT_PERIOD_BOUNDARY_TOLERANCE
+    ) {
+      continue;
+    }
+    const coherence = periodAgreementScore(
+      pair.axisX.period,
+      pair.axisY.period
+    );
+    const coherenceGain =
+      coherence - incumbentCoherence;
+    const supportGain =
+      pair.independentSupport -
+      incumbentPair.independentSupport;
+    const requiredGain =
+      supportGain >= 1
+        ? ADJACENT_PERIOD_SUPPORT_GAIN
+        : supportGain === 0 &&
+            pair.independentSupport >=
+              ADJACENT_PERIOD_STRONG_SUPPORT
+          ? ADJACENT_PERIOD_EQUAL_SUPPORT_GAIN
+          : Number.POSITIVE_INFINITY;
+    if (
+      coherence < ADJACENT_PERIOD_COHERENCE_FLOOR ||
+      coherenceGain < requiredGain
+    ) {
+      continue;
+    }
+    const current =
+      challengerIndex >= 0
+        ? scoringPairs[challengerIndex]!
+        : undefined;
+    if (
+      !current ||
+      coherenceGain > challengerGain ||
+      (
+        coherenceGain === challengerGain &&
+        (
+          pair.independentSupport >
+            current.independentSupport ||
+          (
+            pair.independentSupport ===
+              current.independentSupport &&
+            pair.score > current.score
+          )
+        )
+      )
+    ) {
+      challengerIndex = index;
+      challengerGain = coherenceGain;
+    }
+  }
+  if (challengerIndex < 0) {
+    return undefined;
+  }
+  const incumbentScore = earlyScores.find(
+    (item) => item.inputIndex === incumbentIndex
+  );
+  const challengerScore = earlyScores.find(
+    (item) => item.inputIndex === challengerIndex
+  );
+  if (!incumbentScore || !challengerScore) {
+    return undefined;
+  }
+  const reconstructionMargin =
+    reconstructionEvidence(challengerScore) -
+    reconstructionEvidence(incumbentScore);
+  if (
+    reconstructionMargin <
+    -ADJACENT_PERIOD_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const scores = [
+    {
+      ...incumbentScore,
+      inputIndex: 0
+    },
+    {
+      ...challengerScore,
+      inputIndex: 1
+    }
+  ];
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    challengerGain,
+    "adjacent-period-coherence",
+    ADJACENT_PERIOD_SUPPORT_GAIN,
+    [
+      hypothesisSources[incumbentIndex] ?? "detector",
+      hypothesisSources[challengerIndex] ??
+        "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    scoringCandidates[challengerIndex]!,
+    diagnostics,
+    false
   );
 }
 
@@ -2031,6 +2242,9 @@ function attachRerankDiagnostics(
         : rerank.decisionBasis ===
             "multi-proposer-consensus"
           ? "Multiple independent proposer groups selected this guarded reconstruction candidate"
+          : rerank.decisionBasis ===
+              "adjacent-period-coherence"
+            ? "A neighboring cell count restored the corroborated shared source period"
         : `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
     );
   } else if (rerank.decision === "ambiguous") {
@@ -2048,6 +2262,9 @@ function attachRerankDiagnostics(
           : rerank.decisionBasis ===
               "multi-proposer-consensus"
             ? `Multi-proposer consensus rerank. ${candidate.reason}`
+            : rerank.decisionBasis ===
+                "adjacent-period-coherence"
+              ? `Adjacent period-coherence rerank. ${candidate.reason}`
           : `Conservative reconstruction rerank. ${candidate.reason}`
         : candidate.reason,
     diagnostics: {

@@ -9,13 +9,14 @@ const detectorOptions = {
   cropToBounds: false
 };
 
-describe("Step 1P adjacent-period baseline", () => {
+describe("Step 1P adjacent-period coherence", () => {
   test("freezes three one-cell losses and three controls before the correction", () => {
     const baseline = step1pAdjacentNativeSizeCorpus.map(
       (fixture) => {
         const result = researchRobustGridCandidates(
           fixture.createInputImage(),
-          detectorOptions
+          detectorOptions,
+          adjacentPeriodAblation
         );
         const selected = result.candidates[0]!;
         const recall = classifyRobustGridExpectedSize(
@@ -75,7 +76,8 @@ describe("Step 1P adjacent-period baseline", () => {
       const image = fixture.createInputImage();
       const selected = researchRobustGridCandidates(
         image,
-        detectorOptions
+        detectorOptions,
+        adjacentPeriodAblation
       ).candidates[0]!;
       const selectedDelta = periodDelta(
         image.width,
@@ -101,7 +103,97 @@ describe("Step 1P adjacent-period baseline", () => {
       ).toBe(1);
     }
   );
+
+  test.each([
+    {
+      id: "step1p-adjacent-soft-frame-17x18",
+      previous: "18x18"
+    },
+    {
+      id: "step1p-adjacent-noisy-panel-height-31x20",
+      previous: "31x21"
+    },
+    {
+      id: "step1p-adjacent-noisy-panel-width-31x20",
+      previous: "30x20"
+    }
+  ])(
+    "$id requires the adjacent-period reranker for recovery",
+    ({ id, previous }) => {
+      const fixture =
+        step1pAdjacentNativeSizeCorpus.find(
+          (item) => item.id === id
+        )!;
+      const enabled = researchRobustGridCandidates(
+        fixture.createInputImage(),
+        detectorOptions
+      );
+      const ablated = researchRobustGridCandidates(
+        fixture.createInputImage(),
+        detectorOptions,
+        adjacentPeriodAblation
+      );
+      const selected = enabled.candidates[0]!;
+
+      expect(selected).toMatchObject({
+        outputWidth: fixture.nativeWidth,
+        outputHeight: fixture.nativeHeight
+      });
+      expect(
+        selected.diagnostics?.robust
+          ?.reconstructionRerank
+      ).toMatchObject({
+        decision: "switched",
+        decisionBasis: "adjacent-period-coherence"
+      });
+      expect(selectedSize(ablated)).toBe(previous);
+      expect(ablated.trace.disabledRerankers).toContain(
+        "adjacent-period-coherence"
+      );
+    }
+  );
+
+  test("changes only the three recovery fixtures and preserves anisotropic controls", () => {
+    const changed: string[] = [];
+    const enabledSizes: string[] = [];
+    for (const fixture of step1pAdjacentNativeSizeCorpus) {
+      const image = fixture.createInputImage();
+      const enabled = researchRobustGridCandidates(
+        image,
+        detectorOptions
+      );
+      const ablated = researchRobustGridCandidates(
+        image,
+        detectorOptions,
+        adjacentPeriodAblation
+      );
+      enabledSizes.push(selectedSize(enabled));
+      if (selectedSize(enabled) !== selectedSize(ablated)) {
+        changed.push(fixture.id);
+      }
+    }
+
+    expect(changed).toEqual([
+      "step1p-adjacent-soft-frame-17x18",
+      "step1p-adjacent-noisy-panel-height-31x20",
+      "step1p-adjacent-noisy-panel-width-31x20"
+    ]);
+    expect(enabledSizes).toEqual([
+      "17x18",
+      "31x20",
+      "31x20",
+      "32x20",
+      "20x32",
+      "13x9"
+    ]);
+  });
 });
+
+const adjacentPeriodAblation = {
+  disabledRerankers: [
+    "adjacent-period-coherence"
+  ] as const
+};
 
 function periodDelta(
   sourceWidth: number,
@@ -113,4 +205,13 @@ function periodDelta(
     sourceWidth / outputWidth -
       sourceHeight / outputHeight
   );
+}
+
+function selectedSize(
+  result: ReturnType<
+    typeof researchRobustGridCandidates
+  >
+): string {
+  const selected = result.candidates[0]!;
+  return `${selected.outputWidth}x${selected.outputHeight}`;
 }

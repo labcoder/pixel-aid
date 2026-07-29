@@ -547,6 +547,7 @@ export type GridRobustRerankDiagnostics = {
   decisionBasis:
     | "reconstruction-total"
     | "adjacent-boundary-evidence"
+    | "adjacent-period-coherence"
     | "blur-band-consensus"
     | "multi-proposer-consensus"
     | "phase-boundary-consensus"
