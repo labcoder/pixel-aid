@@ -59,11 +59,25 @@ export type RobustGridResearchPair = {
   blurScore: number;
 };
 
+export type RobustGridResearchRankedCandidate = {
+  rank: number;
+  outputWidth: number;
+  outputHeight: number;
+  source: ScoringPairSource;
+  confidence: number;
+  provenance: GridRobustCandidateProvenanceDiagnostics;
+  decision: GridRobustRerankDiagnostics["decision"] | null;
+  decisionBasis:
+    | GridRobustRerankDiagnostics["decisionBasis"]
+    | null;
+};
+
 export type RobustGridResearchTrace = {
   disabledIndependentProposers: RobustGridIndependentProposerId[];
   axisX: RobustGridResearchAxisCandidate[];
   axisY: RobustGridResearchAxisCandidate[];
   scoringPairs: RobustGridResearchPair[];
+  rankedCandidates: RobustGridResearchRankedCandidate[];
   selected: {
     outputWidth: number;
     outputHeight: number;
@@ -316,12 +330,66 @@ function createResearchTrace(
       detectorScore: roundScore(item.pair.score),
       blurScore: roundScore(item.pair.blurScore)
     })),
+    rankedCandidates: candidates.map((candidate, index) =>
+      rankedResearchCandidate(candidate, index, scoringPairs)
+    ),
     selected: {
       outputWidth: selected.outputWidth,
       outputHeight: selected.outputHeight,
       decision: rerank?.decision ?? null,
       decisionBasis: rerank?.decisionBasis ?? null
     }
+  };
+}
+
+function rankedResearchCandidate(
+  candidate: GridCandidate,
+  rank: number,
+  scoringPairs: readonly ScoringPair[]
+): RobustGridResearchRankedCandidate {
+  const robust = candidate.diagnostics?.robust;
+  if (!robust) {
+    throw new Error(
+      "Robust research tracing received a candidate without robust diagnostics"
+    );
+  }
+  const scoringPair = scoringPairs.find(
+    (item) =>
+      item.pair.axisX.cellCount === candidate.outputWidth &&
+      item.pair.axisY.cellCount === candidate.outputHeight
+  );
+  return {
+    rank: rank + 1,
+    outputWidth: candidate.outputWidth,
+    outputHeight: candidate.outputHeight,
+    source: scoringPair?.source ?? "detector",
+    confidence: candidate.confidence,
+    provenance: copyCandidateProvenance(robust.provenance),
+    decision: robust.reconstructionRerank?.decision ?? null,
+    decisionBasis:
+      robust.reconstructionRerank?.decisionBasis ?? null
+  };
+}
+
+function copyCandidateProvenance(
+  provenance: GridRobustCandidateProvenanceDiagnostics
+): GridRobustCandidateProvenanceDiagnostics {
+  return {
+    axisX: {
+      selectedCellCount: provenance.axisX.selectedCellCount,
+      proposals: provenance.axisX.proposals.map(
+        proposalDiagnostics
+      )
+    },
+    axisY: {
+      selectedCellCount: provenance.axisY.selectedCellCount,
+      proposals: provenance.axisY.proposals.map(
+        proposalDiagnostics
+      )
+    },
+    pairProposers: [...provenance.pairProposers],
+    independentSupport: provenance.independentSupport,
+    ambiguityPreserved: provenance.ambiguityPreserved
   };
 }
 
