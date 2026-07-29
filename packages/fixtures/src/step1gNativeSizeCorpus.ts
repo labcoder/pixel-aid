@@ -224,8 +224,8 @@ const definitions: readonly Step1GFixtureDefinition[] = [
     role: "control",
     sourceFamilyId: "micro-tile",
     description: "Micro tile with balanced checker texture inside every apparent source cell.",
-    scaleX: 16,
-    scaleY: 16,
+    scaleX: 6,
+    scaleY: 6,
     resample: "nearest",
     acceptance: {
       requireExactTopCandidate: true,
@@ -239,8 +239,8 @@ const definitions: readonly Step1GFixtureDefinition[] = [
     role: "control",
     sourceFamilyId: "terrain-tile",
     description: "Terrain tile with a repeated low-amplitude gradient inside every apparent source cell.",
-    scaleX: 4,
-    scaleY: 4,
+    scaleX: 6,
+    scaleY: 6,
     resample: "nearest",
     acceptance: {
       requireExactTopCandidate: true,
@@ -254,8 +254,8 @@ const definitions: readonly Step1GFixtureDefinition[] = [
     role: "control",
     sourceFamilyId: "ui-glyph",
     description: "UI glyph with low-amplitude luminance noise contained inside each apparent source cell.",
-    scaleX: 5,
-    scaleY: 5,
+    scaleX: 6,
+    scaleY: 6,
     resample: "nearest",
     acceptance: {
       requireExactTopCandidate: true,

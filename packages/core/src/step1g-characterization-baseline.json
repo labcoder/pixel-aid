@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "detectorBaselineCommit": "9eb887c",
+  "description": "Step 1G first-party synthetic corpus measured before any post-Step-1F robust detector changes.",
+  "detectorOptions": {
+    "strategy": "robust",
+    "maxScale": 32,
+    "sampling": "full",
+    "cropToBounds": false
+  },
+  "summary": {
+    "accepted": 5,
+    "knownFailures": 7
+  },
+  "cases": [
+    {
+      "id": "step1g-color-field-tall-character",
+      "failureClass": "color-field",
+      "role": "challenge",
+      "nativeSize": "24x56",
+      "inputSize": "126x290",
+      "topCandidates": ["24x28@0.629832", "24x20@0.625045", "24x23@0.592377", "24x22@0.595629", "24x34@0.591026"],
+      "authoredCandidateRank": null,
+      "selectedSize": "24x28",
+      "confidenceLabel": "medium",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-webp-terrain-tile",
+      "failureClass": "webp",
+      "role": "challenge",
+      "nativeSize": "32x32",
+      "inputSize": "128x128",
+      "topCandidates": ["16x16@0.728636", "16x20@0.684595", "20x20@0.591532", "16x12@0.582695", "12x16@0.549614"],
+      "authoredCandidateRank": null,
+      "selectedSize": "16x16",
+      "confidenceLabel": "medium",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-chroma-noise-ui-glyph",
+      "failureClass": "chroma-noise",
+      "role": "challenge",
+      "nativeSize": "36x36",
+      "inputSize": "180x180",
+      "topCandidates": ["24x24@0.584547", "16x16@0.583313", "16x24@0.473144", "24x16@0.494848", "18x18@0.459507"],
+      "authoredCandidateRank": null,
+      "selectedSize": "24x24",
+      "confidenceLabel": "medium",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-bicubic-micro-tile",
+      "failureClass": "bicubic",
+      "role": "challenge",
+      "nativeSize": "8x8",
+      "inputSize": "116x110",
+      "topCandidates": ["16x16@0.755579", "16x12@0.658052", "12x16@0.562402", "16x18@0.584754", "16x15@0.553392"],
+      "authoredCandidateRank": null,
+      "selectedSize": "16x16",
+      "confidenceLabel": "medium",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-native-aa-small-prop",
+      "failureClass": "native-aa",
+      "role": "challenge",
+      "nativeSize": "24x24",
+      "inputSize": "144x144",
+      "topCandidates": ["24x24@0.628237", "20x20@0.667165", "20x24@0.616846", "24x20@0.662565", "22x22@0.545924"],
+      "authoredCandidateRank": 1,
+      "selectedSize": "24x24",
+      "confidenceLabel": "medium",
+      "reconstruction": {
+        "exactPixelMatch": 0.548611,
+        "paletteLabelAccuracy": 0.991319,
+        "alphaMaskIou": 1,
+        "meanAbsoluteChannelError": 2.894965
+      },
+      "passesAcceptance": true
+    },
+    {
+      "id": "step1g-mush-warp-tall-character",
+      "failureClass": "mush-warp",
+      "role": "challenge",
+      "nativeSize": "24x56",
+      "inputSize": "114x274",
+      "topCandidates": ["32x77@0.408935", "32x78@0.406651", "32x79@0.407335", "32x76@0.407672", "31x76@0.402364"],
+      "authoredCandidateRank": null,
+      "selectedSize": "32x77",
+      "confidenceLabel": "low",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-blur-small-prop",
+      "failureClass": "blur",
+      "role": "challenge",
+      "nativeSize": "24x24",
+      "inputSize": "149x149",
+      "topCandidates": ["14x14@0.542149", "14x15@0.572", "48x48@0.456858", "15x15@0.468859", "15x14@0.449595"],
+      "authoredCandidateRank": null,
+      "selectedSize": "14x14",
+      "confidenceLabel": "low",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-grid-soften-flat-panel",
+      "failureClass": "grid-soften",
+      "role": "challenge",
+      "nativeSize": "48x32",
+      "inputSize": "180x136",
+      "topCandidates": ["24x12@0.510506", "20x12@0.558727", "48x12@0.524763", "24x20@0.451292", "20x20@0.443311"],
+      "authoredCandidateRank": null,
+      "selectedSize": "24x12",
+      "confidenceLabel": "low",
+      "reconstruction": null,
+      "passesAcceptance": false
+    },
+    {
+      "id": "step1g-clean-nearest-tall-character",
+      "failureClass": "clean-nn",
+      "role": "control",
+      "nativeSize": "24x56",
+      "inputSize": "120x280",
+      "topCandidates": ["24x56@0.78262", "24x28@0.628336", "24x55@0.621058", "24x57@0.669905", "25x56@0.58974"],
+      "authoredCandidateRank": 1,
+      "selectedSize": "24x56",
+      "confidenceLabel": "medium",
+      "reconstruction": {
+        "exactPixelMatch": 1,
+        "paletteLabelAccuracy": 1,
+        "alphaMaskIou": 1,
+        "meanAbsoluteChannelError": 0
+      },
+      "passesAcceptance": true
+    },
+    {
+      "id": "step1g-cell-texture-micro-tile",
+      "failureClass": "cell-texture",
+      "role": "control",
+      "nativeSize": "8x8",
+      "inputSize": "48x48",
+      "topCandidates": ["8x8@0.730481", "8x4@0.581386", "4x8@0.644716", "8x3@0.557151", "3x8@0.557151"],
+      "authoredCandidateRank": 1,
+      "selectedSize": "8x8",
+      "confidenceLabel": "medium",
+      "reconstruction": {
+        "exactPixelMatch": 0,
+        "paletteLabelAccuracy": 1,
+        "alphaMaskIou": 1,
+        "meanAbsoluteChannelError": 3.75
+      },
+      "passesAcceptance": true
+    },
+    {
+      "id": "step1g-cell-gradient-terrain-tile",
+      "failureClass": "cell-gradient",
+      "role": "control",
+      "nativeSize": "32x32",
+      "inputSize": "192x192",
+      "topCandidates": ["32x32@0.85499", "24x32@0.657154", "16x32@0.685027", "16x16@0.629441", "32x33@0.603869"],
+      "authoredCandidateRank": 1,
+      "selectedSize": "32x32",
+      "confidenceLabel": "high",
+      "reconstruction": {
+        "exactPixelMatch": 0.861328,
+        "paletteLabelAccuracy": 1,
+        "alphaMaskIou": 1,
+        "meanAbsoluteChannelError": 0.125244
+      },
+      "passesAcceptance": true
+    },
+    {
+      "id": "step1g-cell-noise-ui-glyph",
+      "failureClass": "cell-noise",
+      "role": "control",
+      "nativeSize": "36x36",
+      "inputSize": "216x216",
+      "topCandidates": ["36x36@0.587529", "36x35@0.547104", "35x36@0.551381", "35x35@0.59681", "20x20@0.510967"],
+      "authoredCandidateRank": 1,
+      "selectedSize": "36x36",
+      "confidenceLabel": "medium",
+      "reconstruction": {
+        "exactPixelMatch": 0.060957,
+        "paletteLabelAccuracy": 1,
+        "alphaMaskIou": 1,
+        "meanAbsoluteChannelError": 1.052662
+      },
+      "passesAcceptance": true
+    }
+  ]
+}
