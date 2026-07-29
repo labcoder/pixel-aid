@@ -37,35 +37,46 @@ describe("robust grid candidates", () => {
     expect(first.length).toBeLessThanOrEqual(5);
     expect(JSON.stringify(first).length).toBeLessThan(20_000);
     expect(first[0]!.diagnostics?.robust?.reconstructionRerank).toMatchObject({
+      decisionBasis: "reconstruction-total",
       switchThreshold: 0.03
     });
-    expect(first[0]!.diagnostics?.robust?.provenance).toEqual({
+    expect(first[0]!.diagnostics?.robust?.provenance).toMatchObject({
       axisX: {
         selectedCellCount: 16,
-        proposals: [
-          expect.objectContaining({
-            proposer: "integrated",
-            independenceGroup: "integrated-profile",
-            cellCount: 16,
-            rank: 0
-          })
-        ]
       },
       axisY: {
         selectedCellCount: 16,
-        proposals: [
-          expect.objectContaining({
-            proposer: "integrated",
-            independenceGroup: "integrated-profile",
-            cellCount: 16,
-            rank: 0
-          })
-        ]
       },
-      pairProposers: ["integrated"],
-      independentSupport: 1,
+      pairProposers: [
+        "integrated",
+        "autocorrelation",
+        "run-spacing"
+      ],
+      independentSupport: 3,
       ambiguityPreserved: false
     });
+    expect(
+      first[0]!.diagnostics?.robust?.provenance.axisX.proposals
+    ).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          proposer: "integrated",
+          independenceGroup: "integrated-profile",
+          cellCount: 16,
+          rank: 0
+        }),
+        expect.objectContaining({
+          proposer: "autocorrelation",
+          independenceGroup: "autocorrelation",
+          cellCount: 16
+        }),
+        expect.objectContaining({
+          proposer: "run-spacing",
+          independenceGroup: "run-spacing",
+          cellCount: 16
+        })
+      ])
+    );
     expect(
       first[0]!.diagnostics?.robust?.reconstructionRerank?.hypotheses
     ).toHaveLength(3);

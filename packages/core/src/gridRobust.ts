@@ -1,8 +1,10 @@
 import type {
   GridCandidate,
   GridCandidateDiagnostics,
+  GridRobustAxisProposalDiagnostics,
   GridRobustAxisDiagnostics,
   GridRobustCandidateProvenanceDiagnostics,
+  GridRobustProposerId,
   GridRobustRerankDiagnostics,
   Rect,
   RGBAImage
@@ -13,7 +15,14 @@ import {
   type GridHypothesisScore
 } from "./gridHypothesisScore";
 import { inferRobustAxisHypotheses, type RobustAxisHypothesis } from "./gridRobustAxis";
+import {
+  buildRobustAxisCandidateUnion,
+  hasHarmonicAmbiguity,
+  pairProposerSupport,
+  type RobustAxisUnionCandidate
+} from "./gridRobustCandidateUnion";
 import { buildRobustGridEvidence } from "./gridRobustEvidence";
+import { proposeIndependentAxisHypotheses } from "./gridRobustProposers";
 
 export type RobustGridDetectionOptions = {
   maxScale?: number;
@@ -25,17 +34,30 @@ export type RobustGridDetectionOptions = {
 type CandidatePair = {
   axisX: RobustAxisHypothesis;
   axisY: RobustAxisHypothesis;
-  axisXRank: number;
-  axisYRank: number;
+  axisXUnion: RobustAxisUnionCandidate;
+  axisYUnion: RobustAxisUnionCandidate;
   score: number;
   blurScore: number;
   blurEvidenceWeight: number;
   detectorAgreement: number;
   commonSizeScore: number;
+  pairProposers: GridRobustProposerId[];
+  independentSupport: number;
+};
+
+type ScoringPairSource = "detector" | "blur" | "independent";
+
+type ScoringPair = {
+  pair: CandidatePair;
+  source: ScoringPairSource;
 };
 
 const COMMON_NATIVE_SIZES = new Set([8, 12, 16, 20, 24, 32, 40, 48, 64, 96, 128, 192, 256]);
 const RECONSTRUCTION_SWITCH_THRESHOLD = 0.03;
+const INDEPENDENT_CELL_EVIDENCE_THRESHOLD = 0.04;
+const STRONG_INDEPENDENT_PROPOSAL_SCORE = 0.65;
+const MIN_INDEPENDENT_PERIOD = 3;
+const MAX_EARLY_SCORING_PAIRS = 12;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -61,8 +83,27 @@ export function detectRobustGridCandidates(
     maxPeriod: maxScale,
     maxCandidates: 12
   });
-  const pairs = pairAxisHypotheses(axisX, axisY);
-  const selectedPairs = selectDistinctPairs(pairs, 5);
+  const unionX = buildRobustAxisCandidateUnion(
+    evidence.axisX,
+    axisX,
+    proposeIndependentAxisHypotheses(evidence.axisX, {
+      maxPeriod: maxScale,
+      maxCandidates: 10
+    })
+  );
+  const unionY = buildRobustAxisCandidateUnion(
+    evidence.axisY,
+    axisY,
+    proposeIndependentAxisHypotheses(evidence.axisY, {
+      maxPeriod: maxScale,
+      maxCandidates: 10
+    })
+  );
+  const pairs = pairAxisHypotheses(unionX, unionY);
+  const integratedPairs = pairs.filter((pair) =>
+    pair.pairProposers.includes("integrated")
+  );
+  const selectedPairs = selectDistinctPairs(integratedPairs, 5);
   const detectorCandidates = selectedPairs.map((pair, index) =>
     createGridCandidate(
       pair,
@@ -73,7 +114,11 @@ export function detectRobustGridCandidates(
       sampleStep
     )
   );
-  const scoringPairs = selectScoringPairs(pairs, selectedPairs);
+  const scoringPairs = selectScoringPairs(
+    pairs,
+    integratedPairs,
+    selectedPairs
+  );
   const scoringCandidates = scoringPairs.map((item, index) => {
     const detectorCandidate = detectorCandidates.find(
       (candidate) =>
@@ -99,26 +144,43 @@ export function detectRobustGridCandidates(
     image,
     detectorCandidates,
     scoringCandidates,
+    scoringPairs.map((item) => item.pair),
     scoringPairs.map((item) => item.source)
   );
 }
 
 function pairAxisHypotheses(
-  axisX: readonly RobustAxisHypothesis[],
-  axisY: readonly RobustAxisHypothesis[]
+  axisX: readonly RobustAxisUnionCandidate[],
+  axisY: readonly RobustAxisUnionCandidate[]
 ): CandidatePair[] {
   const pairs: CandidatePair[] = [];
+  const integratedX = integratedAxisCandidates(axisX);
+  const integratedY = integratedAxisCandidates(axisY);
   const preferMatchingPeriods =
-    axisX[0] !== undefined &&
-    axisY[0] !== undefined &&
-    periodAgreementScore(axisX[0].period, axisY[0].period) >= 0.78;
+    integratedX[0] !== undefined &&
+    integratedY[0] !== undefined &&
+    periodAgreementScore(
+      integratedX[0].hypothesis.period,
+      integratedY[0].hypothesis.period
+    ) >= 0.78;
   const reliableRunEvidence =
-    Math.max(...axisX.map((item) => item.runAgreement)) >= 0.35 &&
-    Math.max(...axisY.map((item) => item.runAgreement)) >= 0.35;
+    Math.max(
+      ...integratedX.map(
+        (item) => item.hypothesis.runAgreement
+      )
+    ) >= 0.35 &&
+    Math.max(
+      ...integratedY.map(
+        (item) => item.hypothesis.runAgreement
+      )
+    ) >= 0.35;
   for (let xIndex = 0; xIndex < axisX.length; xIndex += 1) {
-    const x = axisX[xIndex]!;
+    const xUnion = axisX[xIndex]!;
+    const x = xUnion.hypothesis;
     for (let yIndex = 0; yIndex < axisY.length; yIndex += 1) {
-      const y = axisY[yIndex]!;
+      const yUnion = axisY[yIndex]!;
+      const y = yUnion.hypothesis;
+      const provenance = pairProposerSupport(xUnion, yUnion);
       const axisScore = (x.score + y.score) / 2;
       const blurAxisScore = (x.blurScore + y.blurScore) / 2;
       const detectorAgreement = (x.detectorAgreement + y.detectorAgreement) / 2;
@@ -158,14 +220,16 @@ function pairAxisHypotheses(
       pairs.push({
         axisX: x,
         axisY: y,
-        axisXRank: xIndex,
-        axisYRank: yIndex,
+        axisXUnion: xUnion,
+        axisYUnion: yUnion,
         score,
         blurScore,
         blurEvidenceWeight:
           (x.blurEvidenceWeight + y.blurEvidenceWeight) / 2,
         detectorAgreement,
-        commonSizeScore
+        commonSizeScore,
+        pairProposers: provenance.proposers,
+        independentSupport: provenance.independentSupport
       });
     }
   }
@@ -179,11 +243,37 @@ function pairAxisHypotheses(
   return pairs;
 }
 
+function integratedAxisCandidates(
+  candidates: readonly RobustAxisUnionCandidate[]
+): RobustAxisUnionCandidate[] {
+  return candidates
+    .filter((candidate) =>
+      candidate.proposals.some(
+        (proposal) => proposal.proposer === "integrated"
+      )
+    )
+    .sort(
+      (first, second) =>
+        integratedRank(first) - integratedRank(second)
+    );
+}
+
+function integratedRank(
+  candidate: RobustAxisUnionCandidate
+): number {
+  return (
+    candidate.proposals.find(
+      (proposal) => proposal.proposer === "integrated"
+    )?.rank ?? Number.MAX_SAFE_INTEGER
+  );
+}
+
 function selectScoringPairs(
   pairs: readonly CandidatePair[],
+  integratedPairs: readonly CandidatePair[],
   selectedPairs: readonly CandidatePair[]
-): { pair: CandidatePair; source: "detector" | "blur" }[] {
-  const selected: { pair: CandidatePair; source: "detector" | "blur" }[] = [];
+): ScoringPair[] {
+  const selected: ScoringPair[] = [];
   for (const pair of selectedPairs.slice(0, 2)) {
     selected.push({ pair, source: "detector" });
   }
@@ -191,7 +281,7 @@ function selectScoringPairs(
   const hasBroadBlurEvidence =
     incumbent !== undefined && incumbent.blurEvidenceWeight >= 0.04;
   if (hasBroadBlurEvidence) {
-    const blurAlternative = [...pairs]
+    const blurAlternative = [...integratedPairs]
       .sort(
         (first, second) =>
           second.blurScore - first.blurScore ||
@@ -214,7 +304,105 @@ function selectScoringPairs(
   if (selected.length < 3 && selectedPairs[2]) {
     selected.push({ pair: selectedPairs[2], source: "detector" });
   }
-  return selected.slice(0, 3);
+  for (const proposer of [
+    "autocorrelation",
+    "run-spacing"
+  ] as const) {
+    const alternatives = pairs
+      .filter((pair) => pair.pairProposers.includes(proposer))
+      .sort((first, second) =>
+        compareIndependentPairs(first, second, proposer)
+      );
+    for (const pair of alternatives.slice(0, 4)) {
+      appendScoringPair(selected, {
+        pair,
+        source: "independent"
+      });
+    }
+  }
+  return selected.slice(0, MAX_EARLY_SCORING_PAIRS);
+}
+
+function compareIndependentPairs(
+  first: CandidatePair,
+  second: CandidatePair,
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  const firstRank = jointProposalRank(first, proposer);
+  const secondRank = jointProposalRank(second, proposer);
+  const firstStrength = jointProposalStrength(first, proposer);
+  const secondStrength = jointProposalStrength(second, proposer);
+  return (
+    firstRank - secondRank ||
+    secondStrength - firstStrength ||
+    periodAgreementScore(
+      second.axisX.period,
+      second.axisY.period
+    ) -
+      periodAgreementScore(
+        first.axisX.period,
+        first.axisY.period
+      ) ||
+    second.score - first.score ||
+    second.detectorAgreement - first.detectorAgreement ||
+    first.axisX.cellCount * first.axisY.cellCount -
+      second.axisX.cellCount * second.axisY.cellCount
+  );
+}
+
+function appendScoringPair(
+  selected: ScoringPair[],
+  item: ScoringPair
+): void {
+  if (
+    selected.some(
+      (existing) =>
+        existing.pair.axisX.cellCount ===
+          item.pair.axisX.cellCount &&
+        existing.pair.axisY.cellCount ===
+          item.pair.axisY.cellCount
+    )
+  ) {
+    return;
+  }
+  selected.push(item);
+}
+
+function strongestJointIndependentProposal(
+  pair: CandidatePair
+): number {
+  return Math.max(
+    jointProposalStrength(pair, "autocorrelation"),
+    jointProposalStrength(pair, "run-spacing")
+  );
+}
+
+function jointProposalStrength(
+  pair: CandidatePair,
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  const x = pair.axisXUnion.proposals.find(
+    (proposal) => proposal.proposer === proposer
+  );
+  const y = pair.axisYUnion.proposals.find(
+    (proposal) => proposal.proposer === proposer
+  );
+  return x && y ? Math.min(x.score, y.score) : 0;
+}
+
+function jointProposalRank(
+  pair: CandidatePair,
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  const x = pair.axisXUnion.proposals.find(
+    (proposal) => proposal.proposer === proposer
+  );
+  const y = pair.axisYUnion.proposals.find(
+    (proposal) => proposal.proposer === proposer
+  );
+  return x && y
+    ? x.rank + y.rank
+    : Number.MAX_SAFE_INTEGER;
 }
 
 function attachBlurScoringPrior(
@@ -258,6 +446,14 @@ function createGridCandidate(
   if (pair.axisX.harmonicAdvantage > 0 || pair.axisY.harmonicAdvantage > 0) {
     notes.push("Harmonic family arbitration favored the coarser supported period");
   }
+  const independentProposers = pair.pairProposers.filter(
+    (proposer) => proposer !== "integrated"
+  );
+  if (independentProposers.length > 0) {
+    notes.push(
+      `Independent candidate support: ${independentProposers.join(", ")}`
+    );
+  }
   if (sampleStep > 1) {
     notes.push(`Sampled detector step ${sampleStep}`);
   }
@@ -297,7 +493,7 @@ function createGridCandidate(
         rows: Math.max(1, Math.round(image.height / pair.axisY.period))
       },
       cropPolicy: cropUsed ? "bounds" : "full-canvas",
-      provenance: integratedProvenance(pair)
+      provenance: candidateProvenance(pair)
     }
   };
   const candidate: GridCandidate = {
@@ -317,43 +513,37 @@ function createGridCandidate(
   return candidate;
 }
 
-function integratedProvenance(
+function candidateProvenance(
   pair: CandidatePair
 ): GridRobustCandidateProvenanceDiagnostics {
-  const evidenceFamilies = [
-    "boundary",
-    "curvature",
-    "quantized-run",
-    "blur-ramp"
-  ] as const;
   return {
     axisX: {
       selectedCellCount: pair.axisX.cellCount,
-      proposals: [{
-        proposer: "integrated",
-        independenceGroup: "integrated-profile",
-        evidenceFamilies: [...evidenceFamilies],
-        cellCount: pair.axisX.cellCount,
-        period: roundNumber(pair.axisX.period),
-        score: roundScore(pair.axisX.score),
-        rank: pair.axisXRank
-      }]
+      proposals: pair.axisXUnion.proposals.map(
+        proposalDiagnostics
+      )
     },
     axisY: {
       selectedCellCount: pair.axisY.cellCount,
-      proposals: [{
-        proposer: "integrated",
-        independenceGroup: "integrated-profile",
-        evidenceFamilies: [...evidenceFamilies],
-        cellCount: pair.axisY.cellCount,
-        period: roundNumber(pair.axisY.period),
-        score: roundScore(pair.axisY.score),
-        rank: pair.axisYRank
-      }]
+      proposals: pair.axisYUnion.proposals.map(
+        proposalDiagnostics
+      )
     },
-    pairProposers: ["integrated"],
-    independentSupport: 1,
-    ambiguityPreserved: false
+    pairProposers: pair.pairProposers,
+    independentSupport: pair.independentSupport,
+    ambiguityPreserved:
+      hasHarmonicAmbiguity(pair.axisXUnion) ||
+      hasHarmonicAmbiguity(pair.axisYUnion)
+  };
+}
+
+function proposalDiagnostics(
+  proposal: GridRobustAxisProposalDiagnostics
+): GridRobustAxisProposalDiagnostics {
+  return {
+    ...proposal,
+    period: roundNumber(proposal.period),
+    score: roundScore(proposal.score)
   };
 }
 
@@ -378,13 +568,59 @@ function rerankWithReconstructionEvidence(
   image: RGBAImage,
   candidates: readonly GridCandidate[],
   scoringCandidates: readonly GridCandidate[],
-  hypothesisSources: readonly ("detector" | "blur")[]
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[]
 ): GridCandidate[] {
   if (scoringCandidates.length <= 1) {
     return [...candidates];
   }
-  const scores = scoreGridHypotheses(image, scoringCandidates, {
-    maxHypotheses: 3
+  const earlyScores = scoreGridHypotheses(
+    image,
+    scoringCandidates,
+    {
+      maxHypotheses: scoringCandidates.length,
+      maxSampledCells: 1_024,
+      maxSamplesPerCell: 9
+    }
+  );
+  const independentChallengers = selectIndependentChallengers(
+    earlyScores,
+    scoringPairs,
+    hypothesisSources
+  );
+  if (independentChallengers.length > 0) {
+    const independentResult = evaluateIndependentChallengers(
+      image,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      independentChallengers
+    );
+    if (independentResult) {
+      return orderRobustCandidates(
+        independentResult.selected,
+        candidates,
+        scoringCandidates,
+        earlyScores,
+        scoringPairs,
+        hypothesisSources
+      );
+    }
+  }
+
+  const fallbackIndices = hypothesisSources
+    .map((source, index) => ({ source, index }))
+    .filter((item) => item.source !== "independent")
+    .slice(0, 3)
+    .map((item) => item.index);
+  const fallbackCandidates = fallbackIndices.map(
+    (index) => scoringCandidates[index]!
+  );
+  const fallbackSources = fallbackIndices.map(
+    (index) => hypothesisSources[index]!
+  );
+  const scores = scoreGridHypotheses(image, fallbackCandidates, {
+    maxHypotheses: fallbackCandidates.length
   });
   const incumbent = scores.find((item) => item.inputIndex === 0)!;
   const best = scores[0]!;
@@ -403,25 +639,186 @@ function rerankWithReconstructionEvidence(
     selectedIndex,
     decision,
     scoreMargin,
-    hypothesisSources
+    "reconstruction-total",
+    RECONSTRUCTION_SWITCH_THRESHOLD,
+    fallbackSources
   );
-  const selectedCandidate = scoringCandidates[selectedIndex]!;
+  const selectedCandidate = fallbackCandidates[selectedIndex]!;
   const selected = attachRerankDiagnostics(
     selectedCandidate,
     diagnostics,
     decision === "ambiguous"
   );
-  const ordered = [selected];
-  for (let index = 0; index < candidates.length; index += 1) {
-    if (
-      candidates[index]!.outputWidth === selected.outputWidth &&
-      candidates[index]!.outputHeight === selected.outputHeight
-    ) {
-      continue;
-    }
-    ordered.push(candidates[index]!);
+  return orderRobustCandidates(
+    selected,
+    candidates,
+    scoringCandidates,
+    earlyScores,
+    scoringPairs,
+    hypothesisSources
+  );
+}
+
+function selectIndependentChallengers(
+  earlyScores: readonly GridHypothesisScore[],
+  scoringPairs: readonly CandidatePair[],
+  sources: readonly ScoringPairSource[]
+): number[] {
+  const incumbent = earlyScores.find(
+    (item) => item.inputIndex === 0
+  );
+  if (!incumbent) {
+    return [];
   }
-  return ordered.slice(0, 5);
+  const incumbentEvidence = reconstructionEvidence(incumbent);
+  const eligible = earlyScores.filter((score) => {
+    const pair = scoringPairs[score.inputIndex];
+    return (
+      score.inputIndex !== 0 &&
+      sources[score.inputIndex] === "independent" &&
+      pair !== undefined &&
+      hasSufficientIndependentResolution(pair) &&
+      strongestJointIndependentProposal(pair) >=
+        STRONG_INDEPENDENT_PROPOSAL_SCORE &&
+      reconstructionEvidence(score) - incumbentEvidence >=
+        INDEPENDENT_CELL_EVIDENCE_THRESHOLD
+    );
+  });
+  const selected: number[] = [];
+  for (const proposer of [
+    "autocorrelation",
+    "run-spacing"
+  ] as const) {
+    const best = eligible
+      .filter((score) =>
+        scoringPairs[score.inputIndex]!.pairProposers.includes(
+          proposer
+        )
+      )
+      .sort((first, second) =>
+        compareIndependentScores(
+          first,
+          second,
+          scoringPairs,
+          proposer
+        )
+      )[0];
+    if (
+      best &&
+      !selected.includes(best.inputIndex)
+    ) {
+      selected.push(best.inputIndex);
+    }
+  }
+  return selected.slice(0, 2);
+}
+
+function compareIndependentScores(
+  first: GridHypothesisScore,
+  second: GridHypothesisScore,
+  pairs: readonly CandidatePair[],
+  proposer: Exclude<GridRobustProposerId, "integrated">
+): number {
+  const firstPair = pairs[first.inputIndex]!;
+  const secondPair = pairs[second.inputIndex]!;
+  return (
+    jointProposalRank(firstPair, proposer) -
+      jointProposalRank(secondPair, proposer) ||
+    periodAgreementScore(
+      secondPair.axisX.period,
+      secondPair.axisY.period
+    ) -
+      periodAgreementScore(
+        firstPair.axisX.period,
+        firstPair.axisY.period
+      ) ||
+    jointProposalStrength(secondPair, proposer) -
+      jointProposalStrength(firstPair, proposer) ||
+    reconstructionEvidence(second) -
+      reconstructionEvidence(first) ||
+    first.inputIndex - second.inputIndex
+  );
+}
+
+function evaluateIndependentChallengers(
+  image: RGBAImage,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  challengerIndices: readonly number[]
+): { selected: GridCandidate } | undefined {
+  const finalIndices = [0, ...challengerIndices].slice(0, 3);
+  const finalCandidates = finalIndices.map(
+    (index) => scoringCandidates[index]!
+  );
+  const finalSources = finalIndices.map(
+    (index) => hypothesisSources[index]!
+  );
+  const scores = scoreGridHypotheses(image, finalCandidates, {
+    maxHypotheses: finalCandidates.length
+  });
+  const incumbent = scores.find(
+    (item) => item.inputIndex === 0
+  )!;
+  const confirmed = scores
+    .filter((item) => item.inputIndex !== 0)
+    .map((challenger) => {
+      const originalIndex =
+        finalIndices[challenger.inputIndex]!;
+      const pair = scoringPairs[originalIndex]!;
+      return {
+        challenger,
+        pair,
+        evidenceMargin:
+          reconstructionEvidence(challenger) -
+          reconstructionEvidence(incumbent)
+      };
+    })
+    .filter(
+      (item) =>
+        item.evidenceMargin >=
+          INDEPENDENT_CELL_EVIDENCE_THRESHOLD &&
+        hasSufficientIndependentResolution(item.pair) &&
+        strongestJointIndependentProposal(item.pair) >=
+          STRONG_INDEPENDENT_PROPOSAL_SCORE
+    )
+    .sort(
+      (first, second) =>
+        second.evidenceMargin - first.evidenceMargin ||
+        strongestJointIndependentProposal(second.pair) -
+          strongestJointIndependentProposal(first.pair) ||
+        first.challenger.inputIndex -
+          second.challenger.inputIndex
+    );
+  const selected = confirmed[0];
+  if (!selected) {
+    return undefined;
+  }
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    selected.challenger.inputIndex,
+    "switched",
+    selected.evidenceMargin,
+    "independent-cell-evidence",
+    INDEPENDENT_CELL_EVIDENCE_THRESHOLD,
+    finalSources
+  );
+  return {
+    selected: attachRerankDiagnostics(
+      finalCandidates[selected.challenger.inputIndex]!,
+      diagnostics,
+      false
+    )
+  };
+}
+
+function hasSufficientIndependentResolution(
+  pair: CandidatePair
+): boolean {
+  return (
+    pair.axisX.period >= MIN_INDEPENDENT_PERIOD &&
+    pair.axisY.period >= MIN_INDEPENDENT_PERIOD
+  );
 }
 
 function createRerankDiagnostics(
@@ -429,13 +826,16 @@ function createRerankDiagnostics(
   selectedInputRank: number,
   decision: GridRobustRerankDiagnostics["decision"],
   scoreMargin: number,
-  hypothesisSources: readonly ("detector" | "blur")[]
+  decisionBasis: GridRobustRerankDiagnostics["decisionBasis"],
+  switchThreshold: number,
+  hypothesisSources: readonly ScoringPairSource[]
 ): GridRobustRerankDiagnostics {
   return {
     decision,
+    decisionBasis,
     selectedInputRank,
     scoreMargin: roundScore(scoreMargin),
-    switchThreshold: RECONSTRUCTION_SWITCH_THRESHOLD,
+    switchThreshold,
     hypotheses: [...scores]
       .sort((first, second) => first.inputIndex - second.inputIndex)
       .slice(0, 3)
@@ -456,6 +856,62 @@ function createRerankDiagnostics(
   };
 }
 
+function orderRobustCandidates(
+  selected: GridCandidate,
+  detectorCandidates: readonly GridCandidate[],
+  scoringCandidates: readonly GridCandidate[],
+  earlyScores: readonly GridHypothesisScore[],
+  scoringPairs: readonly CandidatePair[],
+  sources: readonly ScoringPairSource[]
+): GridCandidate[] {
+  const ordered: GridCandidate[] = [];
+  appendDistinctCandidate(ordered, selected);
+  for (const candidate of detectorCandidates.slice(0, 2)) {
+    appendDistinctCandidate(ordered, candidate);
+  }
+  const independent = selectIndependentChallengers(
+    earlyScores,
+    scoringPairs,
+    sources
+  );
+  for (const index of independent) {
+    appendDistinctCandidate(
+      ordered,
+      scoringCandidates[index]!
+    );
+  }
+  for (const candidate of detectorCandidates) {
+    appendDistinctCandidate(ordered, candidate);
+  }
+  return ordered.slice(0, 5);
+}
+
+function appendDistinctCandidate(
+  selected: GridCandidate[],
+  candidate: GridCandidate
+): void {
+  if (
+    selected.some(
+      (item) =>
+        item.outputWidth === candidate.outputWidth &&
+        item.outputHeight === candidate.outputHeight
+    )
+  ) {
+    return;
+  }
+  selected.push(candidate);
+}
+
+function reconstructionEvidence(
+  score: GridHypothesisScore
+): number {
+  return (
+    score.withinCellCompactness * 0.4 +
+    score.crossCellSeparation * 0.2 +
+    score.blurTolerantResidualFit * 0.4
+  );
+}
+
 function attachRerankDiagnostics(
   candidate: GridCandidate,
   rerank: GridRobustRerankDiagnostics,
@@ -471,7 +927,9 @@ function attachRerankDiagnostics(
   const notes = [...diagnostics.notes];
   if (rerank.decision === "switched") {
     notes.push(
-      `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
+      rerank.decisionBasis === "independent-cell-evidence"
+        ? "Independent proposer agreement plus cell evidence selected this candidate"
+        : `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
     );
   } else if (rerank.decision === "ambiguous") {
     notes.push(
@@ -483,7 +941,9 @@ function attachRerankDiagnostics(
     confidence,
     reason:
       rerank.decision === "switched"
-        ? `Conservative reconstruction rerank. ${candidate.reason}`
+        ? rerank.decisionBasis === "independent-cell-evidence"
+          ? `Independent-evidence rerank. ${candidate.reason}`
+          : `Conservative reconstruction rerank. ${candidate.reason}`
         : candidate.reason,
     diagnostics: {
       ...diagnostics,

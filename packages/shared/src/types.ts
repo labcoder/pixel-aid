@@ -531,7 +531,7 @@ export type GridRobustAxisDiagnostics = {
 
 export type GridRobustHypothesisDiagnostics = {
   inputRank: number;
-  source: "detector" | "blur";
+  source: "detector" | "blur" | "independent";
   outputWidth: number;
   outputHeight: number;
   totalScore: number;
@@ -544,6 +544,9 @@ export type GridRobustHypothesisDiagnostics = {
 
 export type GridRobustRerankDiagnostics = {
   decision: "kept-incumbent" | "switched" | "ambiguous";
+  decisionBasis:
+    | "reconstruction-total"
+    | "independent-cell-evidence";
   selectedInputRank: number;
   scoreMargin: number;
   switchThreshold: number;
