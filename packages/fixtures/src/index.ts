@@ -60,6 +60,11 @@ export type {
   Step1PAdjacentFixtureRole,
   Step1PAdjacentNativeSizeFixture
 } from "./step1pAdjacentNativeSizeCorpus";
+export { step1pHarmonicAxisCorpus } from "./step1pHarmonicAxisCorpus";
+export type {
+  Step1PHarmonicAxisFixture,
+  Step1PHarmonicAxisFixtureRole
+} from "./step1pHarmonicAxisCorpus";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
