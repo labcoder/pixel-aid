@@ -17,6 +17,22 @@ When beta feedback exposes a repeatable failure, classify the source before addi
 
 New bugs should become fixtures when they affect grid detection, alpha/background cleanup, palette stability, sheet/tile structure, export metadata, or a release workflow that otherwise needs manual QA. Keep large sources lazy and prefer compact golden signatures over checked-in PNG outputs.
 
+### Step 1G native-size corpus
+
+`step1gNativeSizeCorpus` is the PixelAid-owned regression corpus derived from
+the general visual failure classes observed after the Step 1F competitive
+evaluation. It combines six original source-art families with twelve
+deterministic degradation profiles. The fixtures contain no benchmark or
+competitor art.
+
+The corpus separates desired acceptance from current behavior. Fixture metadata
+declares exact-size, palette-label, alpha-mask, and clean-input expectations;
+`packages/core/src/step1g-characterization-baseline.json` records the detector
+before subsequent improvements; and `step1gNonRegression.test.ts` actively
+enforces only cases that already pass. See
+`docs/research/native-size-inference-step-1g.md` for the matrix and the protocol
+for promoting known failures before detector changes.
+
 Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixelaid/fixtures`. Each failure fixture or internal sample reference must record:
 
 - `sourceFilename`: a committed synthetic source URI such as `synthetic://...`, a redistributable asset path, or an internal-only reference path.
