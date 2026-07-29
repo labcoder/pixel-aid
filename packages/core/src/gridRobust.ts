@@ -38,7 +38,11 @@ export type RobustGridIndependentProposerId = Exclude<
 
 export type RobustGridResearchOptions = {
   disabledIndependentProposers?: readonly RobustGridIndependentProposerId[];
+  disabledRerankers?: readonly RobustGridResearchRerankerId[];
 };
+
+export type RobustGridResearchRerankerId =
+  "multi-proposer-consensus";
 
 export type RobustGridResearchAxisCandidate = {
   cellCount: number;
@@ -74,6 +78,7 @@ export type RobustGridResearchRankedCandidate = {
 
 export type RobustGridResearchTrace = {
   disabledIndependentProposers: RobustGridIndependentProposerId[];
+  disabledRerankers: RobustGridResearchRerankerId[];
   axisX: RobustGridResearchAxisCandidate[];
   axisY: RobustGridResearchAxisCandidate[];
   scoringPairs: RobustGridResearchPair[];
@@ -133,6 +138,14 @@ const BLUR_BAND_MIN_PERIOD = 3.7;
 const BLUR_BAND_SUPPORT_ADVANTAGE = 0.055;
 const BLUR_BAND_BOUNDARY_TOLERANCE = 0.22;
 const BLUR_BAND_RECONSTRUCTION_TOLERANCE = 0.03;
+const MULTI_PROPOSER_SUPPORT_FLOOR = 3;
+const MULTI_PROPOSER_SUPPORT_ADVANTAGE = 1;
+const MULTI_PROPOSER_STRENGTH_FLOOR = 0.6;
+const MULTI_PROPOSER_STRENGTH_ADVANTAGE = 0.08;
+const MULTI_PROPOSER_MIN_PERIOD = 3.5;
+const MULTI_PROPOSER_DETECTOR_TOLERANCE = 0.1;
+const MULTI_PROPOSER_BOUNDARY_TOLERANCE = 0.15;
+const MULTI_PROPOSER_RECONSTRUCTION_TOLERANCE = 0.025;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -268,7 +281,8 @@ function runRobustGridDetection(
     detectorCandidates,
     scoringCandidates,
     scoringPairs.map((item) => item.pair),
-    scoringPairs.map((item) => item.source)
+    scoringPairs.map((item) => item.source),
+    research
   );
   return {
     candidates,
@@ -318,6 +332,9 @@ function createResearchTrace(
   return {
     disabledIndependentProposers: [
       ...(research?.disabledIndependentProposers ?? [])
+    ],
+    disabledRerankers: [
+      ...(research?.disabledRerankers ?? [])
     ],
     axisX: axisX.map(axisResearchCandidate),
     axisY: axisY.map(axisResearchCandidate),
@@ -852,7 +869,8 @@ function rerankWithReconstructionEvidence(
   candidates: readonly GridCandidate[],
   scoringCandidates: readonly GridCandidate[],
   scoringPairs: readonly CandidatePair[],
-  hypothesisSources: readonly ScoringPairSource[]
+  hypothesisSources: readonly ScoringPairSource[],
+  research: RobustGridResearchOptions | undefined
 ): GridCandidate[] {
   if (scoringCandidates.length <= 1) {
     return [...candidates];
@@ -888,8 +906,16 @@ function rerankWithReconstructionEvidence(
           scoringPairs,
           hypothesisSources
         );
-      return orderRobustCandidates(
+      const selected = applyMultiProposerConsensus(
         adjacentResult ?? independentResult.selected,
+        scoringCandidates,
+        scoringPairs,
+        hypothesisSources,
+        earlyScores,
+        research
+      );
+      return orderRobustCandidates(
+        selected,
         candidates,
         scoringCandidates,
         earlyScores,
@@ -905,8 +931,16 @@ function rerankWithReconstructionEvidence(
     hypothesisSources
   );
   if (phaseConsensus) {
-    return orderRobustCandidates(
+    const selected = applyMultiProposerConsensus(
       phaseConsensus,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      earlyScores,
+      research
+    );
+    return orderRobustCandidates(
+      selected,
       candidates,
       scoringCandidates,
       earlyScores,
@@ -922,8 +956,16 @@ function rerankWithReconstructionEvidence(
       hypothesisSources
     );
   if (blurBandConsensus) {
-    return orderRobustCandidates(
+    const selected = applyMultiProposerConsensus(
       blurBandConsensus,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      earlyScores,
+      research
+    );
+    return orderRobustCandidates(
+      selected,
       candidates,
       scoringCandidates,
       earlyScores,
@@ -968,10 +1010,18 @@ function rerankWithReconstructionEvidence(
     fallbackSources
   );
   const selectedCandidate = fallbackCandidates[selectedIndex]!;
-  const selected = attachRerankDiagnostics(
+  const fallbackSelected = attachRerankDiagnostics(
     selectedCandidate,
     diagnostics,
     decision === "ambiguous"
+  );
+  const selected = applyMultiProposerConsensus(
+    fallbackSelected,
+    scoringCandidates,
+    scoringPairs,
+    hypothesisSources,
+    earlyScores,
+    research
   );
   return orderRobustCandidates(
     selected,
@@ -981,6 +1031,201 @@ function rerankWithReconstructionEvidence(
     scoringPairs,
     hypothesisSources
   );
+}
+
+function applyMultiProposerConsensus(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[],
+  research: RobustGridResearchOptions | undefined
+): GridCandidate {
+  if (
+    research?.disabledRerankers?.includes(
+      "multi-proposer-consensus"
+    )
+  ) {
+    return incumbent;
+  }
+  return (
+    resolveMultiProposerConsensusCandidate(
+      incumbent,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      earlyScores
+    ) ?? incumbent
+  );
+}
+
+function resolveMultiProposerConsensusCandidate(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[]
+): GridCandidate | undefined {
+  const incumbentIndex = scoringCandidates.findIndex(
+    (candidate) =>
+      candidate.outputWidth === incumbent.outputWidth &&
+      candidate.outputHeight === incumbent.outputHeight
+  );
+  const incumbentPair = scoringPairs[incumbentIndex];
+  if (incumbentIndex < 0 || !incumbentPair) {
+    return undefined;
+  }
+  const incumbentStrength =
+    secondStrongestJointIndependentProposal(
+      incumbentPair
+    );
+  const incumbentBoundaryX =
+    axisBoundaryDecisionScore(incumbentPair.axisX);
+  const incumbentBoundaryY =
+    axisBoundaryDecisionScore(incumbentPair.axisY);
+  let challengerIndex = -1;
+  let challengerStrength = 0;
+  for (
+    let index = 0;
+    index < scoringPairs.length;
+    index += 1
+  ) {
+    if (index === incumbentIndex) {
+      continue;
+    }
+    const pair = scoringPairs[index]!;
+    if (
+      !pair.pairProposers.includes("integrated") ||
+      pair.independentSupport <
+        MULTI_PROPOSER_SUPPORT_FLOOR ||
+      pair.independentSupport -
+        incumbentPair.independentSupport <
+        MULTI_PROPOSER_SUPPORT_ADVANTAGE ||
+      pair.axisX.period < MULTI_PROPOSER_MIN_PERIOD ||
+      pair.axisY.period < MULTI_PROPOSER_MIN_PERIOD ||
+      pair.score <
+        incumbentPair.score -
+          MULTI_PROPOSER_DETECTOR_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisX) <
+        incumbentBoundaryX -
+          MULTI_PROPOSER_BOUNDARY_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisY) <
+        incumbentBoundaryY -
+          MULTI_PROPOSER_BOUNDARY_TOLERANCE
+    ) {
+      continue;
+    }
+    const strength =
+      secondStrongestJointIndependentProposal(pair);
+    if (
+      strength < MULTI_PROPOSER_STRENGTH_FLOOR ||
+      strength - incumbentStrength <
+        MULTI_PROPOSER_STRENGTH_ADVANTAGE
+    ) {
+      continue;
+    }
+    const current =
+      challengerIndex >= 0
+        ? scoringPairs[challengerIndex]!
+        : undefined;
+    if (
+      !current ||
+      pair.independentSupport >
+        current.independentSupport ||
+      (
+        pair.independentSupport ===
+          current.independentSupport &&
+        (
+          strength > challengerStrength ||
+          (
+            strength === challengerStrength &&
+            pair.score > current.score
+          )
+        )
+      )
+    ) {
+      challengerIndex = index;
+      challengerStrength = strength;
+    }
+  }
+  if (challengerIndex < 0) {
+    return undefined;
+  }
+  const challengerPair = scoringPairs[challengerIndex]!;
+  const incumbentScore = earlyScores.find(
+    (item) => item.inputIndex === incumbentIndex
+  );
+  const challengerScore = earlyScores.find(
+    (item) => item.inputIndex === challengerIndex
+  );
+  if (!incumbentScore || !challengerScore) {
+    return undefined;
+  }
+  const reconstructionMargin =
+    reconstructionEvidence(challengerScore) -
+    reconstructionEvidence(incumbentScore);
+  if (
+    reconstructionMargin <
+    -MULTI_PROPOSER_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const supportMargin =
+    challengerPair.independentSupport -
+    incumbentPair.independentSupport;
+  const scores = [
+    {
+      ...incumbentScore,
+      inputIndex: 0
+    },
+    {
+      ...challengerScore,
+      inputIndex: 1
+    }
+  ];
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    supportMargin,
+    "multi-proposer-consensus",
+    MULTI_PROPOSER_SUPPORT_ADVANTAGE,
+    [
+      hypothesisSources[incumbentIndex] ?? "detector",
+      hypothesisSources[challengerIndex] ??
+        "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    scoringCandidates[challengerIndex]!,
+    diagnostics,
+    false
+  );
+}
+
+function secondStrongestJointIndependentProposal(
+  pair: CandidatePair
+): number {
+  let strongest = 0;
+  let secondStrongest = 0;
+  for (const proposer of [
+    "autocorrelation",
+    "blur-band",
+    "phase-spectrum",
+    "run-spacing"
+  ] as const) {
+    const strength = jointProposalStrength(
+      pair,
+      proposer
+    );
+    if (strength >= strongest) {
+      secondStrongest = strongest;
+      strongest = strength;
+    } else if (strength > secondStrongest) {
+      secondStrongest = strength;
+    }
+  }
+  return secondStrongest;
 }
 
 function resolvePhaseConsensusCandidate(
@@ -1783,6 +2028,9 @@ function attachRerankDiagnostics(
     notes.push(
       rerank.decisionBasis === "independent-cell-evidence"
         ? "Independent proposer agreement plus cell evidence selected this candidate"
+        : rerank.decisionBasis ===
+            "multi-proposer-consensus"
+          ? "Multiple independent proposer groups selected this guarded reconstruction candidate"
         : `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
     );
   } else if (rerank.decision === "ambiguous") {
@@ -1797,6 +2045,9 @@ function attachRerankDiagnostics(
       rerank.decision === "switched"
         ? rerank.decisionBasis === "independent-cell-evidence"
           ? `Independent-evidence rerank. ${candidate.reason}`
+          : rerank.decisionBasis ===
+              "multi-proposer-consensus"
+            ? `Multi-proposer consensus rerank. ${candidate.reason}`
           : `Conservative reconstruction rerank. ${candidate.reason}`
         : candidate.reason,
     diagnostics: {

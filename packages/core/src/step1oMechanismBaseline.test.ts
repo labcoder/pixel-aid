@@ -15,7 +15,8 @@ describe("Step 1O mechanism baseline", () => {
       (fixture) => {
         const result = researchRobustGridCandidates(
           fixture.createInputImage(),
-          detectorOptions
+          detectorOptions,
+          step1mResearchBaseline
         );
         const selected = result.candidates[0]!;
         const recall = classifyRobustGridExpectedSize(
@@ -43,7 +44,8 @@ describe("Step 1O mechanism baseline", () => {
       (fixture) => {
         const selected = researchRobustGridCandidates(
           fixture.createInputImage(),
-          detectorOptions
+          detectorOptions,
+          step1mResearchBaseline
         ).candidates[0]!;
         return {
           mechanism: fixture.failureMechanism,
@@ -66,6 +68,12 @@ describe("Step 1O mechanism baseline", () => {
     ).toHaveLength(3);
   });
 });
+
+const step1mResearchBaseline = {
+  disabledRerankers: [
+    "multi-proposer-consensus"
+  ] as const
+};
 
 const step1mBaseline = [
   {
