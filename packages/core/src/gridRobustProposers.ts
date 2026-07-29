@@ -241,16 +241,60 @@ function blendedPhaseConcentration(
   maximum: number,
   period: number
 ): number {
-  const energyWeighted = phaseConcentration(
-    profile,
-    total,
-    period
+  if (
+    total <= 0 ||
+    maximum <= 0 ||
+    period <= 0
+  ) {
+    return 0;
+  }
+  const cap = maximum * 0.28;
+  const minimum = maximum * 0.015;
+  let energyCosine = 0;
+  let energySine = 0;
+  let clippedCosine = 0;
+  let clippedSine = 0;
+  let clippedTotal = 0;
+  const step = (2 * Math.PI) / period;
+  const cosineStep = Math.cos(step);
+  const sineStep = Math.sin(step);
+  let cosine = cosineStep;
+  let sine = sineStep;
+  for (let index = 1; index < profile.length; index += 1) {
+    const source = profile[index]!;
+    if (source > 0) {
+      energyCosine += source * cosine;
+      energySine += source * sine;
+      if (source >= minimum) {
+        const clipped = Math.min(source, cap);
+        clippedCosine += clipped * cosine;
+        clippedSine += clipped * sine;
+        clippedTotal += clipped;
+      }
+    }
+    const nextCosine =
+      cosine * cosineStep - sine * sineStep;
+    sine =
+      sine * cosineStep + cosine * sineStep;
+    cosine = nextCosine;
+  }
+  const energyWeighted = Math.min(
+    1,
+    Math.sqrt(
+      energyCosine * energyCosine +
+      energySine * energySine
+    ) / total
   );
-  const clipped = clippedPhaseConcentration(
-    profile,
-    maximum,
-    period
-  );
+  const clipped =
+    clippedTotal > 0
+      ? Math.min(
+          1,
+          Math.sqrt(
+            clippedCosine * clippedCosine +
+            clippedSine * clippedSine
+          ) / clippedTotal
+        )
+      : 0;
   return energyWeighted * 0.38 + clipped * 0.62;
 }
 
@@ -264,51 +308,29 @@ function phaseConcentration(
   }
   let cosine = 0;
   let sine = 0;
+  const step = (2 * Math.PI) / period;
+  const cosineStep = Math.cos(step);
+  const sineStep = Math.sin(step);
+  let phaseCosine = cosineStep;
+  let phaseSine = sineStep;
   for (let index = 1; index < profile.length; index += 1) {
     const value = profile[index]!;
-    if (value <= 0) {
-      continue;
+    if (value > 0) {
+      cosine += value * phaseCosine;
+      sine += value * phaseSine;
     }
-    const angle = (2 * Math.PI * index) / period;
-    cosine += value * Math.cos(angle);
-    sine += value * Math.sin(angle);
+    const nextCosine =
+      phaseCosine * cosineStep -
+      phaseSine * sineStep;
+    phaseSine =
+      phaseSine * cosineStep +
+      phaseCosine * sineStep;
+    phaseCosine = nextCosine;
   }
   return Math.min(
     1,
     Math.sqrt(cosine * cosine + sine * sine) / total
   );
-}
-
-function clippedPhaseConcentration(
-  profile: Float64Array,
-  maximum: number,
-  period: number
-): number {
-  if (maximum <= 0 || period <= 0) {
-    return 0;
-  }
-  const cap = maximum * 0.28;
-  const minimum = maximum * 0.015;
-  let cosine = 0;
-  let sine = 0;
-  let total = 0;
-  for (let index = 1; index < profile.length; index += 1) {
-    const source = profile[index]!;
-    if (source < minimum) {
-      continue;
-    }
-    const value = Math.min(source, cap);
-    const angle = (2 * Math.PI * index) / period;
-    cosine += value * Math.cos(angle);
-    sine += value * Math.sin(angle);
-    total += value;
-  }
-  return total > 0
-    ? Math.min(
-        1,
-        Math.sqrt(cosine * cosine + sine * sine) / total
-      )
-    : 0;
 }
 
 function normalizedAutocorrelation(
