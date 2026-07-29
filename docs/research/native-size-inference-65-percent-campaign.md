@@ -109,7 +109,8 @@ The campaign pauses only for:
 
 1. **Step 1O:** add selection-invariant ranked-candidate diagnostics, classify
    proposal versus ranking failures, build mechanism-owned fixtures, and
-   restore the robust performance budget.
+   restore the robust performance budget. Completed; see
+   `native-size-inference-step-1o.md`.
 2. **Step 1P:** run one guarded, ablatable general algorithm hypothesis at a
    time.
 3. **Step 1Q:** repeat the development matrix until Step 1N reaches at least
