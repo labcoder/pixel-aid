@@ -547,6 +547,7 @@ export type GridRobustRerankDiagnostics = {
   decisionBasis:
     | "reconstruction-total"
     | "adjacent-boundary-evidence"
+    | "phase-boundary-consensus"
     | "independent-cell-evidence";
   selectedInputRank: number;
   scoreMargin: number;

@@ -62,6 +62,10 @@ const ADJACENT_BOUNDARY_MARGIN = 0.045;
 const ADJACENT_PROPOSAL_SCORE_FLOOR = 0.8;
 const ADJACENT_PROPOSAL_TOLERANCE = 0.14;
 const ADJACENT_RECONSTRUCTION_TOLERANCE = 0.025;
+const PHASE_PROPOSAL_SCORE_FLOOR = 0.75;
+const PHASE_BOUNDARY_COVERAGE_FLOOR = 0.48;
+const PHASE_AXIS_SUPPORT_THRESHOLD = 0.68;
+const PHASE_RECONSTRUCTION_TOLERANCE = 0.025;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -629,6 +633,22 @@ function rerankWithReconstructionEvidence(
       );
     }
   }
+  const phaseConsensus = resolvePhaseConsensusCandidate(
+    image,
+    scoringCandidates,
+    scoringPairs,
+    hypothesisSources
+  );
+  if (phaseConsensus) {
+    return orderRobustCandidates(
+      phaseConsensus,
+      candidates,
+      scoringCandidates,
+      earlyScores,
+      scoringPairs,
+      hypothesisSources
+    );
+  }
 
   const fallbackIndices = hypothesisSources
     .map((source, index) => ({ source, index }))
@@ -678,6 +698,156 @@ function rerankWithReconstructionEvidence(
     earlyScores,
     scoringPairs,
     hypothesisSources
+  );
+}
+
+function resolvePhaseConsensusCandidate(
+  image: RGBAImage,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[]
+): GridCandidate | undefined {
+  const incumbent = scoringCandidates[0];
+  const incumbentPair = scoringPairs[0];
+  if (
+    !incumbent ||
+    !incumbentPair ||
+    (
+      incumbentPair.independentSupport >= 2 &&
+      strongestJointIndependentProposal(incumbentPair) >=
+        STRONG_INDEPENDENT_PROPOSAL_SCORE
+    )
+  ) {
+    return undefined;
+  }
+  const supported = scoringPairs
+    .map((pair, index) => ({
+      pair,
+      index,
+      support: phasePairSupport(pair)
+    }))
+    .filter(
+      ({ pair, index, support }) =>
+        index !== 0 &&
+        support >= PHASE_AXIS_SUPPORT_THRESHOLD &&
+        pair.axisX.period >= MIN_INDEPENDENT_PERIOD &&
+        pair.axisY.period >= MIN_INDEPENDENT_PERIOD &&
+        phaseCandidatePreservesBoundarySupport(
+          pair,
+          incumbentPair
+        )
+    )
+    .sort(
+      (first, second) =>
+        second.support - first.support ||
+        phasePairAverageSupport(second.pair) -
+          phasePairAverageSupport(first.pair) ||
+        second.pair.score - first.pair.score ||
+        first.index - second.index
+    );
+  const challenger = supported[0];
+  if (!challenger) {
+    return undefined;
+  }
+  const challengerCandidate =
+    scoringCandidates[challenger.index]!;
+  const scores = scoreGridHypotheses(
+    image,
+    [incumbent, challengerCandidate],
+    { maxHypotheses: 2 }
+  );
+  const incumbentScore = scores.find(
+    (item) => item.inputIndex === 0
+  )!;
+  const challengerScore = scores.find(
+    (item) => item.inputIndex === 1
+  )!;
+  const reconstructionMargin =
+    reconstructionEvidence(challengerScore) -
+    reconstructionEvidence(incumbentScore);
+  if (
+    reconstructionMargin <
+    -PHASE_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    challenger.support - PHASE_AXIS_SUPPORT_THRESHOLD,
+    "phase-boundary-consensus",
+    PHASE_AXIS_SUPPORT_THRESHOLD,
+    [
+      hypothesisSources[0] ?? "detector",
+      hypothesisSources[challenger.index] ?? "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    challengerCandidate,
+    diagnostics,
+    false
+  );
+}
+
+function phaseCandidatePreservesBoundarySupport(
+  challenger: CandidatePair,
+  incumbent: CandidatePair
+): boolean {
+  const xMargin =
+    axisBoundaryDecisionScore(challenger.axisX) -
+    axisBoundaryDecisionScore(incumbent.axisX);
+  const yMargin =
+    axisBoundaryDecisionScore(challenger.axisY) -
+    axisBoundaryDecisionScore(incumbent.axisY);
+  const supportAdvantage =
+    phasePairSupport(challenger) -
+    phasePairSupport(incumbent);
+  return (
+    xMargin >= -0.14 &&
+    yMargin >= -0.14 &&
+    (
+      Math.max(xMargin, yMargin) >= 0.045 ||
+      supportAdvantage >= 0.15
+    )
+  );
+}
+
+function phasePairSupport(pair: CandidatePair): number {
+  return Math.min(
+    phaseAxisSupport(pair.axisXUnion),
+    phaseAxisSupport(pair.axisYUnion)
+  );
+}
+
+function phasePairAverageSupport(
+  pair: CandidatePair
+): number {
+  return (
+    phaseAxisSupport(pair.axisXUnion) +
+    phaseAxisSupport(pair.axisYUnion)
+  ) / 2;
+}
+
+function phaseAxisSupport(
+  candidate: RobustAxisUnionCandidate
+): number {
+  const proposal = candidate.proposals.find(
+    (item) => item.proposer === "phase-spectrum"
+  );
+  const axis = candidate.hypothesis;
+  if (
+    !proposal ||
+    proposal.score < PHASE_PROPOSAL_SCORE_FLOOR ||
+    axis.boundaryCoverage <
+      PHASE_BOUNDARY_COVERAGE_FLOOR
+  ) {
+    return 0;
+  }
+  return (
+    proposal.score * 0.55 +
+    axis.boundaryCoverage * 0.3 +
+    axis.score * 0.15
   );
 }
 

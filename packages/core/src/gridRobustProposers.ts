@@ -153,14 +153,16 @@ export function proposePhaseSpectrumAxisHypotheses(
     cellCount += 1
   ) {
     const period = evidence.length / cellCount;
-    const transition = phaseConcentration(
+    const transition = blendedPhaseConcentration(
       evidence.transitionProfile,
       evidence.transitionTotal,
+      evidence.transitionMaximum,
       period
     );
-    const curvature = phaseConcentration(
+    const curvature = blendedPhaseConcentration(
       evidence.curvatureProfile,
       evidence.curvatureTotal,
+      evidence.curvatureMaximum,
       period
     );
     const ramp =
@@ -233,6 +235,25 @@ function candidateRange(
   };
 }
 
+function blendedPhaseConcentration(
+  profile: Float64Array,
+  total: number,
+  maximum: number,
+  period: number
+): number {
+  const energyWeighted = phaseConcentration(
+    profile,
+    total,
+    period
+  );
+  const clipped = clippedPhaseConcentration(
+    profile,
+    maximum,
+    period
+  );
+  return energyWeighted * 0.38 + clipped * 0.62;
+}
+
 function phaseConcentration(
   profile: Float64Array,
   total: number,
@@ -256,6 +277,38 @@ function phaseConcentration(
     1,
     Math.sqrt(cosine * cosine + sine * sine) / total
   );
+}
+
+function clippedPhaseConcentration(
+  profile: Float64Array,
+  maximum: number,
+  period: number
+): number {
+  if (maximum <= 0 || period <= 0) {
+    return 0;
+  }
+  const cap = maximum * 0.28;
+  const minimum = maximum * 0.015;
+  let cosine = 0;
+  let sine = 0;
+  let total = 0;
+  for (let index = 1; index < profile.length; index += 1) {
+    const source = profile[index]!;
+    if (source < minimum) {
+      continue;
+    }
+    const value = Math.min(source, cap);
+    const angle = (2 * Math.PI * index) / period;
+    cosine += value * Math.cos(angle);
+    sine += value * Math.sin(angle);
+    total += value;
+  }
+  return total > 0
+    ? Math.min(
+        1,
+        Math.sqrt(cosine * cosine + sine * sine) / total
+      )
+    : 0;
 }
 
 function normalizedAutocorrelation(
