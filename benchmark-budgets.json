@@ -19,6 +19,14 @@
       "rationale": "Isolated 1080p grid detection scales predictably and should catch major regressions in the detector hot path."
     },
     {
+      "benchmarkName": "robust native-size acceptance matrix: 18 sources",
+      "metric": "meanMs",
+      "budgetMs": 125,
+      "blocking": false,
+      "category": "robust-grid-detection",
+      "rationale": "The deterministic Step 1B and Step 1G fixture matrix provides a low-noise advisory guard while robust inference remains opt-in."
+    },
+    {
       "benchmarkName": "fake-pixel-720p-single: full cleanup 0.92MP",
       "metric": "meanMs",
       "budgetMs": 300,

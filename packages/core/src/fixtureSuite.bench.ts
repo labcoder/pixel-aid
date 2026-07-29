@@ -2,7 +2,8 @@ import { bench, describe } from "vitest";
 import {
   benchmarkFixtureCatalog,
   cleanupFixtureCatalog,
-  nativeSizeInferenceFixtures
+  nativeSizeInferenceFixtures,
+  step1gNativeSizeCorpus
 } from "@pixelaid/fixtures";
 import type { BenchmarkFixture, CleanupFixture } from "@pixelaid/fixtures";
 import {
@@ -12,10 +13,22 @@ import {
   scoreGridHypotheses,
   sliceSheetFrames
 } from "./index";
+import { roundTripWebp } from "./goldenImage.test-utils";
 
 const fixtureById = new Map(benchmarkFixtureCatalog.map((fixture) => [fixture.id, fixture]));
 const cleanupFixtureById = new Map(cleanupFixtureCatalog.map((fixture) => [fixture.id, fixture]));
 const remapPalette = createBenchmarkPalette(64);
+const step1gNativeSizeImages = await Promise.all(
+  step1gNativeSizeCorpus.map(async (fixture) => {
+    const preCodec = fixture.createPreCodecImage();
+    return fixture.codec
+      ? roundTripWebp(preCodec, {
+          quality: fixture.codec.quality,
+          method: fixture.codec.method
+        })
+      : preCodec;
+  })
+);
 
 describe("large cleanup fixtures", () => {
   const fake720p = requiredBenchmark("fake-pixel-720p-single");
@@ -23,7 +36,10 @@ describe("large cleanup fixtures", () => {
   const largeSheet = requiredBenchmark("fake-pixel-large-sheet");
   const paletteHeavy = requiredCleanupFixture("large-landscape-bands");
   const paletteHeavyImage = paletteHeavy.createImage();
-  const robustNativeSizeImages = nativeSizeInferenceFixtures.map((fixture) => fixture.createImage());
+  const robustNativeSizeImages = [
+    ...nativeSizeInferenceFixtures.map((fixture) => fixture.createImage()),
+    ...step1gNativeSizeImages
+  ];
   const fake720pRobustSource = fake720p.createImage();
   const fake720pRobustCandidates = detectGridCandidates(
     fake720pRobustSource,
@@ -53,7 +69,7 @@ describe("large cleanup fixtures", () => {
     });
   });
 
-  bench("robust native-size acceptance matrix: 6 sources", () => {
+  bench("robust native-size acceptance matrix: 18 sources", () => {
     for (const image of robustNativeSizeImages) {
       detectGridCandidates(image, {
         strategy: "robust",
