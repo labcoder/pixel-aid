@@ -56,6 +56,15 @@ export type {
   RobustAxisProposal,
   RobustAxisProposerOptions
 } from "./gridRobustProposers";
+export {
+  buildRobustAxisCandidateUnion,
+  hasHarmonicAmbiguity,
+  pairProposerSupport
+} from "./gridRobustCandidateUnion";
+export type {
+  RobustAxisCandidateUnionOptions,
+  RobustAxisUnionCandidate
+} from "./gridRobustCandidateUnion";
 export { scoreGridHypotheses } from "./gridHypothesisScore";
 export type {
   GridHypothesisScore,

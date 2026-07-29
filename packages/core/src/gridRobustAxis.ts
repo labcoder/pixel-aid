@@ -39,7 +39,7 @@ export function inferRobustAxisHypotheses(
   const hypotheses: RobustAxisHypothesis[] = [];
 
   for (let cellCount = minCount; cellCount <= maxCount; cellCount += 1) {
-    hypotheses.push(scoreCellCount(evidence, cellCount));
+    hypotheses.push(scoreRobustAxisCellCount(evidence, cellCount));
   }
 
   applyHarmonicArbitration(hypotheses);
@@ -78,7 +78,10 @@ function appendDistinctBlurHypotheses(
   }
 }
 
-function scoreCellCount(evidence: RobustAxisEvidence, cellCount: number): RobustAxisHypothesis {
+export function scoreRobustAxisCellCount(
+  evidence: RobustAxisEvidence,
+  cellCount: number
+): RobustAxisHypothesis {
   const period = evidence.length / cellCount;
   const flatPairReliability = clampScore((evidence.exactFlatPairRatio - 0.05) / 0.45);
   const hardEdgeReliability = clampScore((evidence.hardTransitionRatio - 0.2) / 0.7);
