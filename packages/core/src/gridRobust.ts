@@ -43,7 +43,8 @@ export type RobustGridResearchOptions = {
 
 export type RobustGridResearchRerankerId =
   | "multi-proposer-consensus"
-  | "adjacent-period-coherence";
+  | "adjacent-period-coherence"
+  | "harmonic-axis-period-coherence";
 
 export type RobustGridResearchAxisCandidate = {
   cellCount: number;
@@ -155,6 +156,13 @@ const ADJACENT_PERIOD_MIN_PERIOD = 3.5;
 const ADJACENT_PERIOD_DETECTOR_TOLERANCE = 0.04;
 const ADJACENT_PERIOD_BOUNDARY_TOLERANCE = 0.15;
 const ADJACENT_PERIOD_RECONSTRUCTION_TOLERANCE = 0.025;
+const HARMONIC_AXIS_COHERENCE_FLOOR = 0.94;
+const HARMONIC_AXIS_COHERENCE_GAIN = 0.25;
+const HARMONIC_AXIS_SUPPORT_FLOOR = 2;
+const HARMONIC_AXIS_MIN_PERIOD = 3;
+const HARMONIC_AXIS_DETECTOR_TOLERANCE = 0.2;
+const HARMONIC_AXIS_BOUNDARY_TOLERANCE = 0.25;
+const HARMONIC_AXIS_RECONSTRUCTION_TOLERANCE = 0.04;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -1058,8 +1066,16 @@ function applyLateConsensusRerankers(
     earlyScores,
     research
   );
-  return applyAdjacentPeriodCoherence(
+  const adjacent = applyAdjacentPeriodCoherence(
     consensus,
+    scoringCandidates,
+    scoringPairs,
+    hypothesisSources,
+    earlyScores,
+    research
+  );
+  return applyHarmonicAxisPeriodCoherence(
+    adjacent,
     scoringCandidates,
     scoringPairs,
     hypothesisSources,
@@ -1257,6 +1273,186 @@ function resolveAdjacentPeriodCoherenceCandidate(
     challengerGain,
     "adjacent-period-coherence",
     ADJACENT_PERIOD_SUPPORT_GAIN,
+    [
+      hypothesisSources[incumbentIndex] ?? "detector",
+      hypothesisSources[challengerIndex] ??
+        "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    scoringCandidates[challengerIndex]!,
+    diagnostics,
+    false
+  );
+}
+
+function applyHarmonicAxisPeriodCoherence(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[],
+  research: RobustGridResearchOptions | undefined
+): GridCandidate {
+  if (
+    research?.disabledRerankers?.includes(
+      "harmonic-axis-period-coherence"
+    )
+  ) {
+    return incumbent;
+  }
+  return (
+    resolveHarmonicAxisPeriodCoherenceCandidate(
+      incumbent,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources,
+      earlyScores
+    ) ?? incumbent
+  );
+}
+
+function resolveHarmonicAxisPeriodCoherenceCandidate(
+  incumbent: GridCandidate,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[],
+  earlyScores: readonly GridHypothesisScore[]
+): GridCandidate | undefined {
+  const incumbentIndex = scoringCandidates.findIndex(
+    (candidate) =>
+      candidate.outputWidth === incumbent.outputWidth &&
+      candidate.outputHeight === incumbent.outputHeight
+  );
+  const incumbentPair = scoringPairs[incumbentIndex];
+  if (incumbentIndex < 0 || !incumbentPair) {
+    return undefined;
+  }
+  const incumbentCoherence = periodAgreementScore(
+    incumbentPair.axisX.period,
+    incumbentPair.axisY.period
+  );
+  const incumbentBoundaryX =
+    axisBoundaryDecisionScore(incumbentPair.axisX);
+  const incumbentBoundaryY =
+    axisBoundaryDecisionScore(incumbentPair.axisY);
+  let challengerIndex = -1;
+  let challengerGain = 0;
+  for (
+    let index = 0;
+    index < scoringPairs.length;
+    index += 1
+  ) {
+    if (index === incumbentIndex) {
+      continue;
+    }
+    const pair = scoringPairs[index]!;
+    const doublesOneAxis =
+      (
+        pair.axisX.cellCount ===
+          incumbentPair.axisX.cellCount * 2 &&
+        pair.axisY.cellCount ===
+          incumbentPair.axisY.cellCount
+      ) ||
+      (
+        pair.axisX.cellCount ===
+          incumbentPair.axisX.cellCount &&
+        pair.axisY.cellCount ===
+          incumbentPair.axisY.cellCount * 2
+      );
+    if (
+      !doublesOneAxis ||
+      !pair.pairProposers.includes("phase-spectrum") ||
+      pair.independentSupport <
+        HARMONIC_AXIS_SUPPORT_FLOOR ||
+      pair.axisX.period < HARMONIC_AXIS_MIN_PERIOD ||
+      pair.axisY.period < HARMONIC_AXIS_MIN_PERIOD ||
+      pair.score <
+        incumbentPair.score -
+          HARMONIC_AXIS_DETECTOR_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisX) <
+        incumbentBoundaryX -
+          HARMONIC_AXIS_BOUNDARY_TOLERANCE ||
+      axisBoundaryDecisionScore(pair.axisY) <
+        incumbentBoundaryY -
+          HARMONIC_AXIS_BOUNDARY_TOLERANCE
+    ) {
+      continue;
+    }
+    const coherence = periodAgreementScore(
+      pair.axisX.period,
+      pair.axisY.period
+    );
+    const coherenceGain =
+      coherence - incumbentCoherence;
+    if (
+      coherence < HARMONIC_AXIS_COHERENCE_FLOOR ||
+      coherenceGain < HARMONIC_AXIS_COHERENCE_GAIN
+    ) {
+      continue;
+    }
+    const current =
+      challengerIndex >= 0
+        ? scoringPairs[challengerIndex]!
+        : undefined;
+    if (
+      !current ||
+      coherenceGain > challengerGain ||
+      (
+        coherenceGain === challengerGain &&
+        (
+          pair.independentSupport >
+            current.independentSupport ||
+          (
+            pair.independentSupport ===
+              current.independentSupport &&
+            pair.score > current.score
+          )
+        )
+      )
+    ) {
+      challengerIndex = index;
+      challengerGain = coherenceGain;
+    }
+  }
+  if (challengerIndex < 0) {
+    return undefined;
+  }
+  const incumbentScore = earlyScores.find(
+    (item) => item.inputIndex === incumbentIndex
+  );
+  const challengerScore = earlyScores.find(
+    (item) => item.inputIndex === challengerIndex
+  );
+  if (!incumbentScore || !challengerScore) {
+    return undefined;
+  }
+  const reconstructionMargin =
+    reconstructionEvidence(challengerScore) -
+    reconstructionEvidence(incumbentScore);
+  if (
+    reconstructionMargin <
+    -HARMONIC_AXIS_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const scores = [
+    {
+      ...incumbentScore,
+      inputIndex: 0
+    },
+    {
+      ...challengerScore,
+      inputIndex: 1
+    }
+  ];
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    challengerGain,
+    "harmonic-axis-period-coherence",
+    HARMONIC_AXIS_COHERENCE_GAIN,
     [
       hypothesisSources[incumbentIndex] ?? "detector",
       hypothesisSources[challengerIndex] ??
@@ -2245,6 +2441,9 @@ function attachRerankDiagnostics(
           : rerank.decisionBasis ===
               "adjacent-period-coherence"
             ? "A neighboring cell count restored the corroborated shared source period"
+            : rerank.decisionBasis ===
+                "harmonic-axis-period-coherence"
+              ? "A corroborated harmonic axis restored a shared source period"
         : `Provisional reconstruction reranked candidate ${rerank.selectedInputRank + 1} first`
     );
   } else if (rerank.decision === "ambiguous") {
@@ -2265,6 +2464,9 @@ function attachRerankDiagnostics(
             : rerank.decisionBasis ===
                 "adjacent-period-coherence"
               ? `Adjacent period-coherence rerank. ${candidate.reason}`
+              : rerank.decisionBasis ===
+                  "harmonic-axis-period-coherence"
+                ? `Harmonic-axis period-coherence rerank. ${candidate.reason}`
           : `Conservative reconstruction rerank. ${candidate.reason}`
         : candidate.reason,
     diagnostics: {

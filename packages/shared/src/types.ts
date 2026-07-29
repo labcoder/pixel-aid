@@ -548,6 +548,7 @@ export type GridRobustRerankDiagnostics = {
     | "reconstruction-total"
     | "adjacent-boundary-evidence"
     | "adjacent-period-coherence"
+    | "harmonic-axis-period-coherence"
     | "blur-band-consensus"
     | "multi-proposer-consensus"
     | "phase-boundary-consensus"

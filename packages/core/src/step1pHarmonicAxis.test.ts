@@ -15,7 +15,8 @@ describe("Step 1P harmonic-axis baseline", () => {
       (fixture) => {
         const result = researchRobustGridCandidates(
           fixture.createInputImage(),
-          detectorOptions
+          detectorOptions,
+          harmonicAxisAblation
         );
         const selected = result.candidates[0]!;
         const recall = classifyRobustGridExpectedSize(
@@ -70,7 +71,8 @@ describe("Step 1P harmonic-axis baseline", () => {
     (fixture) => {
       const result = researchRobustGridCandidates(
         fixture.createInputImage(),
-        detectorOptions
+        detectorOptions,
+        harmonicAxisAblation
       );
       const selected = result.candidates[0]!;
       const oneAxisHalf =
@@ -101,4 +103,97 @@ describe("Step 1P harmonic-axis baseline", () => {
       expect(recall.axisYPresent).toBe(true);
     }
   );
+
+  test.each([
+    {
+      id: "step1p-harmonic-axis-tall-console-20x32",
+      previous: "10x32"
+    },
+    {
+      id: "step1p-harmonic-axis-soft-lattice-16x16",
+      previous: "16x8"
+    }
+  ])(
+    "$id requires the harmonic-axis period reranker",
+    ({ id, previous }) => {
+      const fixture = step1pHarmonicAxisCorpus.find(
+        (item) => item.id === id
+      )!;
+      const enabled = researchRobustGridCandidates(
+        fixture.createInputImage(),
+        detectorOptions
+      );
+      const ablated = researchRobustGridCandidates(
+        fixture.createInputImage(),
+        detectorOptions,
+        harmonicAxisAblation
+      );
+      const selected = enabled.candidates[0]!;
+
+      expect(selected).toMatchObject({
+        outputWidth: fixture.nativeWidth,
+        outputHeight: fixture.nativeHeight
+      });
+      expect(
+        selected.diagnostics?.robust
+          ?.reconstructionRerank
+      ).toMatchObject({
+        decision: "switched",
+        decisionBasis:
+          "harmonic-axis-period-coherence"
+      });
+      expect(selectedSize(ablated)).toBe(previous);
+      expect(ablated.trace.disabledRerankers).toContain(
+        "harmonic-axis-period-coherence"
+      );
+    }
+  );
+
+  test("changes only the two owned recovery fixtures", () => {
+    const changed: string[] = [];
+    const enabledSizes: string[] = [];
+    for (const fixture of step1pHarmonicAxisCorpus) {
+      const image = fixture.createInputImage();
+      const enabled = researchRobustGridCandidates(
+        image,
+        detectorOptions
+      );
+      const ablated = researchRobustGridCandidates(
+        image,
+        detectorOptions,
+        harmonicAxisAblation
+      );
+      enabledSizes.push(selectedSize(enabled));
+      if (selectedSize(enabled) !== selectedSize(ablated)) {
+        changed.push(fixture.id);
+      }
+    }
+
+    expect(changed).toEqual([
+      "step1p-harmonic-axis-tall-console-20x32",
+      "step1p-harmonic-axis-soft-lattice-16x16"
+    ]);
+    expect(enabledSizes).toEqual([
+      "20x32",
+      "16x16",
+      "32x20",
+      "20x32",
+      "24x24"
+    ]);
+  });
 });
+
+const harmonicAxisAblation = {
+  disabledRerankers: [
+    "harmonic-axis-period-coherence"
+  ] as const
+};
+
+function selectedSize(
+  result: ReturnType<
+    typeof researchRobustGridCandidates
+  >
+): string {
+  const selected = result.candidates[0]!;
+  return `${selected.outputWidth}x${selected.outputHeight}`;
+}
