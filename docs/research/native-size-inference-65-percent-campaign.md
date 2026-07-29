@@ -112,9 +112,10 @@ The campaign pauses only for:
    restore the robust performance budget. Completed; see
    `native-size-inference-step-1o.md`.
 2. **Step 1P:** run one guarded, ablatable general algorithm hypothesis at a
-   time.
+   time. Completed with three accepted rerankers; see
+   `native-size-inference-step-1p-1q.md`.
 3. **Step 1Q:** repeat the development matrix until Step 1N reaches at least
-   24/36 with all protected guards intact.
+   24/36 with all protected guards intact. Passed at 25/36.
 4. **Step 1R:** freeze the entrant and run the 60-case sealed proof. If the
    result is below 39/60, return to Step 1P using the revealed mechanisms and
    reserve a new corpus for the next proof.
