@@ -12,6 +12,11 @@ export type {
   NativeSizeInferenceFixture,
   NativeSizeInferenceFixtureInput
 } from "./nativeSizeInference";
+export { nativeSizeSourceFamilies } from "./nativeSizeSourceFamilies";
+export type {
+  NativeSizeSourceFamily,
+  NativeSizeSourceFamilyId
+} from "./nativeSizeSourceFamilies";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
