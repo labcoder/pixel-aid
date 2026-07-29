@@ -33,6 +33,13 @@ enforces only cases that already pass. See
 `docs/research/native-size-inference-step-1g.md` for the matrix and the protocol
 for promoting known failures before detector changes.
 
+Step 1I keeps that frozen characterization as the before-state and adds
+`step1iAblation.test.ts` as the after-state. The independent-proposer
+experiment improves the combined 18-case development matrix from 11 to 14
+exact top-size passes while retaining four named failures. See
+`docs/research/native-size-inference-step-1i.md` for the algorithm, guards,
+performance cost, and product boundaries.
+
 Machine-readable intake metadata lives in `QualityFixtureMetadata` from `@pixelaid/fixtures`. Each failure fixture or internal sample reference must record:
 
 - `sourceFilename`: a committed synthetic source URI such as `synthetic://...`, a redistributable asset path, or an internal-only reference path.
