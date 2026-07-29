@@ -39,6 +39,33 @@ describe("robust grid candidates", () => {
     expect(first[0]!.diagnostics?.robust?.reconstructionRerank).toMatchObject({
       switchThreshold: 0.03
     });
+    expect(first[0]!.diagnostics?.robust?.provenance).toEqual({
+      axisX: {
+        selectedCellCount: 16,
+        proposals: [
+          expect.objectContaining({
+            proposer: "integrated",
+            independenceGroup: "integrated-profile",
+            cellCount: 16,
+            rank: 0
+          })
+        ]
+      },
+      axisY: {
+        selectedCellCount: 16,
+        proposals: [
+          expect.objectContaining({
+            proposer: "integrated",
+            independenceGroup: "integrated-profile",
+            cellCount: 16,
+            rank: 0
+          })
+        ]
+      },
+      pairProposers: ["integrated"],
+      independentSupport: 1,
+      ambiguityPreserved: false
+    });
     expect(
       first[0]!.diagnostics?.robust?.reconstructionRerank?.hypotheses
     ).toHaveLength(3);

@@ -2,6 +2,7 @@ import type {
   GridCandidate,
   GridCandidateDiagnostics,
   GridRobustAxisDiagnostics,
+  GridRobustCandidateProvenanceDiagnostics,
   GridRobustRerankDiagnostics,
   Rect,
   RGBAImage
@@ -24,6 +25,8 @@ export type RobustGridDetectionOptions = {
 type CandidatePair = {
   axisX: RobustAxisHypothesis;
   axisY: RobustAxisHypothesis;
+  axisXRank: number;
+  axisYRank: number;
   score: number;
   blurScore: number;
   blurEvidenceWeight: number;
@@ -112,8 +115,10 @@ function pairAxisHypotheses(
   const reliableRunEvidence =
     Math.max(...axisX.map((item) => item.runAgreement)) >= 0.35 &&
     Math.max(...axisY.map((item) => item.runAgreement)) >= 0.35;
-  for (const x of axisX) {
-    for (const y of axisY) {
+  for (let xIndex = 0; xIndex < axisX.length; xIndex += 1) {
+    const x = axisX[xIndex]!;
+    for (let yIndex = 0; yIndex < axisY.length; yIndex += 1) {
+      const y = axisY[yIndex]!;
       const axisScore = (x.score + y.score) / 2;
       const blurAxisScore = (x.blurScore + y.blurScore) / 2;
       const detectorAgreement = (x.detectorAgreement + y.detectorAgreement) / 2;
@@ -153,6 +158,8 @@ function pairAxisHypotheses(
       pairs.push({
         axisX: x,
         axisY: y,
+        axisXRank: xIndex,
+        axisYRank: yIndex,
         score,
         blurScore,
         blurEvidenceWeight:
@@ -289,7 +296,8 @@ function createGridCandidate(
         columns: Math.max(1, Math.round(image.width / pair.axisX.period)),
         rows: Math.max(1, Math.round(image.height / pair.axisY.period))
       },
-      cropPolicy: cropUsed ? "bounds" : "full-canvas"
+      cropPolicy: cropUsed ? "bounds" : "full-canvas",
+      provenance: integratedProvenance(pair)
     }
   };
   const candidate: GridCandidate = {
@@ -307,6 +315,46 @@ function createGridCandidate(
     candidate.sourceRect = sourceRect;
   }
   return candidate;
+}
+
+function integratedProvenance(
+  pair: CandidatePair
+): GridRobustCandidateProvenanceDiagnostics {
+  const evidenceFamilies = [
+    "boundary",
+    "curvature",
+    "quantized-run",
+    "blur-ramp"
+  ] as const;
+  return {
+    axisX: {
+      selectedCellCount: pair.axisX.cellCount,
+      proposals: [{
+        proposer: "integrated",
+        independenceGroup: "integrated-profile",
+        evidenceFamilies: [...evidenceFamilies],
+        cellCount: pair.axisX.cellCount,
+        period: roundNumber(pair.axisX.period),
+        score: roundScore(pair.axisX.score),
+        rank: pair.axisXRank
+      }]
+    },
+    axisY: {
+      selectedCellCount: pair.axisY.cellCount,
+      proposals: [{
+        proposer: "integrated",
+        independenceGroup: "integrated-profile",
+        evidenceFamilies: [...evidenceFamilies],
+        cellCount: pair.axisY.cellCount,
+        period: roundNumber(pair.axisY.period),
+        score: roundScore(pair.axisY.score),
+        rank: pair.axisYRank
+      }]
+    },
+    pairProposers: ["integrated"],
+    independentSupport: 1,
+    ambiguityPreserved: false
+  };
 }
 
 function axisDiagnostics(axis: RobustAxisHypothesis): GridRobustAxisDiagnostics {

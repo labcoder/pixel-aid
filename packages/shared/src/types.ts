@@ -550,6 +550,49 @@ export type GridRobustRerankDiagnostics = {
   hypotheses: GridRobustHypothesisDiagnostics[];
 };
 
+export type GridRobustProposerId =
+  | "integrated"
+  | "autocorrelation"
+  | "run-spacing";
+
+export type GridRobustIndependenceGroup =
+  | "integrated-profile"
+  | "autocorrelation"
+  | "run-spacing";
+
+export type GridRobustEvidenceFamily =
+  | "boundary"
+  | "curvature"
+  | "quantized-run"
+  | "blur-ramp"
+  | "autocorrelation"
+  | "cell-coherence"
+  | "distillability";
+
+export type GridRobustAxisProposalDiagnostics = {
+  proposer: GridRobustProposerId;
+  independenceGroup: GridRobustIndependenceGroup;
+  evidenceFamilies: GridRobustEvidenceFamily[];
+  cellCount: number;
+  period: number;
+  score: number;
+  rank: number;
+  harmonicOf?: number;
+};
+
+export type GridRobustAxisProvenanceDiagnostics = {
+  selectedCellCount: number;
+  proposals: GridRobustAxisProposalDiagnostics[];
+};
+
+export type GridRobustCandidateProvenanceDiagnostics = {
+  axisX: GridRobustAxisProvenanceDiagnostics;
+  axisY: GridRobustAxisProvenanceDiagnostics;
+  pairProposers: GridRobustProposerId[];
+  independentSupport: number;
+  ambiguityPreserved: boolean;
+};
+
 export type GridRobustDiagnostics = {
   strategy: "robust";
   axisX: GridRobustAxisDiagnostics;
@@ -559,6 +602,7 @@ export type GridRobustDiagnostics = {
   harmonicDecision: string;
   fullCanvasCellCount: { columns: number; rows: number };
   cropPolicy: "bounds" | "full-canvas";
+  provenance: GridRobustCandidateProvenanceDiagnostics;
   reconstructionRerank?: GridRobustRerankDiagnostics;
 };
 
