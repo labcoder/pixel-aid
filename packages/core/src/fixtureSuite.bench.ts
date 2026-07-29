@@ -4,7 +4,8 @@ import {
   cleanupFixtureCatalog,
   nativeSizeInferenceFixtures,
   step1gNativeSizeCorpus,
-  step1kNativeSizeCorpus
+  step1kNativeSizeCorpus,
+  step1mNativeSizeCorpus
 } from "@pixelaid/fixtures";
 import type { BenchmarkFixture, CleanupFixture } from "@pixelaid/fixtures";
 import {
@@ -42,6 +43,9 @@ describe("large cleanup fixtures", () => {
     ...step1gNativeSizeImages
   ];
   const step1kNativeSizeImages = step1kNativeSizeCorpus.map(
+    (fixture) => fixture.createInputImage()
+  );
+  const step1mNativeSizeImages = step1mNativeSizeCorpus.map(
     (fixture) => fixture.createInputImage()
   );
   const fake720pRobustSource = fake720p.createImage();
@@ -86,6 +90,17 @@ describe("large cleanup fixtures", () => {
 
   bench("robust Step 1K regression matrix: 9 sources", () => {
     for (const image of step1kNativeSizeImages) {
+      detectGridCandidates(image, {
+        strategy: "robust",
+        maxScale: 32,
+        sampling: "full",
+        cropToBounds: false
+      });
+    }
+  });
+
+  bench("robust Step 1M development matrix: 12 sources", () => {
+    for (const image of step1mNativeSizeImages) {
       detectGridCandidates(image, {
         strategy: "robust",
         maxScale: 32,

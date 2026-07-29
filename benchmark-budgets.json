@@ -27,6 +27,14 @@
       "rationale": "The deterministic Step 1B and Step 1G fixture matrix provides a low-noise advisory guard while robust inference remains opt-in."
     },
     {
+      "benchmarkName": "robust Step 1M development matrix: 12 sources",
+      "metric": "meanMs",
+      "budgetMs": 100,
+      "blocking": false,
+      "category": "robust-grid-detection",
+      "rationale": "The frozen pre-change Step 1M matrix measured 84.33 ms locally; a 100 ms advisory ceiling allows normal host variance while guarding the new opt-in low-evidence path."
+    },
+    {
       "benchmarkName": "fake-pixel-720p-single: full cleanup 0.92MP",
       "metric": "meanMs",
       "budgetMs": 300,
