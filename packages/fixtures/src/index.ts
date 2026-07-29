@@ -30,6 +30,14 @@ export type {
   NativeSizeSourceFamily,
   NativeSizeSourceFamilyId
 } from "./nativeSizeSourceFamilies";
+export { step1gNativeSizeCorpus } from "./step1gNativeSizeCorpus";
+export type {
+  Step1GAcceptance,
+  Step1GCodec,
+  Step1GFailureClass,
+  Step1GFixtureRole,
+  Step1GNativeSizeFixture
+} from "./step1gNativeSizeCorpus";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
