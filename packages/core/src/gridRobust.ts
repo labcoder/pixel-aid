@@ -105,7 +105,7 @@ const RECONSTRUCTION_SWITCH_THRESHOLD = 0.03;
 const INDEPENDENT_CELL_EVIDENCE_THRESHOLD = 0.04;
 const STRONG_INDEPENDENT_PROPOSAL_SCORE = 0.65;
 const MIN_INDEPENDENT_PERIOD = 3;
-const MAX_EARLY_SCORING_PAIRS = 12;
+const MAX_EARLY_SCORING_PAIRS = 16;
 const ADJACENT_BOUNDARY_MARGIN = 0.045;
 const ADJACENT_PROPOSAL_SCORE_FLOOR = 0.8;
 const ADJACENT_PROPOSAL_TOLERANCE = 0.14;
@@ -114,6 +114,11 @@ const PHASE_PROPOSAL_SCORE_FLOOR = 0.75;
 const PHASE_BOUNDARY_COVERAGE_FLOOR = 0.48;
 const PHASE_AXIS_SUPPORT_THRESHOLD = 0.68;
 const PHASE_RECONSTRUCTION_TOLERANCE = 0.025;
+const BLUR_BAND_PROPOSAL_FLOOR = 0.84;
+const BLUR_BAND_MIN_PERIOD = 3.7;
+const BLUR_BAND_SUPPORT_ADVANTAGE = 0.055;
+const BLUR_BAND_BOUNDARY_TOLERANCE = 0.22;
+const BLUR_BAND_RECONSTRUCTION_TOLERANCE = 0.03;
 
 export function detectRobustGridCandidates(
   image: RGBAImage,
@@ -495,7 +500,8 @@ function selectScoringPairs(
   for (const proposer of [
     "autocorrelation",
     "phase-spectrum",
-    "run-spacing"
+    "run-spacing",
+    "blur-band"
   ] as const) {
     const alternatives = pairs
       .filter((pair) => pair.pairProposers.includes(proposer))
@@ -570,6 +576,7 @@ function strongestJointIndependentProposal(
 ): number {
   return Math.max(
     jointProposalStrength(pair, "autocorrelation"),
+    jointProposalStrength(pair, "blur-band"),
     jointProposalStrength(pair, "phase-spectrum"),
     jointProposalStrength(pair, "run-spacing")
   );
@@ -829,6 +836,23 @@ function rerankWithReconstructionEvidence(
       hypothesisSources
     );
   }
+  const blurBandConsensus =
+    resolveBlurBandConsensusCandidate(
+      image,
+      scoringCandidates,
+      scoringPairs,
+      hypothesisSources
+    );
+  if (blurBandConsensus) {
+    return orderRobustCandidates(
+      blurBandConsensus,
+      candidates,
+      scoringCandidates,
+      earlyScores,
+      scoringPairs,
+      hypothesisSources
+    );
+  }
 
   const fallbackIndices = hypothesisSources
     .map((source, index) => ({ source, index }))
@@ -967,6 +991,143 @@ function resolvePhaseConsensusCandidate(
     challengerCandidate,
     diagnostics,
     false
+  );
+}
+
+function resolveBlurBandConsensusCandidate(
+  image: RGBAImage,
+  scoringCandidates: readonly GridCandidate[],
+  scoringPairs: readonly CandidatePair[],
+  hypothesisSources: readonly ScoringPairSource[]
+): GridCandidate | undefined {
+  const incumbent = scoringCandidates[0];
+  const incumbentPair = scoringPairs[0];
+  if (!incumbent || !incumbentPair) {
+    return undefined;
+  }
+  const incumbentSupport =
+    blurBandPairSupport(incumbentPair);
+  const supported = scoringPairs
+    .map((pair, index) => ({
+      pair,
+      index,
+      support: blurBandPairSupport(pair),
+      rank: jointProposalRank(pair, "blur-band")
+    }))
+    .filter(
+      ({ pair, index, support }) =>
+        index !== 0 &&
+        hypothesisSources[index] === "independent" &&
+        support >= BLUR_BAND_PROPOSAL_FLOOR &&
+        support - incumbentSupport >=
+          BLUR_BAND_SUPPORT_ADVANTAGE &&
+        pair.axisX.period >= BLUR_BAND_MIN_PERIOD &&
+        pair.axisY.period >= BLUR_BAND_MIN_PERIOD &&
+        isIntegratedBlurBandPair(pair) &&
+        preservesBlurBandBoundarySupport(
+          pair,
+          incumbentPair
+        )
+    )
+    .sort(
+      (first, second) =>
+        second.support - first.support ||
+        first.rank - second.rank ||
+        second.pair.blurScore - first.pair.blurScore ||
+        first.index - second.index
+    );
+  const challenger = supported[0];
+  if (!challenger) {
+    return undefined;
+  }
+  const challengerCandidate =
+    scoringCandidates[challenger.index]!;
+  const scores = scoreGridHypotheses(
+    image,
+    [incumbent, challengerCandidate],
+    { maxHypotheses: 2 }
+  );
+  const incumbentScore = scores.find(
+    (item) => item.inputIndex === 0
+  )!;
+  const challengerScore = scores.find(
+    (item) => item.inputIndex === 1
+  )!;
+  const reconstructionMargin =
+    reconstructionEvidence(challengerScore) -
+    reconstructionEvidence(incumbentScore);
+  if (
+    reconstructionMargin <
+    -BLUR_BAND_RECONSTRUCTION_TOLERANCE
+  ) {
+    return undefined;
+  }
+  const diagnostics = createRerankDiagnostics(
+    scores,
+    1,
+    "switched",
+    challenger.support - incumbentSupport,
+    "blur-band-consensus",
+    BLUR_BAND_SUPPORT_ADVANTAGE,
+    [
+      hypothesisSources[0] ?? "detector",
+      hypothesisSources[challenger.index] ??
+        "independent"
+    ]
+  );
+  return attachRerankDiagnostics(
+    challengerCandidate,
+    diagnostics,
+    false
+  );
+}
+
+function isIntegratedBlurBandPair(
+  pair: CandidatePair
+): boolean {
+  return (
+    pair.pairProposers.includes("integrated") &&
+    pair.pairProposers.includes("blur-band")
+  );
+}
+
+function preservesBlurBandBoundarySupport(
+  challenger: CandidatePair,
+  incumbent: CandidatePair
+): boolean {
+  return (
+    blurBandAxisDecisionScore(challenger.axisX) >=
+      blurBandAxisDecisionScore(incumbent.axisX) -
+        BLUR_BAND_BOUNDARY_TOLERANCE &&
+    blurBandAxisDecisionScore(challenger.axisY) >=
+      blurBandAxisDecisionScore(incumbent.axisY) -
+        BLUR_BAND_BOUNDARY_TOLERANCE
+  );
+}
+
+function blurBandAxisDecisionScore(
+  axis: RobustAxisHypothesis
+): number {
+  return (
+    axis.blurScore * 0.5 +
+    axis.blurBoundaryCoverage * 0.15 +
+    axis.blurBoundaryDensity * 0.2 +
+    axis.blurActiveBoundaryRatio * 0.15
+  );
+}
+
+function blurBandPairSupport(
+  pair: CandidatePair
+): number {
+  return Math.min(
+    axisProposalStrength(
+      pair.axisXUnion,
+      "blur-band"
+    ),
+    axisProposalStrength(
+      pair.axisYUnion,
+      "blur-band"
+    )
   );
 }
 

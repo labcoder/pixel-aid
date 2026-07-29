@@ -256,6 +256,7 @@ export function proposeIndependentAxisHypotheses(
 ): RobustAxisProposal[] {
   const proposals = [
     ...proposeAutocorrelationAxisHypotheses(evidence, options),
+    ...proposeBlurBandAxisHypotheses(evidence, options),
     ...proposePhaseSpectrumAxisHypotheses(evidence, options),
     ...proposeRunSpacingAxisHypotheses(evidence, options)
   ];

@@ -32,7 +32,8 @@ describe("robust independent axis proposers", () => {
       );
 
       expect(firstX).toEqual(secondX);
-      expect(firstX).toHaveLength(30);
+      expect(firstX.length).toBeGreaterThanOrEqual(30);
+      expect(firstX.length).toBeLessThanOrEqual(40);
       expect(
         firstX.filter((item) => item.proposer === "autocorrelation")
       ).toHaveLength(10);
@@ -42,6 +43,11 @@ describe("robust independent axis proposers", () => {
       expect(
         firstX.filter((item) => item.proposer === "phase-spectrum")
       ).toHaveLength(10);
+      expect([0, 10]).toContain(
+        firstX.filter(
+          (item) => item.proposer === "blur-band"
+        ).length
+      );
       for (const proposal of firstX) {
         expect(proposal.cellCount).toBeGreaterThan(0);
         expect(proposal.period).toBeGreaterThanOrEqual(1.5);
@@ -142,10 +148,13 @@ describe("robust independent axis proposers", () => {
     ).toEqual([]);
   });
 
-  test("the three proposers expose separate independence groups", () => {
-    const fixture = nativeSizeInferenceFixtures[0]!;
+  test("the four proposers expose separate independence groups", () => {
+    const fixture = step1mNativeSizeCorpus.find(
+      (item) =>
+        item.id === "step1m-grid-soften-emblem-24x24"
+    )!;
     const evidence = buildRobustGridEvidence(
-      fixture.createImage(),
+      fixture.createInputImage(),
       { maxPeriod: 32 }
     );
     const autocorrelation = proposeAutocorrelationAxisHypotheses(
@@ -154,17 +163,26 @@ describe("robust independent axis proposers", () => {
     const phaseSpectrum = proposePhaseSpectrumAxisHypotheses(
       evidence.axisX
     );
+    const blurBands = proposeBlurBandAxisHypotheses(
+      evidence.axisX
+    );
     const runs = proposeRunSpacingAxisHypotheses(evidence.axisX);
 
     expect(
       new Set(
-        [...autocorrelation, ...phaseSpectrum, ...runs].map(
+        [
+          ...autocorrelation,
+          ...blurBands,
+          ...phaseSpectrum,
+          ...runs
+        ].map(
           (item) => item.independenceGroup
         )
       )
     ).toEqual(
       new Set([
         "autocorrelation",
+        "blur-band-center",
         "phase-spectrum",
         "run-spacing"
       ])

@@ -55,6 +55,7 @@ export function buildRobustAxisCandidateUnion(
 
   for (const proposer of [
     "autocorrelation",
+    "blur-band",
     "phase-spectrum",
     "run-spacing"
   ] as const) {
@@ -249,6 +250,7 @@ export function pairProposerSupport(
   const proposers = [
     "integrated",
     "autocorrelation",
+    "blur-band",
     "phase-spectrum",
     "run-spacing"
   ].filter(
