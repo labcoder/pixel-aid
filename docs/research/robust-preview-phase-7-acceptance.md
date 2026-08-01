@@ -2,6 +2,8 @@
 
 Phase 7 packages the frozen Step 6S reconstruction work as an opt-in product preview. Classic remains the default until Phase 8 supplies enough product evidence to reconsider that default.
 
+Phase 7.5 public-release hardening is recorded in [the release-readiness record](./robust-preview-phase-7-5-readiness.md).
+
 ## Candidate boundary
 
 - Frozen algorithm baseline: `e32030b`

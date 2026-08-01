@@ -19,4 +19,4 @@ PixelAid 0.2.0 introduces **Robust Preview**, an opt-in native reconstruction st
 - Warn and Raw safety modes are advanced diagnostic controls.
 - Classic will remain the default until the Phase 8 evidence campaign is complete.
 
-See [the Robust Preview guide](docs/robust-preview.md) for product behavior, automation examples, and issue-reporting guidance.
+See [the Robust Preview guide](https://github.com/labcoder/pixel-aid/blob/main/docs/robust-preview.md) for product behavior, automation examples, and issue-reporting guidance.
