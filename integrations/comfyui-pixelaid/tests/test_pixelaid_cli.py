@@ -43,6 +43,9 @@ class PixelAidCliTests(unittest.TestCase):
             downscale="detailPreserving",
             alpha="backgroundFloodFill",
             overwrite=True,
+            reconstruction_strategy="robust",
+            robust_safety="guarded",
+            full_canvas=True,
             color_space="oklab",
             quantizer="wu",
             max_colors="auto",
@@ -73,7 +76,30 @@ class PixelAidCliTests(unittest.TestCase):
         self.assertIn("--line-cleanup", args)
         self.assertIn("high", args)
         self.assertIn("--snap", args)
+        self.assertIn("--reconstruction-strategy", args)
+        self.assertIn("robust", args)
+        self.assertIn("--robust-safety", args)
+        self.assertIn("guarded", args)
+        self.assertIn("--full-canvas", args)
         self.assertIn("--json", args)
+
+    def test_build_fix_sprite_args_keeps_classic_default_without_robust_safety(self):
+        args = build_fix_sprite_args(
+            input_path="input.png",
+            output_path="fixed.png",
+            manifest_path="fixed.json",
+            asset_type="sprite",
+            target="64x64",
+            colors=24,
+            downscale="dominant",
+            alpha="preserve",
+            overwrite=False,
+        )
+
+        strategy_index = args.index("--reconstruction-strategy")
+        self.assertEqual(args[strategy_index + 1], "classic")
+        self.assertNotIn("--robust-safety", args)
+        self.assertNotIn("--full-canvas", args)
 
 
 if __name__ == "__main__":

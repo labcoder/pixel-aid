@@ -72,6 +72,9 @@ def build_fix_sprite_args(
     downscale: str,
     alpha: str,
     overwrite: bool,
+    reconstruction_strategy: str = "classic",
+    robust_safety: str = "guarded",
+    full_canvas: bool = False,
     color_space: str | None = None,
     quantizer: str | None = None,
     max_colors: str | int | None = None,
@@ -102,8 +105,14 @@ def build_fix_sprite_args(
         downscale,
         "--alpha",
         alpha,
+        "--reconstruction-strategy",
+        reconstruction_strategy,
         "--json",
     ]
+    if reconstruction_strategy == "robust":
+        args.extend(["--robust-safety", robust_safety])
+    if full_canvas:
+        args.append("--full-canvas")
     optional_flags = {
         "--color-space": color_space,
         "--quantizer": quantizer,
@@ -180,6 +189,9 @@ def fix_image_tensor_with_pixelaid(
     downscale: str,
     alpha: str,
     overwrite: bool,
+    reconstruction_strategy: str = "classic",
+    robust_safety: str = "guarded",
+    full_canvas: bool = False,
     color_space: str | None = None,
     quantizer: str | None = None,
     max_colors: str | int | None = None,
@@ -214,6 +226,9 @@ def fix_image_tensor_with_pixelaid(
                 downscale=downscale,
                 alpha=alpha,
                 overwrite=overwrite,
+                reconstruction_strategy=reconstruction_strategy,
+                robust_safety=robust_safety,
+                full_canvas=full_canvas,
                 color_space=color_space,
                 quantizer=quantizer,
                 max_colors=max_colors,

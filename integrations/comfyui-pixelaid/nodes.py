@@ -52,7 +52,10 @@ class PixelAidFixSprite:
                 "image": ("IMAGE",),
                 "output_dir": ("STRING", {"default": "pixelaid_outputs"}),
                 "pixelaid_executable": ("STRING", {"default": default_pixelaid_executable()}),
-                "asset_type": (["sprite", "icon", "portrait", "uiElement"], {"default": "sprite"}),
+                "asset_type": (["sprite", "icon", "background", "portrait", "uiElement"], {"default": "sprite"}),
+                "reconstruction_strategy": (["classic", "robust"], {"default": "classic"}),
+                "robust_safety": (["guarded", "warn", "off"], {"default": "guarded"}),
+                "full_canvas": ("BOOLEAN", {"default": False}),
                 "target": ("STRING", {"default": "64x64"}),
                 "colors": ("INT", {"default": 24, "min": 2, "max": 512}),
                 "max_colors": ("STRING", {"default": ""}),
@@ -73,12 +76,15 @@ class PixelAidFixSprite:
             }
         }
 
-    def fix(self, image, output_dir, pixelaid_executable, asset_type, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, protect_salient_colors, emit_palette, downscale, alpha, fix_mixels, line_cleanup, snap, overwrite):
+    def fix(self, image, output_dir, pixelaid_executable, asset_type, reconstruction_strategy, robust_safety, full_canvas, target, colors, max_colors, color_space, quantizer, palette, dither, palette_weighting, protect_colors, protect_salient_colors, emit_palette, downscale, alpha, fix_mixels, line_cleanup, snap, overwrite):
         fixed_image, payload, manifest_path, emitted_palette_path = fix_image_tensor_with_pixelaid(
             image,
             output_dir=output_dir,
             pixelaid_executable=pixelaid_executable,
             asset_type=asset_type,
+            reconstruction_strategy=reconstruction_strategy,
+            robust_safety=robust_safety,
+            full_canvas=full_canvas,
             target=target,
             colors=colors,
             max_colors=max_colors or None,

@@ -7,7 +7,7 @@ This integration does not port PixelAid's TypeScript algorithms to Python. It ca
 ## Nodes
 
 - `PixelAid Inspect`: writes the ComfyUI image batch to a temporary PNG, runs `pixelaid inspect --json`, and returns metadata.
-- `PixelAid Fix Sprite`: runs `pixelaid fix --json`, reads the cleaned PNG back into ComfyUI, and returns the fixed image, metadata, and manifest path.
+- `PixelAid Fix Sprite`: runs `pixelaid fix --json`, exposes Classic or opt-in Robust Preview reconstruction with Guarded safety, reads the cleaned PNG back into ComfyUI, and returns the fixed image, metadata, and manifest path.
 - `PixelAid Palette Report`: runs `pixelaid report --json` for palette/grid/quality diagnostics.
 - `PixelAid Export Bundle`: runs `pixelaid export --json` into an output directory.
 
@@ -34,6 +34,8 @@ This integration does not port PixelAid's TypeScript algorithms to Python. It ca
 4. Restart ComfyUI after installing or changing the node package.
 
 ComfyUI already provides the Torch, NumPy, and Pillow runtime used for `IMAGE` tensor conversion. No extra Python package is required for the MVP wrapper.
+
+Robust Preview remains opt-in and Classic remains the node default. Robust is available for single sprites, icons, and backgrounds when `full_canvas` is enabled. Portrait and UI workflows stay on Classic. Fallback details are preserved in the returned PixelAid metadata and manifest.
 
 ## Troubleshooting
 
