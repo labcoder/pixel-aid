@@ -41,3 +41,5 @@ Phase 8 evidence is required before considering Robust as the default. Until the
 - omitted strategy fields resolve to Classic;
 - new UI settings begin on Classic; and
 - fallback and warning telemetry remains local and deterministic.
+
+The completed implementation and verification matrix is recorded in [the Phase 7 acceptance record](./robust-preview-phase-7-acceptance.md).
