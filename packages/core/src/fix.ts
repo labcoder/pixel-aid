@@ -1973,7 +1973,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
     );
   }
 
-  if (options.outputSizeMode === "source") {
+  if (!options.reconstruction && options.outputSizeMode === "source") {
     return {
       outputWidth: image.width,
       outputHeight: image.height,
@@ -1987,6 +1987,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
   }
 
   if (
+    !options.reconstruction &&
     options.outputSizeMode === "exact" &&
     (!options.targetWidth || !options.targetHeight)
   ) {
@@ -2047,6 +2048,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       return createFullCompositionReconstructionGrid(image, candidate);
     }
     if (
+      !options.reconstruction &&
       options.outputSizeMode !== "detected" &&
       options.targetWidth &&
       options.targetHeight

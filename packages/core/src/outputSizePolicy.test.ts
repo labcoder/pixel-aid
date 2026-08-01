@@ -107,6 +107,38 @@ describe("output-size policies", () => {
     );
   });
 
+  test("automatic native reconstruction ignores compatibility target dimensions", () => {
+    const source = createBlockImage(24, 18, 3);
+    const detectedSubject: GridCandidate = {
+      outputWidth: 6,
+      outputHeight: 4,
+      scaleX: 3,
+      scaleY: 3,
+      phaseX: 0,
+      phaseY: 0,
+      sourceRect: { x: 3, y: 3, w: 18, h: 12 },
+      confidence: 0.9,
+      reason: "Automatic reconstruction candidate"
+    };
+    const result = fixImage(
+      source,
+      options({
+        reconstruction: { sizeMode: "auto" },
+        targetWidth: 128,
+        targetHeight: 128,
+        grid: { detect: "auto", cropToBounds: true }
+      }),
+      { gridCandidates: [detectedSubject] }
+    );
+
+    expect(result.grid).toMatchObject({
+      outputWidth: 6,
+      outputHeight: 4,
+      scaleX: 3,
+      scaleY: 3
+    });
+  });
+
   test("canvas packaging does not change native reconstruction geometry", () => {
     const source = createBlockImage(24, 18, 3);
     const base = options({
