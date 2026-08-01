@@ -1,5 +1,5 @@
 import { createGoldenSignature } from "@pixelaid/fixtures";
-import type { FixOptions, RGBAImage } from "@pixelaid/shared";
+import type { FixOptions, GridCandidate, RGBAImage } from "@pixelaid/shared";
 import { describe, expect, test } from "vitest";
 import { fixImage } from "./fix";
 
@@ -52,6 +52,37 @@ describe("output-size policies", () => {
     expect(result.image).toMatchObject({ width: 10, height: 7 });
     expect(result.grid).toMatchObject({ outputWidth: 10, outputHeight: 7 });
     expect(result.grid.sourceRect).toBeUndefined();
+  });
+
+  test.fails("exact full-canvas mapping does not reuse detected subject crop dimensions", () => {
+    const source = createBlockImage(24, 18, 3);
+    const detectedSubject: GridCandidate = {
+      outputWidth: 6,
+      outputHeight: 4,
+      scaleX: 3,
+      scaleY: 3,
+      phaseX: 2,
+      phaseY: 1,
+      sourceRect: { x: 3, y: 3, w: 18, h: 12 },
+      confidence: 0.9,
+      reason: "Characterized detected foreground crop"
+    };
+    const expected = fixImage(source, options({ outputSizeMode: "source" }));
+    const exact = fixImage(
+      source,
+      options({
+        outputSizeMode: "exact",
+        targetWidth: source.width,
+        targetHeight: source.height,
+        grid: { detect: "auto", cropToBounds: true }
+      }),
+      { gridCandidates: [detectedSubject] }
+    );
+
+    expect(exact.image).toMatchObject({ width: source.width, height: source.height });
+    expect(createGoldenSignature(exact.image)).toEqual(
+      createGoldenSignature(expected.image)
+    );
   });
 
   test("detected ignores stale target dimensions", () => {
