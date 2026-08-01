@@ -32,6 +32,19 @@ npx pixelaid fix panda-test.png --out panda-fixed.png --target 96x96 --json
 
 `pixelaid fix` and `pixelaid batch` use PixelAid's guided suggestion as the default base settings, matching the web "recommended fix" flow. Explicit flags such as `--target`, `--max-colors`, `--alpha`, or grid/cleanup controls are applied as overrides on top of that suggestion. Pass `--no-auto` to restore the fully manual legacy path that uses only explicit flags plus algorithm defaults. `--auto` and `--auto-suggest` remain accepted for older scripts but are now redundant.
 
+Robust native-size inference is available as an explicit experiment while Classic remains the default:
+
+```sh
+pixelaid fix generated.png \
+  --out generated-fixed.png \
+  --output-size detected \
+  --grid-strategy robust \
+  --robust-safety guarded \
+  --json
+```
+
+Use `--output-size source` to keep the decoded canvas 1:1, or `--output-size exact --target WIDTHxHEIGHT` for an exact result. Detected and source modes reject target dimensions so automation cannot silently choose conflicting semantics. Robust safety modes are `guarded` (the automation default), `warn`, and `off`; fallback/warning details are returned in the normal JSON diagnostics and warnings. Robust background processing also requires `--full-canvas`. These controls do not implicitly change alpha removal, outlines, palettes, fringe cleanup, or downscale selection.
+
 Palette strategies accepted by `--palette-strategy`/`--quantizer` are `medianCut`, `frequency`, `perceptual`, `wu`, `kmeans`, and `familyFirst` (`median-cut` remains a CLI alias for `medianCut`). `familyFirst` seats perceptual color families first, adds nested ramps as the color budget grows, and is the guided default for single sprites/icons.
 
 Local workspace usage:

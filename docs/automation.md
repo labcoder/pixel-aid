@@ -30,6 +30,7 @@ pixelaid report input.png more.png --colors 24 --json
 pixelaid suggest input.png --asset-type sprite --target 64x64 --json
 pixelaid fix input.png --out hero.png --manifest hero.json --target 64x64 --colors 24
 pixelaid fix generated.jpg --out hero.png --manifest hero.json --auto --asset-type sprite --json
+pixelaid fix generated.png --out detected.png --output-size detected --grid-strategy robust --robust-safety guarded --json
 pixelaid fix-sheet sheet.png --out-dir ./out --frames frames.json --asset-type animation
 pixelaid palette input.png --max-colors 24 --out palette.hex
 pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip
@@ -52,6 +53,10 @@ Useful fix flags:
 - `--asset-type sprite|sprite-sheet|animation|character|tileset|tilemap|portrait|icon|ui|background`
 - `--auto` or `--auto-suggest` on `fix` to inspect the source and use suggested settings before writing output
 - `--target WIDTHxHEIGHT`
+- `--output-size detected|source|exact` (`exact` requires `--target`; the other modes reject target dimensions)
+- `--grid-strategy classic|robust` (Classic remains the default)
+- `--robust-safety guarded|warn|off` (automation defaults to `guarded` when Robust is selected)
+- `--crop-to-bounds` / `--full-canvas` (Robust backgrounds require the full-canvas form)
 - `--colors N` or `--max-colors N`
 - `--palette-strategy medianCut|perceptual|frequency`
 - `--dither none|ordered|errorDiffusion`
@@ -72,6 +77,10 @@ Useful fix flags:
 - `--remove-halos` / `--keep-halos`
 - `--contrast-expansion` / `--no-contrast-expansion`
 - `--denoise-strength N`
+
+Robust native-size inference is experimental and opt-in. `guarded` compares the Robust proposal with Classic and falls back when a severe aspect change has weak independent support. `warn` keeps that same Robust proposal but adds a structured warning. `off` exposes the frozen raw detector behavior for controlled testing. The selected strategy, fallback decision, reason codes, and both candidate summaries are serialized under `result.grid.diagnostics.selection`; warning and fallback messages are also included in the normal automation `warnings` array.
+
+Output sizing is independent of cleanup. `detected` lets the selected detector choose native dimensions, `source` processes the full decoded canvas at 1:1, and `exact` guarantees the requested target dimensions. Alpha/background removal, outline handling, palette settings, fringe cleanup, and downscale method remain separately configurable.
 
 Diagnostics:
 

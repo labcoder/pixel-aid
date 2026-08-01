@@ -88,7 +88,7 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType, target, maxColors (number|auto), paletteStrategy, quantizer, colorSpace, seed, palette, paletteWeighting, minRegion, protectColors, protectSalientColors (keep small vivid regions like eyes/nose at low color budgets; default on for single sprites), paletteDithering/dither, emitPalette, emitPaletteConditioning, downscale/downscaleMethod, grid, alpha, backgroundDetection (classic|adaptive), cleanup, and sheet settings. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans, familyFirst. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
+  description: "PixelAid automation options such as assetType; outputSizeMode (detected|source|exact); target; gridStrategy (classic|robust); robustSafety (guarded|warn|off); maxColors (number|auto); paletteStrategy; quantizer; colorSpace; seed; palette; paletteWeighting; minRegion; protectColors; protectSalientColors; paletteDithering/dither; emitPalette; emitPaletteConditioning; downscale/downscaleMethod; grid; alpha; backgroundDetection (classic|adaptive); cleanup; and sheet settings. Robust remains opt-in and automation defaults its safety policy to guarded. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans, familyFirst. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
   additionalProperties: true,
 };
 

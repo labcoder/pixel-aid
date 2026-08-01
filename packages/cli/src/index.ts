@@ -691,6 +691,12 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   const options: AutomationFixOptionsInput = {};
   const assetType = takeValue(args, "--asset-type");
   if (assetType) options.assetType = assetType as NonNullable<AutomationFixOptionsInput["assetType"]>;
+  const outputSizeMode = takeValue(args, "--output-size");
+  if (outputSizeMode) {
+    options.outputSizeMode = outputSizeMode as NonNullable<
+      AutomationFixOptionsInput["outputSizeMode"]
+    >;
+  }
   const target = takeValue(args, "--target");
   if (target) options.target = target;
   const colors = readOptionalMaxColorsFlag(args, "--colors") ?? readOptionalMaxColorsFlag(args, "--max-colors");
@@ -813,6 +819,13 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   }
 
   const gridMode = takeValue(args, "--grid");
+  const gridStrategy = takeValue(args, "--grid-strategy");
+  const robustSafety = takeValue(args, "--robust-safety");
+  const cropToBounds = takeBooleanChoice(
+    args,
+    "--crop-to-bounds",
+    "--full-canvas"
+  );
   const fixMixels = takeBooleanFlag(args, "--fix-mixels");
   const snap = takeBooleanFlag(args, "--snap");
   const scale = readOptionalNumberFlag(args, "--scale");
@@ -820,9 +833,26 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   const scaleY = readOptionalNumberFlag(args, "--scale-y");
   const phaseX = readOptionalNumberFlag(args, "--phase-x");
   const phaseY = readOptionalNumberFlag(args, "--phase-y");
-  if (gridMode || fixMixels || snap || scale !== undefined || scaleX !== undefined || scaleY !== undefined || phaseX !== undefined || phaseY !== undefined) {
+  if (gridMode || gridStrategy || robustSafety || cropToBounds !== undefined || fixMixels || snap || scale !== undefined || scaleX !== undefined || scaleY !== undefined || phaseX !== undefined || phaseY !== undefined) {
     options.grid = {
       ...(gridMode ? { detect: gridMode as "auto" | "manual" } : {}),
+      ...(gridStrategy
+        ? {
+            autoStrategy:
+              gridStrategy as NonNullable<
+                NonNullable<AutomationFixOptionsInput["grid"]>["autoStrategy"]
+              >
+          }
+        : {}),
+      ...(robustSafety
+        ? {
+            robustSafety:
+              robustSafety as NonNullable<
+                NonNullable<AutomationFixOptionsInput["grid"]>["robustSafety"]
+              >
+          }
+        : {}),
+      ...(cropToBounds !== undefined ? { cropToBounds } : {}),
       ...(fixMixels ? { fixMixels: true } : {}),
       ...(scale !== undefined ? { scale } : {}),
       ...(scaleX !== undefined ? { scaleX } : {}),
@@ -1055,11 +1085,15 @@ function usageText(): string {
     "  --emit-palette-conditioning <artifact.json>",
     "",
     "Grid / pixel-perfect options:",
+    "  --output-size detected|source|exact  Detector-sized, decoded source-sized, or exact target-sized output",
     "  --detect-scale                 Print detected pixel scale on inspect JSON (accepted on fix)",
     "  --fix-mixels                   Normalize uneven pixel block sizes (mixels) before downscaling; honors --target",
     "  --snap                         Force square pixels (single uniform integer scale; output size follows the subject, not --target)",
     "  --line-cleanup off|low|high    Pixel-perfect line cleanup strength (supersedes the legacy 1px-gap cleanup)",
     "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
+    "  --grid-strategy classic|robust  Opt into the experimental Robust native-size detector",
+    "  --robust-safety guarded|warn|off  Fall back, warn, or use the raw Robust proposal (default: guarded)",
+    "  --crop-to-bounds / --full-canvas  Enable subject cropping or preserve the complete canvas",
     "",
     "Alpha options:",
     "  --alpha preserve|binary|backgroundFloodFill|colorKey",

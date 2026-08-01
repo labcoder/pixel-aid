@@ -8,9 +8,12 @@ import {
   type ColorSpace,
   type DownscaleMethod,
   type FixOptions,
+  type GridAutoStrategy,
+  type GridRobustSafety,
   type LineCleanupStrength,
   type MorphologyCleanupSettings,
   type OutlineMode,
+  type OutputSizeMode,
   type PaletteDitheringMode,
   type PaletteLockScope,
   type PaletteMode,
@@ -40,6 +43,7 @@ export type AutomationTargetInput = string | { width: number; height: number };
 
 export type AutomationFixOptionsInput = {
   assetType?: AutomationAssetTypeInput;
+  outputSizeMode?: OutputSizeMode;
   target?: AutomationTargetInput;
   targetWidth?: number;
   targetHeight?: number;
@@ -72,6 +76,8 @@ export type AutomationFixOptionsInput = {
   fixMixels?: boolean;
   snap?: boolean;
   lineCleanup?: LineCleanupStrength;
+  gridStrategy?: GridAutoStrategy;
+  robustSafety?: GridRobustSafety;
   grid?: Partial<FixOptions["grid"]>;
   cleanup?: Partial<FixOptions["cleanup"]>;
   sheet?: Partial<SheetSliceOptions>;
@@ -140,6 +146,9 @@ const paletteWeightings = new Set<PaletteWeighting>(["area", "frequency"]);
 const outlineModes = new Set<OutlineMode>(["none", "repairExisting", "add"]);
 const lineCleanupStrengths = new Set<LineCleanupStrength>(["off", "low", "high"]);
 const backgroundDetectionModes = new Set<NonNullable<AlphaCleanupSettings["backgroundDetection"]>>(["classic", "adaptive"]);
+const outputSizeModes = new Set<OutputSizeMode>(["detected", "source", "exact"]);
+const gridAutoStrategies = new Set<GridAutoStrategy>(["classic", "robust"]);
+const gridRobustSafetyModes = new Set<GridRobustSafety>(["guarded", "warn", "off"]);
 
 const presets: Record<AssetType, AssetPreset> = {
   sprite: createPreset(24, "dominant", "backgroundFloodFill", "single"),
@@ -188,6 +197,19 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
   if (!target.ok) {
     return target;
   }
+  const outputSizeMode = input.outputSizeMode === undefined
+    ? undefined
+    : normalizeEnum(input.outputSizeMode, outputSizeModes, "outputSizeMode");
+  if (outputSizeMode && !outputSizeMode.ok) {
+    return outputSizeMode;
+  }
+  const outputSizeValidation = validateOutputSizePolicy(
+    outputSizeMode?.ok ? outputSizeMode.value : undefined,
+    target.value
+  );
+  if (!outputSizeValidation.ok) {
+    return outputSizeValidation;
+  }
 
   const maxColors = normalizeMaxColors(input.maxColors ?? preset.maxColors, "maxColors");
   if (!maxColors.ok) {
@@ -214,6 +236,8 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
 
   const grid = normalizeGrid({
     ...(input.grid ?? {}),
+    ...(input.gridStrategy !== undefined ? { autoStrategy: input.gridStrategy } : {}),
+    ...(input.robustSafety !== undefined ? { robustSafety: input.robustSafety } : {}),
     ...(input.fixMixels !== undefined ? { fixMixels: input.fixMixels } : {}),
     ...(input.snap !== undefined ? { snap: input.snap } : {}),
   }, mode);
@@ -312,6 +336,7 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
   const options: FixOptions = {
     mode,
     assetType,
+    ...(outputSizeMode?.ok ? { outputSizeMode: outputSizeMode.value } : {}),
     ...(target.value.targetWidth ? { targetWidth: target.value.targetWidth } : {}),
     ...(target.value.targetHeight ? { targetHeight: target.value.targetHeight } : {}),
     maxColors: fixMaxColors,
@@ -385,12 +410,35 @@ function normalizeGrid(input: Partial<FixOptions["grid"]> | undefined, mode: Ass
   if (detect !== "auto" && detect !== "manual") {
     return automationError("invalid_options", `Invalid grid detection mode "${detect}".`, 2);
   }
+  const autoStrategy = input?.autoStrategy === undefined
+    ? undefined
+    : normalizeEnum(input.autoStrategy, gridAutoStrategies, "gridStrategy");
+  if (autoStrategy && !autoStrategy.ok) {
+    return autoStrategy;
+  }
+  const robustSafety = input?.robustSafety === undefined
+    ? undefined
+    : normalizeEnum(input.robustSafety, gridRobustSafetyModes, "robustSafety");
+  if (robustSafety && !robustSafety.ok) {
+    return robustSafety;
+  }
+  if (robustSafety?.ok && autoStrategy?.ok && autoStrategy.value !== "robust") {
+    return automationError(
+      "invalid_options",
+      "robustSafety requires gridStrategy robust.",
+      2
+    );
+  }
 
   const grid: FixOptions["grid"] = {
     detect,
     cropToBounds: input?.cropToBounds ?? mode === "single",
     localCorrection: input?.localCorrection ?? mode === "single",
     fixMixels: input?.fixMixels ?? false,
+    ...(autoStrategy?.ok ? { autoStrategy: autoStrategy.value } : {}),
+    ...(autoStrategy?.ok && autoStrategy.value === "robust"
+      ? { robustSafety: robustSafety?.ok ? robustSafety.value : "guarded" }
+      : {}),
     ...(input?.snap !== undefined ? { snap: input.snap } : {}),
   };
 
@@ -400,6 +448,29 @@ function normalizeGrid(input: Partial<FixOptions["grid"]> | undefined, mode: Ass
   assignFinite(grid, "phaseX", input?.phaseX);
   assignFinite(grid, "phaseY", input?.phaseY);
   return automationOk(grid);
+}
+
+function validateOutputSizePolicy(
+  mode: OutputSizeMode | undefined,
+  target: { targetWidth?: number; targetHeight?: number }
+): AutomationResult<undefined> {
+  const hasWidth = target.targetWidth !== undefined;
+  const hasHeight = target.targetHeight !== undefined;
+  if (mode === "exact" && (!hasWidth || !hasHeight)) {
+    return automationError(
+      "invalid_options",
+      "outputSizeMode exact requires both targetWidth and targetHeight (or --target WIDTHxHEIGHT).",
+      2
+    );
+  }
+  if ((mode === "detected" || mode === "source") && (hasWidth || hasHeight)) {
+    return automationError(
+      "invalid_options",
+      `outputSizeMode ${mode} cannot be combined with target dimensions.`,
+      2
+    );
+  }
+  return automationOk(undefined);
 }
 
 function normalizeCleanup(

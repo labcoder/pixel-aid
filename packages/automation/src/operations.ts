@@ -450,6 +450,11 @@ export async function fixSprite(
     }
 
     const fixed = runFix(imageResult.value, fixOptions, scopedRuntime, operation);
+    const selectionWarnings = gridSelectionWarnings(fixed);
+    const operationWarnings = uniqueWarnings([
+      ...optionWarnings,
+      ...selectionWarnings
+    ]);
     assertAutomationNotCancelled(scopedRuntime);
     reportAutomationProgress(scopedRuntime, operation, "output-write", 92, "Writing fixed PNG");
     const imageWrite = await encodePngFile(fixed.image, output.value.path);
@@ -491,8 +496,8 @@ export async function fixSprite(
       result: fixed,
       manifest: pixelManifest,
       files,
-      warnings: [...optionWarnings],
-    }, optionWarnings);
+      warnings: operationWarnings,
+    }, operationWarnings);
   } catch (error) {
     const cancelled = cancellationFailure(error, scopedRuntime, operation);
     if (cancelled) {
@@ -1008,7 +1013,28 @@ function mergeSuggestedFixOptions(
     };
   }
 
+  if (
+    (overrides?.outputSizeMode === "detected" ||
+      overrides?.outputSizeMode === "source") &&
+    !hasExplicitTargetOverride(overrides)
+  ) {
+    delete merged.target;
+    delete merged.targetWidth;
+    delete merged.targetHeight;
+  }
+
   return merged;
+}
+
+function hasExplicitTargetOverride(
+  options: AutomationFixOptionsInput | undefined
+): boolean {
+  return Boolean(
+    options &&
+      (options.target !== undefined ||
+        options.targetWidth !== undefined ||
+        options.targetHeight !== undefined)
+  );
 }
 
 function automationOptionsFromCoreSuggestion(suggestion: CoreFixSettingSuggestion): AutomationFixOptionsInput {
@@ -1109,6 +1135,13 @@ function sheetFromCoreSuggestion(suggestion: CoreFixSettingSuggestion): SheetSli
 
 function uniqueWarnings(warnings: readonly string[]): string[] {
   return [...new Set(warnings)];
+}
+
+function gridSelectionWarnings(result: PixelFixResult): string[] {
+  const selection = result.grid.diagnostics?.selection;
+  return selection && selection.decision !== "selected"
+    ? [selection.message]
+    : [];
 }
 
 function normalizeQualityReportAssets(request: CreateQualityReportRequest): QualityReportAssetRequest[] {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { normalizeFixOptions, parseAutomationAssetType } from "./options";
 
 describe("automation option normalization", () => {
-  it("keeps robust native-size inference out of automation defaults and inputs", () => {
+  it("keeps Classic as the default and preserves explicit Robust with guarded safety", () => {
     const defaultResult = normalizeFixOptions({});
     const requestedResult = normalizeFixOptions({
       grid: {
@@ -15,7 +15,62 @@ describe("automation option normalization", () => {
     expect(requestedResult.ok).toBe(true);
     if (!defaultResult.ok || !requestedResult.ok) return;
     expect(defaultResult.value.grid.autoStrategy).toBeUndefined();
-    expect(requestedResult.value.grid.autoStrategy).toBeUndefined();
+    expect(requestedResult.value.grid).toMatchObject({
+      autoStrategy: "robust",
+      robustSafety: "guarded"
+    });
+  });
+
+  it.each(["guarded", "warn", "off"] as const)(
+    "normalizes explicit Robust safety mode %s",
+    (robustSafety) => {
+      const result = normalizeFixOptions({
+        gridStrategy: "robust",
+        robustSafety
+      });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.value.grid).toMatchObject({
+        autoStrategy: "robust",
+        robustSafety
+      });
+    }
+  );
+
+  it("rejects Robust safety when Classic is selected", () => {
+    const result = normalizeFixOptions({
+      gridStrategy: "classic",
+      robustSafety: "warn"
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatchObject({ code: "invalid_options", exitCode: 2 });
+  });
+
+  it.each([
+    [{ outputSizeMode: "exact" as const, target: "32x24" }, "exact"],
+    [{ outputSizeMode: "detected" as const }, "detected"],
+    [{ outputSizeMode: "source" as const }, "source"]
+  ])("normalizes output-size policy %#", (input, expected) => {
+    const result = normalizeFixOptions(input);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.outputSizeMode).toBe(expected);
+  });
+
+  it.each([
+    { outputSizeMode: "exact" as const },
+    { outputSizeMode: "source" as const, target: "32x24" },
+    { outputSizeMode: "detected" as const, targetWidth: 32 }
+  ])("rejects conflicting output-size input %#", (input) => {
+    const result = normalizeFixOptions(input);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatchObject({ code: "invalid_options", exitCode: 2 });
   });
 
   it.each([

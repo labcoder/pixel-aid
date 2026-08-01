@@ -382,6 +382,45 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("forwards Robust strategy, safety, and exact output policy", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "robust-fixed.png");
+      const manifest = path.join(dir, "robust-fixed.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--output-size",
+        "exact",
+        "--target",
+        "2x2",
+        "--grid-strategy",
+        "robust",
+        "--robust-safety",
+        "guarded",
+        "--full-canvas",
+        "--json"
+      ], capture);
+
+      expect(code).toBe(0);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.operation.settings).toMatchObject({
+        outputSizeMode: "exact",
+        targetWidth: 2,
+        targetHeight: 2,
+        grid: {
+          autoStrategy: "robust",
+          robustSafety: "guarded",
+          cropToBounds: false
+        }
+      });
+    });
+  });
+
   it("fixes a sprite with auto-suggested settings", async () => {
     await withFixture(async ({ dir, input }) => {
       const capture = createCapture();
