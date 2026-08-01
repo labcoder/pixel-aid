@@ -8,7 +8,10 @@ export type {
   FixPhaseTimingName,
   FixOptions,
   GridAutoStrategy,
+  GridRobustSafety,
   GridCandidate,
+  GridSelectionDiagnostics,
+  GridSelectionReasonCode,
   GridRobustAxisDiagnostics,
   GridRobustAxisProposalDiagnostics,
   GridRobustAxisProvenanceDiagnostics,
@@ -30,6 +33,7 @@ export type {
   OutlineCleanupDiagnostics,
   OutlineMode,
   PixelFixResult,
+  OutputSizeMode,
   PixelScaleReport,
   RGBAImage,
   SceneAssetDiagnostics,
@@ -47,6 +51,11 @@ export { detectSpriteBounds } from "./bounds";
 export type { SpriteBoundsOptions } from "./bounds";
 export { detectGridCandidates } from "./grid";
 export type { GridDetectionOptions } from "./grid";
+export {
+  assessRobustGridSafety,
+  createGridSelectionDiagnostics
+} from "./gridRobustSafety";
+export type { RobustGridSafetyAssessment } from "./gridRobustSafety";
 export {
   proposeAutocorrelationAxisHypotheses,
   proposeIndependentAxisHypotheses,

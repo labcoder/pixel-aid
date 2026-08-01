@@ -487,6 +487,39 @@ export type GridAutoStrategy = "classic" | "robust";
 
 export type OutputSizeMode = "detected" | "source" | "exact";
 
+export type GridRobustSafety = "guarded" | "warn" | "off";
+
+export type GridSelectionReasonCode =
+  | "robust-selected"
+  | "runtime-candidate"
+  | "manual-grid"
+  | "ineligible-asset"
+  | "background-requires-full-canvas"
+  | "severe-anisotropy"
+  | "classic-aspect-disagreement"
+  | "weak-independent-support"
+  | "preserved-ambiguity"
+  | "weak-axis-evidence";
+
+export type GridSelectionCandidateSummary = {
+  outputWidth: number;
+  outputHeight: number;
+  scaleX: number;
+  scaleY: number;
+  confidence: number;
+};
+
+export type GridSelectionDiagnostics = {
+  requestedStrategy: GridAutoStrategy;
+  selectedStrategy: GridAutoStrategy;
+  robustSafety: GridRobustSafety;
+  decision: "selected" | "warning" | "fallback";
+  reasonCodes: GridSelectionReasonCode[];
+  message: string;
+  robustCandidate?: GridSelectionCandidateSummary;
+  classicCandidate?: GridSelectionCandidateSummary;
+};
+
 export type GridCandidate = {
   outputWidth: number;
   outputHeight: number;
@@ -512,6 +545,7 @@ export type GridCandidateDiagnostics = {
   notes: string[];
   sobelTileVoting?: GridSobelTileVotingDiagnostics;
   robust?: GridRobustDiagnostics;
+  selection?: GridSelectionDiagnostics;
   drift?: GridDriftDiagnostics;
   mixels?: MixelNormalizationDiagnostics;
 };
@@ -709,6 +743,7 @@ export type FixOptions = {
   grid: {
     detect: "auto" | "manual";
     autoStrategy?: GridAutoStrategy;
+    robustSafety?: GridRobustSafety;
     scale?: number;
     scaleX?: number;
     scaleY?: number;

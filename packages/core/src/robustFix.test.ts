@@ -54,7 +54,7 @@ describe("opt-in robust fix routing", () => {
 
     expect(result.grid.diagnostics?.robust).toBeUndefined();
     expect(result.grid.reason).toContain(
-      "Robust grid inference is limited to single sprite/icon assets"
+      "Robust grid inference is limited to eligible single-image assets"
     );
   });
 
@@ -66,8 +66,7 @@ describe("opt-in robust fix routing", () => {
     ["tilemap", "tileSheet"],
     ["portrait", "single"],
     ["iconSet", "spriteSheet"],
-    ["uiElement", "single"],
-    ["background", "single"]
+    ["uiElement", "single"]
   ] satisfies readonly [AssetType, AssetMode][])(
     "keeps robust requests bit-identical to classic output for excluded %s assets",
     (assetType, mode) => {
@@ -93,6 +92,39 @@ describe("opt-in robust fix routing", () => {
       expect(robustRequest.grid.diagnostics?.robust).toBeUndefined();
     }
   );
+
+  test("allows explicitly full-canvas backgrounds to opt into robust inference", () => {
+    const source = nativeSizeInferenceFixtures[0]!.createImage();
+    const result = fixImage(source, {
+      ...robustOptions({ cropToBounds: false }),
+      assetType: "background"
+    });
+
+    expect(result.grid.diagnostics?.robust?.strategy).toBe("robust");
+    expect(result.grid.sourceRect).toBeUndefined();
+  });
+
+  test("keeps background robust inference behind a full-canvas requirement", () => {
+    const source = nativeSizeInferenceFixtures[0]!.createImage();
+    const result = fixImage(source, {
+      ...robustOptions(),
+      assetType: "background",
+      grid: { detect: "auto", autoStrategy: "robust" }
+    });
+
+    expect(result.grid.diagnostics?.robust).toBeUndefined();
+    expect(result.grid.diagnostics?.selection?.reasonCodes).toContain(
+      "background-requires-full-canvas"
+    );
+  });
+
+  test("keeps the raw Step 1Q path when robust safety is omitted", () => {
+    const source = nativeSizeInferenceFixtures[0]!.createImage();
+    const result = fixImage(source, robustOptions({ cropToBounds: false }));
+
+    expect(result.grid.diagnostics?.robust?.strategy).toBe("robust");
+    expect(result.grid.diagnostics?.selection).toBeUndefined();
+  });
 
   test("keeps explicit target dimensions authoritative over robust candidates", () => {
     const source = nativeSizeInferenceFixtures[0]!.createImage();

@@ -20,6 +20,10 @@ import { applyContrastExpansion } from "./contrastExpansion";
 import { applyDenoise } from "./denoise";
 import { detectGridCandidates } from "./grid";
 import type { GridDetectionOptions } from "./grid";
+import {
+  assessRobustGridSafety,
+  createGridSelectionDiagnostics
+} from "./gridRobustSafety";
 import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
@@ -1877,24 +1881,28 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
     const robustEligible =
       options.grid.autoStrategy === "robust" &&
       options.mode === "single" &&
-      (options.assetType === "sprite" || options.assetType === "icon");
+      (options.assetType === "sprite" ||
+        options.assetType === "icon" ||
+        (options.assetType === "background" &&
+          (options.outputSizeMode === "exact" ||
+            options.grid.cropToBounds === false)));
     const detectionOptions: GridDetectionOptions = {
       strategy: robustEligible ? "robust" : "classic"
     };
     if (robustEligible) {
       detectionOptions.cropToBounds =
-        options.grid.cropToBounds ?? options.mode === "single";
+        options.outputSizeMode === "exact"
+          ? false
+          : options.grid.cropToBounds ?? options.mode === "single";
     }
-    const detectedCandidates =
-      runtimeCandidates ?? detectGridCandidates(image, detectionOptions);
-    const candidates =
-      !runtimeCandidates &&
-      options.grid.autoStrategy === "robust" &&
-      !robustEligible
-        ? detectedCandidates.map((item, index) =>
-            index === 0 ? attachRobustEligibilityFallback(item, options) : item
-          )
-        : detectedCandidates;
+    const detectedCandidates = runtimeCandidates ?? detectGridCandidates(image, detectionOptions);
+    const candidates = resolveAutomaticCandidates({
+      image,
+      options,
+      detectedCandidates,
+      robustEligible,
+      ...(runtimeCandidates ? { runtimeCandidates } : {})
+    });
     const [candidate] = candidates;
     if (
       options.outputSizeMode !== "detected" &&
@@ -1965,7 +1973,11 @@ function attachRobustEligibilityFallback(
   candidate: GridCandidate,
   options: FixOptions
 ): GridCandidate {
-  const note = `Robust grid inference is limited to single sprite/icon assets; ${options.assetType} uses the classic detector.`;
+  const backgroundNeedsFullCanvas =
+    options.assetType === "background" && options.grid.cropToBounds !== false;
+  const note = backgroundNeedsFullCanvas
+    ? "Robust background inference requires full-canvas processing with cropToBounds disabled; this request uses the classic detector."
+    : `Robust grid inference is limited to eligible single-image assets; ${options.assetType} uses the classic detector.`;
   return {
     ...candidate,
     reason: `${note} ${candidate.reason}`,
@@ -1973,9 +1985,107 @@ function attachRobustEligibilityFallback(
       ? {
           diagnostics: {
             ...candidate.diagnostics,
-            notes: [...candidate.diagnostics.notes, note]
+            notes: [...candidate.diagnostics.notes, note],
+            selection: {
+              requestedStrategy: "robust",
+              selectedStrategy: "classic",
+              robustSafety: options.grid.robustSafety ?? "off",
+              decision: "fallback",
+              reasonCodes: [
+                backgroundNeedsFullCanvas
+                  ? "background-requires-full-canvas"
+                  : "ineligible-asset"
+              ],
+              message: note,
+              classicCandidate: summarizeGridCandidate(candidate)
+            }
           }
         }
       : {})
+  };
+}
+
+function resolveAutomaticCandidates(options: {
+  image: RGBAImage;
+  options: FixOptions;
+  runtimeCandidates?: readonly GridCandidate[];
+  detectedCandidates: readonly GridCandidate[];
+  robustEligible: boolean;
+}): readonly GridCandidate[] {
+  const {
+    image,
+    options: fixOptions,
+    runtimeCandidates,
+    detectedCandidates,
+    robustEligible
+  } = options;
+  if (runtimeCandidates) {
+    return runtimeCandidates;
+  }
+  if (fixOptions.grid.autoStrategy !== "robust") {
+    return detectedCandidates;
+  }
+  if (!robustEligible) {
+    return detectedCandidates.map((item, index) =>
+      index === 0 ? attachRobustEligibilityFallback(item, fixOptions) : item
+    );
+  }
+
+  const safety = fixOptions.grid.robustSafety ?? "off";
+  if (safety === "off") {
+    return detectedCandidates;
+  }
+
+  const classicCandidates = detectGridCandidates(image, { strategy: "classic" });
+  const robustCandidate = detectedCandidates[0];
+  const classicCandidate = classicCandidates[0];
+  if (!robustCandidate || !classicCandidate) {
+    return detectedCandidates;
+  }
+  const assessment = assessRobustGridSafety(robustCandidate, classicCandidate);
+  const selection = createGridSelectionDiagnostics({
+    robustCandidate,
+    classicCandidate,
+    safety,
+    assessment
+  });
+  const selectedCandidates =
+    safety === "guarded" && assessment.shouldFallback
+      ? classicCandidates
+      : detectedCandidates;
+  return selectedCandidates.map((candidate) =>
+    attachGridSelection(candidate, selection)
+  );
+}
+
+function attachGridSelection(
+  candidate: GridCandidate,
+  selection: NonNullable<
+    NonNullable<GridCandidate["diagnostics"]>["selection"]
+  >
+): GridCandidate {
+  if (!candidate.diagnostics) {
+    return candidate;
+  }
+  return {
+    ...candidate,
+    diagnostics: {
+      ...candidate.diagnostics,
+      notes:
+        selection.decision === "selected"
+          ? candidate.diagnostics.notes
+          : [...candidate.diagnostics.notes, selection.message],
+      selection
+    }
+  };
+}
+
+function summarizeGridCandidate(candidate: GridCandidate) {
+  return {
+    outputWidth: candidate.outputWidth,
+    outputHeight: candidate.outputHeight,
+    scaleX: candidate.scaleX,
+    scaleY: candidate.scaleY,
+    confidence: candidate.confidence
   };
 }
