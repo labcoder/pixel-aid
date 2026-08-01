@@ -71,4 +71,4 @@ MCP and HTTP-style requests use `options.gridStrategy: "robust"` and `options.ro
 
 Include the PixelAid version, asset type, requested native-size mode, output-canvas settings, requested and used strategies, Guarded reason codes, and a sanitized Diagnostics export. Do not share private source assets without permission. A reduced or synthetic reproduction is preferred.
 
-Robust Preview remains opt-in until the Phase 8 evidence campaign measures real-world preference, geometry accuracy, fallback frequency, performance, and cross-surface output parity.
+Robust Preview remains opt-in until the Phase 8 evidence campaign measures real-world preference, geometry accuracy, fallback frequency, performance, and cross-surface output parity. The frozen methodology and promotion gates are defined in [the Phase 8 evidence protocol](./research/robust-preview-phase-8-protocol.md).

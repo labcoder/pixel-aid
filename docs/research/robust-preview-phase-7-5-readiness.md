@@ -71,4 +71,4 @@ No signing, upload, origin push, itch.io publication, or npm publication occurre
 
 PixelAid 0.2.0 is ready to proceed as an opt-in Robust Preview release candidate, with Classic still the default. The locally verifiable web, Windows, CLI, ComfyUI, automation, persistence, export, documentation, and bundle requirements pass. Credentialed Windows/macOS signing and external publication remain deliberate release-owner operations, not engineering gaps in the candidate.
 
-Phase 8 should now gather real-world preference, fallback, warning, override, performance, and cross-surface parity evidence before any proposal to change the default.
+Phase 8 should now gather real-world preference, fallback, warning, override, performance, and cross-surface parity evidence before any proposal to change the default. Its preregistered methodology lives in [the Phase 8 evidence protocol](./robust-preview-phase-8-protocol.md).
