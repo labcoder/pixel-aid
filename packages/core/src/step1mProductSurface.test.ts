@@ -86,10 +86,9 @@ describe("Step 1M product-surface regression guards", () => {
 
   test.each([
     ["animationSheet", "spriteSheet"],
-    ["tileset", "tileSheet"],
-    ["background", "single"]
+    ["tileset", "tileSheet"]
   ] satisfies readonly [AssetType, AssetMode][])(
-    "keeps robust requests on excluded %s assets identical to classic routing",
+    "keeps robust requests on remaining excluded %s assets identical to classic routing",
     (assetType, mode) => {
       const fixture = step1mNativeSizeCorpus[0]!;
       const source = fixture.createInputImage();
@@ -111,6 +110,28 @@ describe("Step 1M product-surface regression guards", () => {
       expect(robust.grid.diagnostics?.robust).toBeUndefined();
     }
   );
+
+  test("keeps cropped background requests on classic routing", () => {
+    const fixture = step1mNativeSizeCorpus[0]!;
+    const source = fixture.createInputImage();
+    const classic = fixImage(source, {
+      ...fixOptions({ autoStrategy: "classic", cropToBounds: true }),
+      assetType: "background"
+    });
+    const robust = fixImage(source, {
+      ...fixOptions({ autoStrategy: "robust", cropToBounds: true }),
+      assetType: "background"
+    });
+
+    expect(robust.palette).toEqual(classic.palette);
+    expect(createGoldenSignature(robust.image)).toEqual(
+      createGoldenSignature(classic.image)
+    );
+    expect(robust.grid.diagnostics?.robust).toBeUndefined();
+    expect(robust.grid.diagnostics?.selection?.reasonCodes).toContain(
+      "background-requires-full-canvas"
+    );
+  });
 });
 
 function fixOptions(
