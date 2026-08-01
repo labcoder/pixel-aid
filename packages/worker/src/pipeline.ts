@@ -1,9 +1,10 @@
-import { FixCancelledError, analyzeOutlineSemantics, analyzeQualityReport, fixImage, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
+import { FixCancelledError, analyzeOutlineSemantics, analyzeQualityReport, detectGridCandidates, fixImage, suggestFixSettings, suggestFixSettingsForAssetType } from "@pixelaid/core";
 import type { FixCancellationSignal, FixProgressEvent } from "@pixelaid/core";
 import type { RGBAImage } from "@pixelaid/shared";
 import type {
   AnalyzeQualityWorkerRequest,
   AnalyzeSourceWorkerRequest,
+  DetectGridWorkerRequest,
   FixImageWorkerRequest,
   SourcePaletteAnalysis,
   SuggestFixWorkerRequest,
@@ -48,6 +49,10 @@ export function runWorkerRequest(
 
     if (request.type === "analyze-quality") {
       return runAnalyzeQualityRequest(request);
+    }
+
+    if (request.type === "detect-grid") {
+      return runDetectGridRequest(request);
     }
 
     if (request.type === "suggest-fix") {
@@ -103,6 +108,21 @@ function runAnalyzeQualityRequest(request: AnalyzeQualityWorkerRequest): WorkerR
   };
 }
 
+function runDetectGridRequest(request: DetectGridWorkerRequest): WorkerResponse {
+  const image = transferableToImage(request);
+  return {
+    type: "grid-detection-result",
+    requestId: request.requestId,
+    result: detectGridCandidates(image, {
+      strategy: request.strategy,
+      ...(request.cropToBounds !== undefined
+        ? { cropToBounds: request.cropToBounds }
+        : {}),
+      ...(request.maxScale !== undefined ? { maxScale: request.maxScale } : {})
+    })
+  };
+}
+
 function runSuggestFixRequest(request: SuggestFixWorkerRequest): WorkerResponse {
   const image = transferableToImage(request);
   return {
@@ -151,7 +171,7 @@ function runFixImageRequest(
   };
 }
 
-function transferableToImage(request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | SuggestFixWorkerRequest): RGBAImage {
+function transferableToImage(request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | DetectGridWorkerRequest | SuggestFixWorkerRequest): RGBAImage {
   const expectedLength = request.image.width * request.image.height * 4;
   if (request.image.data.byteLength !== expectedLength) {
     throw new Error("Image data length does not match dimensions");

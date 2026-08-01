@@ -36,7 +36,7 @@ describe("asset analysis cache keys", () => {
   });
 
   it("keys grid candidate caches by source dimensions and preprocessing path", () => {
-    expect(buildGridCandidateCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000 })).toBe("a|grid|100x80|32000|32|source");
+    expect(buildGridCandidateCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000 })).toBe("a|grid|100x80|32000|32|source|classic");
     expect(
       buildGridCandidateCacheKey({
         assetId: "a",
@@ -45,7 +45,16 @@ describe("asset analysis cache keys", () => {
         byteLength: 32000,
         preprocessing: "backgroundFloodFill"
       })
-    ).toBe("a|grid|100x80|32000|32|backgroundFloodFill");
+    ).toBe("a|grid|100x80|32000|32|backgroundFloodFill|classic");
+    expect(
+      buildGridCandidateCacheKey({
+        assetId: "a",
+        width: 100,
+        height: 80,
+        byteLength: 32000,
+        strategy: "robust"
+      })
+    ).toBe("a|grid|100x80|32000|32|source|robust");
   });
 
   it("invalidates quality analysis when relevant settings change", () => {

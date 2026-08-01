@@ -1,8 +1,9 @@
 import type { QualityReport, QualityReportOptions } from "@pixelaid/core";
-import type { RGBAImage } from "@pixelaid/shared";
+import type { GridAutoStrategy, GridCandidate, RGBAImage } from "@pixelaid/shared";
 import type {
   AnalyzeQualityWorkerRequest,
   AnalyzeSourceWorkerRequest,
+  DetectGridWorkerRequest,
   PersistentWorkerStalePolicy,
   SourceAssetAnalysisResult,
   WorkerResponse
@@ -15,7 +16,10 @@ import {
 } from "./workerDiagnostics";
 import { createWorkerPool, WorkerPoolCancelledError, WorkerPoolStaleJobError, type WorkerPool } from "./workerPool";
 
-type AnalysisWorkerRequest = AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest;
+type AnalysisWorkerRequest =
+  | AnalyzeSourceWorkerRequest
+  | AnalyzeQualityWorkerRequest
+  | DetectGridWorkerRequest;
 
 export type AnalysisJob<T> = {
   requestId: string;
@@ -35,6 +39,17 @@ export type SourceAnalysisJobOptions = {
 };
 
 export type QualityAnalysisJobOptions = {
+  onDiagnostics?: WorkerDiagnosticsSink;
+  workerFactory?: () => Worker;
+  workerPool?: WorkerPool;
+  staleKey?: string;
+  stalePolicy?: PersistentWorkerStalePolicy;
+};
+
+export type GridDetectionJobOptions = {
+  strategy: GridAutoStrategy;
+  cropToBounds?: boolean;
+  maxScale?: number;
   onDiagnostics?: WorkerDiagnosticsSink;
   workerFactory?: () => Worker;
   workerPool?: WorkerPool;
@@ -105,6 +120,40 @@ export function startQualityAnalysisJob(image: RGBAImage, options: QualityReport
   return startAnalysisJob(request, diagnostics, jobOptions, (response) => {
     if (response.type !== "quality-analysis-result") {
       throw new Error("Unexpected quality analysis response");
+    }
+    return response.result;
+  });
+}
+
+export function startGridDetectionJob(
+  image: RGBAImage,
+  options: GridDetectionJobOptions
+): AnalysisJob<GridCandidate[]> {
+  const requestId = crypto.randomUUID();
+  const diagnostics = createWorkerDiagnosticsRecorder({
+    requestId,
+    kind: "gridDetection",
+    sourceWidth: image.width,
+    sourceHeight: image.height,
+    sourceByteLength: image.data.byteLength,
+    ...(options.onDiagnostics ? { onDiagnostics: options.onDiagnostics } : {})
+  });
+  const clone = cloneImageToTransferable(image);
+  diagnostics.markImageClone(clone.cloneMs);
+  const request: DetectGridWorkerRequest = {
+    type: "detect-grid",
+    requestId,
+    image: clone.transferable,
+    strategy: options.strategy,
+    ...(options.cropToBounds !== undefined
+      ? { cropToBounds: options.cropToBounds }
+      : {}),
+    ...(options.maxScale !== undefined ? { maxScale: options.maxScale } : {})
+  };
+
+  return startAnalysisJob(request, diagnostics, options, (response) => {
+    if (response.type !== "grid-detection-result") {
+      throw new Error("Unexpected grid detection response");
     }
     return response.result;
   });

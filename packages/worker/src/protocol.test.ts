@@ -131,4 +131,33 @@ describe("persistent worker protocol", () => {
       assetType: "sprite"
     });
   });
+
+  test("preserves the requested grid strategy across worker protocol conversion", () => {
+    const request: WorkerRequest = {
+      type: "detect-grid",
+      requestId: "grid_1",
+      image,
+      strategy: "robust",
+      cropToBounds: false,
+      maxScale: 24
+    };
+
+    const persistent = legacyWorkerRequestToPersistent(request, "asset_1:grid");
+
+    expect(persistent).toMatchObject({
+      type: "worker-job",
+      protocolVersion: persistentWorkerProtocolVersion,
+      job: {
+        kind: "gridDetection",
+        strategy: "robust",
+        cropToBounds: false,
+        maxScale: 24
+      }
+    });
+    expect(
+      persistent.type === "worker-job"
+        ? persistentWorkerJobToLegacyRequest(persistent)
+        : null
+    ).toEqual(request);
+  });
 });

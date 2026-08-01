@@ -305,6 +305,30 @@ describe("worker fix pipeline", () => {
     expect(response.result.qualityReport.metrics.palette.exactColorCount).toBeGreaterThan(0);
   });
 
+  test.each(["classic", "robust"] as const)(
+    "detects %s grid candidates through the worker protocol",
+    (strategy) => {
+      const request: WorkerRequest = {
+        type: "detect-grid",
+        requestId: `grid-${strategy}`,
+        image: image(),
+        strategy,
+        cropToBounds: false
+      };
+
+      const response = runWorkerRequest(request, () => 0);
+
+      expect(response.type).toBe("grid-detection-result");
+      if (response.type !== "grid-detection-result") {
+        throw new Error("Expected grid detection response");
+      }
+      expect(response.result.length).toBeGreaterThan(0);
+      expect(response.result[0]?.diagnostics?.robust?.strategy).toBe(
+        strategy === "robust" ? "robust" : undefined
+      );
+    }
+  );
+
   test("emits progress events before returning a result", () => {
     const request: WorkerRequest = {
       type: "fix-image",

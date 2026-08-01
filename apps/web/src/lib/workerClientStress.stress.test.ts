@@ -191,7 +191,8 @@ function createStressReport(diagnostics: WorkerJobDiagnostics[]): WorkerStressRe
       byKind: {
         fix: summarizeKind(diagnostics, "fix"),
         sourceAnalysis: summarizeKind(diagnostics, "sourceAnalysis"),
-        qualityAnalysis: summarizeKind(diagnostics, "qualityAnalysis")
+        qualityAnalysis: summarizeKind(diagnostics, "qualityAnalysis"),
+        gridDetection: summarizeKind(diagnostics, "gridDetection")
       }
     },
     diagnostics

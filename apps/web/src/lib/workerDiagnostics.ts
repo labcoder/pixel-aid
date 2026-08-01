@@ -1,6 +1,6 @@
 import type { RGBAImage, TransferableImage } from "@pixelaid/shared";
 
-export type WorkerJobKind = "fix" | "sourceAnalysis" | "qualityAnalysis" | "suggestFix";
+export type WorkerJobKind = "fix" | "sourceAnalysis" | "qualityAnalysis" | "gridDetection" | "suggestFix";
 export type WorkerJobOutcome = "completed" | "cancelled" | "failed";
 
 export type WorkerJobDiagnostics = {

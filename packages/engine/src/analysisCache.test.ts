@@ -38,7 +38,7 @@ describe("engine analysis cache", () => {
     expect(buildSourceAnalysisCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000 })).toBe("a|100x80|32000");
   });
 
-  it("keys grid candidates to the source asset, detector budget, and preprocessing path", () => {
+  it("keys grid candidates to the source asset, detector budget, preprocessing path, and strategy", () => {
     const base = buildGridCandidateCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000, maxScale: 32 });
     const changedPreprocessing = buildGridCandidateCacheKey({
       assetId: "a",
@@ -49,10 +49,19 @@ describe("engine analysis cache", () => {
       preprocessing: "backgroundFloodFill"
     });
     const changedDetectorBudget = buildGridCandidateCacheKey({ assetId: "a", width: 100, height: 80, byteLength: 32000, maxScale: 16 });
+    const changedStrategy = buildGridCandidateCacheKey({
+      assetId: "a",
+      width: 100,
+      height: 80,
+      byteLength: 32000,
+      maxScale: 32,
+      strategy: "robust"
+    });
 
-    expect(base).toBe("a|grid|100x80|32000|32|source");
+    expect(base).toBe("a|grid|100x80|32000|32|source|classic");
     expect(changedPreprocessing).not.toBe(base);
     expect(changedDetectorBudget).not.toBe(base);
+    expect(changedStrategy).not.toBe(base);
   });
 
   it("invalidates quality analysis when relevant settings change", () => {

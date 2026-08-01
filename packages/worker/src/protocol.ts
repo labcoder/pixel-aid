@@ -1,4 +1,4 @@
-import type { AssetType, FixOptions, GridCandidate, PixelFixResult, TransferableImage, WorkerProgress } from "@pixelaid/shared";
+import type { AssetType, FixOptions, GridAutoStrategy, GridCandidate, PixelFixResult, TransferableImage, WorkerProgress } from "@pixelaid/shared";
 import type { FixSettingSuggestion, OutlineColorCandidate, QualityReport, QualityReportOptions } from "@pixelaid/core";
 
 export type FixImageWorkerRequest = {
@@ -42,6 +42,15 @@ export type AnalyzeQualityWorkerRequest = {
   options: QualityReportOptions;
 };
 
+export type DetectGridWorkerRequest = {
+  type: "detect-grid";
+  requestId: string;
+  image: TransferableImage;
+  strategy: GridAutoStrategy;
+  cropToBounds?: boolean;
+  maxScale?: number;
+};
+
 export type SuggestFixWorkerRequest = {
   type: "suggest-fix";
   requestId: string;
@@ -53,6 +62,7 @@ export type WorkerRequest =
   | FixImageWorkerRequest
   | AnalyzeSourceWorkerRequest
   | AnalyzeQualityWorkerRequest
+  | DetectGridWorkerRequest
   | SuggestFixWorkerRequest
   | CancelWorkerRequest;
 
@@ -72,6 +82,12 @@ export type WorkerQualityAnalysisResponse = {
   type: "quality-analysis-result";
   requestId: string;
   result: QualityReport;
+};
+
+export type WorkerGridDetectionResponse = {
+  type: "grid-detection-result";
+  requestId: string;
+  result: GridCandidate[];
 };
 
 export type WorkerSuggestFixResponse = {
@@ -100,14 +116,15 @@ export type WorkerResponse =
   | WorkerResultResponse
   | WorkerSourceAnalysisResponse
   | WorkerQualityAnalysisResponse
+  | WorkerGridDetectionResponse
   | WorkerSuggestFixResponse
   | WorkerErrorResponse
   | WorkerCancelledResponse
   | WorkerProgressResponse;
 
-export const persistentWorkerProtocolVersion = 1;
+export const persistentWorkerProtocolVersion = 2;
 
-export type PersistentWorkerJobKind = "fix" | "sourceAnalysis" | "qualityAnalysis" | "suggestFix";
+export type PersistentWorkerJobKind = "fix" | "sourceAnalysis" | "qualityAnalysis" | "gridDetection" | "suggestFix";
 
 export type PersistentWorkerStalePolicy = "allow" | "latestOnly";
 
@@ -138,6 +155,14 @@ export type PersistentWorkerQualityAnalysisJob = {
   options: QualityReportOptions;
 };
 
+export type PersistentWorkerGridDetectionJob = {
+  kind: "gridDetection";
+  image: TransferableImage;
+  strategy: GridAutoStrategy;
+  cropToBounds?: boolean;
+  maxScale?: number;
+};
+
 export type PersistentWorkerSuggestFixJob = {
   kind: "suggestFix";
   image: TransferableImage;
@@ -149,6 +174,7 @@ export type PersistentWorkerJob =
   | PersistentWorkerFixJob
   | PersistentWorkerSourceAnalysisJob
   | PersistentWorkerQualityAnalysisJob
+  | PersistentWorkerGridDetectionJob
   | PersistentWorkerSuggestFixJob;
 
 export type PersistentWorkerJobRequest = {
@@ -196,6 +222,7 @@ export type PersistentWorkerResult =
   | { kind: "fix"; result: PixelFixResult }
   | { kind: "sourceAnalysis"; result: SourceAssetAnalysisResult }
   | { kind: "qualityAnalysis"; result: QualityReport }
+  | { kind: "gridDetection"; result: GridCandidate[] }
   | { kind: "suggestFix"; result: FixSettingSuggestion };
 
 export type PersistentWorkerResultResponse = {
@@ -298,6 +325,18 @@ export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobR
     };
   }
 
+
+  if (job.kind === "gridDetection") {
+    return {
+      type: "detect-grid",
+      requestId: request.requestId,
+      image: job.image,
+      strategy: job.strategy,
+      ...(job.cropToBounds !== undefined ? { cropToBounds: job.cropToBounds } : {}),
+      ...(job.maxScale !== undefined ? { maxScale: job.maxScale } : {})
+    };
+  }
+
   return {
     type: "suggest-fix",
     requestId: request.requestId,
@@ -307,7 +346,7 @@ export function persistentWorkerJobToLegacyRequest(request: PersistentWorkerJobR
 }
 
 function legacyJobToPersistentJob(
-  request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | SuggestFixWorkerRequest
+  request: FixImageWorkerRequest | AnalyzeSourceWorkerRequest | AnalyzeQualityWorkerRequest | DetectGridWorkerRequest | SuggestFixWorkerRequest
 ): PersistentWorkerJob {
   if (request.type === "fix-image") {
     return {
@@ -333,6 +372,17 @@ function legacyJobToPersistentJob(
       kind: "qualityAnalysis",
       image: request.image,
       options: request.options
+    };
+  }
+
+
+  if (request.type === "detect-grid") {
+    return {
+      kind: "gridDetection",
+      image: request.image,
+      strategy: request.strategy,
+      ...(request.cropToBounds !== undefined ? { cropToBounds: request.cropToBounds } : {}),
+      ...(request.maxScale !== undefined ? { maxScale: request.maxScale } : {})
     };
   }
 

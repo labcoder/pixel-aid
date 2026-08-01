@@ -1,4 +1,4 @@
-import type { AlphaMode, AssetType, GridCandidate } from "@pixelaid/shared";
+import type { AlphaMode, AssetType, GridAutoStrategy, GridCandidate } from "@pixelaid/shared";
 
 export type GridCandidateCachePreprocessing = "source" | "backgroundFloodFill";
 
@@ -30,6 +30,7 @@ export function buildGridCandidateCacheKey(input: {
   byteLength: number;
   maxScale?: number;
   preprocessing?: GridCandidateCachePreprocessing;
+  strategy?: GridAutoStrategy;
 }): string {
   return [
     input.assetId,
@@ -37,7 +38,8 @@ export function buildGridCandidateCacheKey(input: {
     `${input.width}x${input.height}`,
     input.byteLength,
     input.maxScale ?? 32,
-    input.preprocessing ?? "source"
+    input.preprocessing ?? "source",
+    input.strategy ?? "classic"
   ].join("|");
 }
 
