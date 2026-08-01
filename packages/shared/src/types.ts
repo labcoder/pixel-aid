@@ -524,6 +524,8 @@ export type OutputPackagingOptions = {
 export type PixelReconstructionMetadata = {
   nativeCanvas: { width: number; height: number };
   reconstructedImage: { width: number; height: number };
+  /** Native-canvas position occupied by reconstructedImage before output packaging. */
+  compositionPlacement: Rect;
   contentBounds: Rect;
   contentBoundsSource: "alpha" | "background-mask" | "full-canvas";
   requestedStrategy: GridAutoStrategy;

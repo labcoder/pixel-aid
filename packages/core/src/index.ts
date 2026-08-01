@@ -125,6 +125,8 @@ export type {
 } from "./morphology";
 export { downsampleBlocks } from "./downsample";
 export type { DownsampleOptions } from "./downsample";
+export { packagePixelArt } from "./packaging";
+export type { PackagePixelArtResult } from "./packaging";
 export { fixImage } from "./fix";
 export { chooseSuggestionGrid, suggestFixSettings, suggestFixSettingsForAssetType } from "./fixSuggestions";
 export type {

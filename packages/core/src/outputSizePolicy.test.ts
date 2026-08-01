@@ -107,6 +107,33 @@ describe("output-size policies", () => {
     );
   });
 
+  test("canvas packaging does not change native reconstruction geometry", () => {
+    const source = createBlockImage(24, 18, 3);
+    const base = options({
+      reconstruction: { sizeMode: "manual", width: 8, height: 6 },
+      packaging: {
+        canvasMode: "exact",
+        width: 12,
+        height: 10,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      },
+      grid: { detect: "auto", cropToBounds: true }
+    });
+    const first = fixImage(source, base);
+    const second = fixImage(source, {
+      ...base,
+      packaging: { ...base.packaging!, width: 16, height: 12 }
+    });
+
+    expect(first.reconstruction).toEqual(second.reconstruction);
+    expect(first.grid).toEqual(second.grid);
+    expect(first.palette).toEqual(second.palette);
+    expect(first.image).toMatchObject({ width: 12, height: 10 });
+    expect(second.image).toMatchObject({ width: 16, height: 12 });
+  });
+
   test("exact rejects an incomplete target", () => {
     const source = createBlockImage(24, 18, 3);
 

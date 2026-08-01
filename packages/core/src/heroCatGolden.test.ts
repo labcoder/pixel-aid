@@ -43,7 +43,58 @@ describe("hero cat golden regression", () => {
       comparison.matches,
       `${comparison.message} Run PIXELAID_UPDATE_GOLDENS=1 npm run test -w @pixelaid/core -- src/heroCatGolden.test.ts to update intentionally.`
     ).toBe(true);
-  });
+  }, 10_000);
+
+  test("separates the 128px native composition from the 90x113 cat bounds", () => {
+    const source = readGoldenPng(sourcePath);
+    const suggestion = suggestFixSettings(source);
+    const base = buildGuidedHeroCatOptions(source, suggestion);
+    const result = fixImage(source, {
+      ...base,
+      reconstruction: { sizeMode: "manual", width: 128, height: 128 },
+      packaging: {
+        canvasMode: "exact",
+        width: 128,
+        height: 128,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      }
+    });
+
+    expect(result.image).toMatchObject({ width: 128, height: 128 });
+    expect(result.reconstruction).toMatchObject({
+      nativeCanvas: { width: 128, height: 128 },
+      reconstructedImage: { width: 90, height: 113 },
+      compositionPlacement: { x: 16, y: 6, w: 90, h: 113 },
+      contentBounds: { w: 90, h: 113 }
+    });
+    expect(result.packaging).toMatchObject({
+      canvas: { width: 128, height: 128 },
+      placement: { x: 16, y: 6, w: 90, h: 113 },
+      appliedScale: 1
+    });
+  }, 10_000);
+
+  test("packages the reconstructed cat bounds back to the historical golden", () => {
+    const source = readGoldenPng(sourcePath);
+    const expected = readGoldenPng(goldenPath);
+    const suggestion = suggestFixSettings(source);
+    const base = buildGuidedHeroCatOptions(source, suggestion);
+    const result = fixImage(source, {
+      ...base,
+      reconstruction: { sizeMode: "manual", width: 128, height: 128 },
+      packaging: {
+        canvasMode: "content",
+        framing: "packSubject",
+        scale: "native",
+        anchor: "topLeft"
+      }
+    });
+
+    expect(result.image).toMatchObject({ width: 90, height: 113 });
+    expect(compareGoldenImage(result.image, expected, { mode: "exact" }).matches).toBe(true);
+  }, 10_000);
 });
 
 function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSuggestion): FixOptions {

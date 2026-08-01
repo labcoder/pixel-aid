@@ -31,6 +31,7 @@ import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
 import { createImage } from "./image";
+import { packagePixelArt } from "./packaging";
 import { applyLineCleanup } from "./lineCleanup";
 import { detectMixels, regularizeMixels } from "./mixels";
 import { snapToGrid } from "./snap";
@@ -241,10 +242,17 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const resultGrid = outlinePadding > 0 ? padGridForOutline(resultGridBase, outlinePadding) : resultGridBase;
   const phaseTimings = collectedPhaseTimings(phaseTimer);
   const reconstruction = describeReconstruction(image, finalImage, resultGrid, options);
-  const packaging = describeLegacyPackaging(finalImage, reconstruction.contentBounds);
+  const packaged = options.packaging
+    ? packagePixelArt(finalImage, reconstruction.contentBounds, options.packaging, {
+        nativeCanvas: reconstruction.nativeCanvas,
+        compositionPlacement: reconstruction.compositionPlacement
+      })
+    : undefined;
+  const resultImage = packaged?.image ?? finalImage;
+  const packaging = packaged?.metadata ?? describeLegacyPackaging(finalImage, reconstruction.contentBounds);
 
   const result = {
-    image: finalImage,
+    image: resultImage,
     palette: effectivePalette,
     grid: resultGrid,
     reconstruction,
@@ -253,8 +261,8 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
       durationMs: 0,
       sourceWidth: image.width,
       sourceHeight: image.height,
-      outputWidth: finalImage.width,
-      outputHeight: finalImage.height,
+      outputWidth: resultImage.width,
+      outputHeight: resultImage.height,
       paletteCount: effectivePalette.length,
       gridConfidence: resultGrid.confidence
     },
@@ -293,20 +301,39 @@ function describeReconstruction(
     (grid.diagnostics?.robust ? "robust" : "classic");
   const phaseX = Math.max(0, grid.phaseX);
   const phaseY = Math.max(0, grid.phaseY);
-  const nativeCanvasWidth = Math.max(
-    1,
-    Math.floor((source.width - phaseX) / Math.max(Number.EPSILON, grid.scaleX))
-  );
-  const nativeCanvasHeight = Math.max(
-    1,
-    Math.floor((source.height - phaseY) / Math.max(Number.EPSILON, grid.scaleY))
-  );
+  const requestedNativeSize = options.reconstruction?.sizeMode === "manual"
+    ? resolveManualNativeSize(options)
+    : undefined;
+  const compositionX = grid.sourceRect
+    ? Math.max(0, Math.floor(grid.sourceRect.x / Math.max(Number.EPSILON, grid.scaleX)))
+    : 0;
+  const compositionY = grid.sourceRect
+    ? Math.max(0, Math.floor(grid.sourceRect.y / Math.max(Number.EPSILON, grid.scaleY)))
+    : 0;
+  const nativeCanvasWidth = requestedNativeSize?.width ?? (grid.sourceRect
+    ? Math.max(
+        compositionX + reconstructed.width,
+        Math.floor((source.width - phaseX) / Math.max(Number.EPSILON, grid.scaleX))
+      )
+    : grid.outputWidth);
+  const nativeCanvasHeight = requestedNativeSize?.height ?? (grid.sourceRect
+    ? Math.max(
+        compositionY + reconstructed.height,
+        Math.floor((source.height - phaseY) / Math.max(Number.EPSILON, grid.scaleY))
+      )
+    : grid.outputHeight);
 
   return {
     nativeCanvas: { width: nativeCanvasWidth, height: nativeCanvasHeight },
     reconstructedImage: {
       width: reconstructed.width,
       height: reconstructed.height
+    },
+    compositionPlacement: {
+      x: compositionX,
+      y: compositionY,
+      w: reconstructed.width,
+      h: reconstructed.height
     },
     contentBounds,
     contentBoundsSource: hasTransparentPixels(reconstructed)
@@ -1924,6 +1951,26 @@ function isPaletteArtifactChromaColor(r: number, g: number, b: number): boolean 
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {
+  const manualNativeSize = options.reconstruction?.sizeMode === "manual"
+    ? resolveManualNativeSize(options)
+    : undefined;
+  if (manualNativeSize && options.grid.detect === "manual") {
+    return createManualNativeReconstructionGrid(
+      image,
+      {
+        outputWidth: manualNativeSize.width,
+        outputHeight: manualNativeSize.height,
+        scaleX: image.width / manualNativeSize.width,
+        scaleY: image.height / manualNativeSize.height,
+        phaseX: options.grid.phaseX ?? 0,
+        phaseY: options.grid.phaseY ?? 0,
+        confidence: 1,
+        reason: "Manual grid and native reconstruction size"
+      },
+      manualNativeSize
+    );
+  }
+
   if (options.outputSizeMode === "source") {
     return {
       outputWidth: image.width,
@@ -1977,6 +2024,22 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       ...(runtimeCandidates ? { runtimeCandidates } : {})
     });
     const [candidate] = candidates;
+    if (manualNativeSize) {
+      const closest = candidates.reduce(
+        (best, item) => {
+          const distance =
+            Math.abs(item.outputWidth - manualNativeSize.width) +
+            Math.abs(item.outputHeight - manualNativeSize.height);
+          return distance < best.distance ? { candidate: item, distance } : best;
+        },
+        { candidate: candidate!, distance: Number.POSITIVE_INFINITY }
+      ).candidate;
+      return createManualNativeReconstructionGrid(
+        image,
+        closest,
+        manualNativeSize
+      );
+    }
     if (
       options.outputSizeMode !== "detected" &&
       options.targetWidth &&
@@ -2045,6 +2108,65 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
     confidence: 1,
     reason: "Manual grid settings"
   };
+}
+
+function createManualNativeReconstructionGrid(
+  image: RGBAImage,
+  candidate: GridCandidate,
+  size: { width: number; height: number }
+): GridCandidate {
+  const scaleX = image.width / size.width;
+  const scaleY = image.height / size.height;
+  const sourceRect = candidate.sourceRect;
+  return {
+    ...candidate,
+    outputWidth: sourceRect
+      ? Math.max(1, Math.floor(sourceRect.w / scaleX))
+      : size.width,
+    outputHeight: sourceRect
+      ? Math.max(1, Math.floor(sourceRect.h / scaleY))
+      : size.height,
+    scaleX,
+    scaleY,
+    phaseX: sourceRect ? candidate.phaseX : fullCanvasPhase(candidate.phaseX, scaleX),
+    phaseY: sourceRect ? candidate.phaseY : fullCanvasPhase(candidate.phaseY, scaleY),
+    reason: `Manual ${size.width}x${size.height} native reconstruction; ${candidate.reason}`,
+    ...(candidate.diagnostics
+      ? {
+          diagnostics: {
+            ...candidate.diagnostics,
+            cropUsed: sourceRect !== undefined,
+            notes: [
+              ...candidate.diagnostics.notes,
+              "The detector supplied alignment and subject-bound evidence while manual native dimensions remained authoritative."
+            ]
+          }
+        }
+      : {})
+  };
+}
+
+function resolveManualNativeSize(options: FixOptions): { width: number; height: number } {
+  const width = options.reconstruction?.width;
+  const height = options.reconstruction?.height;
+  if (!isPositiveInteger(width) || !isPositiveInteger(height)) {
+    throw new Error(
+      "Manual native reconstruction requires positive integer width and height."
+    );
+  }
+  return { width, height };
+}
+
+function fullCanvasPhase(origin: number, scale: number): number {
+  if (!Number.isFinite(origin) || !Number.isFinite(scale) || scale <= 0) {
+    return 0;
+  }
+  const phase = origin % scale;
+  return phase < 0 ? phase + scale : phase;
+}
+
+function isPositiveInteger(value: number | undefined): value is number {
+  return Number.isInteger(value) && (value ?? 0) > 0;
 }
 
 function attachRobustEligibilityFallback(
