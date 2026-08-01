@@ -39,6 +39,8 @@ The handler understands these routes:
 
 Job requests use JSON bodies with local file paths. Fix requests can target either a single sprite output or a sheet output directory depending on the body fields.
 
+Single-sprite fix requests may set `options.gridStrategy` to `robust` and `options.robustSafety` to `guarded`, `warn`, or `off`. Robust Preview remains opt-in; Classic is used when the strategy is omitted. Selection diagnostics stay in the operation result, and fallback or warning messages are copied to the completed job's `warnings` array.
+
 ## Programmatic Usage
 
 ```ts

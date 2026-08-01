@@ -88,9 +88,19 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options. For single images, reconstruction controls the true native pixel-art result and packaging independently controls its output canvas. Legacy outputSizeMode/target remain supported. Other options include assetType; gridStrategy (classic|robust); robustSafety (guarded|warn|off); fixMixels; palette, downscale, alpha, backgroundDetection, cleanup, and sheet settings. Robust remains opt-in and defaults to guarded safety.",
+  description: "PixelAid automation options. For single images, reconstruction controls the true native pixel-art result and packaging independently controls its output canvas. Legacy outputSizeMode/target remain supported. Robust Preview remains opt-in and defaults to guarded safety. Other options include assetType, fixMixels, palette, downscale, alpha, backgroundDetection, cleanup, and sheet settings.",
   additionalProperties: true,
   properties: {
+    gridStrategy: {
+      type: "string",
+      enum: ["classic", "robust"],
+      description: "Native reconstruction strategy. Classic is the default; Robust is an opt-in preview for eligible single-image assets."
+    },
+    robustSafety: {
+      type: "string",
+      enum: ["guarded", "warn", "off"],
+      description: "Robust Preview safety policy. Guarded is recommended; off exposes the raw expert proposal."
+    },
     reconstruction: {
       type: "object",
       description: "Stage 1 for single images: detect or manually specify the true native pixel-art reconstruction size.",

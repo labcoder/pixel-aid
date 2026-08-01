@@ -421,6 +421,88 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("accepts the first-class reconstruction strategy alias", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "robust-alias.png");
+      const manifest = path.join(dir, "robust-alias.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--output-size",
+        "exact",
+        "--target",
+        "2x2",
+        "--reconstruction-strategy",
+        "robust",
+        "--robust-safety",
+        "guarded",
+        "--full-canvas",
+        "--json"
+      ], capture);
+
+      expect(code).toBe(0);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.operation.settings.grid).toMatchObject({
+        autoStrategy: "robust",
+        robustSafety: "guarded"
+      });
+    });
+  });
+
+  it("prints Robust fallbacks in human-readable output", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "portrait-fallback.png");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--no-auto",
+        "--asset-type",
+        "portrait",
+        "--output-size",
+        "exact",
+        "--target",
+        "2x2",
+        "--reconstruction-strategy",
+        "robust",
+        "--robust-safety",
+        "guarded",
+        "--full-canvas"
+      ], capture);
+
+      expect(code).toBe(0);
+      expect(capture.stdout.join("")).toContain("fix complete");
+      expect(capture.stdout.join("")).toContain(
+        "Warning: Robust grid inference is limited to eligible single-image assets; portrait uses the classic detector."
+      );
+    });
+  });
+
+  it("rejects conflicting reconstruction strategy aliases", async () => {
+    await withFixture(async ({ input }) => {
+      const capture = createCapture();
+      const code = await runCli([
+        "inspect",
+        input,
+        "--reconstruction-strategy",
+        "robust",
+        "--grid-strategy",
+        "classic",
+        "--json"
+      ], capture);
+
+      expect(code).toBe(2);
+      expect(parseStdout(capture).error?.code).toBe("invalid_options");
+    });
+  });
+
   it("separates native reconstruction from exact output-canvas packaging", async () => {
     await withFixture(async ({ dir, input }) => {
       const capture = createCapture();

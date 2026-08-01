@@ -61,6 +61,15 @@ describe("PixelAid MCP-ready handlers", () => {
     const result = response?.result as { tools: typeof pixelaidMcpTools };
     expect(result.tools.map((tool) => tool.name)).toEqual(pixelaidMcpTools.map((tool) => tool.name));
     expect(result.tools[0]?.inputSchema.type).toBe("object");
+    const fixTool = result.tools.find((tool) => tool.name === "fix_sprite");
+    const optionsSchema = fixTool?.inputSchema.properties.options as {
+      properties: {
+        gridStrategy: { enum: string[] };
+        robustSafety: { enum: string[] };
+      };
+    };
+    expect(optionsSchema.properties.gridStrategy.enum).toEqual(["classic", "robust"]);
+    expect(optionsSchema.properties.robustSafety.enum).toEqual(["guarded", "warn", "off"]);
   });
 
   it("handles tools/call JSON-RPC requests with progress-aware structured content", async () => {

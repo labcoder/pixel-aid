@@ -41,14 +41,14 @@ pixelaid fix generated.png \
   --canvas 128x128 \
   --framing preserve \
   --canvas-scale native \
-  --grid-strategy robust \
+  --reconstruction-strategy robust \
   --robust-safety guarded \
   --json
 ```
 
 Sizing now has two explicit stages for single images. `--native-size auto|WIDTHxHEIGHT` controls the true reconstructed pixel-art dimensions. `--canvas content|native|WIDTHxHEIGHT` then packages that reconstruction without changing its native pixels unless `--canvas-scale integer|resample` requests scaling. `--framing preserve` retains proportional source padding, `pack` removes it, and `fit` scales the subject to the selected canvas; `--anchor` controls placement.
 
-For example, a reconstructed `90x113` subject can remain `90x113` inside a `128x128` output while preserving its source-relative position. Background removal does not change that geometry. Robust safety modes are `guarded` (the automation default), `warn`, and `off`; fallback/warning details are returned in the normal JSON diagnostics and warnings. Robust background processing also requires `--full-canvas`. These controls do not implicitly change alpha removal, outlines, palettes, fringe cleanup, or downscale selection.
+For example, a reconstructed `90x113` subject can remain `90x113` inside a `128x128` output while preserving its source-relative position. Background removal does not change that geometry. Robust safety modes are `guarded` (the automation default), `warn`, and `off`; fallback/warning details are returned in the normal JSON diagnostics and warnings and are printed as warnings in human-readable output. Robust background processing also requires `--full-canvas`. These controls do not implicitly change alpha removal, outlines, palettes, fringe cleanup, or downscale selection. `--grid-strategy` remains a back-compatible alias for `--reconstruction-strategy`.
 
 Existing scripts can continue using `--output-size source|detected|exact` and `--target WIDTHxHEIGHT`. Those flags retain the legacy combined sizing contract; new workflows should prefer `--native-size` plus `--canvas` so reconstruction and packaging cannot be confused.
 

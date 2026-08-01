@@ -134,6 +134,48 @@ describe("PixelAid local HTTP automation API", () => {
     expect(exported.body.job?.result).toEqual({ targets: ["godot"] });
   });
 
+  it("preserves Robust Preview options and fallback warnings in job JSON", async () => {
+    let seenOptions: unknown;
+    const fallback = "Robust requested -> Classic used for this fixture.";
+    const api = createPixelAidHttpHandler({
+      idFactory: () => "robust_preview",
+      operations: {
+        fixSprite: async (body) => {
+          seenOptions = body.options;
+          return automationOk(
+            { outputPath: body.outputPath, selectedStrategy: "classic" },
+            [fallback]
+          );
+        }
+      }
+    });
+
+    await request(api, {
+      method: "POST",
+      path: "/v1/jobs/fix",
+      body: JSON.stringify({
+        inputPath: "sprite.png",
+        outputPath: "fixed.png",
+        options: {
+          gridStrategy: "robust",
+          robustSafety: "guarded"
+        }
+      })
+    });
+
+    const completed = await waitForJob(api, "robust_preview", "succeeded");
+
+    expect(seenOptions).toEqual({
+      gridStrategy: "robust",
+      robustSafety: "guarded"
+    });
+    expect(completed.body.job).toMatchObject({
+      status: "succeeded",
+      result: { selectedStrategy: "classic" },
+      warnings: [fallback]
+    });
+  });
+
   it("cancels running jobs with the automation cancellation controller", async () => {
     const api = createPixelAidHttpHandler({
       idFactory: () => "job_cancel",

@@ -57,6 +57,8 @@ Configure an MCP client to launch that command from a trusted local checkout. Th
 
 The package also exports `pixelaidMcpTools`, `validateToolInput`, `handlePixelAidTool`, and `handlePixelAidMcpRequest` for direct tests or embedded integrations.
 
+`fix_sprite` accepts the same two-stage reconstruction and packaging options as the CLI. Set `options.gridStrategy` to `robust` to opt into Robust Preview and optionally set `options.robustSafety` to `guarded`, `warn`, or `off`; Classic remains the default. Fallback and warning details are returned in both the fix-result diagnostics and `structuredContent.warnings`.
+
 ## Development Notes
 
 - Keep tool schemas aligned with `@pixelaid/automation` request shapes.

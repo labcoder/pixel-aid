@@ -441,9 +441,14 @@ function emitAutomation<T>(
   return {
     code: 0,
     payload: { ok: true, command, result: sanitizeAutomationValue(result.value), warnings: result.warnings },
-    human: `${command} complete\n`,
+    human: formatAutomationHuman(command, result.warnings),
     diagnostics: { ...diagnostics, warnings: result.warnings },
   };
+}
+
+function formatAutomationHuman(command: string, warnings: readonly string[]): string {
+  const warningLines = warnings.map((warning) => `Warning: ${warning}\n`).join("");
+  return `${command} complete\n${warningLines}`;
 }
 
 function sanitizeAutomationValue(value: unknown): unknown {
@@ -845,7 +850,14 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   }
 
   const gridMode = takeValue(args, "--grid");
-  const gridStrategy = takeValue(args, "--grid-strategy");
+  const reconstructionStrategy = takeValue(args, "--reconstruction-strategy");
+  const legacyGridStrategy = takeValue(args, "--grid-strategy");
+  if (reconstructionStrategy && legacyGridStrategy) {
+    throw new CliUsageError(
+      "Use either --reconstruction-strategy or --grid-strategy, not both."
+    );
+  }
+  const gridStrategy = reconstructionStrategy ?? legacyGridStrategy;
   const robustSafety = takeValue(args, "--robust-safety");
   const cropToBounds = takeBooleanChoice(
     args,
@@ -1164,7 +1176,8 @@ function usageText(): string {
     "",
     "Native reconstruction (stage 1):",
     "  --native-size auto|WIDTHxHEIGHT  Detect or manually set the true reconstructed pixel-art size",
-    "  --grid-strategy classic|robust  Choose the Classic or opt-in Robust native reconstruction detector",
+    "  --reconstruction-strategy classic|robust  Choose Classic or opt-in Robust Preview reconstruction",
+    "  --grid-strategy classic|robust  Back-compatible alias for --reconstruction-strategy",
     "  --robust-safety guarded|warn|off  Fall back, warn, or use the raw Robust proposal (default: guarded)",
     "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
     "  --fix-mixels                   Normalize uneven pixel block sizes (mixels) before downscaling",

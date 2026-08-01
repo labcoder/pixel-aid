@@ -30,7 +30,7 @@ pixelaid report input.png more.png --colors 24 --json
 pixelaid suggest input.png --asset-type sprite --target 64x64 --json
 pixelaid fix input.png --out hero.png --manifest hero.json --target 64x64 --colors 24
 pixelaid fix generated.jpg --out hero.png --manifest hero.json --auto --asset-type sprite --json
-pixelaid fix generated.png --out fixed.png --native-size auto --canvas 128x128 --framing preserve --canvas-scale native --grid-strategy robust --robust-safety guarded --json
+pixelaid fix generated.png --out fixed.png --native-size auto --canvas 128x128 --framing preserve --canvas-scale native --reconstruction-strategy robust --robust-safety guarded --json
 pixelaid fix-sheet sheet.png --out-dir ./out --frames frames.json --asset-type animation
 pixelaid palette input.png --max-colors 24 --out palette.hex
 pixelaid export input.png --out-dir ./bundle --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip
@@ -59,7 +59,7 @@ Useful fix flags:
 - `--anchor center|bottom-center|top-left|X,Y`
 - `--target WIDTHxHEIGHT`
 - `--output-size detected|source|exact` (`exact` requires `--target`; the other modes reject target dimensions)
-- `--grid-strategy classic|robust` (Classic remains the default)
+- `--reconstruction-strategy classic|robust` (Classic remains the default; `--grid-strategy` is a back-compatible alias)
 - `--robust-safety guarded|warn|off` (automation defaults to `guarded` when Robust is selected)
 - `--crop-to-bounds` / `--full-canvas` (Robust backgrounds require the full-canvas form)
 - `--colors N` or `--max-colors N`
@@ -83,7 +83,7 @@ Useful fix flags:
 - `--contrast-expansion` / `--no-contrast-expansion`
 - `--denoise-strength N`
 
-Robust native-size inference is experimental and opt-in. `guarded` compares the Robust proposal with Classic and falls back for weakly supported severe aspect changes. It also catches moderate anisotropy when Robust has weak axis evidence, loses materially on confidence, and disagrees with a well-supported isotropic Classic reference. Decisive independent reconstruction consensus preserves legitimate non-square pixels. `warn` keeps the same Robust proposal but adds a structured warning. `off` exposes the frozen raw detector behavior for controlled testing. The selected strategy, fallback decision, reason codes, and both candidate summaries are serialized under `result.grid.diagnostics.selection`; warning and fallback messages are also included in the normal automation `warnings` array.
+Robust Preview native-size inference is opt-in. `guarded` compares the Robust proposal with Classic and falls back for weakly supported severe aspect changes. It also catches moderate anisotropy when Robust has weak axis evidence, loses materially on confidence, and disagrees with a well-supported isotropic Classic reference. Decisive independent reconstruction consensus preserves legitimate non-square pixels. `warn` keeps the same Robust proposal but adds a structured warning. `off` exposes the frozen raw detector behavior for controlled expert testing. The selected strategy, fallback decision, reason codes, and both candidate summaries are serialized under `result.grid.diagnostics.selection`; warning and fallback messages are also included in the normal automation `warnings` array. The CLI prints those messages in human-readable mode, HTTP jobs retain them in `job.warnings`, and MCP calls retain them in `structuredContent.warnings`.
 
 Native reconstruction and output packaging are independent. At the automation API/MCP level, use `options.reconstruction: { sizeMode: "auto" | "manual", width?, height? }` and `options.packaging: { canvasMode: "content" | "native" | "exact", width?, height?, framing, scale, anchor, offsetX?, offsetY? }`. Manual reconstruction requires both native dimensions; exact packaging requires both canvas dimensions. These options currently apply to single-image assets, while sheets continue to use their frame and sheet normalization controls.
 
