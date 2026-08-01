@@ -77,6 +77,57 @@ function fixResult(): PixelFixResult {
   };
 }
 
+function robustFallbackResult(): PixelFixResult {
+  const base = fixResult();
+  return {
+    ...base,
+    settings: {
+      ...base.settings,
+      grid: {
+        detect: "auto",
+        autoStrategy: "robust",
+        robustSafety: "guarded"
+      }
+    },
+    grid: {
+      ...base.grid,
+      diagnostics: {
+        edgeScore: 0.52,
+        runScore: 0.41,
+        sizeScore: 0.8,
+        scaleScore: 0.76,
+        divisibilityScore: 1,
+        cropUsed: false,
+        sourceCoverage: 1,
+        confidenceLabel: "medium",
+        notes: [],
+        selection: {
+          requestedStrategy: "robust",
+          selectedStrategy: "classic",
+          robustSafety: "guarded",
+          decision: "fallback",
+          reasonCodes: ["moderate-anisotropy", "weak-axis-evidence"],
+          message: "Guarded Robust inference fell back to Classic.",
+          robustCandidate: {
+            outputWidth: 3,
+            outputHeight: 2,
+            scaleX: 0.75,
+            scaleY: 1,
+            confidence: 0.54
+          },
+          classicCandidate: {
+            outputWidth: 2,
+            outputHeight: 2,
+            scaleX: 1,
+            scaleY: 1,
+            confidence: 0.83
+          }
+        }
+      }
+    }
+  };
+}
+
 describe("PixelAid asset document archives", () => {
   test("creates and reads a versioned .pixelaid archive", () => {
     const archive = createPixelAidDocumentArchive({
@@ -134,6 +185,54 @@ describe("PixelAid asset document archives", () => {
       image: { width: 2, height: 2 },
       palette: ["#000000"]
     });
+  });
+
+  test("round-trips Robust Preview settings and fallback diagnostics", () => {
+    const serializedResult = serializePixelFixResultForDocument(robustFallbackResult());
+    const archive = createPixelAidDocumentArchive({
+      appVersion: "0.2.0",
+      asset: asset(),
+      sourcePngBytes,
+      fixedPngBytes,
+      session: {
+        assetId: "asset-1",
+        settings: {
+          gridAutoStrategy: "robust",
+          robustSafety: "guarded"
+        },
+        fixResult: serializedResult
+      },
+      createdAt: "2026-08-01T00:00:00.000Z"
+    });
+
+    const parsed = readPixelAidDocumentArchive(archive.bytes);
+    const session = parsed.session as {
+      settings: { gridAutoStrategy: string; robustSafety: string };
+      fixResult: ReturnType<typeof serializePixelFixResultForDocument>;
+    };
+
+    expect(session.settings).toEqual({
+      gridAutoStrategy: "robust",
+      robustSafety: "guarded"
+    });
+    expect(session.fixResult?.settings.grid).toMatchObject({
+      detect: "auto",
+      autoStrategy: "robust",
+      robustSafety: "guarded"
+    });
+    expect(session.fixResult?.grid.diagnostics?.selection).toMatchObject({
+      requestedStrategy: "robust",
+      selectedStrategy: "classic",
+      robustSafety: "guarded",
+      decision: "fallback",
+      reasonCodes: ["moderate-anisotropy", "weak-axis-evidence"]
+    });
+
+    const hydrated = hydratePixelFixResultFromDocument(
+      session.fixResult,
+      { width: 2, height: 2, data: new Uint8ClampedArray(16) }
+    );
+    expect(hydrated?.grid.diagnostics?.selection?.decision).toBe("fallback");
   });
 
   test("uses a distinct .pixelaid filename", () => {

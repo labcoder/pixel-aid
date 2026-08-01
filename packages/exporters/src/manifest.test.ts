@@ -365,6 +365,78 @@ describe("generic manifest export", () => {
     });
   });
 
+  test("preserves Robust Preview settings and Guarded selection diagnostics", () => {
+    const robustResult: PixelFixResult = {
+      ...result,
+      settings: {
+        ...settings,
+        mode: "single",
+        assetType: "sprite",
+        grid: {
+          detect: "auto",
+          autoStrategy: "robust",
+          robustSafety: "guarded"
+        },
+        sheet: undefined
+      },
+      grid: {
+        ...result.grid,
+        diagnostics: {
+          edgeScore: 0.52,
+          runScore: 0.41,
+          sizeScore: 0.8,
+          scaleScore: 0.76,
+          divisibilityScore: 1,
+          cropUsed: false,
+          sourceCoverage: 1,
+          confidenceLabel: "medium",
+          notes: [],
+          selection: {
+            requestedStrategy: "robust",
+            selectedStrategy: "classic",
+            robustSafety: "guarded",
+            decision: "fallback",
+            reasonCodes: ["severe-anisotropy", "weak-axis-evidence"],
+            message: "Guarded Robust inference fell back to Classic.",
+            robustCandidate: {
+              outputWidth: 44,
+              outputHeight: 16,
+              scaleX: 3,
+              scaleY: 4,
+              confidence: 0.48
+            },
+            classicCandidate: {
+              outputWidth: 32,
+              outputHeight: 16,
+              scaleX: 4,
+              scaleY: 4,
+              confidence: 0.82
+            }
+          }
+        }
+      }
+    };
+
+    const manifest = createPixelAssetManifest({
+      result: robustResult,
+      imageName: "hero.png"
+    });
+
+    expect(manifest.meta.operation.settings.grid).toMatchObject({
+      detect: "auto",
+      autoStrategy: "robust",
+      robustSafety: "guarded"
+    });
+    expect(manifest.meta.operation.grid.diagnostics?.selection).toMatchObject({
+      requestedStrategy: "robust",
+      selectedStrategy: "classic",
+      robustSafety: "guarded",
+      decision: "fallback",
+      reasonCodes: ["severe-anisotropy", "weak-axis-evidence"]
+    });
+    expect(validateManifest(manifest)).toEqual([]);
+  });
+
   test("exports engine guidance placeholders for Godot and Unity", () => {
     expect(GODOT_IMPORT_GUIDANCE.join("\n")).toContain("nearest");
     expect(UNITY_IMPORT_GUIDANCE.join("\n")).toContain("Point");
