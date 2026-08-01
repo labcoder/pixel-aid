@@ -4,7 +4,9 @@ import type {
   DownscaleMethod,
   GridAutoStrategy,
   GridRobustSafety,
+  NativeSizeMode,
   OutlineMode,
+  OutputPackagingOptions,
   OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
@@ -22,6 +24,8 @@ export type EngineDefaultFixSettings = {
   targetWidth: number;
   targetHeight: number;
   outputSizeMode: OutputSizeMode;
+  nativeSizeMode: NativeSizeMode;
+  outputPackaging: OutputPackagingOptions;
   maxColors: number;
   paletteMode: PaletteMode;
   paletteStrategy: PaletteStrategy;
@@ -84,6 +88,15 @@ const defaultFixSettings: EngineDefaultFixSettings = {
   targetWidth: 64,
   targetHeight: 64,
   outputSizeMode: "exact",
+  nativeSizeMode: "manual",
+  outputPackaging: {
+    canvasMode: "content",
+    width: 64,
+    height: 64,
+    framing: "preserveComposition",
+    scale: "native",
+    anchor: "center"
+  },
   maxColors: 16,
   paletteMode: "auto",
   paletteStrategy: "medianCut",
@@ -144,6 +157,7 @@ const defaultFixSettings: EngineDefaultFixSettings = {
 export function createDefaultFixSettings(): EngineDefaultFixSettings {
   return {
     ...defaultFixSettings,
+    outputPackaging: { ...defaultFixSettings.outputPackaging },
     selectedOutlineSourceColors: [...defaultFixSettings.selectedOutlineSourceColors]
   };
 }

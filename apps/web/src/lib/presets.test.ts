@@ -19,6 +19,15 @@ describe("editor presets", () => {
         targetWidth: 32,
         targetHeight: 32,
         outputSizeMode: "exact",
+        nativeSizeMode: "manual",
+        outputPackaging: {
+          canvasMode: "content",
+          width: 32,
+          height: 32,
+          framing: "preserveComposition",
+          scale: "native",
+          anchor: "center"
+        },
         maxColors: 16,
         gridDetect: "auto",
         gridAutoStrategy: "classic",

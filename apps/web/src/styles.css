@@ -1716,6 +1716,61 @@ button:focus-visible {
   padding: 10px;
 }
 
+.pixel-pipeline-panel {
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 12px 12px;
+  padding: 12px;
+  background: #101414;
+  border: 1px solid #3b4543;
+  border-radius: 8px;
+}
+
+.pixel-pipeline-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.pixel-pipeline-heading h2,
+.pixel-pipeline-heading p,
+.pixel-pipeline-stage-title strong,
+.pixel-pipeline-stage-title small {
+  margin: 0;
+}
+
+.pixel-pipeline-heading h2 {
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.pixel-pipeline-heading p,
+.pixel-pipeline-stage-title small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.pixel-pipeline-stage {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem;
+  background: #151a1a;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.pixel-pipeline-stage-title {
+  display: grid;
+  gap: 0.12rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid #28302f;
+}
+
+.pixel-pipeline-stage-title strong {
+  color: var(--amber);
+  font-size: 0.75rem;
+}
+
 .guided-fix-heading {
   display: grid;
   gap: 0.3rem;

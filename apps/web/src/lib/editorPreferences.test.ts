@@ -180,11 +180,20 @@ describe("editor preferences", () => {
     expect(invalid.settings.protectSalientColors).toBe(true);
   });
 
-  test("defaults to Classic exact sizing and round-trips opt-in Robust controls", () => {
+  test("defaults to Classic two-stage sizing and round-trips opt-in controls", () => {
     const defaults = createDefaultEditorPreferences();
     const normalized = normalizeEditorPreferences({
       settings: {
         outputSizeMode: "detected",
+        nativeSizeMode: "auto",
+        outputPackaging: {
+          canvasMode: "exact",
+          width: 128,
+          height: 96,
+          framing: "fitSubject",
+          scale: "integerFit",
+          anchor: "bottomCenter"
+        },
         gridAutoStrategy: "robust",
         robustSafety: "warn"
       }
@@ -192,6 +201,14 @@ describe("editor preferences", () => {
     const invalid = normalizeEditorPreferences({
       settings: {
         outputSizeMode: "stretch",
+        nativeSizeMode: "magic",
+        outputPackaging: {
+          canvasMode: "stretch",
+          width: -2,
+          framing: "crop",
+          scale: "smooth",
+          anchor: "outside"
+        },
         gridAutoStrategy: "magic",
         robustSafety: "always"
       }
@@ -199,16 +216,42 @@ describe("editor preferences", () => {
 
     expect(defaults.settings).toMatchObject({
       outputSizeMode: "exact",
+      nativeSizeMode: "manual",
+      outputPackaging: {
+        canvasMode: "content",
+        width: 64,
+        height: 64,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      },
       gridAutoStrategy: "classic",
       robustSafety: "guarded"
     });
     expect(normalized.settings).toMatchObject({
       outputSizeMode: "detected",
+      nativeSizeMode: "auto",
+      outputPackaging: {
+        canvasMode: "exact",
+        width: 128,
+        height: 96,
+        framing: "fitSubject",
+        scale: "integerFit",
+        anchor: "bottomCenter"
+      },
       gridAutoStrategy: "robust",
       robustSafety: "warn"
     });
     expect(invalid.settings).toMatchObject({
       outputSizeMode: "exact",
+      nativeSizeMode: "manual",
+      outputPackaging: expect.objectContaining({
+        canvasMode: "content",
+        width: 1,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      }),
       gridAutoStrategy: "classic",
       robustSafety: "guarded"
     });

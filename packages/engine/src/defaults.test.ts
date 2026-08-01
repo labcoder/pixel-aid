@@ -11,6 +11,15 @@ describe("engine default settings", () => {
       targetWidth: 64,
       targetHeight: 64,
       outputSizeMode: "exact",
+      nativeSizeMode: "manual",
+      outputPackaging: {
+        canvasMode: "content",
+        width: 64,
+        height: 64,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      },
       maxColors: 16,
       paletteMode: "auto",
       paletteStrategy: "medianCut",
@@ -34,7 +43,9 @@ describe("engine default settings", () => {
     const second = createDefaultFixSettings();
 
     first.selectedOutlineSourceColors.push("#ffffff");
+    first.outputPackaging.canvasMode = "exact";
 
     expect(second.selectedOutlineSourceColors).toEqual([]);
+    expect(second.outputPackaging.canvasMode).toBe("content");
   });
 });

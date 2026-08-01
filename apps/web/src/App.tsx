@@ -41,7 +41,9 @@ import type {
   GridCandidate,
   GridRobustSafety,
   LineCleanupStrength,
+  NativeSizeMode,
   OutlineMode,
+  OutputPackagingOptions,
   OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
@@ -160,6 +162,7 @@ import {
 import { isDesktopRuntime, openDesktopImageFiles, saveDesktopBundleFile } from "./lib/desktopBridge";
 import {
   createDefaultEditorPreferences,
+  defaultEditorPreferenceSettings,
   editorPreferencesVersion,
   loadEditorPreferences,
   saveEditorPreferences,
@@ -216,8 +219,7 @@ import {
   denoiseStrengthLabel,
   deriveGridScale,
   keepSourceSize,
-  resizeWithAspectLock,
-  targetSizePresets
+  resizeWithAspectLock
 } from "./lib/fixControls";
 import { createOutlineCandidateView, hasManualSuspectOutlineSource } from "./lib/outlineCandidateView";
 import { formatFixProgress, shouldLogProgressStage } from "./lib/fixProgress";
@@ -861,6 +863,8 @@ type AssetEditorSession = {
     targetWidth: number;
     targetHeight: number;
     outputSizeMode: OutputSizeMode;
+    nativeSizeMode?: NativeSizeMode;
+    outputPackaging?: OutputPackagingOptions;
     maxColors: number;
     maxColorsAuto: boolean;
     paletteMode: PaletteMode;
@@ -1060,6 +1064,10 @@ export function App() {
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
   const [targetHeight, setTargetHeight] = useState(initialSettings.targetHeight);
   const [outputSizeMode, setOutputSizeMode] = useState<OutputSizeMode>(initialSettings.outputSizeMode);
+  const [nativeSizeMode, setNativeSizeMode] = useState<NativeSizeMode>(initialSettings.nativeSizeMode);
+  const [outputPackaging, setOutputPackaging] = useState<OutputPackagingOptions>(() => ({
+    ...initialSettings.outputPackaging
+  }));
   const [maxColors, setMaxColors] = useState(initialSettings.maxColors);
   const [maxColorsAuto, setMaxColorsAuto] = useState(initialSettings.maxColorsAuto);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>(initialSettings.paletteMode);
@@ -1327,6 +1335,8 @@ export function App() {
       setTargetWidth(settings.targetWidth);
       setTargetHeight(settings.targetHeight);
       setOutputSizeMode(settings.outputSizeMode);
+      setNativeSizeMode(settings.nativeSizeMode);
+      setOutputPackaging({ ...settings.outputPackaging });
       setMaxColors(settings.maxColors);
       setMaxColorsAuto(settings.maxColorsAuto);
       setPaletteMode(settings.paletteMode);
@@ -1425,6 +1435,8 @@ export function App() {
         targetWidth,
         targetHeight,
         outputSizeMode,
+        nativeSizeMode,
+        outputPackaging,
         maxColors,
         maxColorsAuto,
         paletteMode,
@@ -1537,6 +1549,8 @@ export function App() {
     morphologyCleanup,
     normalizeTimelineFrames,
     outputSizeMode,
+    nativeSizeMode,
+    outputPackaging,
     outlineAlpha,
     outlineColor,
     outlineColorEdited,
@@ -1823,6 +1837,8 @@ export function App() {
         targetWidth,
         targetHeight,
         outputSizeMode,
+        nativeSizeMode,
+        outputPackaging: { ...outputPackaging },
         maxColors,
         maxColorsAuto,
         paletteMode,
@@ -1990,6 +2006,8 @@ export function App() {
       morphologyCleanup,
       normalizeTimelineFrames,
       outputSizeMode,
+      nativeSizeMode,
+      outputPackaging,
       outlineAlpha,
       outlineColor,
       outlineColorEdited,
@@ -2095,6 +2113,14 @@ export function App() {
     setTargetWidth(settings.targetWidth);
     setTargetHeight(settings.targetHeight);
     setOutputSizeMode(settings.outputSizeMode ?? "exact");
+    setNativeSizeMode(
+      settings.nativeSizeMode ??
+        (settings.outputSizeMode === "detected" ? "auto" : "manual")
+    );
+    setOutputPackaging({
+      ...defaultEditorPreferenceSettings.outputPackaging,
+      ...settings.outputPackaging
+    });
     setMaxColors(settings.maxColors);
     setMaxColorsAuto(settings.maxColorsAuto ?? false);
     setPaletteMode(settings.paletteMode);
@@ -2334,7 +2360,6 @@ export function App() {
       mode !== "single" ||
       gridDetect !== "auto" ||
       gridAutoStrategy !== "robust" ||
-      outputSizeMode === "source" ||
       alpha === "backgroundFloodFill" ||
       gridCandidates.length > 0 ||
       !(
@@ -2350,7 +2375,7 @@ export function App() {
     const job = startGridDetectionJob(selectedAsset.image, {
       strategy: "robust",
       cropToBounds:
-        outputSizeMode === "exact" || selectedAsset.assetType === "background"
+        selectedAsset.assetType === "background"
           ? false
           : cropToBounds,
       maxScale: 32,
@@ -2405,7 +2430,6 @@ export function App() {
     gridCandidates.length,
     gridDetect,
     mode,
-    outputSizeMode,
     selectedAsset
   ]);
   const outputPalette = fixResult?.palette ?? [];
@@ -3308,6 +3332,8 @@ export function App() {
         effectiveTargetWidth,
         effectiveTargetHeight,
         outputSizeMode,
+        nativeSizeMode,
+        outputPackaging,
         maxColors,
         paletteMode,
         paletteStrategy,
@@ -3717,7 +3743,7 @@ export function App() {
     setMode(resolvedMode);
     setTargetWidth(suggestion.targetWidth);
     setTargetHeight(suggestion.targetHeight);
-    setOutputSizeMode("exact");
+    setNativeSizeMode("manual");
     setFrameWidth(layout?.frameWidth ?? suggestion.targetWidth);
     setFrameHeight(layout?.frameHeight ?? suggestion.targetHeight);
     setSheetRows(layout?.rows ?? 1);
@@ -4395,8 +4421,28 @@ export function App() {
     const options: FixOptions = {
       mode,
       assetType,
-      ...(mode === "single" ? { outputSizeMode } : {}),
-      ...(sheetMode || outputSizeMode === "exact"
+      ...(mode === "single"
+        ? {
+            reconstruction:
+              nativeSizeMode === "manual"
+                ? {
+                    sizeMode: "manual" as const,
+                    width: effectiveTargetWidth,
+                    height: effectiveTargetHeight
+                  }
+                : { sizeMode: "auto" as const },
+            packaging: {
+              ...outputPackaging,
+              ...(outputPackaging.canvasMode === "exact"
+                ? {
+                    width: outputPackaging.width ?? effectiveTargetWidth,
+                    height: outputPackaging.height ?? effectiveTargetHeight
+                  }
+                : {})
+            }
+          }
+        : {}),
+      ...(sheetMode
         ? {
             targetWidth: effectiveTargetWidth,
             targetHeight: effectiveTargetHeight
@@ -4520,7 +4566,9 @@ export function App() {
     matteCleanup,
     mode,
     morphologyCleanup,
+    nativeSizeMode,
     outputSizeMode,
+    outputPackaging,
     outlineColor,
     outlineAlpha,
     outlineColorEdited,
@@ -4891,6 +4939,8 @@ export function App() {
           targetWidth,
           targetHeight,
           outputSizeMode,
+          nativeSizeMode,
+          outputPackaging,
           maxColors,
           gridDetect,
           gridAutoStrategy,
@@ -4922,6 +4972,8 @@ export function App() {
       setPaletteBudget(next.maxColors);
       setGridDetect(next.gridDetect);
       setOutputSizeMode(next.outputSizeMode);
+      setNativeSizeMode(next.nativeSizeMode);
+      setOutputPackaging({ ...next.outputPackaging });
       setGridAutoStrategy(next.gridAutoStrategy);
       setRobustSafety(next.robustSafety);
       setGridScaleX(next.gridScaleX);
@@ -4935,7 +4987,7 @@ export function App() {
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridAutoStrategy, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, outputSizeMode, robustSafety, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
+    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridAutoStrategy, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, nativeSizeMode, outputPackaging, outputSizeMode, robustSafety, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
   );
 
   const currentEditorPresetSettings = useCallback(
@@ -4945,6 +4997,8 @@ export function App() {
       targetWidth,
       targetHeight,
       outputSizeMode,
+      nativeSizeMode,
+      outputPackaging: { ...outputPackaging },
       maxColors,
       gridDetect,
       gridAutoStrategy,
@@ -4954,7 +5008,7 @@ export function App() {
       downscale,
       alpha
     }),
-    [alpha, assetType, downscale, gridAutoStrategy, gridDetect, gridScaleX, gridScaleY, maxColors, mode, outputSizeMode, robustSafety, targetHeight, targetWidth]
+    [alpha, assetType, downscale, gridAutoStrategy, gridDetect, gridScaleX, gridScaleY, maxColors, mode, nativeSizeMode, outputPackaging, outputSizeMode, robustSafety, targetHeight, targetWidth]
   );
 
   const saveCurrentEditorPreset = useCallback(() => {
@@ -5122,8 +5176,7 @@ export function App() {
       const nextHeight = Math.max(1, Math.round(next.targetHeight));
       setTargetWidth(nextWidth);
       setTargetHeight(nextHeight);
-      setOutputSizeMode("exact");
-      setCropToBounds(false);
+      setNativeSizeMode("manual");
       if (selectedAsset) {
         const scale = deriveGridScale(selectedAsset.image, { width: nextWidth, height: nextHeight });
         setGridScaleX(scale.scaleX);
@@ -5143,23 +5196,6 @@ export function App() {
           targetHeight,
           changed,
           value,
-          locked: aspectLocked
-        })
-      );
-    },
-    [aspectLocked, commitTargetSize, selectedAsset, targetHeight, targetWidth]
-  );
-
-  const applyTargetPreset = useCallback(
-    (dimension: "width" | "height", preset: number) => {
-      commitTargetSize(
-        applyTargetSizePreset({
-          sourceWidth: selectedAsset?.image.width ?? targetWidth,
-          sourceHeight: selectedAsset?.image.height ?? targetHeight,
-          targetWidth,
-          targetHeight,
-          dimension,
-          preset,
           locked: aspectLocked
         })
       );
@@ -5192,8 +5228,14 @@ export function App() {
 
     setAspectLocked(true);
     commitTargetSize(keepSourceSize(selectedAsset.image));
-    setOutputSizeMode("source");
-    appendLog("Set output size to keep source dimensions");
+    setCropToBounds(false);
+    setOutputPackaging((current) => ({
+      ...current,
+      canvasMode: "native",
+      framing: "preserveComposition",
+      scale: "native"
+    }));
+    appendLog("Set native reconstruction and canvas to source dimensions");
   }, [appendLog, commitTargetSize, selectedAsset]);
 
   const applySimpleAlphaChoice = useCallback(
@@ -6485,6 +6527,7 @@ export function App() {
     (candidate: GridCandidate) => {
       clearDetectedSheetLayout();
       setGridDetect("auto");
+      setNativeSizeMode("manual");
       setTargetWidth(candidate.outputWidth);
       setTargetHeight(candidate.outputHeight);
       setGridScaleX(candidate.scaleX);
@@ -6505,7 +6548,7 @@ export function App() {
     (candidate: GridCandidate) => {
       clearDetectedSheetLayout();
       setGridDetect("manual");
-      setOutputSizeMode("exact");
+      setNativeSizeMode("manual");
       setTargetWidth(candidate.outputWidth);
       setTargetHeight(candidate.outputHeight);
       setGridScaleX(candidate.scaleX);
@@ -7407,76 +7450,13 @@ export function App() {
           </>
         ) : (
           <>
-            <SelectField
-              label="Output sizing"
-              value={outputSizeMode}
-              options={[
-                ["exact", "Exact dimensions"],
-                ["detected", "Automatic detected"],
-                ["source", "Keep source 1:1"]
-              ]}
-              onChange={(value) => {
-                const next = value as OutputSizeMode;
-                if (next === "source") {
-                  applyKeepSourceSize();
-                  return;
-                }
-                setOutputSizeMode(next);
-                if (next === "detected") {
-                  setGridDetect("auto");
-                }
-              }}
+            <ReadonlyField
+              label="Native / canvas"
+              value={`${nativeSizeMode === "auto" ? "Auto" : `${targetWidth}x${targetHeight}`} / ${outputPackaging.canvasMode === "exact" ? `${outputPackaging.width ?? targetWidth}x${outputPackaging.height ?? targetHeight}` : outputPackaging.canvasMode}`}
+              text
             />
-            {outputSizeMode === "exact" ? (
-              <>
-                <DimensionField
-                  label="Output W"
-                  value={targetWidth}
-                  min={1}
-                  max={Math.max(512, targetWidth)}
-                  onChange={(value) => updateTargetSize("width", value)}
-                />
-                <DimensionField
-                  label="Output H"
-                  value={targetHeight}
-                  min={1}
-                  max={Math.max(512, targetHeight)}
-                  onChange={(value) => updateTargetSize("height", value)}
-                />
-                <TargetPresetButtons
-                  label={aspectLocked ? "Size presets" : "Width presets"}
-                  presets={targetSizePresets}
-                  activeValue={targetWidth}
-                  onSelect={(preset) => applyTargetPreset("width", preset)}
-                />
-                {!aspectLocked ? (
-                  <TargetPresetButtons
-                    label="Height presets"
-                    presets={targetSizePresets}
-                    activeValue={targetHeight}
-                    onSelect={(preset) => applyTargetPreset("height", preset)}
-                  />
-                ) : null}
-                <label className="toggle-row">
-                  <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
-                  Lock aspect ratio
-                </label>
-              </>
-            ) : (
-              <ReadonlyField
-                label={outputSizeMode === "source" ? "Output" : "Detected"}
-                value={
-                  outputSizeMode === "source" && selectedAsset
-                    ? `${selectedAsset.image.width}x${selectedAsset.image.height}`
-                    : gridCandidates[0]
-                      ? `${gridCandidates[0].outputWidth}x${gridCandidates[0].outputHeight}`
-                      : "Run detector"
-                }
-                text
-              />
-            )}
             <p className="field-note">
-              Exact guarantees the requested canvas, Detected lets the selected grid detector choose native dimensions, and Keep source processes the decoded image at 1:1.
+              Reconstruction strategy, native size, and output canvas now live in Pixel pipeline above Advanced controls.
             </p>
           </>
         )}
@@ -7908,40 +7888,7 @@ export function App() {
       <>
         {mode === "single" ? (
           <>
-            <SelectField
-              label="Grid strategy"
-              value={gridAutoStrategy}
-              options={[
-                ["classic", "Classic"],
-                ["robust", "Robust (experimental)"]
-              ]}
-              onChange={(value) => {
-                const next = value as GridAutoStrategy;
-                clearDetectedSheetLayout();
-                setGridAutoStrategy(next);
-                setGridDetect("auto");
-                if (next === "robust" && assetType === "background") {
-                  setCropToBounds(false);
-                }
-              }}
-            />
-            {gridAutoStrategy === "robust" ? (
-              <>
-                <SelectField
-                  label="Robust safety"
-                  value={robustSafety}
-                  options={[
-                    ["guarded", "Guarded fallback"],
-                    ["warn", "Keep with warning"],
-                    ["off", "Use raw proposal"]
-                  ]}
-                  onChange={(value) => setRobustSafety(value as GridRobustSafety)}
-                />
-                <p className="field-note">
-                  Auto Suggest remains Classic. Robust only runs after you select it here; Guarded may use Classic when aspect evidence is unsafe.
-                </p>
-              </>
-            ) : null}
+            <p className="field-note">Classic / Robust selection is available in Pixel pipeline above Advanced controls.</p>
             {isGridDetectionBusy ? <p className="field-note">Analyzing Robust grid candidates…</p> : null}
           </>
         ) : (
@@ -9160,6 +9107,223 @@ export function App() {
           onRunFix={() => runFix("guided_panel")}
           onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
         />
+        {selectedAsset && mode === "single" ? (
+          <section className="pixel-pipeline-panel" aria-label="Pixel reconstruction and output canvas">
+            <div className="pixel-pipeline-heading">
+              <span className="guided-kicker">Two stages</span>
+              <div>
+                <h2>Pixel pipeline</h2>
+                <p>Reconstruct the true pixels, then package them for export.</p>
+              </div>
+            </div>
+            <div className="pixel-pipeline-stage">
+              <div className="pixel-pipeline-stage-title">
+                <strong>1 · Reconstruction</strong>
+                <small>True sprite and native grid</small>
+              </div>
+              <SelectField
+                label="Strategy"
+                value={gridAutoStrategy}
+                options={[
+                  ["classic", "Classic"],
+                  ["robust", "Robust (experimental)"]
+                ]}
+                onChange={(value) => {
+                  const next = value as GridAutoStrategy;
+                  clearDetectedSheetLayout();
+                  setGridAutoStrategy(next);
+                  setGridDetect("auto");
+                  if (next === "robust" && assetType === "background") {
+                    setCropToBounds(false);
+                  }
+                }}
+              />
+              {gridAutoStrategy === "robust" ? (
+                <SelectField
+                  label="Safety"
+                  value={robustSafety}
+                  options={[
+                    ["guarded", "Guarded fallback"],
+                    ["warn", "Keep with warning"],
+                    ["off", "Use raw proposal"]
+                  ]}
+                  onChange={(value) => setRobustSafety(value as GridRobustSafety)}
+                />
+              ) : null}
+              <SelectField
+                label="Native size"
+                value={nativeSizeMode}
+                options={[
+                  ["auto", "Detect automatically"],
+                  ["manual", "Set native canvas"]
+                ]}
+                onChange={(value) => {
+                  const next = value as NativeSizeMode;
+                  setNativeSizeMode(next);
+                  setOutputSizeMode(next === "auto" ? "detected" : "exact");
+                  if (next === "auto") {
+                    setGridDetect("auto");
+                  }
+                }}
+              />
+              {nativeSizeMode === "manual" ? (
+                <>
+                  <DimensionField
+                    label="Native W"
+                    value={targetWidth}
+                    min={1}
+                    max={Math.max(512, targetWidth)}
+                    onChange={(value) => updateTargetSize("width", value)}
+                  />
+                  <DimensionField
+                    label="Native H"
+                    value={targetHeight}
+                    min={1}
+                    max={Math.max(512, targetHeight)}
+                    onChange={(value) => updateTargetSize("height", value)}
+                  />
+                  <label className="toggle-row">
+                    <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
+                    Lock native aspect ratio
+                  </label>
+                </>
+              ) : (
+                <ReadonlyField
+                  label="Detected"
+                  value={gridCandidates[0] ? `${gridCandidates[0].outputWidth}x${gridCandidates[0].outputHeight}` : "Run detector"}
+                  text
+                />
+              )}
+            </div>
+            <div className="pixel-pipeline-stage">
+              <div className="pixel-pipeline-stage-title">
+                <strong>2 · Output canvas</strong>
+                <small>Bounds, padding, scale, and anchor</small>
+              </div>
+              <SelectField
+                label="Canvas"
+                value={outputPackaging.canvasMode}
+                options={[
+                  ["content", "Reconstructed content"],
+                  ["native", "Native composition"],
+                  ["exact", "Exact canvas"]
+                ]}
+                onChange={(value) =>
+                  setOutputPackaging((current) => {
+                    const canvasMode = value as OutputPackagingOptions["canvasMode"];
+                    return {
+                      ...current,
+                      canvasMode,
+                      ...(canvasMode === "exact" && current.canvasMode !== "exact"
+                        ? { width: targetWidth, height: targetHeight }
+                        : {})
+                    };
+                  })
+                }
+              />
+              {outputPackaging.canvasMode === "exact" ? (
+                <>
+                  <DimensionField
+                    label="Canvas W"
+                    value={outputPackaging.width ?? targetWidth}
+                    min={1}
+                    max={Math.max(512, outputPackaging.width ?? targetWidth)}
+                    onChange={(value) =>
+                      setOutputPackaging((current) => ({ ...current, width: Math.max(1, Math.round(value)) }))
+                    }
+                  />
+                  <DimensionField
+                    label="Canvas H"
+                    value={outputPackaging.height ?? targetHeight}
+                    min={1}
+                    max={Math.max(512, outputPackaging.height ?? targetHeight)}
+                    onChange={(value) =>
+                      setOutputPackaging((current) => ({ ...current, height: Math.max(1, Math.round(value)) }))
+                    }
+                  />
+                </>
+              ) : null}
+              <SelectField
+                label="Framing"
+                value={outputPackaging.framing}
+                options={[
+                  ["preserveComposition", "Preserve source composition"],
+                  ["packSubject", "Pack subject"],
+                  ["fitSubject", "Fit subject"]
+                ]}
+                onChange={(value) =>
+                  setOutputPackaging((current) => ({
+                    ...current,
+                    framing: value as OutputPackagingOptions["framing"]
+                  }))
+                }
+              />
+              {outputPackaging.canvasMode !== "content" ? (
+                <>
+                  <SelectField
+                    label="Pixel scale"
+                    value={outputPackaging.scale}
+                    options={[
+                      ["native", "Native pixels"],
+                      ["integerFit", "Largest integer fit"],
+                      ["resample", "Fit with resampling"]
+                    ]}
+                    onChange={(value) =>
+                      setOutputPackaging((current) => ({
+                        ...current,
+                        scale: value as OutputPackagingOptions["scale"]
+                      }))
+                    }
+                  />
+                  <SelectField
+                    label="Anchor"
+                    value={outputPackaging.anchor}
+                    options={[
+                      ["center", "Center"],
+                      ["bottomCenter", "Bottom center"],
+                      ["topLeft", "Top left"],
+                      ["custom", "Custom offset"]
+                    ]}
+                    onChange={(value) =>
+                      setOutputPackaging((current) => ({
+                        ...current,
+                        anchor: value as OutputPackagingOptions["anchor"]
+                      }))
+                    }
+                  />
+                  {outputPackaging.anchor === "custom" ? (
+                    <>
+                      <NumberField
+                        label="Offset X"
+                        value={outputPackaging.offsetX ?? 0}
+                        min={0}
+                        step={1}
+                        onChange={(value) => setOutputPackaging((current) => ({ ...current, offsetX: Math.round(value) }))}
+                      />
+                      <NumberField
+                        label="Offset Y"
+                        value={outputPackaging.offsetY ?? 0}
+                        min={0}
+                        step={1}
+                        onChange={(value) => setOutputPackaging((current) => ({ ...current, offsetY: Math.round(value) }))}
+                      />
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+              <p className="field-note">
+                Background preserve/remove changes pixels, not this canvas geometry. Native pixels never stretch unless you choose resampling.
+              </p>
+              {fixResult?.reconstruction && fixResult.packaging ? (
+                <ReadonlyField
+                  label="Last result"
+                  value={`${fixResult.reconstruction.reconstructedImage.width}x${fixResult.reconstruction.reconstructedImage.height} → ${fixResult.packaging.canvas.width}x${fixResult.packaging.canvas.height}`}
+                  text
+                />
+              ) : null}
+            </div>
+          </section>
+        ) : null}
         {showAdvancedControls ? (
           visibleInspectorGroups.map((group, index) => (
             <InspectorGroup
@@ -10976,36 +11140,6 @@ function DimensionField({
           aria-label={`${label} slider`}
           onChange={(event) => commit(Number(event.currentTarget.value))}
         />
-      </div>
-    </div>
-  );
-}
-
-function TargetPresetButtons({
-  label,
-  presets,
-  activeValue,
-  onSelect
-}: {
-  label: string;
-  presets: readonly number[];
-  activeValue: number;
-  onSelect: (value: number) => void;
-}) {
-  return (
-    <div className="target-preset-row">
-      <span>{label}</span>
-      <div className="target-preset-buttons">
-        {presets.map((preset) => (
-          <button
-            key={`${label}-${preset}`}
-            type="button"
-            className={activeValue === preset ? "active" : ""}
-            onClick={() => onSelect(preset)}
-          >
-            {preset}
-          </button>
-        ))}
       </div>
     </div>
   );

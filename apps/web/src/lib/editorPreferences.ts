@@ -7,7 +7,9 @@ import type {
   GridAutoStrategy,
   GridRobustSafety,
   LineCleanupStrength,
+  NativeSizeMode,
   OutlineMode,
+  OutputPackagingOptions,
   OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
@@ -38,6 +40,8 @@ export type EditorPreferenceSettings = {
   targetWidth: number;
   targetHeight: number;
   outputSizeMode: OutputSizeMode;
+  nativeSizeMode: NativeSizeMode;
+  outputPackaging: OutputPackagingOptions;
   maxColors: number;
   maxColorsAuto: boolean;
   paletteMode: PaletteMode;
@@ -128,6 +132,8 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   targetWidth: engineFixDefaults.targetWidth,
   targetHeight: engineFixDefaults.targetHeight,
   outputSizeMode: engineFixDefaults.outputSizeMode,
+  nativeSizeMode: engineFixDefaults.nativeSizeMode,
+  outputPackaging: { ...engineFixDefaults.outputPackaging },
   maxColors: engineFixDefaults.maxColors,
   maxColorsAuto: false,
   paletteMode: engineFixDefaults.paletteMode,
@@ -207,6 +213,7 @@ export function createDefaultEditorPreferences(): EditorPreferences {
     version: editorPreferencesVersion,
     settings: {
       ...defaultEditorPreferenceSettings,
+      outputPackaging: { ...defaultEditorPreferenceSettings.outputPackaging },
       engineExportTargets: [...defaultEditorPreferenceSettings.engineExportTargets],
       inspectorGroupOrder: [...defaultEditorPreferenceSettings.inspectorGroupOrder]
     },
@@ -259,6 +266,8 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       targetWidth: integerSetting(settings.targetWidth, defaults.settings.targetWidth, 1, 4096),
       targetHeight: integerSetting(settings.targetHeight, defaults.settings.targetHeight, 1, 4096),
       outputSizeMode: unionSetting(settings.outputSizeMode, ["detected", "source", "exact"], defaults.settings.outputSizeMode),
+      nativeSizeMode: unionSetting(settings.nativeSizeMode, ["auto", "manual"], defaults.settings.nativeSizeMode),
+      outputPackaging: outputPackagingSetting(settings.outputPackaging, defaults.settings.outputPackaging),
       maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 512),
       maxColorsAuto: booleanSetting(settings.maxColorsAuto, defaults.settings.maxColorsAuto),
       paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
@@ -381,6 +390,39 @@ function unionSetting<T extends string>(value: unknown, allowed: readonly T[], f
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
 }
 
+function outputPackagingSetting(
+  value: unknown,
+  fallback: OutputPackagingOptions
+): OutputPackagingOptions {
+  const settings = isRecord(value) ? value : {};
+  return {
+    canvasMode: unionSetting(
+      settings.canvasMode,
+      ["content", "native", "exact"],
+      fallback.canvasMode
+    ),
+    width: integerSetting(settings.width, fallback.width ?? 64, 1, 4096),
+    height: integerSetting(settings.height, fallback.height ?? 64, 1, 4096),
+    framing: unionSetting(
+      settings.framing,
+      ["preserveComposition", "packSubject", "fitSubject"],
+      fallback.framing
+    ),
+    scale: unionSetting(
+      settings.scale,
+      ["native", "integerFit", "resample"],
+      fallback.scale
+    ),
+    anchor: unionSetting(
+      settings.anchor,
+      ["center", "bottomCenter", "topLeft", "custom"],
+      fallback.anchor
+    ),
+    offsetX: integerSetting(settings.offsetX, fallback.offsetX ?? 0, -4096, 4096),
+    offsetY: integerSetting(settings.offsetY, fallback.offsetY ?? 0, -4096, 4096)
+  };
+}
+
 function engineTargetsSetting(value: unknown, fallback: EngineExportTarget[]): EngineExportTarget[] {
   if (!Array.isArray(value)) {
     return [...fallback];
@@ -495,6 +537,10 @@ function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSe
   if (typeof value.targetWidth === "number") settings.targetWidth = integerSetting(value.targetWidth, 64, 1, 4096);
   if (typeof value.targetHeight === "number") settings.targetHeight = integerSetting(value.targetHeight, 64, 1, 4096);
   if (typeof value.outputSizeMode === "string") settings.outputSizeMode = unionSetting(value.outputSizeMode, ["detected", "source", "exact"], "exact");
+  if (typeof value.nativeSizeMode === "string") settings.nativeSizeMode = unionSetting(value.nativeSizeMode, ["auto", "manual"], "manual");
+  if (isRecord(value.outputPackaging)) {
+    settings.outputPackaging = outputPackagingSetting(value.outputPackaging, defaultEditorPreferenceSettings.outputPackaging);
+  }
   if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 512);
   if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
   if (typeof value.gridAutoStrategy === "string") settings.gridAutoStrategy = unionSetting(value.gridAutoStrategy, ["classic", "robust"], "classic");

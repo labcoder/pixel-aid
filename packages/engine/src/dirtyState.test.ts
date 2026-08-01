@@ -159,6 +159,27 @@ describe("engine asset dirty snapshots", () => {
     expect(compareAssetDirtySnapshots(current, clean).isDirty).toBe(false);
   });
 
+  test("treats reconstruction and canvas policy changes as output settings", () => {
+    const clean = createAssetDirtySnapshot(
+      session({
+        settings: {
+          nativeSizeMode: "manual",
+          outputPackaging: { canvasMode: "content" }
+        }
+      })
+    );
+    const current = createAssetDirtySnapshot(
+      session({
+        settings: {
+          nativeSizeMode: "auto",
+          outputPackaging: { canvasMode: "exact", width: 128, height: 128 }
+        }
+      })
+    );
+
+    expect(compareAssetDirtySnapshots(current, clean).reasons).toEqual(["settings"]);
+  });
+
   test("formats dirty reasons for UI copy", () => {
     expect(formatAssetDirtyReason("frames")).toBe("frame layout");
   });

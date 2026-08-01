@@ -38,6 +38,8 @@ const outputSettingKeys = [
   "targetWidth",
   "targetHeight",
   "outputSizeMode",
+  "nativeSizeMode",
+  "outputPackaging",
   "maxColors",
   "paletteMode",
   "paletteStrategy",
