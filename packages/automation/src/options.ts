@@ -12,7 +12,9 @@ import {
   type GridRobustSafety,
   type LineCleanupStrength,
   type MorphologyCleanupSettings,
+  type NativeReconstructionOptions,
   type OutlineMode,
+  type OutputPackagingOptions,
   type OutputSizeMode,
   type PaletteDitheringMode,
   type PaletteLockScope,
@@ -44,6 +46,8 @@ export type AutomationTargetInput = string | { width: number; height: number };
 export type AutomationFixOptionsInput = {
   assetType?: AutomationAssetTypeInput;
   outputSizeMode?: OutputSizeMode;
+  reconstruction?: Partial<NativeReconstructionOptions>;
+  packaging?: Partial<OutputPackagingOptions>;
   target?: AutomationTargetInput;
   targetWidth?: number;
   targetHeight?: number;
@@ -149,6 +153,11 @@ const backgroundDetectionModes = new Set<NonNullable<AlphaCleanupSettings["backg
 const outputSizeModes = new Set<OutputSizeMode>(["detected", "source", "exact"]);
 const gridAutoStrategies = new Set<GridAutoStrategy>(["classic", "robust"]);
 const gridRobustSafetyModes = new Set<GridRobustSafety>(["guarded", "warn", "off"]);
+const nativeSizeModes = new Set<NativeReconstructionOptions["sizeMode"]>(["auto", "manual"]);
+const canvasSizeModes = new Set<OutputPackagingOptions["canvasMode"]>(["content", "native", "exact"]);
+const canvasFramingModes = new Set<OutputPackagingOptions["framing"]>(["preserveComposition", "packSubject", "fitSubject"]);
+const canvasScaleModes = new Set<OutputPackagingOptions["scale"]>(["native", "integerFit", "resample"]);
+const canvasAnchors = new Set<OutputPackagingOptions["anchor"]>(["center", "bottomCenter", "topLeft", "custom"]);
 
 const presets: Record<AssetType, AssetPreset> = {
   sprite: createPreset(24, "dominant", "backgroundFloodFill", "single"),
@@ -210,6 +219,23 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
   if (!outputSizeValidation.ok) {
     return outputSizeValidation;
   }
+  const reconstruction = input.reconstruction
+    ? normalizeReconstruction(input.reconstruction, mode)
+    : undefined;
+  if (reconstruction && !reconstruction.ok) {
+    return reconstruction;
+  }
+  const packaging = input.packaging
+    ? normalizePackaging(input.packaging, mode)
+    : undefined;
+  if (packaging && !packaging.ok) {
+    return packaging;
+  }
+  const resolvedReconstruction = reconstruction?.ok
+    ? reconstruction.value
+    : packaging?.ok
+      ? { sizeMode: "auto" as const }
+      : undefined;
 
   const maxColors = normalizeMaxColors(input.maxColors ?? preset.maxColors, "maxColors");
   if (!maxColors.ok) {
@@ -337,6 +363,8 @@ export function normalizeFixOptions(input: AutomationFixOptionsInput = {}): Auto
     mode,
     assetType,
     ...(outputSizeMode?.ok ? { outputSizeMode: outputSizeMode.value } : {}),
+    ...(resolvedReconstruction ? { reconstruction: resolvedReconstruction } : {}),
+    ...(packaging?.ok ? { packaging: packaging.value } : {}),
     ...(target.value.targetWidth ? { targetWidth: target.value.targetWidth } : {}),
     ...(target.value.targetHeight ? { targetHeight: target.value.targetHeight } : {}),
     maxColors: fixMaxColors,
@@ -448,6 +476,83 @@ function normalizeGrid(input: Partial<FixOptions["grid"]> | undefined, mode: Ass
   assignFinite(grid, "phaseX", input?.phaseX);
   assignFinite(grid, "phaseY", input?.phaseY);
   return automationOk(grid);
+}
+
+function normalizeReconstruction(
+  input: Partial<NativeReconstructionOptions>,
+  mode: AssetMode
+): AutomationResult<NativeReconstructionOptions> {
+  if (mode !== "single") {
+    return automationError(
+      "invalid_options",
+      "Native reconstruction options currently support single-image assets only.",
+      2
+    );
+  }
+  const sizeMode = normalizeEnum(input.sizeMode ?? "auto", nativeSizeModes, "reconstruction.sizeMode");
+  if (!sizeMode.ok) {
+    return sizeMode;
+  }
+  if (sizeMode.value === "auto") {
+    if (input.width !== undefined || input.height !== undefined) {
+      return automationError(
+        "invalid_options",
+        "Automatic native reconstruction cannot include manual width or height.",
+        2
+      );
+    }
+    return automationOk({ sizeMode: "auto" });
+  }
+  const width = normalizePositiveInteger(input.width, "reconstruction.width");
+  if (!width.ok) return width;
+  const height = normalizePositiveInteger(input.height, "reconstruction.height");
+  if (!height.ok) return height;
+  return automationOk({ sizeMode: "manual", width: width.value, height: height.value });
+}
+
+function normalizePackaging(
+  input: Partial<OutputPackagingOptions>,
+  mode: AssetMode
+): AutomationResult<OutputPackagingOptions> {
+  if (mode !== "single") {
+    return automationError(
+      "invalid_options",
+      "Output canvas packaging currently supports single-image assets only.",
+      2
+    );
+  }
+  const canvasMode = normalizeEnum(input.canvasMode ?? "content", canvasSizeModes, "packaging.canvasMode");
+  if (!canvasMode.ok) return canvasMode;
+  const framing = normalizeEnum(input.framing ?? "preserveComposition", canvasFramingModes, "packaging.framing");
+  if (!framing.ok) return framing;
+  const scale = normalizeEnum(input.scale ?? "native", canvasScaleModes, "packaging.scale");
+  if (!scale.ok) return scale;
+  const anchor = normalizeEnum(input.anchor ?? "center", canvasAnchors, "packaging.anchor");
+  if (!anchor.ok) return anchor;
+
+  const packaging: OutputPackagingOptions = {
+    canvasMode: canvasMode.value,
+    framing: framing.value,
+    scale: scale.value,
+    anchor: anchor.value
+  };
+  if (canvasMode.value === "exact") {
+    const width = normalizePositiveInteger(input.width, "packaging.width");
+    if (!width.ok) return width;
+    const height = normalizePositiveInteger(input.height, "packaging.height");
+    if (!height.ok) return height;
+    packaging.width = width.value;
+    packaging.height = height.value;
+  }
+  if (anchor.value === "custom") {
+    const offsetX = normalizeInteger(input.offsetX ?? 0, "packaging.offsetX");
+    if (!offsetX.ok) return offsetX;
+    const offsetY = normalizeInteger(input.offsetY ?? 0, "packaging.offsetY");
+    if (!offsetY.ok) return offsetY;
+    packaging.offsetX = offsetX.value;
+    packaging.offsetY = offsetY.value;
+  }
+  return automationOk(packaging);
 }
 
 function validateOutputSizePolicy(
@@ -686,8 +791,8 @@ function normalizeEnum<T extends string>(value: unknown, allowed: ReadonlySet<T>
   return automationError("invalid_options", `Invalid ${name} "${String(value)}".`, 2);
 }
 
-function normalizePositiveInteger(value: number, name: string): AutomationResult<number> {
-  if (!Number.isFinite(value) || value <= 0) {
+function normalizePositiveInteger(value: number | undefined, name: string): AutomationResult<number> {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
     return automationError("invalid_options", `${name} must be a positive integer.`, 2, { [name]: value });
   }
   return automationOk(Math.round(value));

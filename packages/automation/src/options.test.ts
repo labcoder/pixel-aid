@@ -73,6 +73,62 @@ describe("automation option normalization", () => {
     expect(result.error).toMatchObject({ code: "invalid_options", exitCode: 2 });
   });
 
+  it("normalizes independent native reconstruction and exact-canvas packaging", () => {
+    const result = normalizeFixOptions({
+      reconstruction: { sizeMode: "manual", width: 90, height: 113 },
+      packaging: {
+        canvasMode: "exact",
+        width: 128,
+        height: 128,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center",
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.reconstruction).toEqual({ sizeMode: "manual", width: 90, height: 113 });
+    expect(result.value.packaging).toEqual({
+      canvasMode: "exact",
+      width: 128,
+      height: 128,
+      framing: "preserveComposition",
+      scale: "native",
+      anchor: "center",
+    });
+  });
+
+  it("uses automatic reconstruction when callers specify packaging alone", () => {
+    const result = normalizeFixOptions({
+      packaging: { canvasMode: "native" },
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.reconstruction).toEqual({ sizeMode: "auto" });
+    expect(result.value.packaging).toMatchObject({
+      canvasMode: "native",
+      framing: "preserveComposition",
+      scale: "native",
+      anchor: "center",
+    });
+  });
+
+  it.each([
+    { reconstruction: { sizeMode: "auto" as const, width: 32 } },
+    { reconstruction: { sizeMode: "manual" as const, width: 32 } },
+    { packaging: { canvasMode: "exact" as const, width: 64 } },
+    { assetType: "sprite-sheet", reconstruction: { sizeMode: "auto" as const } },
+    { assetType: "sprite-sheet", packaging: { canvasMode: "content" as const } },
+  ])("rejects invalid two-stage sizing input %#", (input) => {
+    const result = normalizeFixOptions(input);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.error).toMatchObject({ code: "invalid_options", exitCode: 2 });
+  });
+
   it.each([
     ["sprite", "sprite", "single"],
     ["sprite-sheet", "spriteSheet", "spriteSheet"],
