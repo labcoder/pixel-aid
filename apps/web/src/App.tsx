@@ -75,6 +75,7 @@ import {
   analyzeSceneAssetDiagnostics,
   analyzeTilesetSeams,
   applyTilesetSeamRepairs,
+  evaluateRobustInferenceEligibility,
   extractTilemapMetadata,
   sliceSheetFrames
 } from "@pixelaid/core";
@@ -106,6 +107,10 @@ import {
 } from "./lib/animationTimeline";
 import { startGridDetectionJob, type AnalysisJob } from "./lib/analysisWorkerClient";
 import { startEngineQualityAnalysisJob, startEngineSourceAnalysisJob } from "./lib/engineAnalysisJobAdapter";
+import {
+  describeReconstructionStrategyStatus,
+  robustSafetyLabel
+} from "./lib/robustPreview";
 import {
   applyFrameDurationOverrides,
   createAnimationTagFromRange,
@@ -2440,6 +2445,23 @@ export function App() {
   const effectiveMaxColors = maxColorsAuto ? autoPaletteColorCap : maxColors;
   const paletteDiagnostics = fixResult?.diagnostics?.palette;
   const gridSelectionDiagnostics = fixResult?.grid.diagnostics?.selection;
+  const robustPreviewEligibility = evaluateRobustInferenceEligibility({
+    mode,
+    assetType,
+    ...(assetType === "background"
+      ? { cropToBounds: false }
+      : { cropToBounds }),
+    outputSizeMode
+  });
+  const reconstructionStrategyStatus = describeReconstructionStrategyStatus({
+    requestedStrategy: gridAutoStrategy,
+    robustSafety,
+    eligibility: robustPreviewEligibility,
+    ...(gridSelectionDiagnostics ? { selection: gridSelectionDiagnostics } : {}),
+    ...(fixResult?.reconstruction
+      ? { reconstruction: fixResult.reconstruction }
+      : {})
+  });
   const displayedGridCandidate = fixResult?.grid ?? gridCandidates[0];
   const displayedRobustDiagnostics = displayedGridCandidate?.diagnostics?.robust;
   const displayedGridAnisotropy = displayedGridCandidate
@@ -9118,18 +9140,14 @@ export function App() {
             </div>
             <div className="pixel-pipeline-stage">
               <div className="pixel-pipeline-stage-title">
-                <strong>1 · Reconstruction</strong>
+                <strong>1 {"\u00b7"} Reconstruction</strong>
                 <small>True sprite and native grid</small>
               </div>
-              <SelectField
-                label="Strategy"
+              <ReconstructionStrategyPicker
                 value={gridAutoStrategy}
-                options={[
-                  ["classic", "Classic"],
-                  ["robust", "Robust (experimental)"]
-                ]}
-                onChange={(value) => {
-                  const next = value as GridAutoStrategy;
+                robustAvailable={robustPreviewEligibility.eligible}
+                robustAvailabilityMessage={robustPreviewEligibility.message}
+                onChange={(next) => {
                   clearDetectedSheetLayout();
                   setGridAutoStrategy(next);
                   setGridDetect("auto");
@@ -9139,17 +9157,36 @@ export function App() {
                 }}
               />
               {gridAutoStrategy === "robust" ? (
-                <SelectField
-                  label="Safety"
-                  value={robustSafety}
-                  options={[
-                    ["guarded", "Guarded fallback"],
-                    ["warn", "Keep with warning"],
-                    ["off", "Use raw proposal"]
-                  ]}
-                  onChange={(value) => setRobustSafety(value as GridRobustSafety)}
-                />
+                showAdvancedControls ? (
+                  <SelectField
+                    label="Safety (advanced)"
+                    value={robustSafety}
+                    options={[
+                      ["guarded", "Guarded (recommended)"],
+                      ["warn", "Warn; keep Robust"],
+                      ["off", "Raw proposal (expert)"]
+                    ]}
+                    onChange={(value) => setRobustSafety(value as GridRobustSafety)}
+                  />
+                ) : (
+                  <div className="robust-safety-summary">
+                    <ShieldCheck size={14} aria-hidden="true" />
+                    <span>{robustSafetyLabel(robustSafety)}</span>
+                    <small>Expand Advanced controls to change this policy.</small>
+                  </div>
+                )
               ) : null}
+              <div
+                className={`reconstruction-strategy-status is-${reconstructionStrategyStatus.tone}`}
+                role="status"
+                aria-live="polite"
+              >
+                <strong>{reconstructionStrategyStatus.title}</strong>
+                <span>{reconstructionStrategyStatus.detail}</span>
+                {reconstructionStrategyStatus.reasonCodes.length > 0 ? (
+                  <code>{reconstructionStrategyStatus.reasonCodes.join(", ")}</code>
+                ) : null}
+              </div>
               <SelectField
                 label="Native size"
                 value={nativeSizeMode}
@@ -9197,7 +9234,7 @@ export function App() {
             </div>
             <div className="pixel-pipeline-stage">
               <div className="pixel-pipeline-stage-title">
-                <strong>2 · Output canvas</strong>
+                <strong>2 {"\u00b7"} Output canvas</strong>
                 <small>Bounds, padding, scale, and anchor</small>
               </div>
               <SelectField
@@ -10990,6 +11027,55 @@ function Field({ label, value }: { label: string; value: string }) {
         <option>{value}</option>
       </select>
     </label>
+  );
+}
+
+function ReconstructionStrategyPicker({
+  value,
+  robustAvailable,
+  robustAvailabilityMessage,
+  onChange
+}: {
+  value: GridAutoStrategy;
+  robustAvailable: boolean;
+  robustAvailabilityMessage: string;
+  onChange: (value: GridAutoStrategy) => void;
+}) {
+  return (
+    <div
+      className="reconstruction-strategy-picker"
+      role="radiogroup"
+      aria-label="Reconstruction strategy"
+    >
+      <button
+        type="button"
+        className={value === "classic" ? "is-selected" : ""}
+        role="radio"
+        aria-checked={value === "classic"}
+        onClick={() => onChange("classic")}
+      >
+        <span className="reconstruction-strategy-name">
+          <strong>Classic</strong>
+          <small>Default</small>
+        </span>
+        <span>Stable reconstruction for every asset type.</span>
+      </button>
+      <button
+        type="button"
+        className={value === "robust" ? "is-selected is-preview" : "is-preview"}
+        role="radio"
+        aria-checked={value === "robust"}
+        disabled={!robustAvailable}
+        title={robustAvailabilityMessage}
+        onClick={() => onChange("robust")}
+      >
+        <span className="reconstruction-strategy-name">
+          <strong>Robust</strong>
+          <small>Preview</small>
+        </span>
+        <span>Stronger native-grid inference with guarded fallback.</span>
+      </button>
+    </div>
   );
 }
 
