@@ -148,6 +148,10 @@ describe("PixelAid MCP-ready handlers", () => {
     expect(pixelaidMcpTools[1]?.description).toContain("outline repair-safety/fringe candidate metadata");
     expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("fixMixels");
     expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("backgroundDetection");
+    expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("reconstruction");
+    expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("preserveComposition");
+    expect(JSON.stringify(pixelaidMcpTools[0]?.inputSchema)).toContain("packaging");
+    expect(pixelaidMcpTools.find((tool) => tool.name === "fix_sprite")?.description).toContain("independent output canvas");
   });
 
   it("validates required string inputs", () => {

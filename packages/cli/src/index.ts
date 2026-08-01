@@ -699,6 +699,32 @@ function parseFixOptions(args: string[]): AutomationFixOptionsInput {
   }
   const target = takeValue(args, "--target");
   if (target) options.target = target;
+  const nativeSize = takeValue(args, "--native-size");
+  if (nativeSize) {
+    options.reconstruction = nativeSize.toLowerCase() === "auto"
+      ? { sizeMode: "auto" }
+      : { sizeMode: "manual", ...parseSize(nativeSize, "--native-size") };
+  }
+  const canvas = takeValue(args, "--canvas");
+  const framing = takeValue(args, "--framing");
+  const canvasScale = takeValue(args, "--canvas-scale");
+  const anchor = takeValue(args, "--anchor");
+  if (canvas || framing || canvasScale || anchor) {
+    const packaging: NonNullable<AutomationFixOptionsInput["packaging"]> = {};
+    if (canvas) {
+      const normalizedCanvas = canvas.toLowerCase();
+      if (normalizedCanvas === "content" || normalizedCanvas === "native") {
+        packaging.canvasMode = normalizedCanvas;
+      } else {
+        packaging.canvasMode = "exact";
+        Object.assign(packaging, parseSize(canvas, "--canvas"));
+      }
+    }
+    if (framing) packaging.framing = parseCanvasFraming(framing);
+    if (canvasScale) packaging.scale = parseCanvasScale(canvasScale);
+    if (anchor) Object.assign(packaging, parseCanvasAnchor(anchor));
+    options.packaging = packaging;
+  }
   const colors = readOptionalMaxColorsFlag(args, "--colors") ?? readOptionalMaxColorsFlag(args, "--max-colors");
   if (colors !== undefined) options.maxColors = colors;
   const colorSpace = takeValue(args, "--color-space");
@@ -1032,6 +1058,58 @@ function parseSize(value: string, flagName: string): { width: number; height: nu
   };
 }
 
+function parseCanvasFraming(value: string): NonNullable<NonNullable<AutomationFixOptionsInput["packaging"]>["framing"]> {
+  switch (value.toLowerCase()) {
+    case "preserve":
+    case "preserve-composition":
+      return "preserveComposition";
+    case "pack":
+    case "pack-subject":
+      return "packSubject";
+    case "fit":
+    case "fit-subject":
+      return "fitSubject";
+    default:
+      throw new CliUsageError("--framing must be preserve, pack, or fit.");
+  }
+}
+
+function parseCanvasScale(value: string): NonNullable<NonNullable<AutomationFixOptionsInput["packaging"]>["scale"]> {
+  switch (value.toLowerCase()) {
+    case "native":
+      return "native";
+    case "integer":
+    case "integer-fit":
+      return "integerFit";
+    case "resample":
+      return "resample";
+    default:
+      throw new CliUsageError("--canvas-scale must be native, integer, or resample.");
+  }
+}
+
+function parseCanvasAnchor(
+  value: string,
+): Pick<NonNullable<AutomationFixOptionsInput["packaging"]>, "anchor" | "offsetX" | "offsetY"> {
+  switch (value.toLowerCase()) {
+    case "center":
+      return { anchor: "center" };
+    case "bottom-center":
+      return { anchor: "bottomCenter" };
+    case "top-left":
+      return { anchor: "topLeft" };
+  }
+  const custom = /^(-?\d+),(-?\d+)$/.exec(value.trim());
+  if (!custom) {
+    throw new CliUsageError("--anchor must be center, bottom-center, top-left, or X,Y.");
+  }
+  return {
+    anchor: "custom",
+    offsetX: Number(custom[1]),
+    offsetY: Number(custom[2]),
+  };
+}
+
 function assertNoExtraArgs(args: readonly string[]): void {
   if (args.length > 0) {
     throw new CliUsageError(`Unexpected argument "${args[0]}".`);
@@ -1084,16 +1162,26 @@ function usageText(): string {
     "  --emit-palette <palette.aco|palette.gpl|palette.pal|palette.hex|palette.json|palette.png>",
     "  --emit-palette-conditioning <artifact.json>",
     "",
-    "Grid / pixel-perfect options:",
-    "  --output-size detected|source|exact  Detector-sized, decoded source-sized, or exact target-sized output",
-    "  --detect-scale                 Print detected pixel scale on inspect JSON (accepted on fix)",
-    "  --fix-mixels                   Normalize uneven pixel block sizes (mixels) before downscaling; honors --target",
-    "  --snap                         Force square pixels (single uniform integer scale; output size follows the subject, not --target)",
-    "  --line-cleanup off|low|high    Pixel-perfect line cleanup strength (supersedes the legacy 1px-gap cleanup)",
-    "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
-    "  --grid-strategy classic|robust  Opt into the experimental Robust native-size detector",
+    "Native reconstruction (stage 1):",
+    "  --native-size auto|WIDTHxHEIGHT  Detect or manually set the true reconstructed pixel-art size",
+    "  --grid-strategy classic|robust  Choose the Classic or opt-in Robust native reconstruction detector",
     "  --robust-safety guarded|warn|off  Fall back, warn, or use the raw Robust proposal (default: guarded)",
-    "  --crop-to-bounds / --full-canvas  Enable subject cropping or preserve the complete canvas",
+    "  --grid auto|manual --scale <n> --scale-x <n> --scale-y <n> --phase-x <n> --phase-y <n>",
+    "  --fix-mixels                   Normalize uneven pixel block sizes (mixels) before downscaling",
+    "  --snap                         Force square pixels using one uniform integer reconstruction scale",
+    "  --crop-to-bounds / --full-canvas  Reconstruct the subject bounds or the complete native composition",
+    "",
+    "Output packaging (stage 2; single images):",
+    "  --canvas content|native|WIDTHxHEIGHT  Package tight content, native composition, or an exact canvas",
+    "  --framing preserve|pack|fit    Preserve source composition, pack the subject, or fit it to the canvas",
+    "  --canvas-scale native|integer|resample  Keep reconstructed pixels, integer-scale, or explicitly resample",
+    "  --anchor center|bottom-center|top-left|X,Y  Place the reconstructed result on the output canvas",
+    "",
+    "Legacy sizing compatibility:",
+    "  --output-size detected|source|exact  Legacy combined detector/output policy",
+    "  --target WIDTHxHEIGHT           Legacy combined target; prefer --native-size plus --canvas",
+    "  --detect-scale                 Print detected pixel scale on inspect JSON (accepted on fix)",
+    "  --line-cleanup off|low|high    Pixel-perfect line cleanup strength (supersedes the legacy 1px-gap cleanup)",
     "",
     "Alpha options:",
     "  --alpha preserve|binary|backgroundFloodFill|colorKey",

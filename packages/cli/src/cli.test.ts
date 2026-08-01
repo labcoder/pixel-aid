@@ -421,6 +421,53 @@ describe("pixelaid CLI", () => {
     });
   });
 
+  it("separates native reconstruction from exact output-canvas packaging", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const output = path.join(dir, "two-stage-fixed.png");
+      const manifest = path.join(dir, "two-stage-fixed.json");
+      const code = await runCli([
+        "fix",
+        input,
+        "--out",
+        output,
+        "--manifest",
+        manifest,
+        "--no-auto",
+        "--native-size",
+        "2x2",
+        "--canvas",
+        "4x4",
+        "--framing",
+        "preserve",
+        "--canvas-scale",
+        "native",
+        "--anchor",
+        "center",
+        "--json",
+      ], capture);
+
+      expect(code).toBe(0);
+      const manifestJson = JSON.parse(await readFile(manifest, "utf8"));
+      expect(manifestJson.meta.operation.settings).toMatchObject({
+        reconstruction: { sizeMode: "manual", width: 2, height: 2 },
+        packaging: {
+          canvasMode: "exact",
+          width: 4,
+          height: 4,
+          framing: "preserveComposition",
+          scale: "native",
+          anchor: "center",
+        },
+      });
+      const decoded = await decodePngFile(output);
+      expect(decoded.ok).toBe(true);
+      if (!decoded.ok) return;
+      expect(decoded.value.width).toBe(4);
+      expect(decoded.value.height).toBe(4);
+    });
+  });
+
   it("fixes a sprite with auto-suggested settings", async () => {
     await withFixture(async ({ dir, input }) => {
       const capture = createCapture();

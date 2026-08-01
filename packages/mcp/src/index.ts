@@ -88,8 +88,35 @@ type ToolInput = Record<string, unknown>;
 
 const commonOptionsSchema = {
   type: "object",
-  description: "PixelAid automation options such as assetType; outputSizeMode (detected|source|exact); target; gridStrategy (classic|robust); robustSafety (guarded|warn|off); maxColors (number|auto); paletteStrategy; quantizer; colorSpace; seed; palette; paletteWeighting; minRegion; protectColors; protectSalientColors; paletteDithering/dither; emitPalette; emitPaletteConditioning; downscale/downscaleMethod; grid; alpha; backgroundDetection (classic|adaptive); cleanup; and sheet settings. Robust remains opt-in and automation defaults its safety policy to guarded. Grid/pixel-perfect options include fixMixels (or grid.fixMixels), snap, and cleanup.lineCleanup/lineCleanup (off|low|high). Palette strategies/quantizers: medianCut, frequency, perceptual, wu, kmeans, familyFirst. Dither modes: none, ordered, bayer2, bayer4, errorDiffusion, floyd.",
+  description: "PixelAid automation options. For single images, reconstruction controls the true native pixel-art result and packaging independently controls its output canvas. Legacy outputSizeMode/target remain supported. Other options include assetType; gridStrategy (classic|robust); robustSafety (guarded|warn|off); fixMixels; palette, downscale, alpha, backgroundDetection, cleanup, and sheet settings. Robust remains opt-in and defaults to guarded safety.",
   additionalProperties: true,
+  properties: {
+    reconstruction: {
+      type: "object",
+      description: "Stage 1 for single images: detect or manually specify the true native pixel-art reconstruction size.",
+      additionalProperties: false,
+      properties: {
+        sizeMode: { type: "string", enum: ["auto", "manual"] },
+        width: { type: "integer", minimum: 1, description: "Required with sizeMode=manual." },
+        height: { type: "integer", minimum: 1, description: "Required with sizeMode=manual." },
+      },
+    },
+    packaging: {
+      type: "object",
+      description: "Stage 2 for single images: package the reconstructed pixels onto a content, native-composition, or exact output canvas.",
+      additionalProperties: false,
+      properties: {
+        canvasMode: { type: "string", enum: ["content", "native", "exact"] },
+        width: { type: "integer", minimum: 1, description: "Required with canvasMode=exact." },
+        height: { type: "integer", minimum: 1, description: "Required with canvasMode=exact." },
+        framing: { type: "string", enum: ["preserveComposition", "packSubject", "fitSubject"] },
+        scale: { type: "string", enum: ["native", "integerFit", "resample"] },
+        anchor: { type: "string", enum: ["center", "bottomCenter", "topLeft", "custom"] },
+        offsetX: { type: "integer", description: "Custom X placement used with anchor=custom." },
+        offsetY: { type: "integer", description: "Custom Y placement used with anchor=custom." },
+      },
+    },
+  },
 };
 
 export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
@@ -121,7 +148,7 @@ export const pixelaidMcpTools: PixelAidMcpToolDefinition[] = [
   },
   {
     name: "fix_sprite",
-    description: "Fix a single sprite image with the guided suggestion path by default and optionally write a PixelAid manifest. Pass autoSuggest:false for the manual legacy path.",
+    description: "Fix a single sprite image with the guided suggestion path by default and optionally write a PixelAid manifest. Use options.reconstruction for native pixel recovery and options.packaging for the independent output canvas. Pass autoSuggest:false for the manual path.",
     inputSchema: objectSchema(["inputPath", "outputPath"], {
       inputPath: stringSchema("Path to a PNG or JPEG image."),
       outputPath: stringSchema("PNG output path."),
