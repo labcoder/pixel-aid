@@ -54,7 +54,7 @@ describe("output-size policies", () => {
     expect(result.grid.sourceRect).toBeUndefined();
   });
 
-  test.fails("exact full-canvas mapping does not reuse detected subject crop dimensions", () => {
+  test("exact full-canvas mapping does not reuse detected subject crop dimensions", () => {
     const source = createBlockImage(24, 18, 3);
     const detectedSubject: GridCandidate = {
       outputWidth: 6,
@@ -80,6 +80,14 @@ describe("output-size policies", () => {
     );
 
     expect(exact.image).toMatchObject({ width: source.width, height: source.height });
+    expect(exact.reconstruction).toMatchObject({
+      nativeCanvas: { width: source.width, height: source.height },
+      reconstructedImage: { width: source.width, height: source.height }
+    });
+    expect(exact.packaging).toMatchObject({
+      canvasMode: "legacy",
+      canvas: { width: source.width, height: source.height }
+    });
     expect(createGoldenSignature(exact.image)).toEqual(
       createGoldenSignature(expected.image)
     );

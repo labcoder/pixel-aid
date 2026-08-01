@@ -487,6 +487,61 @@ export type GridAutoStrategy = "classic" | "robust";
 
 export type OutputSizeMode = "detected" | "source" | "exact";
 
+export type NativeSizeMode = "auto" | "manual";
+
+export type CanvasSizeMode = "content" | "native" | "exact";
+
+export type CanvasFramingMode =
+  | "preserveComposition"
+  | "packSubject"
+  | "fitSubject";
+
+export type CanvasScaleMode = "native" | "integerFit" | "resample";
+
+export type CanvasAnchor =
+  | "center"
+  | "bottomCenter"
+  | "topLeft"
+  | "custom";
+
+export type NativeReconstructionOptions = {
+  sizeMode: NativeSizeMode;
+  width?: number;
+  height?: number;
+};
+
+export type OutputPackagingOptions = {
+  canvasMode: CanvasSizeMode;
+  width?: number;
+  height?: number;
+  framing: CanvasFramingMode;
+  scale: CanvasScaleMode;
+  anchor: CanvasAnchor;
+  offsetX?: number;
+  offsetY?: number;
+};
+
+export type PixelReconstructionMetadata = {
+  nativeCanvas: { width: number; height: number };
+  reconstructedImage: { width: number; height: number };
+  contentBounds: Rect;
+  contentBoundsSource: "alpha" | "background-mask" | "full-canvas";
+  requestedStrategy: GridAutoStrategy;
+  usedStrategy: GridAutoStrategy;
+};
+
+export type PixelPackagingMetadata = {
+  canvasMode: CanvasSizeMode | "legacy";
+  framing: CanvasFramingMode | "legacy";
+  scaleMode: CanvasScaleMode | "legacy";
+  anchor: CanvasAnchor | "legacy";
+  canvas: { width: number; height: number };
+  placement: Rect;
+  appliedScale: number;
+  trimOffset: { x: number; y: number };
+  warnings: string[];
+};
+
 export type GridRobustSafety = "guarded" | "warn" | "off";
 
 export type GridSelectionReasonCode =
@@ -734,6 +789,9 @@ export type LineCleanupDiagnostics = {
 export type FixOptions = {
   mode: AssetMode;
   assetType: AssetType;
+  reconstruction?: NativeReconstructionOptions;
+  packaging?: OutputPackagingOptions;
+  /** Compatibility policy for callers that have not migrated to packaging. */
   outputSizeMode?: OutputSizeMode;
   targetWidth?: number;
   targetHeight?: number;
@@ -793,6 +851,8 @@ export type PixelFixResult = {
   image: RGBAImage;
   palette: string[];
   grid: GridCandidate;
+  reconstruction?: PixelReconstructionMetadata;
+  packaging?: PixelPackagingMetadata;
   metrics: FixMetrics;
   settings: FixOptions;
   diagnostics?: PixelFixDiagnostics;

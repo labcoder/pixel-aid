@@ -8,6 +8,8 @@ import type {
   MorphologyDiagnostics,
   PaletteDiagnostics,
   PaletteSettings,
+  PixelPackagingMetadata,
+  PixelReconstructionMetadata,
   PixelFixResult,
   Rect,
   RGBAImage,
@@ -15,6 +17,7 @@ import type {
   SpriteFrame
 } from "@pixelaid/shared";
 import { applyAlphaMode } from "./alpha";
+import { detectSpriteBounds } from "./bounds";
 import { colorDistanceSq, parseHexColor, rgbToHex } from "./color";
 import { applyContrastExpansion } from "./contrastExpansion";
 import { applyDenoise } from "./denoise";
@@ -237,11 +240,15 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   const resultGridBase = mixelDiagnostics ? attachMixelDiagnostics(gridWithDrift, mixelDiagnostics) : gridWithDrift;
   const resultGrid = outlinePadding > 0 ? padGridForOutline(resultGridBase, outlinePadding) : resultGridBase;
   const phaseTimings = collectedPhaseTimings(phaseTimer);
+  const reconstruction = describeReconstruction(image, finalImage, resultGrid, options);
+  const packaging = describeLegacyPackaging(finalImage, reconstruction.contentBounds);
 
   const result = {
     image: finalImage,
     palette: effectivePalette,
     grid: resultGrid,
+    reconstruction,
+    packaging,
     metrics: {
       durationMs: 0,
       sourceWidth: image.width,
@@ -268,6 +275,72 @@ export function fixImage(image: RGBAImage, options: FixOptions, runtime?: FixRun
   reportProgress(runtime, "complete", 100);
   assertNotCancelled(runtime?.signal);
   return result;
+}
+
+function describeReconstruction(
+  source: RGBAImage,
+  reconstructed: RGBAImage,
+  grid: GridCandidate,
+  options: FixOptions
+): PixelReconstructionMetadata {
+  const contentBounds = detectSpriteBounds(reconstructed, {
+    backgroundTolerance: 18,
+    alphaThreshold: 8
+  });
+  const requestedStrategy = options.grid.autoStrategy ?? "classic";
+  const usedStrategy =
+    grid.diagnostics?.selection?.selectedStrategy ??
+    (grid.diagnostics?.robust ? "robust" : "classic");
+  const phaseX = Math.max(0, grid.phaseX);
+  const phaseY = Math.max(0, grid.phaseY);
+  const nativeCanvasWidth = Math.max(
+    1,
+    Math.floor((source.width - phaseX) / Math.max(Number.EPSILON, grid.scaleX))
+  );
+  const nativeCanvasHeight = Math.max(
+    1,
+    Math.floor((source.height - phaseY) / Math.max(Number.EPSILON, grid.scaleY))
+  );
+
+  return {
+    nativeCanvas: { width: nativeCanvasWidth, height: nativeCanvasHeight },
+    reconstructedImage: {
+      width: reconstructed.width,
+      height: reconstructed.height
+    },
+    contentBounds,
+    contentBoundsSource: hasTransparentPixels(reconstructed)
+      ? "alpha"
+      : "background-mask",
+    requestedStrategy,
+    usedStrategy
+  };
+}
+
+function describeLegacyPackaging(
+  image: RGBAImage,
+  contentBounds: Rect
+): PixelPackagingMetadata {
+  return {
+    canvasMode: "legacy",
+    framing: "legacy",
+    scaleMode: "legacy",
+    anchor: "legacy",
+    canvas: { width: image.width, height: image.height },
+    placement: { x: 0, y: 0, w: image.width, h: image.height },
+    appliedScale: 1,
+    trimOffset: { x: contentBounds.x, y: contentBounds.y },
+    warnings: []
+  };
+}
+
+function hasTransparentPixels(image: RGBAImage): boolean {
+  for (let offset = 3; offset < image.data.length; offset += 4) {
+    if (image.data[offset]! <= 8) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function attachDriftDiagnostics(grid: GridCandidate, drift: GridDriftDiagnostics): GridCandidate {
@@ -1916,8 +1989,13 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
         },
         { candidate: candidate!, distance: Number.POSITIVE_INFINITY }
       ).candidate;
-      const scaleSourceWidth = closest.sourceRect?.w ?? image.width;
-      const scaleSourceHeight = closest.sourceRect?.h ?? image.height;
+      const exactFullCanvas = options.outputSizeMode === "exact";
+      const scaleSourceWidth = exactFullCanvas
+        ? image.width
+        : closest.sourceRect?.w ?? image.width;
+      const scaleSourceHeight = exactFullCanvas
+        ? image.height
+        : closest.sourceRect?.h ?? image.height;
       const scaleX = options.grid.scaleX ?? options.grid.scale ?? scaleSourceWidth / options.targetWidth;
       const scaleY = options.grid.scaleY ?? options.grid.scale ?? scaleSourceHeight / options.targetHeight;
       const cropToBounds =
@@ -1932,8 +2010,8 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
         outputHeight,
         scaleX,
         scaleY,
-        phaseX: options.grid.phaseX ?? closest.phaseX,
-        phaseY: options.grid.phaseY ?? closest.phaseY,
+        phaseX: exactFullCanvas ? 0 : options.grid.phaseX ?? closest.phaseX,
+        phaseY: exactFullCanvas ? 0 : options.grid.phaseY ?? closest.phaseY,
         confidence: closest.confidence,
         reason:
           cropToBounds && closest.sourceRect
