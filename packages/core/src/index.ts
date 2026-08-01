@@ -65,6 +65,11 @@ export {
   createGridSelectionDiagnostics
 } from "./gridRobustSafety";
 export type { RobustGridSafetyAssessment } from "./gridRobustSafety";
+export { evaluateRobustInferenceEligibility } from "./robustEligibility";
+export type {
+  RobustInferenceEligibility,
+  RobustInferenceEligibilityInput
+} from "./robustEligibility";
 export {
   proposeAutocorrelationAxisHypotheses,
   proposeIndependentAxisHypotheses,

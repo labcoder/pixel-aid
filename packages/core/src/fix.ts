@@ -27,6 +27,10 @@ import {
   assessRobustGridSafety,
   createGridSelectionDiagnostics
 } from "./gridRobustSafety";
+import {
+  evaluateRobustInferenceEligibility,
+  type RobustInferenceEligibility
+} from "./robustEligibility";
 import { planLocalGridDrift } from "./gridDrift";
 import { downsampleBlocks } from "./downsample";
 import { applyHaloRemoval, applyHaloRemovalDetailed } from "./halo";
@@ -2001,14 +2005,18 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       runtime?.gridCandidates && runtime.gridCandidates.length > 0
         ? runtime.gridCandidates
         : undefined;
+    const robustEligibility = evaluateRobustInferenceEligibility({
+      mode: options.mode,
+      assetType: options.assetType,
+      ...(options.grid.cropToBounds !== undefined
+        ? { cropToBounds: options.grid.cropToBounds }
+        : {}),
+      ...(options.outputSizeMode !== undefined
+        ? { outputSizeMode: options.outputSizeMode }
+        : {})
+    });
     const robustEligible =
-      options.grid.autoStrategy === "robust" &&
-      options.mode === "single" &&
-      (options.assetType === "sprite" ||
-        options.assetType === "icon" ||
-        (options.assetType === "background" &&
-          (options.outputSizeMode === "exact" ||
-            options.grid.cropToBounds === false)));
+      options.grid.autoStrategy === "robust" && robustEligibility.eligible;
     const detectionOptions: GridDetectionOptions = {
       strategy: robustEligible ? "robust" : "classic"
     };
@@ -2023,7 +2031,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       image,
       options,
       detectedCandidates,
-      robustEligible,
+      robustEligibility,
       ...(runtimeCandidates ? { runtimeCandidates } : {})
     });
     const [candidate] = candidates;
@@ -2220,13 +2228,10 @@ function isPositiveInteger(value: number | undefined): value is number {
 
 function attachRobustEligibilityFallback(
   candidate: GridCandidate,
-  options: FixOptions
+  options: FixOptions,
+  eligibility: RobustInferenceEligibility
 ): GridCandidate {
-  const backgroundNeedsFullCanvas =
-    options.assetType === "background" && options.grid.cropToBounds !== false;
-  const note = backgroundNeedsFullCanvas
-    ? "Robust background inference requires full-canvas processing with cropToBounds disabled; this request uses the classic detector."
-    : `Robust grid inference is limited to eligible single-image assets; ${options.assetType} uses the classic detector.`;
+  const note = eligibility.message;
   return {
     ...candidate,
     reason: `${note} ${candidate.reason}`,
@@ -2240,11 +2245,7 @@ function attachRobustEligibilityFallback(
               selectedStrategy: "classic",
               robustSafety: options.grid.robustSafety ?? "off",
               decision: "fallback",
-              reasonCodes: [
-                backgroundNeedsFullCanvas
-                  ? "background-requires-full-canvas"
-                  : "ineligible-asset"
-              ],
+              reasonCodes: [eligibility.reasonCode ?? "ineligible-asset"],
               message: note,
               classicCandidate: summarizeGridCandidate(candidate)
             }
@@ -2259,14 +2260,14 @@ function resolveAutomaticCandidates(options: {
   options: FixOptions;
   runtimeCandidates?: readonly GridCandidate[];
   detectedCandidates: readonly GridCandidate[];
-  robustEligible: boolean;
+  robustEligibility: RobustInferenceEligibility;
 }): readonly GridCandidate[] {
   const {
     image,
     options: fixOptions,
     runtimeCandidates,
     detectedCandidates,
-    robustEligible
+    robustEligibility
   } = options;
   if (runtimeCandidates) {
     return runtimeCandidates;
@@ -2274,9 +2275,11 @@ function resolveAutomaticCandidates(options: {
   if (fixOptions.grid.autoStrategy !== "robust") {
     return detectedCandidates;
   }
-  if (!robustEligible) {
+  if (!robustEligibility.eligible) {
     return detectedCandidates.map((item, index) =>
-      index === 0 ? attachRobustEligibilityFallback(item, fixOptions) : item
+      index === 0
+        ? attachRobustEligibilityFallback(item, fixOptions, robustEligibility)
+        : item
     );
   }
 
