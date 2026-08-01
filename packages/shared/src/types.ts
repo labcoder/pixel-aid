@@ -485,6 +485,8 @@ export type QualityProfileId =
 
 export type GridAutoStrategy = "classic" | "robust";
 
+export type OutputSizeMode = "detected" | "source" | "exact";
+
 export type GridCandidate = {
   outputWidth: number;
   outputHeight: number;
@@ -698,6 +700,7 @@ export type LineCleanupDiagnostics = {
 export type FixOptions = {
   mode: AssetMode;
   assetType: AssetType;
+  outputSizeMode?: OutputSizeMode;
   targetWidth?: number;
   targetHeight?: number;
   maxColors: number;

@@ -1847,6 +1847,28 @@ function isPaletteArtifactChromaColor(r: number, g: number, b: number): boolean 
 }
 
 function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntimeOptions): GridCandidate {
+  if (options.outputSizeMode === "source") {
+    return {
+      outputWidth: image.width,
+      outputHeight: image.height,
+      scaleX: 1,
+      scaleY: 1,
+      phaseX: 0,
+      phaseY: 0,
+      confidence: 1,
+      reason: "Source-size output policy"
+    };
+  }
+
+  if (
+    options.outputSizeMode === "exact" &&
+    (!options.targetWidth || !options.targetHeight)
+  ) {
+    throw new Error(
+      "Exact output-size policy requires both targetWidth and targetHeight."
+    );
+  }
+
   if (options.grid.detect === "auto") {
     const runtimeCandidates =
       runtime?.gridCandidates && runtime.gridCandidates.length > 0
@@ -1874,7 +1896,11 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
           )
         : detectedCandidates;
     const [candidate] = candidates;
-    if (options.targetWidth && options.targetHeight) {
+    if (
+      options.outputSizeMode !== "detected" &&
+      options.targetWidth &&
+      options.targetHeight
+    ) {
       const closest = candidates.reduce(
         (best, item) => {
           const distance = Math.abs(item.outputWidth - options.targetWidth!) + Math.abs(item.outputHeight - options.targetHeight!);
@@ -1886,7 +1912,10 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       const scaleSourceHeight = closest.sourceRect?.h ?? image.height;
       const scaleX = options.grid.scaleX ?? options.grid.scale ?? scaleSourceWidth / options.targetWidth;
       const scaleY = options.grid.scaleY ?? options.grid.scale ?? scaleSourceHeight / options.targetHeight;
-      const cropToBounds = options.grid.cropToBounds ?? (options.mode === "single");
+      const cropToBounds =
+        options.outputSizeMode === "exact"
+          ? false
+          : options.grid.cropToBounds ?? options.mode === "single";
       const outputWidth = cropToBounds && closest.sourceRect ? Math.max(1, Math.floor(closest.sourceRect.w / scaleX)) : options.targetWidth;
       const outputHeight = cropToBounds && closest.sourceRect ? Math.max(1, Math.floor(closest.sourceRect.h / scaleY)) : options.targetHeight;
 
