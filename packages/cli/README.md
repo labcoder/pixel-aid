@@ -37,13 +37,20 @@ Robust native-size inference is available as an explicit experiment while Classi
 ```sh
 pixelaid fix generated.png \
   --out generated-fixed.png \
-  --output-size detected \
+  --native-size auto \
+  --canvas 128x128 \
+  --framing preserve \
+  --canvas-scale native \
   --grid-strategy robust \
   --robust-safety guarded \
   --json
 ```
 
-Use `--output-size source` to keep the decoded canvas 1:1, or `--output-size exact --target WIDTHxHEIGHT` for an exact result. Detected and source modes reject target dimensions so automation cannot silently choose conflicting semantics. Robust safety modes are `guarded` (the automation default), `warn`, and `off`; fallback/warning details are returned in the normal JSON diagnostics and warnings. Robust background processing also requires `--full-canvas`. These controls do not implicitly change alpha removal, outlines, palettes, fringe cleanup, or downscale selection.
+Sizing now has two explicit stages for single images. `--native-size auto|WIDTHxHEIGHT` controls the true reconstructed pixel-art dimensions. `--canvas content|native|WIDTHxHEIGHT` then packages that reconstruction without changing its native pixels unless `--canvas-scale integer|resample` requests scaling. `--framing preserve` retains proportional source padding, `pack` removes it, and `fit` scales the subject to the selected canvas; `--anchor` controls placement.
+
+For example, a reconstructed `90x113` subject can remain `90x113` inside a `128x128` output while preserving its source-relative position. Background removal does not change that geometry. Robust safety modes are `guarded` (the automation default), `warn`, and `off`; fallback/warning details are returned in the normal JSON diagnostics and warnings. Robust background processing also requires `--full-canvas`. These controls do not implicitly change alpha removal, outlines, palettes, fringe cleanup, or downscale selection.
+
+Existing scripts can continue using `--output-size source|detected|exact` and `--target WIDTHxHEIGHT`. Those flags retain the legacy combined sizing contract; new workflows should prefer `--native-size` plus `--canvas` so reconstruction and packaging cannot be confused.
 
 Palette strategies accepted by `--palette-strategy`/`--quantizer` are `medianCut`, `frequency`, `perceptual`, `wu`, `kmeans`, and `familyFirst` (`median-cut` remains a CLI alias for `medianCut`). `familyFirst` seats perceptual color families first, adds nested ramps as the color budget grows, and is the guided default for single sprites/icons.
 
