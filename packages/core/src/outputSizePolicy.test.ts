@@ -134,6 +134,75 @@ describe("output-size policies", () => {
     expect(second.image).toMatchObject({ width: 16, height: 12 });
   });
 
+  test("background preservation changes pixels without changing the native grid or canvas", () => {
+    const source = createMatteSubjectImage();
+    const detectedSubject: GridCandidate = {
+      outputWidth: 6,
+      outputHeight: 4,
+      scaleX: 3,
+      scaleY: 3,
+      phaseX: 0,
+      phaseY: 0,
+      sourceRect: { x: 3, y: 3, w: 18, h: 12 },
+      confidence: 0.96,
+      reason: "Fixed subject geometry"
+    };
+    const common = options({
+      assetType: "sprite",
+      reconstruction: { sizeMode: "manual", width: 8, height: 6 },
+      packaging: {
+        canvasMode: "exact",
+        width: 8,
+        height: 6,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      },
+      grid: { detect: "auto", cropToBounds: true }
+    });
+    const preserved = fixImage(
+      source,
+      { ...common, alpha: "preserve" },
+      { gridCandidates: [detectedSubject] }
+    );
+    const removed = fixImage(
+      source,
+      {
+        ...common,
+        alpha: "backgroundFloodFill",
+        alphaSettings: {
+          backgroundDetection: "classic",
+          tolerance: 0,
+          decontaminateRgb: true
+        }
+      },
+      { gridCandidates: [detectedSubject] }
+    );
+
+    expect(preserved.grid).toMatchObject({ scaleX: 3, scaleY: 3 });
+    expect(removed.grid).toMatchObject({ scaleX: 3, scaleY: 3 });
+    expect(preserved.reconstruction).toMatchObject({
+      nativeCanvas: { width: 8, height: 6 },
+      reconstructedImage: { width: 8, height: 6 },
+      compositionPlacement: { x: 0, y: 0, w: 8, h: 6 }
+    });
+    expect(removed.reconstruction).toMatchObject({
+      nativeCanvas: { width: 8, height: 6 },
+      reconstructedImage: { width: 6, height: 4 },
+      compositionPlacement: { x: 1, y: 1, w: 6, h: 4 }
+    });
+    expect(preserved.packaging).toMatchObject({
+      canvas: { width: 8, height: 6 },
+      placement: { x: 0, y: 0, w: 8, h: 6 }
+    });
+    expect(removed.packaging).toMatchObject({
+      canvas: { width: 8, height: 6 },
+      placement: { x: 1, y: 1, w: 6, h: 4 }
+    });
+    expect(alphaAt(preserved.image, 0, 0)).toBe(255);
+    expect(alphaAt(removed.image, 0, 0)).toBe(0);
+  });
+
   test("exact rejects an incomplete target", () => {
     const source = createBlockImage(24, 18, 3);
 
@@ -177,4 +246,25 @@ function createBlockImage(width: number, height: number, scale: number): RGBAIma
     }
   }
   return { width, height, data };
+}
+
+function createMatteSubjectImage(): RGBAImage {
+  const width = 24;
+  const height = 18;
+  const data = new Uint8ClampedArray(width * height * 4);
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const offset = (y * width + x) * 4;
+      const subject = x >= 3 && x < 21 && y >= 3 && y < 15;
+      data[offset] = subject ? 42 : 255;
+      data[offset + 1] = subject ? 104 : 0;
+      data[offset + 2] = subject ? 196 : 255;
+      data[offset + 3] = 255;
+    }
+  }
+  return { width, height, data };
+}
+
+function alphaAt(image: RGBAImage, x: number, y: number): number {
+  return image.data[(y * image.width + x) * 4 + 3]!;
 }

@@ -1954,6 +1954,7 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
   const manualNativeSize = options.reconstruction?.sizeMode === "manual"
     ? resolveManualNativeSize(options)
     : undefined;
+  const preserveFullComposition = shouldPreserveFullComposition(options);
   if (manualNativeSize && options.grid.detect === "manual") {
     return createManualNativeReconstructionGrid(
       image,
@@ -1967,7 +1968,8 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
         confidence: 1,
         reason: "Manual grid and native reconstruction size"
       },
-      manualNativeSize
+      manualNativeSize,
+      preserveFullComposition
     );
   }
 
@@ -2037,8 +2039,12 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
       return createManualNativeReconstructionGrid(
         image,
         closest,
-        manualNativeSize
+        manualNativeSize,
+        preserveFullComposition
       );
+    }
+    if (preserveFullComposition && candidate?.sourceRect) {
+      return createFullCompositionReconstructionGrid(image, candidate);
     }
     if (
       options.outputSizeMode !== "detected" &&
@@ -2113,13 +2119,18 @@ function resolveGrid(image: RGBAImage, options: FixOptions, runtime?: FixRuntime
 function createManualNativeReconstructionGrid(
   image: RGBAImage,
   candidate: GridCandidate,
-  size: { width: number; height: number }
+  size: { width: number; height: number },
+  preserveFullComposition: boolean
 ): GridCandidate {
   const scaleX = image.width / size.width;
   const scaleY = image.height / size.height;
-  const sourceRect = candidate.sourceRect;
+  const sourceRect = preserveFullComposition ? undefined : candidate.sourceRect;
+  const phaseOriginX = candidate.sourceRect?.x ?? candidate.phaseX;
+  const phaseOriginY = candidate.sourceRect?.y ?? candidate.phaseY;
+  const candidateWithoutSourceRect = { ...candidate };
+  delete candidateWithoutSourceRect.sourceRect;
   return {
-    ...candidate,
+    ...(sourceRect ? candidate : candidateWithoutSourceRect),
     outputWidth: sourceRect
       ? Math.max(1, Math.floor(sourceRect.w / scaleX))
       : size.width,
@@ -2128,8 +2139,8 @@ function createManualNativeReconstructionGrid(
       : size.height,
     scaleX,
     scaleY,
-    phaseX: sourceRect ? candidate.phaseX : fullCanvasPhase(candidate.phaseX, scaleX),
-    phaseY: sourceRect ? candidate.phaseY : fullCanvasPhase(candidate.phaseY, scaleY),
+    phaseX: sourceRect ? candidate.phaseX : fullCanvasPhase(phaseOriginX, scaleX),
+    phaseY: sourceRect ? candidate.phaseY : fullCanvasPhase(phaseOriginY, scaleY),
     reason: `Manual ${size.width}x${size.height} native reconstruction; ${candidate.reason}`,
     ...(candidate.diagnostics
       ? {
@@ -2138,12 +2149,48 @@ function createManualNativeReconstructionGrid(
             cropUsed: sourceRect !== undefined,
             notes: [
               ...candidate.diagnostics.notes,
-              "The detector supplied alignment and subject-bound evidence while manual native dimensions remained authoritative."
+              preserveFullComposition
+                ? "The detector supplied alignment evidence while background preservation retained the full native composition."
+                : "The detector supplied alignment and subject-bound evidence while manual native dimensions remained authoritative."
             ]
           }
         }
       : {})
   };
+}
+
+function createFullCompositionReconstructionGrid(
+  image: RGBAImage,
+  candidate: GridCandidate
+): GridCandidate {
+  const { sourceRect, ...candidateWithoutSourceRect } = candidate;
+  const phaseX = fullCanvasPhase(sourceRect?.x ?? candidate.phaseX, candidate.scaleX);
+  const phaseY = fullCanvasPhase(sourceRect?.y ?? candidate.phaseY, candidate.scaleY);
+  return {
+    ...candidateWithoutSourceRect,
+    outputWidth: Math.max(1, Math.floor((image.width - phaseX) / candidate.scaleX)),
+    outputHeight: Math.max(1, Math.floor((image.height - phaseY) / candidate.scaleY)),
+    phaseX,
+    phaseY,
+    reason: `Background-preserving full composition; ${candidate.reason}`,
+    ...(candidate.diagnostics
+      ? {
+          diagnostics: {
+            ...candidate.diagnostics,
+            cropUsed: false,
+            notes: [
+              ...candidate.diagnostics.notes,
+              "Background preservation retained the full native composition without changing the detected grid."
+            ]
+          }
+        }
+      : {})
+  };
+}
+
+function shouldPreserveFullComposition(options: FixOptions): boolean {
+  return options.alpha === "preserve" &&
+    options.packaging?.framing === "preserveComposition";
 }
 
 function resolveManualNativeSize(options: FixOptions): { width: number; height: number } {
