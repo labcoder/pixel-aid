@@ -95,6 +95,54 @@ describe("hero cat golden regression", () => {
     expect(result.image).toMatchObject({ width: 90, height: 113 });
     expect(compareGoldenImage(result.image, expected, { mode: "exact" }).matches).toBe(true);
   }, 10_000);
+
+  test("guards automatic Robust reconstruction from thinning the cat", () => {
+    const source = readGoldenPng(sourcePath);
+    const suggestion = suggestFixSettings(source);
+    const base = buildGuidedHeroCatOptions(source, suggestion);
+    const packaging = {
+      canvasMode: "exact" as const,
+      width: 128,
+      height: 128,
+      framing: "preserveComposition" as const,
+      scale: "native" as const,
+      anchor: "center" as const
+    };
+    const classic = fixImage(source, {
+      ...base,
+      reconstruction: { sizeMode: "auto" },
+      packaging,
+      grid: {
+        ...base.grid,
+        autoStrategy: "classic"
+      }
+    });
+    const guardedRobust = fixImage(source, {
+      ...base,
+      reconstruction: { sizeMode: "auto" },
+      packaging,
+      grid: {
+        ...base.grid,
+        autoStrategy: "robust",
+        robustSafety: "guarded"
+      }
+    });
+
+    expect(classic.reconstruction).toMatchObject({
+      nativeCanvas: { width: 113, height: 113 },
+      reconstructedImage: { width: 81, height: 102 }
+    });
+    expect(guardedRobust.grid.diagnostics?.selection).toMatchObject({
+      requestedStrategy: "robust",
+      selectedStrategy: "classic",
+      decision: "fallback"
+    });
+    expect(guardedRobust.reconstruction).toMatchObject({
+      nativeCanvas: { width: 113, height: 113 },
+      reconstructedImage: { width: 81, height: 102 }
+    });
+    expect(compareGoldenImage(guardedRobust.image, classic.image, { mode: "exact" }).matches).toBe(true);
+  }, 20_000);
 });
 
 function buildGuidedHeroCatOptions(image: RGBAImage, suggestion: FixSettingSuggestion): FixOptions {
