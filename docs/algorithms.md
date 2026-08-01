@@ -35,6 +35,8 @@ Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a 
 
 ### Opt-in robust grid detection
 
+The product-facing Phase 7 availability, safety, and default contract is frozen in [Robust Preview Phase 7 release contract](research/robust-preview-phase-7.md).
+
 Automatic grid detection has two strategies:
 
 - `classic` is the default and preserves the existing product behavior.
