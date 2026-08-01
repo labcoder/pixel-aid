@@ -37,9 +37,12 @@ import type {
   ColorSpace,
   DownscaleMethod,
   FixOptions,
+  GridAutoStrategy,
   GridCandidate,
+  GridRobustSafety,
   LineCleanupStrength,
   OutlineMode,
+  OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
@@ -99,7 +102,7 @@ import {
   getFrameIndexFromTimelinePosition,
   getTimelinePositionForFrame
 } from "./lib/animationTimeline";
-import type { AnalysisJob } from "./lib/analysisWorkerClient";
+import { startGridDetectionJob, type AnalysisJob } from "./lib/analysisWorkerClient";
 import { startEngineQualityAnalysisJob, startEngineSourceAnalysisJob } from "./lib/engineAnalysisJobAdapter";
 import {
   applyFrameDurationOverrides,
@@ -561,14 +564,19 @@ function getSourceAnalysisCacheKey(asset: ImportedImageAsset): string {
   });
 }
 
-function getGridCandidateCacheKey(asset: ImportedImageAsset, preprocessing: GridCandidateCachePreprocessing = "source"): string {
+function getGridCandidateCacheKey(
+  asset: ImportedImageAsset,
+  preprocessing: GridCandidateCachePreprocessing = "source",
+  strategy: GridAutoStrategy = "classic"
+): string {
   return buildGridCandidateCacheKey({
     assetId: asset.id,
     width: asset.image.width,
     height: asset.image.height,
     byteLength: asset.image.data.byteLength,
     maxScale: 32,
-    preprocessing
+    preprocessing,
+    strategy
   });
 }
 
@@ -576,11 +584,12 @@ function cacheGridCandidatesForAsset(
   cache: Record<string, GridCandidate[]>,
   asset: ImportedImageAsset,
   candidates: GridCandidate[],
-  preprocessing: GridCandidateCachePreprocessing = "source"
+  preprocessing: GridCandidateCachePreprocessing = "source",
+  strategy: GridAutoStrategy = "classic"
 ): Record<string, GridCandidate[]> {
   return {
     ...cache,
-    [getGridCandidateCacheKey(asset, preprocessing)]: candidates
+    [getGridCandidateCacheKey(asset, preprocessing, strategy)]: candidates
   };
 }
 
@@ -589,7 +598,12 @@ function gridCandidatePreprocessingForAlpha(alpha: AlphaMode): GridCandidateCach
 }
 
 function reusableGridCandidatesForFix(options: FixOptions, candidates: GridCandidate[]): GridCandidate[] | undefined {
-  if (options.grid.detect !== "auto" || options.alpha === "backgroundFloodFill" || candidates.length === 0) {
+  if (
+    options.grid.detect !== "auto" ||
+    options.grid.autoStrategy === "robust" ||
+    options.alpha === "backgroundFloodFill" ||
+    candidates.length === 0
+  ) {
     return undefined;
   }
 
@@ -846,6 +860,7 @@ type AssetEditorSession = {
     canvasCompareMode: TimelineViewportCompareMode;
     targetWidth: number;
     targetHeight: number;
+    outputSizeMode: OutputSizeMode;
     maxColors: number;
     maxColorsAuto: boolean;
     paletteMode: PaletteMode;
@@ -862,6 +877,8 @@ type AssetEditorSession = {
     palettePreset: string;
     customPaletteText: string;
     gridDetect: "auto" | "manual";
+    gridAutoStrategy: GridAutoStrategy;
+    robustSafety: GridRobustSafety;
     gridScaleX: number;
     gridScaleY: number;
     gridPhaseX: number;
@@ -1042,6 +1059,7 @@ export function App() {
   const [mode, setMode] = useState<AssetMode>(initialSettings.mode);
   const [targetWidth, setTargetWidth] = useState(initialSettings.targetWidth);
   const [targetHeight, setTargetHeight] = useState(initialSettings.targetHeight);
+  const [outputSizeMode, setOutputSizeMode] = useState<OutputSizeMode>(initialSettings.outputSizeMode);
   const [maxColors, setMaxColors] = useState(initialSettings.maxColors);
   const [maxColorsAuto, setMaxColorsAuto] = useState(initialSettings.maxColorsAuto);
   const [paletteMode, setPaletteMode] = useState<PaletteMode>(initialSettings.paletteMode);
@@ -1058,6 +1076,8 @@ export function App() {
   const [palettePreset, setPalettePreset] = useState(initialSettings.palettePreset);
   const [customPaletteText, setCustomPaletteText] = useState(initialSettings.customPaletteText);
   const [gridDetect, setGridDetect] = useState<"auto" | "manual">(initialSettings.gridDetect);
+  const [gridAutoStrategy, setGridAutoStrategy] = useState<GridAutoStrategy>(initialSettings.gridAutoStrategy);
+  const [robustSafety, setRobustSafety] = useState<GridRobustSafety>(initialSettings.robustSafety);
   const [gridScaleX, setGridScaleX] = useState(initialSettings.gridScaleX);
   const [gridScaleY, setGridScaleY] = useState(initialSettings.gridScaleY);
   const [gridPhaseX, setGridPhaseX] = useState(initialSettings.gridPhaseX);
@@ -1155,6 +1175,7 @@ export function App() {
   );
   const [assetSwitchTimingReports, setAssetSwitchTimingReports] = useState<AssetSwitchTimingReport[]>([]);
   const [gridCandidateCache, setGridCandidateCache] = useState<Record<string, GridCandidate[]>>({});
+  const [isGridDetectionBusy, setIsGridDetectionBusy] = useState(false);
   const [sourceAnalysisCache, setSourceAnalysisCache] = useState<Record<string, SourceAssetAnalysis>>({});
   const [qualityReportCache, setQualityReportCache] = useState<Record<string, QualityReport>>({});
   const [assetDirtyStates, setAssetDirtyStates] = useState<Record<string, AssetDirtyState>>({});
@@ -1188,6 +1209,7 @@ export function App() {
   const activeJobRef = useRef<EngineFixJob | null>(null);
   const activeSourceAnalysisJobRef = useRef<AnalysisJob<SourceAssetAnalysis> | null>(null);
   const activeQualityAnalysisJobRef = useRef<AnalysisJob<QualityReport> | null>(null);
+  const activeGridDetectionJobRef = useRef<AnalysisJob<GridCandidate[]> | null>(null);
   const activeAssetSwitchTimingRef = useRef<AssetSwitchTimingReport | null>(null);
   const suppressNextExportValidationResetRef = useRef(false);
   const lastLoggedFixStageRef = useRef<WorkerProgressStage | undefined>(undefined);
@@ -1304,6 +1326,7 @@ export function App() {
       setMode(settings.mode);
       setTargetWidth(settings.targetWidth);
       setTargetHeight(settings.targetHeight);
+      setOutputSizeMode(settings.outputSizeMode);
       setMaxColors(settings.maxColors);
       setMaxColorsAuto(settings.maxColorsAuto);
       setPaletteMode(settings.paletteMode);
@@ -1320,6 +1343,8 @@ export function App() {
       setPalettePreset(settings.palettePreset);
       setCustomPaletteText(settings.customPaletteText);
       setGridDetect(settings.gridDetect);
+      setGridAutoStrategy(settings.gridAutoStrategy);
+      setRobustSafety(settings.robustSafety);
       setGridScaleX(settings.gridScaleX);
       setGridScaleY(settings.gridScaleY);
       setGridPhaseX(settings.gridPhaseX);
@@ -1399,6 +1424,7 @@ export function App() {
         mode,
         targetWidth,
         targetHeight,
+        outputSizeMode,
         maxColors,
         maxColorsAuto,
         paletteMode,
@@ -1415,6 +1441,8 @@ export function App() {
         palettePreset,
         customPaletteText,
         gridDetect,
+        gridAutoStrategy,
+        robustSafety,
         gridScaleX,
         gridScaleY,
         gridPhaseX,
@@ -1493,6 +1521,7 @@ export function App() {
     engineExportTargets,
     frameHeight,
     frameWidth,
+    gridAutoStrategy,
     gridDetect,
     gridPhaseX,
     gridPhaseY,
@@ -1507,6 +1536,7 @@ export function App() {
     mode,
     morphologyCleanup,
     normalizeTimelineFrames,
+    outputSizeMode,
     outlineAlpha,
     outlineColor,
     outlineColorEdited,
@@ -1533,6 +1563,7 @@ export function App() {
     qualityProfile,
     removeHalos,
     removeOrphans,
+    robustSafety,
     savedEditorPresets,
     savedPaletteLibrary,
     sheetColumns,
@@ -1791,6 +1822,7 @@ export function App() {
         canvasCompareMode,
         targetWidth,
         targetHeight,
+        outputSizeMode,
         maxColors,
         maxColorsAuto,
         paletteMode,
@@ -1807,6 +1839,8 @@ export function App() {
         palettePreset,
         customPaletteText,
         gridDetect,
+        gridAutoStrategy,
+        robustSafety,
         gridScaleX,
         gridScaleY,
         gridPhaseX,
@@ -1939,6 +1973,7 @@ export function App() {
       frameMetadataHistory,
       frameMetadataOverrides,
       frameWidth,
+      gridAutoStrategy,
       gridDetect,
       gridPhaseX,
       gridPhaseY,
@@ -1954,6 +1989,7 @@ export function App() {
       mode,
       morphologyCleanup,
       normalizeTimelineFrames,
+      outputSizeMode,
       outlineAlpha,
       outlineColor,
       outlineColorEdited,
@@ -1983,6 +2019,7 @@ export function App() {
       recommendationConfidence,
       removeHalos,
       removeOrphans,
+      robustSafety,
       sandboxScale,
       sandboxSpeed,
       selectedAnimationName,
@@ -2057,6 +2094,7 @@ export function App() {
     setCanvasCompareMode(settings.canvasCompareMode ?? "split");
     setTargetWidth(settings.targetWidth);
     setTargetHeight(settings.targetHeight);
+    setOutputSizeMode(settings.outputSizeMode ?? "exact");
     setMaxColors(settings.maxColors);
     setMaxColorsAuto(settings.maxColorsAuto ?? false);
     setPaletteMode(settings.paletteMode);
@@ -2073,6 +2111,8 @@ export function App() {
     setPalettePreset(settings.palettePreset);
     setCustomPaletteText(settings.customPaletteText);
     setGridDetect(settings.gridDetect);
+    setGridAutoStrategy(settings.gridAutoStrategy ?? "classic");
+    setRobustSafety(settings.robustSafety ?? "guarded");
     setGridScaleX(settings.gridScaleX);
     setGridScaleY(settings.gridScaleY);
     setGridPhaseX(settings.gridPhaseX);
@@ -2280,8 +2320,94 @@ export function App() {
       }
     };
   }, [appendLog, markActiveAssetSwitchTimingForAsset, nextBusyOperation, publishEditorPerformanceSnapshot, selectedAsset, selectedSourceAnalysis, selectedSourceAnalysisKey]);
-  const selectedGridCandidateCacheKey = selectedAsset ? getGridCandidateCacheKey(selectedAsset, gridCandidatePreprocessingForAlpha(alpha)) : "";
+  const selectedGridCandidateCacheKey = selectedAsset
+    ? getGridCandidateCacheKey(
+        selectedAsset,
+        gridCandidatePreprocessingForAlpha(alpha),
+        gridAutoStrategy
+      )
+    : "";
   const gridCandidates = selectCachedGridCandidates(gridCandidateCache, selectedGridCandidateCacheKey);
+  useEffect(() => {
+    if (
+      !selectedAsset ||
+      mode !== "single" ||
+      gridDetect !== "auto" ||
+      gridAutoStrategy !== "robust" ||
+      outputSizeMode === "source" ||
+      alpha === "backgroundFloodFill" ||
+      gridCandidates.length > 0 ||
+      !(
+        selectedAsset.assetType === "sprite" ||
+        selectedAsset.assetType === "icon" ||
+        selectedAsset.assetType === "background"
+      )
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    const job = startGridDetectionJob(selectedAsset.image, {
+      strategy: "robust",
+      cropToBounds:
+        outputSizeMode === "exact" || selectedAsset.assetType === "background"
+          ? false
+          : cropToBounds,
+      maxScale: 32,
+      staleKey: `${selectedAsset.id}:grid:robust`,
+      stalePolicy: "latestOnly"
+    });
+    activeGridDetectionJobRef.current?.cancel();
+    activeGridDetectionJobRef.current = job;
+    setIsGridDetectionBusy(true);
+
+    void job.promise
+      .then((candidates) => {
+        if (cancelled || activeGridDetectionJobRef.current?.requestId !== job.requestId) {
+          return;
+        }
+        setGridCandidateCache((current) =>
+          cacheGridCandidatesForAsset(
+            current,
+            selectedAsset,
+            candidates,
+            "source",
+            "robust"
+          )
+        );
+        appendLog(
+          `Robust detector found ${candidates[0]?.outputWidth ?? "?"}x${candidates[0]?.outputHeight ?? "?"} for review`
+        );
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          appendLog(
+            `Robust detector review failed: ${error instanceof Error ? error.message : "unknown error"}`
+          );
+        }
+      })
+      .finally(() => {
+        if (activeGridDetectionJobRef.current?.requestId === job.requestId) {
+          activeGridDetectionJobRef.current = null;
+          setIsGridDetectionBusy(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+      job.cancel();
+    };
+  }, [
+    alpha,
+    appendLog,
+    cropToBounds,
+    gridAutoStrategy,
+    gridCandidates.length,
+    gridDetect,
+    mode,
+    outputSizeMode,
+    selectedAsset
+  ]);
   const outputPalette = fixResult?.palette ?? [];
   const sheetMode = isSheetLikeMode(mode);
   const activePaletteLockScope: PaletteLockScope = sheetMode ? (paletteLockScope === "single" ? "sheet" : paletteLockScope) : "single";
@@ -2289,6 +2415,16 @@ export function App() {
   const customProtectedPaletteColors = useMemo(() => parsePaletteText(paletteProtectColorsText), [paletteProtectColorsText]);
   const effectiveMaxColors = maxColorsAuto ? autoPaletteColorCap : maxColors;
   const paletteDiagnostics = fixResult?.diagnostics?.palette;
+  const gridSelectionDiagnostics = fixResult?.grid.diagnostics?.selection;
+  const displayedGridCandidate = fixResult?.grid ?? gridCandidates[0];
+  const displayedRobustDiagnostics = displayedGridCandidate?.diagnostics?.robust;
+  const displayedGridAnisotropy = displayedGridCandidate
+    ? Math.max(displayedGridCandidate.scaleX, displayedGridCandidate.scaleY) /
+      Math.max(
+        Number.EPSILON,
+        Math.min(displayedGridCandidate.scaleX, displayedGridCandidate.scaleY)
+      )
+    : null;
   const paletteWarningMessages = summarizePaletteWarnings(paletteDiagnostics);
   const outputPalettePreview = outputPalette.slice(0, Math.min(outputPalette.length, 16));
   const outputPaletteLabel = paletteDiagnostics ? `Output (${paletteDiagnostics.mode})` : "Output";
@@ -3171,12 +3307,15 @@ export function App() {
         targetHeight,
         effectiveTargetWidth,
         effectiveTargetHeight,
+        outputSizeMode,
         maxColors,
         paletteMode,
         paletteStrategy,
         paletteLockScope: activePaletteLockScope,
         paletteDithering,
         gridDetect,
+        gridAutoStrategy,
+        robustSafety,
         gridScaleX,
         gridScaleY,
         gridPhaseX,
@@ -3578,6 +3717,7 @@ export function App() {
     setMode(resolvedMode);
     setTargetWidth(suggestion.targetWidth);
     setTargetHeight(suggestion.targetHeight);
+    setOutputSizeMode("exact");
     setFrameWidth(layout?.frameWidth ?? suggestion.targetWidth);
     setFrameHeight(layout?.frameHeight ?? suggestion.targetHeight);
     setSheetRows(layout?.rows ?? 1);
@@ -3618,6 +3758,8 @@ export function App() {
     setGridPhaseX(suggestion.gridPhaseX);
     setGridPhaseY(suggestion.gridPhaseY);
     setGridDetect(suggestion.gridDetect);
+    setGridAutoStrategy("classic");
+    setRobustSafety("guarded");
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
     setFixMixels(resolvedMode === "single" && suggestion.fixMixels);
@@ -4253,8 +4395,13 @@ export function App() {
     const options: FixOptions = {
       mode,
       assetType,
-      targetWidth: effectiveTargetWidth,
-      targetHeight: effectiveTargetHeight,
+      ...(mode === "single" ? { outputSizeMode } : {}),
+      ...(sheetMode || outputSizeMode === "exact"
+        ? {
+            targetWidth: effectiveTargetWidth,
+            targetHeight: effectiveTargetHeight
+          }
+        : {}),
       maxColors: effectiveMaxColors,
       paletteSettings: {
         mode: paletteMode,
@@ -4274,14 +4421,27 @@ export function App() {
       },
       grid: {
         detect: gridDetect,
-        scaleX: gridScaleX,
-        scaleY: gridScaleY,
-        cropToBounds: mode === "single" && cropToBounds,
+        ...(gridDetect === "auto"
+          ? { autoStrategy: mode === "single" ? gridAutoStrategy : "classic" }
+          : {}),
+        ...(mode === "single" && gridDetect === "auto" && gridAutoStrategy === "robust"
+          ? { robustSafety }
+          : {}),
+        ...(gridDetect === "manual"
+          ? {
+              scaleX: gridScaleX,
+              scaleY: gridScaleY,
+              phaseX: gridPhaseX,
+              phaseY: gridPhaseY
+            }
+          : {}),
+        cropToBounds:
+          mode === "single" &&
+          cropToBounds &&
+          !(gridAutoStrategy === "robust" && assetType === "background"),
         localCorrection: mode === "single" && localCorrection,
         ...(mode === "single" && fixMixels ? { fixMixels: true } : {}),
-        ...(mode === "single" && snap ? { snap: true } : {}),
-        phaseX: gridPhaseX,
-        phaseY: gridPhaseY
+        ...(mode === "single" && snap ? { snap: true } : {})
       },
       downscale,
       alpha,
@@ -4344,6 +4504,7 @@ export function App() {
     denoiseStrength,
     downscale,
     gridDetect,
+    gridAutoStrategy,
     gridPhaseX,
     gridPhaseY,
     gridScaleX,
@@ -4359,6 +4520,7 @@ export function App() {
     matteCleanup,
     mode,
     morphologyCleanup,
+    outputSizeMode,
     outlineColor,
     outlineAlpha,
     outlineColorEdited,
@@ -4375,6 +4537,7 @@ export function App() {
     preserveSinglePixelDetails,
     removeHalos,
     removeOrphans,
+    robustSafety,
     sheetFrames,
     sheetMode,
     sheetOptions,
@@ -4727,8 +4890,11 @@ export function App() {
           mode,
           targetWidth,
           targetHeight,
+          outputSizeMode,
           maxColors,
           gridDetect,
+          gridAutoStrategy,
+          robustSafety,
           gridScaleX,
           gridScaleY,
           downscale,
@@ -4755,6 +4921,9 @@ export function App() {
       setTargetHeight(next.targetHeight);
       setPaletteBudget(next.maxColors);
       setGridDetect(next.gridDetect);
+      setOutputSizeMode(next.outputSizeMode);
+      setGridAutoStrategy(next.gridAutoStrategy);
+      setRobustSafety(next.robustSafety);
       setGridScaleX(next.gridScaleX);
       setGridScaleY(next.gridScaleY);
       setGridPhaseX(0);
@@ -4766,7 +4935,7 @@ export function App() {
       setSuggestionReason(`${preset.label}: ${preset.description}`);
       appendLog(`Applied preset: ${preset.label}`);
     },
-    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
+    [alpha, appendLog, applyAlphaSettings, assetType, clearDetectedSheetLayout, downscale, gridAutoStrategy, gridDetect, gridPhaseX, gridPhaseY, gridScaleX, gridScaleY, maxColors, mode, outputSizeMode, robustSafety, selectedAsset, setPaletteBudget, targetHeight, targetWidth]
   );
 
   const currentEditorPresetSettings = useCallback(
@@ -4775,14 +4944,17 @@ export function App() {
       mode,
       targetWidth,
       targetHeight,
+      outputSizeMode,
       maxColors,
       gridDetect,
+      gridAutoStrategy,
+      robustSafety,
       gridScaleX,
       gridScaleY,
       downscale,
       alpha
     }),
-    [alpha, assetType, downscale, gridDetect, gridScaleX, gridScaleY, maxColors, mode, targetHeight, targetWidth]
+    [alpha, assetType, downscale, gridAutoStrategy, gridDetect, gridScaleX, gridScaleY, maxColors, mode, outputSizeMode, robustSafety, targetHeight, targetWidth]
   );
 
   const saveCurrentEditorPreset = useCallback(() => {
@@ -4950,6 +5122,8 @@ export function App() {
       const nextHeight = Math.max(1, Math.round(next.targetHeight));
       setTargetWidth(nextWidth);
       setTargetHeight(nextHeight);
+      setOutputSizeMode("exact");
+      setCropToBounds(false);
       if (selectedAsset) {
         const scale = deriveGridScale(selectedAsset.image, { width: nextWidth, height: nextHeight });
         setGridScaleX(scale.scaleX);
@@ -5018,6 +5192,7 @@ export function App() {
 
     setAspectLocked(true);
     commitTargetSize(keepSourceSize(selectedAsset.image));
+    setOutputSizeMode("source");
     appendLog("Set output size to keep source dimensions");
   }, [appendLog, commitTargetSize, selectedAsset]);
 
@@ -6326,6 +6501,29 @@ export function App() {
     [appendLog, clearDetectedSheetLayout, mode]
   );
 
+  const applyGridCandidateManually = useCallback(
+    (candidate: GridCandidate) => {
+      clearDetectedSheetLayout();
+      setGridDetect("manual");
+      setOutputSizeMode("exact");
+      setTargetWidth(candidate.outputWidth);
+      setTargetHeight(candidate.outputHeight);
+      setGridScaleX(candidate.scaleX);
+      setGridScaleY(candidate.scaleY);
+      setGridPhaseX(candidate.sourceRect?.x ?? candidate.phaseX);
+      setGridPhaseY(candidate.sourceRect?.y ?? candidate.phaseY);
+      setCropToBounds(false);
+      setSuggestionReason(
+        `Manual candidate ${candidate.outputWidth}x${candidate.outputHeight}; automatic strategy selection is bypassed.`
+      );
+      setRecommendationConfidence(candidate.confidence);
+      appendLog(
+        `Locked grid candidate manually at ${candidate.outputWidth}x${candidate.outputHeight}`
+      );
+    },
+    [appendLog, clearDetectedSheetLayout]
+  );
+
   const performAssetSwitch = useCallback(
     async (
       assetId: string,
@@ -7209,43 +7407,76 @@ export function App() {
           </>
         ) : (
           <>
-            <DimensionField
-              label="Output W"
-              value={targetWidth}
-              min={1}
-              max={Math.max(512, targetWidth)}
-              onChange={(value) => updateTargetSize("width", value)}
+            <SelectField
+              label="Output sizing"
+              value={outputSizeMode}
+              options={[
+                ["exact", "Exact dimensions"],
+                ["detected", "Automatic detected"],
+                ["source", "Keep source 1:1"]
+              ]}
+              onChange={(value) => {
+                const next = value as OutputSizeMode;
+                if (next === "source") {
+                  applyKeepSourceSize();
+                  return;
+                }
+                setOutputSizeMode(next);
+                if (next === "detected") {
+                  setGridDetect("auto");
+                }
+              }}
             />
-            <DimensionField
-              label="Output H"
-              value={targetHeight}
-              min={1}
-              max={Math.max(512, targetHeight)}
-              onChange={(value) => updateTargetSize("height", value)}
-            />
-            <TargetPresetButtons
-              label={aspectLocked ? "Size presets" : "Width presets"}
-              presets={targetSizePresets}
-              activeValue={targetWidth}
-              onSelect={(preset) => applyTargetPreset("width", preset)}
-            />
-            <button type="button" className="wide-tool-button" disabled={!selectedAsset} onClick={applyKeepSourceSize}>
-              Keep Source Size
-            </button>
-            {!aspectLocked ? (
-              <TargetPresetButtons
-                label="Height presets"
-                presets={targetSizePresets}
-                activeValue={targetHeight}
-                onSelect={(preset) => applyTargetPreset("height", preset)}
+            {outputSizeMode === "exact" ? (
+              <>
+                <DimensionField
+                  label="Output W"
+                  value={targetWidth}
+                  min={1}
+                  max={Math.max(512, targetWidth)}
+                  onChange={(value) => updateTargetSize("width", value)}
+                />
+                <DimensionField
+                  label="Output H"
+                  value={targetHeight}
+                  min={1}
+                  max={Math.max(512, targetHeight)}
+                  onChange={(value) => updateTargetSize("height", value)}
+                />
+                <TargetPresetButtons
+                  label={aspectLocked ? "Size presets" : "Width presets"}
+                  presets={targetSizePresets}
+                  activeValue={targetWidth}
+                  onSelect={(preset) => applyTargetPreset("width", preset)}
+                />
+                {!aspectLocked ? (
+                  <TargetPresetButtons
+                    label="Height presets"
+                    presets={targetSizePresets}
+                    activeValue={targetHeight}
+                    onSelect={(preset) => applyTargetPreset("height", preset)}
+                  />
+                ) : null}
+                <label className="toggle-row">
+                  <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
+                  Lock aspect ratio
+                </label>
+              </>
+            ) : (
+              <ReadonlyField
+                label={outputSizeMode === "source" ? "Output" : "Detected"}
+                value={
+                  outputSizeMode === "source" && selectedAsset
+                    ? `${selectedAsset.image.width}x${selectedAsset.image.height}`
+                    : gridCandidates[0]
+                      ? `${gridCandidates[0].outputWidth}x${gridCandidates[0].outputHeight}`
+                      : "Run detector"
+                }
+                text
               />
-            ) : null}
-            <label className="toggle-row">
-              <input type="checkbox" checked={aspectLocked} onChange={(event) => setAspectLocked(event.currentTarget.checked)} />
-              Lock aspect ratio
-            </label>
+            )}
             <p className="field-note">
-              Output size is the native game-art result. Editing it disables auto crop so the requested dimensions are honored.
+              Exact guarantees the requested canvas, Detected lets the selected grid detector choose native dimensions, and Keep source processes the decoded image at 1:1.
             </p>
           </>
         )}
@@ -7273,6 +7504,11 @@ export function App() {
           value={maxColorsAuto ? "auto" : String(maxColors)}
           options={paletteMaxColorOptions}
           onChange={setPaletteMaxColorsSelection}
+        />
+        <ReadonlyField
+          label="Colors in / out"
+          value={`${selectedSourceAnalysis?.palette.totalColors ?? "--"} / ${fixResult?.metrics.paletteCount ?? "--"}`}
+          text
         />
         <SelectField
           label="Palette"
@@ -7670,12 +7906,88 @@ export function App() {
     ),
     grid: (
       <>
+        {mode === "single" ? (
+          <>
+            <SelectField
+              label="Grid strategy"
+              value={gridAutoStrategy}
+              options={[
+                ["classic", "Classic"],
+                ["robust", "Robust (experimental)"]
+              ]}
+              onChange={(value) => {
+                const next = value as GridAutoStrategy;
+                clearDetectedSheetLayout();
+                setGridAutoStrategy(next);
+                setGridDetect("auto");
+                if (next === "robust" && assetType === "background") {
+                  setCropToBounds(false);
+                }
+              }}
+            />
+            {gridAutoStrategy === "robust" ? (
+              <>
+                <SelectField
+                  label="Robust safety"
+                  value={robustSafety}
+                  options={[
+                    ["guarded", "Guarded fallback"],
+                    ["warn", "Keep with warning"],
+                    ["off", "Use raw proposal"]
+                  ]}
+                  onChange={(value) => setRobustSafety(value as GridRobustSafety)}
+                />
+                <p className="field-note">
+                  Auto Suggest remains Classic. Robust only runs after you select it here; Guarded may use Classic when aspect evidence is unsafe.
+                </p>
+              </>
+            ) : null}
+            {isGridDetectionBusy ? <p className="field-note">Analyzing Robust grid candidates…</p> : null}
+          </>
+        ) : (
+          <p className="field-note">Sheet and tile workflows remain on Classic. Per-frame Robust processing is deferred to the next review phase.</p>
+        )}
         <GridCandidateReview
           image={selectedPreviewImage}
           candidates={gridCandidates}
           activeSettings={{ targetWidth, targetHeight, scaleX: gridScaleX, scaleY: gridScaleY, phaseX: gridPhaseX, phaseY: gridPhaseY }}
           onApply={applyGridCandidate}
+          onUseManual={applyGridCandidateManually}
         />
+        {displayedGridCandidate ? (
+          <>
+            <ReadonlyField
+              label="Detected / final"
+              value={`${gridCandidates[0]?.outputWidth ?? displayedGridCandidate.outputWidth}x${gridCandidates[0]?.outputHeight ?? displayedGridCandidate.outputHeight} / ${fixResult?.image.width ?? "--"}x${fixResult?.image.height ?? "--"}`}
+              text
+            />
+            <ReadonlyField
+              label="Periods X / Y"
+              value={`${(displayedRobustDiagnostics?.axisX.period ?? displayedGridCandidate.scaleX).toFixed(3)} / ${(displayedRobustDiagnostics?.axisY.period ?? displayedGridCandidate.scaleY).toFixed(3)}`}
+              text
+            />
+            <ReadonlyField
+              label="Confidence / anisotropy"
+              value={`${Math.round(displayedGridCandidate.confidence * 100)}% / ${displayedGridAnisotropy?.toFixed(2) ?? "--"}x`}
+              text
+            />
+          </>
+        ) : null}
+        {fixResult && gridDetect === "auto" ? (
+          <>
+            <ReadonlyField
+              label="Requested / used"
+              value={`${gridSelectionDiagnostics?.requestedStrategy ?? gridAutoStrategy} / ${gridSelectionDiagnostics?.selectedStrategy ?? (fixResult.grid.diagnostics?.robust ? "robust" : "classic")}`}
+              text
+            />
+            {gridSelectionDiagnostics && gridSelectionDiagnostics.decision !== "selected" ? (
+              <div className="asset-type-warning-list" aria-label="Robust selection warning">
+                <p>{gridSelectionDiagnostics.message}</p>
+                <small>{gridSelectionDiagnostics.reasonCodes.join(", ")}</small>
+              </div>
+            ) : null}
+          </>
+        ) : null}
         <SelectField
           label="Detect"
           value={gridDetect}
@@ -10208,15 +10520,25 @@ function GridCandidateReview({
   image,
   candidates,
   activeSettings,
-  onApply
+  onApply,
+  onUseManual
 }: {
   image: RGBAImage | null;
   candidates: GridCandidate[];
   activeSettings: { targetWidth: number; targetHeight: number; scaleX: number; scaleY: number; phaseX: number; phaseY: number };
   onApply: (candidate: GridCandidate) => void;
+  onUseManual: (candidate: GridCandidate) => void;
 }) {
-  if (!image || candidates.length === 0) {
+  if (!image) {
     return <p className="field-note">Import an asset to inspect grid candidates.</p>;
+  }
+
+  if (candidates.length === 0) {
+    return (
+      <p className="field-note">
+        No cached grid candidates yet. Select Robust to analyze the source, or run Fix when alpha cleanup requires detector-time preprocessing.
+      </p>
+    );
   }
 
   const bestCandidate = candidates[0]!;
@@ -10234,6 +10556,9 @@ function GridCandidateReview({
         </span>
         <button type="button" disabled={bestActive} onClick={() => onApply(bestCandidate)}>
           {bestActive ? "Applied" : "Apply"}
+        </button>
+        <button type="button" onClick={() => onUseManual(bestCandidate)}>
+          Use manually
         </button>
       </div>
       <details>

@@ -1,12 +1,15 @@
-import type { AlphaMode, AssetMode, AssetType, DownscaleMethod } from "@pixelaid/shared";
+import type { AlphaMode, AssetMode, AssetType, DownscaleMethod, GridAutoStrategy, GridRobustSafety, OutputSizeMode } from "@pixelaid/shared";
 
 export type EditorSettingsState = {
   assetType: AssetType;
   mode: AssetMode;
   targetWidth: number;
   targetHeight: number;
+  outputSizeMode: OutputSizeMode;
   maxColors: number;
   gridDetect: "auto" | "manual";
+  gridAutoStrategy: GridAutoStrategy;
+  robustSafety: GridRobustSafety;
   gridScaleX: number;
   gridScaleY: number;
   downscale: DownscaleMethod;

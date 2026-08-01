@@ -2,7 +2,10 @@ import type {
   AlphaMode,
   AssetMode,
   DownscaleMethod,
+  GridAutoStrategy,
+  GridRobustSafety,
   OutlineMode,
+  OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
@@ -18,6 +21,7 @@ export type EngineDefaultFixSettings = {
   mode: AssetMode;
   targetWidth: number;
   targetHeight: number;
+  outputSizeMode: OutputSizeMode;
   maxColors: number;
   paletteMode: PaletteMode;
   paletteStrategy: PaletteStrategy;
@@ -26,6 +30,8 @@ export type EngineDefaultFixSettings = {
   palettePreset: string;
   customPaletteText: string;
   gridDetect: EngineGridDetectMode;
+  gridAutoStrategy: GridAutoStrategy;
+  robustSafety: GridRobustSafety;
   gridScaleX: number;
   gridScaleY: number;
   gridPhaseX: number;
@@ -77,6 +83,7 @@ const defaultFixSettings: EngineDefaultFixSettings = {
   mode: "single",
   targetWidth: 64,
   targetHeight: 64,
+  outputSizeMode: "exact",
   maxColors: 16,
   paletteMode: "auto",
   paletteStrategy: "medianCut",
@@ -85,6 +92,8 @@ const defaultFixSettings: EngineDefaultFixSettings = {
   palettePreset: "pixelaid-arcade-8",
   customPaletteText: "",
   gridDetect: "auto",
+  gridAutoStrategy: "classic",
+  robustSafety: "guarded",
   gridScaleX: 8,
   gridScaleY: 8,
   gridPhaseX: 0,

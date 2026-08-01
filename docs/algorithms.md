@@ -38,9 +38,13 @@ Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a 
 Automatic grid detection has two strategies:
 
 - `classic` is the default and preserves the existing product behavior.
-- `robust` is an explicit reconstruction-only strategy for eligible single-image `sprite` and `icon` inputs.
+- `robust` is an explicit reconstruction-only strategy for eligible single-image `sprite` and `icon` inputs, plus explicitly full-canvas `background` inputs.
 
-Callers can request robust candidates directly with `detectGridCandidates(image, { strategy: "robust" })`. Eligible `fixImage` calls can select the same path with `grid: { detect: "auto", autoStrategy: "robust" }`. Manual grids, manual target dimensions, and runtime-supplied grid candidates remain authoritative. Sheet, tile, portrait, background, and UI workflows do not route through robust inference.
+Callers can request robust candidates directly with `detectGridCandidates(image, { strategy: "robust" })`. Eligible `fixImage` calls can select the same path with `grid: { detect: "auto", autoStrategy: "robust" }`. Backgrounds additionally require `cropToBounds: false`; sheet, tile, portrait, and UI workflows remain on Classic. Manual grids and runtime-supplied grid candidates remain authoritative.
+
+Product surfaces can add `grid.robustSafety: "guarded" | "warn" | "off"` without changing the frozen detector. `guarded` compares the Robust and Classic proposals and falls back only when a severe aspect change also has weak independent or per-axis evidence. `warn` keeps the Robust proposal with the same structured diagnostic, and `off` exposes the raw Step-1Q selection. Core callers that omit the safety field retain the raw behavior; the web and automation surfaces default to Guarded only after the user explicitly selects Robust.
+
+Output sizing is an independent policy. `outputSizeMode: "detected"` uses the selected detector's native size, `"source"` uses a full-canvas scale-1 mapping, and `"exact"` requires target dimensions and guarantees them. Omitting the field preserves the legacy target-guided behavior for existing core callers. None of these policies changes background removal, outline handling, palette generation, fringe correction, cleanup, or the chosen block downscale method.
 
 The robust detector builds deterministic, alpha-aware transition and curvature profiles plus coarse color-run histograms. A parallel blur-aware profile groups broad transition ramps and votes at each ramp's energy-weighted center. Ramp evidence is gated off when boundaries are crisp, so it can supply additional softened-image hypotheses without silently replacing the ordinary detector score. The detector estimates X and Y cell counts independently, scores floating-point periods and boundary offsets, and arbitrates divisor harmonics using both structural evidence and run reliability. Pair scoring allows non-square pixels to win when the axes support them. Conventional output sizes are only a weak pair-level prior; they cannot override reliable run evidence.
 

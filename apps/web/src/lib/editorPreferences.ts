@@ -4,8 +4,11 @@ import type {
   AssetType,
   ColorSpace,
   DownscaleMethod,
+  GridAutoStrategy,
+  GridRobustSafety,
   LineCleanupStrength,
   OutlineMode,
+  OutputSizeMode,
   PaletteDitheringMode,
   PaletteLockScope,
   PaletteMode,
@@ -34,6 +37,7 @@ export type EditorPreferenceSettings = {
   mode: AssetMode;
   targetWidth: number;
   targetHeight: number;
+  outputSizeMode: OutputSizeMode;
   maxColors: number;
   maxColorsAuto: boolean;
   paletteMode: PaletteMode;
@@ -49,6 +53,8 @@ export type EditorPreferenceSettings = {
   palettePreset: string;
   customPaletteText: string;
   gridDetect: "auto" | "manual";
+  gridAutoStrategy: GridAutoStrategy;
+  robustSafety: GridRobustSafety;
   gridScaleX: number;
   gridScaleY: number;
   gridPhaseX: number;
@@ -121,6 +127,7 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   mode: engineFixDefaults.mode,
   targetWidth: engineFixDefaults.targetWidth,
   targetHeight: engineFixDefaults.targetHeight,
+  outputSizeMode: engineFixDefaults.outputSizeMode,
   maxColors: engineFixDefaults.maxColors,
   maxColorsAuto: false,
   paletteMode: engineFixDefaults.paletteMode,
@@ -136,6 +143,8 @@ export const defaultEditorPreferenceSettings: EditorPreferenceSettings = {
   palettePreset: engineFixDefaults.palettePreset,
   customPaletteText: engineFixDefaults.customPaletteText,
   gridDetect: engineFixDefaults.gridDetect,
+  gridAutoStrategy: engineFixDefaults.gridAutoStrategy,
+  robustSafety: engineFixDefaults.robustSafety,
   gridScaleX: engineFixDefaults.gridScaleX,
   gridScaleY: engineFixDefaults.gridScaleY,
   gridPhaseX: engineFixDefaults.gridPhaseX,
@@ -249,6 +258,7 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       mode: unionSetting<AssetMode>(settings.mode, ["single", "spriteSheet", "tileSheet"], defaults.settings.mode),
       targetWidth: integerSetting(settings.targetWidth, defaults.settings.targetWidth, 1, 4096),
       targetHeight: integerSetting(settings.targetHeight, defaults.settings.targetHeight, 1, 4096),
+      outputSizeMode: unionSetting(settings.outputSizeMode, ["detected", "source", "exact"], defaults.settings.outputSizeMode),
       maxColors: integerSetting(settings.maxColors, defaults.settings.maxColors, 1, 512),
       maxColorsAuto: booleanSetting(settings.maxColorsAuto, defaults.settings.maxColorsAuto),
       paletteMode: unionSetting(settings.paletteMode, ["auto", "fixed", "preset"], defaults.settings.paletteMode),
@@ -264,6 +274,8 @@ export function normalizeEditorPreferences(value: unknown): EditorPreferences {
       palettePreset: stringSetting(settings.palettePreset, defaults.settings.palettePreset),
       customPaletteText: stringSetting(settings.customPaletteText, defaults.settings.customPaletteText),
       gridDetect: unionSetting(settings.gridDetect, ["auto", "manual"], defaults.settings.gridDetect),
+      gridAutoStrategy: unionSetting(settings.gridAutoStrategy, ["classic", "robust"], defaults.settings.gridAutoStrategy),
+      robustSafety: unionSetting(settings.robustSafety, ["guarded", "warn", "off"], defaults.settings.robustSafety),
       gridScaleX: numberSetting(settings.gridScaleX, defaults.settings.gridScaleX, 0.01, 1024),
       gridScaleY: numberSetting(settings.gridScaleY, defaults.settings.gridScaleY, 0.01, 1024),
       gridPhaseX: numberSetting(settings.gridPhaseX, defaults.settings.gridPhaseX, 0, 1024),
@@ -482,8 +494,11 @@ function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSe
   if (typeof value.mode === "string") settings.mode = unionSetting<AssetMode>(value.mode, ["single", "spriteSheet", "tileSheet"], "single");
   if (typeof value.targetWidth === "number") settings.targetWidth = integerSetting(value.targetWidth, 64, 1, 4096);
   if (typeof value.targetHeight === "number") settings.targetHeight = integerSetting(value.targetHeight, 64, 1, 4096);
+  if (typeof value.outputSizeMode === "string") settings.outputSizeMode = unionSetting(value.outputSizeMode, ["detected", "source", "exact"], "exact");
   if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 512);
   if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
+  if (typeof value.gridAutoStrategy === "string") settings.gridAutoStrategy = unionSetting(value.gridAutoStrategy, ["classic", "robust"], "classic");
+  if (typeof value.robustSafety === "string") settings.robustSafety = unionSetting(value.robustSafety, ["guarded", "warn", "off"], "guarded");
   if (typeof value.gridScaleX === "number") settings.gridScaleX = numberSetting(value.gridScaleX, 8, 0.01, 1024);
   if (typeof value.gridScaleY === "number") settings.gridScaleY = numberSetting(value.gridScaleY, 8, 0.01, 1024);
   if (typeof value.downscale === "string")

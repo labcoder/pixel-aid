@@ -180,6 +180,40 @@ describe("editor preferences", () => {
     expect(invalid.settings.protectSalientColors).toBe(true);
   });
 
+  test("defaults to Classic exact sizing and round-trips opt-in Robust controls", () => {
+    const defaults = createDefaultEditorPreferences();
+    const normalized = normalizeEditorPreferences({
+      settings: {
+        outputSizeMode: "detected",
+        gridAutoStrategy: "robust",
+        robustSafety: "warn"
+      }
+    });
+    const invalid = normalizeEditorPreferences({
+      settings: {
+        outputSizeMode: "stretch",
+        gridAutoStrategy: "magic",
+        robustSafety: "always"
+      }
+    });
+
+    expect(defaults.settings).toMatchObject({
+      outputSizeMode: "exact",
+      gridAutoStrategy: "classic",
+      robustSafety: "guarded"
+    });
+    expect(normalized.settings).toMatchObject({
+      outputSizeMode: "detected",
+      gridAutoStrategy: "robust",
+      robustSafety: "warn"
+    });
+    expect(invalid.settings).toMatchObject({
+      outputSizeMode: "exact",
+      gridAutoStrategy: "classic",
+      robustSafety: "guarded"
+    });
+  });
+
   test("defaults telemetry consent off and preserves explicit opt-in", () => {
     const defaults = createDefaultEditorPreferences();
     const enabled = normalizeEditorPreferences({ settings: { telemetryConsent: true } });
