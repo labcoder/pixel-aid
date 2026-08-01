@@ -67,6 +67,11 @@ export type {
 } from "./step1pHarmonicAxisCorpus";
 export { releaseOnboardingSamples } from "./onboardingSamples";
 export type { ReleaseOnboardingSample, ReleaseSampleCategory, ReleaseSampleProvenance } from "./onboardingSamples";
+export { robustProductReviewFixtures } from "./robustProductReviewFixtures";
+export type {
+  RobustProductReviewFailureClass,
+  RobustProductReviewFixture
+} from "./robustProductReviewFixtures";
 export { paletteDriftAnimationFixtures } from "./paletteDriftAnimationFrames";
 export { presentationSpriteSheetFixtures } from "./presentationSpriteSheets";
 export { qualityFailureFixtureCatalog } from "./qualityFailureCorpus";
