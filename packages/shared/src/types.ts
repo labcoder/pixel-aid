@@ -553,7 +553,10 @@ export type GridSelectionReasonCode =
   | "ineligible-asset"
   | "background-requires-full-canvas"
   | "severe-anisotropy"
+  | "moderate-anisotropy"
   | "classic-aspect-disagreement"
+  | "moderate-classic-aspect-disagreement"
+  | "lower-confidence-than-classic"
   | "weak-independent-support"
   | "preserved-ambiguity"
   | "weak-axis-evidence";

@@ -49,6 +49,34 @@ describe("Robust product-review baseline", () => {
     });
     expect(candidate?.diagnostics?.robust?.strategy).toBe("robust");
   });
+
+  test.each(
+    robustProductReviewFixtures.filter(
+      (fixture) => fixture.failureClass === "legitimate-anisotropy"
+    )
+  )("$id remains Robust under guarded product safety", (fixture) => {
+    const source = fixture.createInputImage();
+    const base = optionsFor(fixture.assetType);
+    const result = fixImage(source, {
+      ...base,
+      alpha: "preserve",
+      grid: {
+        ...base.grid,
+        autoStrategy: "robust",
+        robustSafety: "guarded",
+        cropToBounds: false
+      }
+    });
+
+    expect(result.grid.diagnostics?.selection).toMatchObject({
+      requestedStrategy: "robust",
+      selectedStrategy: "robust",
+      decision: "selected",
+      reasonCodes: ["robust-selected"]
+    });
+    expect(result.grid.diagnostics?.robust?.strategy).toBe("robust");
+    expect(result.reconstruction?.usedStrategy).toBe("robust");
+  });
 });
 
 function optionsFor(assetType: FixOptions["assetType"]): FixOptions {

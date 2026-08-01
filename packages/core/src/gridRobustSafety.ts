@@ -10,8 +10,15 @@ export type RobustGridSafetyAssessment = {
 };
 
 const SEVERE_PERIOD_RATIO = 1.55;
-const ASPECT_LOG_DISAGREEMENT = 0.3;
+const MODERATE_PERIOD_RATIO = 1.1;
+const SEVERE_ASPECT_LOG_DISAGREEMENT = 0.3;
+const MODERATE_ASPECT_LOG_DISAGREEMENT = 0.1;
 const WEAK_AXIS_EVIDENCE = 0.35;
+const CLASSIC_ISOTROPY_LIMIT = 1.05;
+const CLASSIC_REFERENCE_CONFIDENCE = 0.5;
+const ROBUST_CONFIDENCE_DEFICIT = 0.08;
+const DECISIVE_CANDIDATE_MARGIN = 0.15;
+const DECISIVE_RERANK_MARGIN = 0.2;
 
 export function assessRobustGridSafety(
   robustCandidate: GridCandidate,
@@ -24,6 +31,7 @@ export function assessRobustGridSafety(
 
   const reasonCodes: GridSelectionReasonCode[] = [];
   const periodRatio = ratio(robustCandidate.scaleX, robustCandidate.scaleY);
+  const classicPeriodRatio = ratio(classicCandidate.scaleX, classicCandidate.scaleY);
   const aspectDisagreement = Math.abs(
     Math.log(
       (robustCandidate.outputWidth / robustCandidate.outputHeight) /
@@ -35,12 +43,29 @@ export function assessRobustGridSafety(
     axisEvidence(robust.axisY)
   );
   const weakIndependentSupport = robust.provenance.independentSupport < 2;
+  const decisiveReconstructionConsensus =
+    robust.provenance.independentSupport >= 2 &&
+    !robust.provenance.ambiguityPreserved &&
+    robust.candidateMargin >= DECISIVE_CANDIDATE_MARGIN &&
+    robust.reconstructionRerank?.decision === "switched" &&
+    robust.reconstructionRerank.scoreMargin >= DECISIVE_RERANK_MARGIN;
+  const lowerConfidenceThanClassic =
+    classicCandidate.confidence >= CLASSIC_REFERENCE_CONFIDENCE &&
+    classicCandidate.confidence - robustCandidate.confidence >=
+      ROBUST_CONFIDENCE_DEFICIT;
 
   if (periodRatio >= SEVERE_PERIOD_RATIO) {
     reasonCodes.push("severe-anisotropy");
+  } else if (periodRatio >= MODERATE_PERIOD_RATIO) {
+    reasonCodes.push("moderate-anisotropy");
   }
-  if (aspectDisagreement >= ASPECT_LOG_DISAGREEMENT) {
+  if (aspectDisagreement >= SEVERE_ASPECT_LOG_DISAGREEMENT) {
     reasonCodes.push("classic-aspect-disagreement");
+  } else if (aspectDisagreement >= MODERATE_ASPECT_LOG_DISAGREEMENT) {
+    reasonCodes.push("moderate-classic-aspect-disagreement");
+  }
+  if (lowerConfidenceThanClassic) {
+    reasonCodes.push("lower-confidence-than-classic");
   }
   if (weakIndependentSupport) {
     reasonCodes.push("weak-independent-support");
@@ -59,8 +84,21 @@ export function assessRobustGridSafety(
     reasonCodes.includes("weak-independent-support") ||
     reasonCodes.includes("preserved-ambiguity") ||
     reasonCodes.includes("weak-axis-evidence");
+  const unsupportedWeakEvidence =
+    weakSupport && !decisiveReconstructionConsensus;
+  const moderateShapeChange =
+    reasonCodes.includes("moderate-anisotropy") &&
+    reasonCodes.includes("moderate-classic-aspect-disagreement");
+  const unreliableModerateShapeChange =
+    moderateShapeChange &&
+    classicPeriodRatio <= CLASSIC_ISOTROPY_LIMIT &&
+    lowerConfidenceThanClassic &&
+    unsupportedWeakEvidence;
 
-  if (!severeShapeChange || !weakSupport) {
+  if (
+    (!severeShapeChange || !unsupportedWeakEvidence) &&
+    !unreliableModerateShapeChange
+  ) {
     return { shouldFallback: false, reasonCodes: ["robust-selected"] };
   }
   return { shouldFallback: true, reasonCodes };

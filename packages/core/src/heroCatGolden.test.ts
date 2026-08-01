@@ -135,7 +135,13 @@ describe("hero cat golden regression", () => {
     expect(guardedRobust.grid.diagnostics?.selection).toMatchObject({
       requestedStrategy: "robust",
       selectedStrategy: "classic",
-      decision: "fallback"
+      decision: "fallback",
+      reasonCodes: expect.arrayContaining([
+        "moderate-anisotropy",
+        "moderate-classic-aspect-disagreement",
+        "lower-confidence-than-classic",
+        "weak-axis-evidence"
+      ])
     });
     expect(guardedRobust.reconstruction).toMatchObject({
       nativeCanvas: { width: 113, height: 113 },
