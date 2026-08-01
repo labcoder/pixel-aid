@@ -12,6 +12,7 @@
     "dist/bin.cjs",
     "README.md",
     "LICENSE",
+    "LICENSES.md",
     "NOTICE",
     "THIRD_PARTY_NOTICES.md"
   ],

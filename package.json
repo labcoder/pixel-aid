@@ -34,7 +34,7 @@
     "build": "npm run build --workspaces --if-present",
     "benchmark": "npm run benchmark --workspaces --if-present",
     "test": "npm run test:tooling && npm run test --workspaces --if-present",
-    "test:tooling": "node --test scripts/set-version.test.mjs scripts/package-web-artifacts.test.mjs scripts/workflow-artifacts.test.mjs scripts/check-web-bundle-budget.test.mjs",
+    "test:tooling": "node --test scripts/set-version.test.mjs scripts/package-web-artifacts.test.mjs scripts/workflow-artifacts.test.mjs scripts/check-web-bundle-budget.test.mjs scripts/cli-package-metadata.test.mjs",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "benchmark:record": "node scripts/run-benchmarks.mjs",
