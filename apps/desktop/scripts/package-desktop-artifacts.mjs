@@ -18,7 +18,7 @@ const macosSigningEnvKeys = [
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const desktopRoot = path.resolve(scriptDir, "..");
 const repoRoot = path.resolve(desktopRoot, "..", "..");
-const noticeFiles = ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md"];
+const noticeFiles = ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md", "RELEASE_NOTES.md"];
 const windowsArtifactSigningEndpoints = {
   brs: "https://brs.codesigning.azure.net",
   brazilsouth: "https://brs.codesigning.azure.net",
@@ -332,6 +332,8 @@ async function writePackageReadme({ stageDir, target, productName, version, sign
     "",
     launchLine,
     signingLine,
+    "Robust Preview is opt-in; Classic remains the default.",
+    "See RELEASE_NOTES.md for eligibility and current limitations.",
     "",
   ].join("\n");
 

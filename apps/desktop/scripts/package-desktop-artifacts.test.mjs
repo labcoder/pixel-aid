@@ -34,7 +34,7 @@ async function createPackageFixture() {
     "utf8",
   );
 
-  for (const noticeFile of ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md"]) {
+  for (const noticeFile of ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md", "RELEASE_NOTES.md"]) {
     await writeFile(path.join(repoRoot, noticeFile), `${noticeFile} text\n`, "utf8");
   }
 
@@ -216,6 +216,8 @@ test("packages a Windows release executable into a portable archive", async () =
       "exe bytes",
     );
     assert.equal(await readFile(path.join(result.stageDir, "LICENSE"), "utf8"), "LICENSE text\n");
+    assert.equal(await readFile(path.join(result.stageDir, "RELEASE_NOTES.md"), "utf8"), "RELEASE_NOTES.md text\n");
+    assert.match(await readFile(path.join(result.stageDir, "README.txt"), "utf8"), /Robust Preview is opt-in/u);
     assert.equal(await readFile(result.archivePath, "utf8"), "zip bytes");
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
@@ -247,6 +249,7 @@ test("packages a macOS app bundle into an app archive", async () => {
       "app bytes",
     );
     assert.equal(await readFile(path.join(result.stageDir, "NOTICE"), "utf8"), "NOTICE text\n");
+    assert.equal(await readFile(path.join(result.stageDir, "RELEASE_NOTES.md"), "utf8"), "RELEASE_NOTES.md text\n");
     assert.equal(await readFile(result.archivePath, "utf8"), "zip bytes");
   } finally {
     await rm(repoRoot, { recursive: true, force: true });

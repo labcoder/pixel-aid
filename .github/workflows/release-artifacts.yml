@@ -23,6 +23,11 @@ on:
         required: false
         default: false
         type: boolean
+      publish_npm:
+        description: Publish the PixelAid CLI package to npm after building its validated tarball
+        required: false
+        default: false
+        type: boolean
   push:
     tags:
       - "v*.*.*"
@@ -111,6 +116,42 @@ jobs:
         with:
           name: pixelaid-web-itch
           path: artifacts/web/*web-itch.zip
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+
+  cli:
+    name: CLI npm package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs: checks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build CLI npm tarball
+        run: |
+          mkdir -p artifacts/cli
+          npm pack -w pixelaid --pack-destination artifacts/cli
+
+      - name: Validate npm publication contents
+        run: npm publish -w pixelaid --dry-run
+
+      - name: Upload CLI npm tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixelaid-cli-npm
+          path: artifacts/cli/pixelaid-*.tgz
           archive: false
           if-no-files-found: error
           retention-days: 30
@@ -535,3 +576,35 @@ jobs:
           ITCH_TARGET: ${{ vars.ITCH_TARGET }}
           PUBLISH_MACOS_X64: ${{ github.ref_type == 'tag' || github.event.inputs.macos_x64 == 'true' }}
         run: bash scripts/publish-itch-artifacts.sh
+
+  publish-npm:
+    name: Publish CLI to npm
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    needs:
+      - checks
+      - cli
+    if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_npm == 'true' }}
+    environment: release-publishing
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Publish CLI package
+        run: npm publish -w pixelaid --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

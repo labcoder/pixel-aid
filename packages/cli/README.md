@@ -222,3 +222,5 @@ When a maintainer is ready to release for real, publish from the workspace:
 ```sh
 npm publish -w pixelaid
 ```
+
+The Release Artifacts workflow always builds and uploads a dry-run-validated npm tarball. Its `publish_npm` input is an explicit, release-owner-only publishing path and requires the `NPM_TOKEN` secret in the `release-publishing` environment.

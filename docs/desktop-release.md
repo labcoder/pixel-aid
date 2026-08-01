@@ -6,7 +6,7 @@ This checklist tracks the current desktop packaging path. It is intentionally ex
 
 The next public desktop build should target:
 
-- Windows x64 portable zip containing `PixelAid.exe`, license files, notices, and package notes.
+- Windows x64 portable zip containing `PixelAid.exe`, license files, release notes, notices, and package notes.
 - macOS zipped `.app` bundle containing `PixelAid.app`, license files, notices, and package notes.
 
 Build each platform on its native release machine or CI runner. Do not cross-sign desktop artifacts locally. Installer, DMG, Linux, Microsoft Store, Mac App Store, and auto-update artifacts are deferred until the direct-download zip flow is stable.
@@ -336,7 +336,7 @@ The current local signed package command uses App Store Connect API credentials.
 
 ### Deferred Artifact Types
 
-Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, GitHub Release automation, and itch.io publication flows are deferred until the portable zip and `.app` release-candidate artifacts are stable. Add those paths as separate release phases so signing, notarization, store review, and external publishing can be verified independently.
+Installer, DMG, Linux package, Microsoft Store, Mac App Store, auto-update, and GitHub Release automation remain deferred. The release workflow can build signed portable artifacts and publish them to opt-in itch.io channels; keep store and updater paths as separate release phases.
 
 ## Checksums
 

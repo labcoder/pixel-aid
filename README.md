@@ -8,7 +8,7 @@ The repo currently contains the web editor, a Tauri desktop shell, deterministic
 
 ## Status
 
-PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and public release publishing still needs final distribution automation. The CLI package is prepared for npm packaging as `pixelaid`.
+PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer and `@pixelaid/ai` is an optional adapter package. Web/desktop artifacts and the CLI npm tarball are built by release automation; itch.io and npm publication remain explicit release-owner actions. The CLI package is prepared for public npm packaging as `pixelaid`.
 
 ## Robust Preview
 

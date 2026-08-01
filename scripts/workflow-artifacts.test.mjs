@@ -54,12 +54,16 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertIncludes(workflow, "macos_signed:");
   assertIncludes(workflow, "macos_x64:");
   assertIncludes(workflow, "publish_itch:");
+  assertIncludes(workflow, "publish_npm:");
   assertIncludes(workflow, "Validate release tag");
   assertIncludes(workflow, "Release tag ${tag} does not match package version ${pkg.version}. Expected ${expected}.");
   assertIncludes(workflow, "run: npm run license:check");
   assertIncludes(workflow, "run: npm run typecheck");
   assertIncludes(workflow, "run: npm test");
   assertIncludes(workflow, "run: npm run lint");
+  assertIncludes(workflow, "run: npm run build");
+  assertIncludes(workflow, "run: npm run bundle:budget");
+  assertIncludes(workflow, "run: npm run app-shell:check");
   assertIncludes(workflow, "run: npm run web:package:itch");
   assertIncludes(workflow, "TELEMETRY_DISTRIBUTION: web_itch");
   assertIncludes(workflow, "if: ${{ github.ref_type != 'tag' && github.event.inputs.windows_signed != 'true' }}");
@@ -74,9 +78,23 @@ test("release artifact workflow builds web and unsigned desktop packages with te
   assertIncludes(workflow, "name: pixelaid-web-itch");
   assertIncludes(workflow, "name: pixelaid-windows-portable");
   assertIncludes(workflow, "name: pixelaid-macos-${{ matrix.arch }}-app");
+  assertIncludes(workflow, "name: pixelaid-cli-npm");
+  assertIncludes(workflow, "npm pack -w pixelaid --pack-destination artifacts/cli");
+  assertIncludes(workflow, "run: npm publish -w pixelaid --dry-run");
   assert.equal(workflow.includes("run: npm run web:package:standalone"), false);
   assert.equal(workflow.includes("TELEMETRY_DISTRIBUTION: web_standalone"), false);
   assert.equal(workflow.includes("name: pixelaid-web-standalone"), false);
+});
+
+test("release artifact workflow keeps npm publication explicit", async () => {
+  const workflow = await readWorkflow("release-artifacts.yml");
+
+  assertIncludes(workflow, "name: Publish CLI to npm");
+  assertIncludes(workflow, "if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_npm == 'true' }}");
+  assertIncludes(workflow, "environment: release-publishing");
+  assertIncludes(workflow, "registry-url: https://registry.npmjs.org");
+  assertIncludes(workflow, "run: npm publish -w pixelaid --access public --provenance");
+  assertIncludes(workflow, "NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}");
 });
 
 test("release artifact workflow can build signed Windows packages through release environment", async () => {

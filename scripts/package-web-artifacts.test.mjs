@@ -26,7 +26,7 @@ async function createWebPackageFixture() {
   await writeFile(path.join(repoRoot, "apps/web/dist/index.html"), "<!doctype html><div id=\"root\"></div>\n", "utf8");
   await writeFile(path.join(repoRoot, "apps/web/dist/assets/app.js"), "console.log('PixelAid');\n", "utf8");
 
-  for (const noticeFile of ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md"]) {
+  for (const noticeFile of ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md", "RELEASE_NOTES.md"]) {
     await writeFile(path.join(repoRoot, noticeFile), `${noticeFile} text\n`, "utf8");
   }
 
@@ -61,13 +61,14 @@ test("packages an itch web build with index.html at the zip root", async () => {
 
     assert.equal(result.archivePath, path.join(repoRoot, "artifacts/web/PixelAid-0.1.0-web-itch.zip"));
     assert.equal(result.stageDir, path.join(repoRoot, "artifacts/web/staging/PixelAid-0.1.0-web-itch"));
-    assert.equal(await readFile(path.join(result.stageDir, "README.txt"), "utf8"), "PixelAid web package for itch.io HTML5 upload.\n");
+    assert.match(await readFile(path.join(result.stageDir, "README.txt"), "utf8"), /Robust Preview is opt-in/u);
 
     const archive = unzipSync(new Uint8Array(await readFile(result.archivePath)));
     assert.equal(strFromU8(archive["index.html"]), "<!doctype html><div id=\"root\"></div>\n");
     assert.equal(strFromU8(archive["assets/app.js"]), "console.log('PixelAid');\n");
     assert.equal(strFromU8(archive["LICENSE"]), "LICENSE text\n");
-    assert.equal(strFromU8(archive["README.txt"]), "PixelAid web package for itch.io HTML5 upload.\n");
+    assert.equal(strFromU8(archive["RELEASE_NOTES.md"]), "RELEASE_NOTES.md text\n");
+    assert.match(strFromU8(archive["README.txt"]), /Classic remains the default/u);
   } finally {
     await rm(repoRoot, { recursive: true, force: true });
   }

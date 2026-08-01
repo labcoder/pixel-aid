@@ -6,7 +6,7 @@ import { zipSync } from "fflate";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..");
-const noticeFiles = ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md"];
+const noticeFiles = ["LICENSE", "NOTICE", "LICENSES.md", "THIRD_PARTY_NOTICES.md", "RELEASE_NOTES.md"];
 const packageTargets = new Set(["itch", "standalone"]);
 
 class WebPackageError extends Error {
@@ -121,9 +121,10 @@ export function getWebArtifactName({ version, target }) {
 }
 
 function readmeForTarget(target) {
-  return target === "itch"
-    ? "PixelAid web package for itch.io HTML5 upload.\n"
-    : "PixelAid web package for standalone static hosting.\n";
+  const targetLine = target === "itch"
+    ? "PixelAid web package for itch.io HTML5 upload."
+    : "PixelAid web package for standalone static hosting.";
+  return `${targetLine}\n\nRobust Preview is opt-in; Classic remains the default.\nSee RELEASE_NOTES.md for eligibility and current limitations.\n`;
 }
 
 async function copyDirectoryContents(sourceDir, destinationDir) {
