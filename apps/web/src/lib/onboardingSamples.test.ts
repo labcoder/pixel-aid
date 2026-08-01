@@ -1,5 +1,9 @@
 import { describe, expect, test } from "vitest";
-import { createOnboardingSampleImport, getOnboardingSampleCards } from "./onboardingSamples";
+import {
+  createOnboardingSampleImport,
+  getOnboardingSampleCards,
+  resolveOnboardingSamplePipelineSettings
+} from "./onboardingSamples";
 
 describe("onboarding samples", () => {
   test("list release sample cards for the editor launcher", () => {
@@ -29,6 +33,30 @@ describe("onboarding samples", () => {
     expect(imported.fixtureExpected.sheet?.rowFrameCounts).toEqual([4, 6, 5]);
     expect(imported.fixtureExpected.sheet?.animationNames).toEqual(["idle", "walk", "jump"]);
     expect(imported.settings.sheet).toMatchObject({ frameWidth: 48, frameHeight: 42, rows: 3, columns: 6, margin: 84 });
+  });
+
+  test("migrates legacy sample targets into a Classic two-stage pipeline", () => {
+    const imported = createOnboardingSampleImport("demo-fake-grid-robot");
+    const pipeline = resolveOnboardingSamplePipelineSettings(
+      imported.settings,
+      imported.settings.targetWidth!,
+      imported.settings.targetHeight!
+    );
+
+    expect(pipeline).toEqual({
+      outputSizeMode: "exact",
+      nativeSizeMode: "manual",
+      outputPackaging: {
+        canvasMode: "exact",
+        width: 102,
+        height: 144,
+        framing: "preserveComposition",
+        scale: "native",
+        anchor: "center"
+      },
+      gridAutoStrategy: "classic",
+      robustSafety: "guarded"
+    });
   });
 
   test("throw a useful error for unknown sample IDs", () => {

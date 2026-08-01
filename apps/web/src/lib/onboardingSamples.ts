@@ -1,6 +1,13 @@
 import { cleanupFixtureCatalog, releaseOnboardingSamples } from "@pixelaid/fixtures";
 import type { CleanupFixtureExpected, ReleaseOnboardingSample } from "@pixelaid/fixtures";
-import type { FixOptions } from "@pixelaid/shared";
+import type {
+  FixOptions,
+  GridAutoStrategy,
+  GridRobustSafety,
+  NativeSizeMode,
+  OutputPackagingOptions,
+  OutputSizeMode
+} from "@pixelaid/shared";
 import { createDefaultAssetTypeMetadata } from "./assets";
 import type { ImportedImageAsset } from "./imageDecode";
 
@@ -17,6 +24,14 @@ export type OnboardingSampleImport = {
   asset: ImportedImageAsset;
   settings: FixOptions;
   fixtureExpected: CleanupFixtureExpected;
+};
+
+export type OnboardingSamplePipelineSettings = {
+  outputSizeMode: OutputSizeMode;
+  nativeSizeMode: NativeSizeMode;
+  outputPackaging: OutputPackagingOptions;
+  gridAutoStrategy: GridAutoStrategy;
+  robustSafety: GridRobustSafety;
 };
 
 export function getOnboardingSampleCards(): OnboardingSampleCard[] {
@@ -73,5 +88,60 @@ export function createOnboardingSampleImport(sampleId: string, importedAt = new 
         }
       }
     }
+  };
+}
+
+export function resolveOnboardingSamplePipelineSettings(
+  settings: FixOptions,
+  targetWidth: number,
+  targetHeight: number
+): OnboardingSamplePipelineSettings {
+  const outputSizeMode = settings.outputSizeMode ??
+    (settings.targetWidth && settings.targetHeight ? "exact" : "detected");
+  const nativeSizeMode = settings.reconstruction?.sizeMode ??
+    (outputSizeMode === "detected" ? "auto" : "manual");
+  const outputPackaging = settings.packaging ?? legacySamplePackaging(
+    outputSizeMode,
+    targetWidth,
+    targetHeight
+  );
+
+  return {
+    outputSizeMode,
+    nativeSizeMode,
+    outputPackaging: { ...outputPackaging },
+    gridAutoStrategy: settings.grid.autoStrategy ?? "classic",
+    robustSafety: settings.grid.robustSafety ?? "guarded"
+  };
+}
+
+function legacySamplePackaging(
+  outputSizeMode: OutputSizeMode,
+  targetWidth: number,
+  targetHeight: number
+): OutputPackagingOptions {
+  if (outputSizeMode === "exact") {
+    return {
+      canvasMode: "exact",
+      width: targetWidth,
+      height: targetHeight,
+      framing: "preserveComposition",
+      scale: "native",
+      anchor: "center"
+    };
+  }
+  if (outputSizeMode === "source") {
+    return {
+      canvasMode: "native",
+      framing: "preserveComposition",
+      scale: "native",
+      anchor: "center"
+    };
+  }
+  return {
+    canvasMode: "content",
+    framing: "packSubject",
+    scale: "native",
+    anchor: "center"
   };
 }

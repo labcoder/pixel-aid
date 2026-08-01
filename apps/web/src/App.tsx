@@ -290,7 +290,12 @@ import {
   moveVisibleInspectorGroup,
   type InspectorGroupId
 } from "./lib/inspectorGroups";
-import { createOnboardingSampleImport, getOnboardingSampleCards, type OnboardingSampleImport } from "./lib/onboardingSamples";
+import {
+  createOnboardingSampleImport,
+  getOnboardingSampleCards,
+  resolveOnboardingSamplePipelineSettings,
+  type OnboardingSampleImport
+} from "./lib/onboardingSamples";
 import {
   getOutlineSourceColorsForFix,
   isOutlineColorEditable,
@@ -4124,6 +4129,11 @@ export function App() {
       const { asset, sample, settings } = sampleImport;
       const targetSampleWidth = settings.targetWidth ?? asset.image.width;
       const targetSampleHeight = settings.targetHeight ?? asset.image.height;
+      const samplePipeline = resolveOnboardingSamplePipelineSettings(
+        settings,
+        targetSampleWidth,
+        targetSampleHeight
+      );
       const sheetOptions = settings.sheet;
       const sampleFrames = sheetOptions ? createSampleSheetFrames(sheetOptions, sampleImport.fixtureExpected.sheet) : [];
       const sampleAnimations = createSampleAnimations(sample.title, sampleFrames, sampleImport.fixtureExpected.sheet);
@@ -4136,6 +4146,9 @@ export function App() {
       setMode(settings.mode);
       setTargetWidth(targetSampleWidth);
       setTargetHeight(targetSampleHeight);
+      setOutputSizeMode(samplePipeline.outputSizeMode);
+      setNativeSizeMode(samplePipeline.nativeSizeMode);
+      setOutputPackaging({ ...samplePipeline.outputPackaging });
       setFrameWidth(sheetOptions?.frameWidth ?? targetSampleWidth);
       setFrameHeight(sheetOptions?.frameHeight ?? targetSampleHeight);
       setSheetRows(sheetOptions?.rows ?? 1);
@@ -4176,6 +4189,8 @@ export function App() {
       setGridPhaseX(settings.grid.phaseX ?? gridCandidatesForSample[0]?.phaseX ?? 0);
       setGridPhaseY(settings.grid.phaseY ?? gridCandidatesForSample[0]?.phaseY ?? 0);
       setGridDetect(settings.grid.detect);
+      setGridAutoStrategy(samplePipeline.gridAutoStrategy);
+      setRobustSafety(samplePipeline.robustSafety);
       setCropToBounds(settings.grid.cropToBounds ?? (settings.mode === "single"));
       setLocalCorrection(settings.grid.localCorrection ?? false);
       setDownscale(settings.downscale);
