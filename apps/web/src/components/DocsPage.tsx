@@ -13,7 +13,7 @@ export function DocsPage({ onBack }: { onBack: () => void }) {
         </button>
         <div>
           <h1>PixelAid Docs</h1>
-          <p>Editor controls, modes, and first-milestone behavior.</p>
+          <p>Editor controls, reconstruction modes, export workflows, and release guidance.</p>
         </div>
       </header>
       <div className="docs-layout">

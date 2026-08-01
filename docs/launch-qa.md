@@ -35,7 +35,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | --- | --- | --- | --- |
 | Import | Toolbar import, drag/drop, paste, repeated imports, unsupported files, progress labels. | `demo-fake-grid-robot`, one user PNG, one non-image file. | Asset appears once, analysis status appears, unsupported file logs a recoverable error. |
 | Classification | Auto type detection plus manual asset-type override per imported asset. | Sprite, icon, animation sheet, tileset, background samples. | Asset type, support warnings, and mode update correctly without leaking settings across assets. |
-| Single-sprite fix | Auto grid, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, `outline-repair-dual-tone`, `halo-transparent-edge`. | Output is native sized, palette-limited, transparent where expected, with no clipped outline. |
+| Single-sprite fix | Classic default, opt-in Robust Guarded, auto/manual native size, independent canvas packaging, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, Hero Cat golden, `outline-repair-dual-tone`, `halo-transparent-edge`. | Classic remains default; Robust status is explicit; exact canvas survives fallback; output is native sized, palette-limited, transparent where expected, with no clipped outline. |
 | Sheet correction | Auto row/cell detection, manual add/remove/fill row fixes, frame drag/resize with undo. | `demo-palette-drift-walk`, `demo-uneven-labeled-sheet`, `drifted-effect-sheet`. | Detected row counts match expectations or are manually corrected; source/output timeline frames stay aligned. |
 | Palette | Auto/fixed/preset palettes, sheet lock, no dithering default, palette sidecar export. | Palette drift sample plus a high-color AI asset. | Palette count respects budget and animation does not shimmer from per-frame palette changes. |
 | Alpha and matte cleanup | Preserve, binary, flood fill, color key, decontaminated transparent RGB, and chroma-matte review. | Checkerboard matte icon, matte white sprite, and a source-sized sheet with colored matte artifacts. | Preview looks clean on checker/light/dark/grass-style backgrounds, and subject colors are not removed during matte cleanup. |
@@ -53,15 +53,16 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 2. Load **Fake-grid robot sprite** from the Samples panel.
 3. Confirm recommended settings populate the inspector.
 4. Run Fix and compare Input/Output.
-5. Export the bundle and inspect the manifest.
-6. Load **Palette drift walk cycle**.
-7. Run Fix, open Timeline, compare input/output playback for the row.
-8. Load **Uneven labeled animation sheet**.
-9. Confirm row clip selection exposes idle, walk, and jump and output cell presets do not disturb source boxes.
-10. Export with normalized sheet enabled and confirm frame rects match the packed output.
-11. Load **Broken tileset seams**.
-12. Confirm repeat preview shows seam warnings, low-risk seam repair can be applied and undone, and high-risk/manual repaint seams remain suggestions.
-13. Export Diagnostics from the Console panel and confirm private prompt/API-key-like strings are redacted.
+5. Select Robust Preview, rerun Fix, and confirm the status reports Robust used or an explicit Guarded fallback without changing the requested output canvas.
+6. Return to Classic, export the bundle, and inspect the manifest.
+7. Load **Palette drift walk cycle** and confirm Robust is not offered for the sheet workflow.
+8. Run Fix, open Timeline, compare input/output playback for the row.
+9. Load **Uneven labeled animation sheet**.
+10. Confirm row clip selection exposes idle, walk, and jump and output cell presets do not disturb source boxes.
+11. Export with normalized sheet enabled and confirm frame rects match the packed output.
+12. Load **Broken tileset seams**.
+13. Confirm repeat preview shows seam warnings, low-risk seam repair can be applied and undone, and high-risk/manual repaint seams remain suggestions.
+14. Export Diagnostics from the Console panel and confirm private prompt/API-key-like strings are redacted.
 
 ## Beta Feedback Loop
 
@@ -77,7 +78,7 @@ Every beta report should include:
 
 Do not ask beta users to share proprietary prompts or private source assets by default. Ask for a reduced reproduction, cropped sample, or synthetic replacement first.
 
-## Current Known Limitations For 1.0
+## Current Known Limitations
 
 | Limitation | User-facing note | Follow-up |
 | --- | --- | --- |
@@ -89,6 +90,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. | `MIG-67` added explicit 700 kB largest-chunk and 260 kB total-gzip budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
 | Subject-safe matte cleanup needs broader real-world coverage. | Current cleanup removes outside-connected matte artifacts while preserving supported foreground colors from the same hue family, but beta assets should expand the regression corpus. | Beta fixture expansion milestone. |
+| Robust reconstruction is a Preview. | Classic remains the default. Robust is limited to eligible single images, uses Guarded fallback, and must not be presented as sheet support. | Phase 8 evidence campaign. |
 
 ## Privacy Rules
 

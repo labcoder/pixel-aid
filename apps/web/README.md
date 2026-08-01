@@ -8,6 +8,8 @@ Implemented and ready for local development. This package is a private workspace
 
 The app can run by itself through Vite, but normal development starts from the repo root so workspace dependencies resolve consistently.
 
+The editor exposes Classic and opt-in Robust Preview as the first stage of the Pixel pipeline for eligible single-image assets. Native reconstruction is separate from output-canvas bounds, framing, scale, and anchor. Classic remains the default; Robust uses Guarded fallback unless the user deliberately changes the advanced safety policy. See [the Robust Preview guide](../../docs/robust-preview.md).
+
 ## Commands
 
 From the repo root:

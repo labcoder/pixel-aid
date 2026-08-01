@@ -33,6 +33,7 @@ npm run typecheck
 ## Responsibilities
 
 - Grid candidate detection and local drift planning.
+- Classic and opt-in Robust native reconstruction, shared eligibility, Guarded safety, and structured selection diagnostics.
 - Block downsampling from fake-pixel sources to real native pixels.
 - Palette extraction, remapping, dithering, and drift analysis.
 - Alpha cleanup, halo removal, morphology cleanup, outline repair/addition, and contrast expansion.
@@ -44,6 +45,7 @@ npm run typecheck
 
 - `fixImage(image, options, runtimeOptions?)`
 - `detectGridCandidates(image, options?)`
+- `resolveRobustInferenceEligibility(input)`
 - `downsampleBlocks(image, options)`
 - `extractPalette`, `remapToPalette`, and `resolvePalette`
 - `detectSheetLayout` and `sliceSheetFrames`

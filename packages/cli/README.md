@@ -4,7 +4,7 @@
 
 ## Status
 
-Implemented and prepared for npm packaging as `pixelaid@0.1.0`. The package builds a single Node binary at `dist/bin.cjs`, publishes the `pixelaid` executable, and keeps docs-only sample images out of the packed package.
+Implemented and prepared for npm packaging as `pixelaid@0.2.0`. The package builds a single Node binary at `dist/bin.cjs`, publishes the `pixelaid` executable, and keeps docs-only sample images out of the packed package.
 
 The CLI is usable from this workspace today. Published install commands work after a maintainer publishes the package to npm.
 
@@ -200,10 +200,10 @@ Keep CLI output deterministic and parseable for agent workflows. Keep command pa
 
 ## Packaging Checks
 
-Use the repo-wide version command before a release so package versions stay aligned. Keep the current version at `0.1.0` until the release target changes:
+Use the repo-wide version command before a release so package versions stay aligned. The current release-candidate version is `0.2.0`:
 
 ```sh
-npm run version:set -- 0.1.0
+npm run version:set -- 0.2.0
 ```
 
 Run the focused package checks:

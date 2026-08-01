@@ -6,6 +6,7 @@ import licensingMarkdown from "../../../../docs/licensing.md?raw";
 import onboardingSamplesMarkdown from "../../../../docs/onboarding-samples.md?raw";
 import troubleshootingMarkdown from "../../../../docs/troubleshooting.md?raw";
 import launchQaMarkdown from "../../../../docs/launch-qa.md?raw";
+import robustPreviewMarkdown from "../../../../docs/robust-preview.md?raw";
 
 export type DocsSection = {
   id: string;
@@ -24,13 +25,19 @@ export const docsSections: DocsSection[] = [
   {
     id: "fix-settings",
     title: "Fix Settings",
-    tooltip: "Controls asset type, processing mode, output size, sheet sizing hierarchy, palette, downscale, and alpha handling.",
+    tooltip: "Controls asset type, processing mode, native reconstruction, output packaging, palette, downscale, and alpha handling.",
     markdown: extractMarkdownSection(editorMarkdown, "Fix Settings")
+  },
+  {
+    id: "robust-preview",
+    title: "Robust Preview",
+    tooltip: "Classic versus Robust reconstruction, Guarded fallback, eligibility, and two-stage output sizing.",
+    markdown: robustPreviewMarkdown
   },
   {
     id: "grid",
     title: "Grid",
-    tooltip: "Controls pseudo-pixel grid detection and manual output sizing.",
+    tooltip: "Reviews pseudo-pixel grid evidence and exposes manual scale and phase controls.",
     markdown: extractMarkdownSection(editorMarkdown, "Grid")
   },
   {

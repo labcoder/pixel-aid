@@ -5,6 +5,8 @@ describe("docs content", () => {
   test("contains editor sections for inspector help links", () => {
     expect(getDocsSection("fix-settings")?.title).toBe("Fix Settings");
     expect(getDocsSection("fix-settings")?.markdown).toContain("Asset type");
+    expect(getDocsSection("robust-preview")?.markdown).toContain("Classic remains the default");
+    expect(getDocsSection("robust-preview")?.markdown).toContain("Two independent stages");
     expect(getDocsSection("grid")?.markdown).toContain("Auto candidate");
     expect(getDocsSection("export")?.markdown).toContain("ZIP");
   });

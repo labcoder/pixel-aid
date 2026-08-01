@@ -8,6 +8,8 @@ Implemented for local desktop development and packaging checks. This package is 
 
 Public desktop release work still requires platform-specific signing, notarization, artifact publishing, and checksum handling by the release owner. Auto-update delivery is deferred.
 
+The desktop app uses the same Pixel pipeline as the web editor, including Classic and opt-in Robust Preview reconstruction, Guarded fallback status, and separate output-canvas packaging. See [the Robust Preview guide](../../docs/robust-preview.md) for eligibility and limitations.
+
 ## Requirements
 
 - Node.js 20 or newer.

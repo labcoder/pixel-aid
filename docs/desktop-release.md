@@ -375,7 +375,7 @@ Generated app icons live under `apps/desktop/src-tauri/icons/` and are committed
 
 ## Auto-Update Status
 
-Auto-update delivery is deferred. The 1.1.0 distribution path is manual release publishing with signed artifacts where supported, release notes, and `SHA256SUMS.txt`.
+Auto-update delivery is deferred. The 0.2.0 distribution path is manual release publishing with signed artifacts where supported, release notes, and `SHA256SUMS.txt`.
 
 Before enabling in-app updates, add and document:
 

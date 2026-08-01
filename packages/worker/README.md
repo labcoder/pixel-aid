@@ -29,6 +29,7 @@ npm run typecheck
 - Define legacy and persistent worker request/response types.
 - Convert transfer-friendly `ArrayBuffer` image payloads into `RGBAImage` data for core operations.
 - Run source analysis, quality reports, fix suggestions, and fix jobs.
+- Preserve Classic/Robust reconstruction settings and structured Guarded selection diagnostics across worker requests and results.
 - Emit coarse progress events from core runtime callbacks.
 - Support persistent worker queue policies, stale job handling, health responses, and cancellation messages.
 

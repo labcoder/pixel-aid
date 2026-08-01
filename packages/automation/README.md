@@ -52,6 +52,12 @@ type AutomationResult<T> =
 
 Errors use stable codes and exit-code metadata so CLI, MCP, HTTP, and agent workflows can handle failures without parsing prose.
 
+## Robust Preview
+
+Single-image fix inputs may set `gridStrategy: "robust"` with `robustSafety: "guarded" | "warn" | "off"`. Classic remains the omitted default. Guarded is supplied automatically when automation selects Robust without an explicit safety value. Completed operations preserve requested/used strategy diagnostics and copy fallback or warning messages into the normal `warnings` array. Robust backgrounds require full-canvas reconstruction; unsupported asset types remain on Classic.
+
+These settings change native reconstruction only. Canvas bounds, framing, scale, anchor, palette, alpha, outline, background cleanup, and downscale options remain independent.
+
 ## Development Notes
 
 - Keep filesystem operations explicit and overwrite-safe. Use `planOutputFile` and related helpers for writes.

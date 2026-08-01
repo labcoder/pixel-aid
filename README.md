@@ -10,6 +10,12 @@ The repo currently contains the web editor, a Tauri desktop shell, deterministic
 
 PixelAid is under active development. The editor, core cleanup pipeline, worker path, generic and engine-oriented exporters, CLI, MCP stdio server, desktop shell, and fixture suites are implemented enough for local development and validation. Some surfaces are still WIP: the local HTTP package is a lightweight handler layer, `@pixelaid/ai` is an optional adapter package, and public release publishing still needs final distribution automation. The CLI package is prepared for npm packaging as `pixelaid`.
 
+## Robust Preview
+
+PixelAid 0.2.0 includes an opt-in **Robust Preview** reconstruction strategy for difficult pseudo-pixel sprites, icons, and full-canvas backgrounds. **Classic remains the default.** Robust estimates the true native grid; output-canvas size, framing, palette, alpha, background, outline, and cleanup remain separate controls. Guarded safety is enabled by default after Robust is selected and visibly falls back to Classic when geometry is not sufficiently supported.
+
+See [the Robust Preview guide](docs/robust-preview.md) and [0.2.0 release notes](RELEASE_NOTES.md) for eligibility, safety policies, automation examples, and current limitations.
+
 ## Requirements
 
 - Node.js 20 or newer.
@@ -180,6 +186,7 @@ npm run build -w @pixelaid/mcp
 
 ## Project Docs
 
+- [docs/robust-preview.md](docs/robust-preview.md) explains Classic versus Robust, Guarded fallback, and two-stage sizing.
 - [docs/architecture.md](docs/architecture.md) explains the current architecture.
 - [docs/algorithms.md](docs/algorithms.md) describes the cleanup algorithms.
 - [docs/editor.md](docs/editor.md) covers editor workflows.
@@ -189,6 +196,7 @@ npm run build -w @pixelaid/mcp
 - [docs/fixtures.md](docs/fixtures.md) covers generated fixtures and benchmarks.
 - [docs/performance.md](docs/performance.md) tracks performance expectations.
 - [docs/licensing.md](docs/licensing.md) covers licensing and dependency review notes.
+- [RELEASE_NOTES.md](RELEASE_NOTES.md) describes the current public release candidate.
 
 ## License
 

@@ -4,6 +4,14 @@ The single-image branch is the most complete path through PixelAid's fixer. It r
 
 The important composition detail is that PixelAid does not simply downsample and quantize. It can pre-remove a connected background, resolve a target-guided pixel grid, optionally plan local grid drift, expand contrast, detect mixels on the original image while applying regularization to the processed image, downsample, clean alpha and edges, reserve key colors, resolve a palette, and remap the final image.
 
+## Reconstruction strategy and output packaging
+
+Classic remains the default grid strategy. Eligible single sprites and icons can opt into Robust Preview; backgrounds are eligible only when the full native canvas is reconstructed instead of cropping to subject bounds. Robust changes automatic native-grid inference and reconstruction sampling only. It does not alter classification, background removal, alpha, outline, palette, downscale method, or cleanup choices.
+
+Guarded safety compares the Robust proposal with Classic and can return the Classic reconstruction with structured reason codes. Warn retains the Robust proposal with the same warning evidence; Raw exposes the frozen proposal for diagnosis. Manual grid or native-size values bypass automatic strategy selection.
+
+After native reconstruction, output packaging applies independent canvas bounds, framing, pixel scale, and anchor. An exact 128x128 canvas therefore remains 128x128 whether Guarded uses Robust or falls back to Classic. See [Robust Preview](../robust-preview.md) for the product-facing contract.
+
 ## Main flow
 
 ```mermaid
@@ -58,7 +66,7 @@ flowchart TD
 | --- | --- | --- | --- |
 | 1 | Dispatch | `fix.ts:34 fixImage()`, `fix.ts:280 isSheetFrameFix()` | If `options.mode !== "single"` and `sheetFrames.length > 0`, `fixImage()` exits to the sheet-frame path. Otherwise this path continues. |
 | 2 | Optional pre-alpha | `fix.ts:41-45`, `alpha.ts:10 applyAlphaMode()` | Only `options.alpha === "backgroundFloodFill"` runs before grid detection. `alpha.ts:97 backgroundFloodFill()` is border-seeded connected fill against `estimateBackgroundModel()`, not global color-keying; it then peels exterior chroma matte and binarizes alpha (`alpha.ts:143-156`). |
-| 3 | Grid resolution | `fix.ts:48`, `fix.ts:1677 resolveGrid()` | Auto mode uses runtime-supplied candidates or `detectGridCandidates()` (`fix.ts:1678-1680`). If target size is known, it chooses the candidate closest to target dimensions and computes scale; `cropToBounds` defaults to true for `mode === "single"` (`fix.ts:1681-1716`). Manual mode derives scale and output dimensions directly (`fix.ts:1722-1736`). |
+| 3 | Grid resolution | `fix.ts:48`, `fix.ts:1677 resolveGrid()` | Auto mode uses runtime-supplied candidates or the selected Classic/Robust `detectGridCandidates()` path (`fix.ts:1678-1680`). Eligible Robust requests then apply the selected safety policy and preserve structured selection diagnostics. If target size is known, it guides candidate selection and scale; manual mode derives scale and output dimensions directly. |
 | 4 | Local drift planning | `fix.ts:49-60`, `gridDrift.ts: planLocalGridDrift()` | Runs only for `options.mode === "single" && options.grid.localCorrection`. Used drift boundaries feed `downsampleBlocks()` as row/column boundary arrays. |
 | 5 | Contrast expansion | `fix.ts:61-63`, `contrastExpansion.ts: applyContrastExpansion()` | Runs before mixel regularization and downsampling. Disabled settings still produce diagnostics with `enabled: false`. |
 | 6 | Mixel regularization | `fix.ts:64-87`, `mixels.ts: detectMixels()`, `mixels.ts: regularizeMixels()` | If `options.grid.fixMixels` is true in single mode, PixelAid detects mixels on the **original** image but applies regularization to the contrast-expanded/preprocessed image. The comments at `fix.ts:70-72` explain why: background flood-fill and preprocessing add alpha-edge noise and flat transparent regions that would skew the flatness and roughness signal. |

@@ -31,7 +31,7 @@ Manual asset type stays on the imported asset instead of in global preferences. 
 
 Asset type describes the user's product intent for the import. Processing mode describes the algorithm path PixelAid will use to fix it.
 
-Supported asset types in 0.1.0:
+Supported asset types in 0.2.0:
 
 | Asset type | Processing mode | Support | Notes |
 | --- | --- | --- | --- |
@@ -74,13 +74,30 @@ For single sprites, the guided card exposes simple controls before the advanced 
 
 These simple controls update the same settings shown in the advanced groups, so advanced editing and guided editing stay synchronized.
 
-Target W and Target H define the native output size. They can be edited with number fields, sliders, or common pixel-art presets such as 16, 32, 48, 64, 128, 256, and 512. When aspect ratio is locked, size presets apply to width and height follows the source proportions. When it is unlocked, width and height have separate preset rows.
+Native W and Native H define the true reconstructed pixel canvas when Native size is set manually. They can be edited with number fields and sliders. When aspect ratio is locked, editing one dimension updates the other. Auto native size lets the selected Classic or Robust strategy infer these dimensions.
+
+Output canvas is a separate packaging stage. Reconstructed content uses the fixed content bounds, Native composition preserves the inferred source canvas, and Exact canvas uses explicit Canvas W/H. Framing controls whether PixelAid preserves proportional source padding, packs the subject, or fits it to the canvas. Pixel scale controls native pixels, largest integer fit, or explicit resampling; Anchor controls placement. Background preservation or removal changes pixels, not this geometry.
 
 In sprite sheet and tile sheet processing modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is shown as read-only Derived W and Derived H. Manual sheets derive that size from Frame W, Frame H, Rows, Columns, Margin, and Spacing. Detected animation sheets derive it from the detected row clips and their per-animation cell sizes.
+
+# Pixel Pipeline
+
+The Pixel pipeline separates two decisions that were previously easy to confuse:
+
+1. **Reconstruction** resolves the true sprite and native grid.
+2. **Output canvas** packages that reconstruction into export bounds.
+
+Classic is the stable default reconstruction strategy. Robust Preview is an explicit alternative for eligible single sprites, icons, and full-canvas backgrounds. Guarded safety is on by default after Robust is selected; Warn and Raw are available only in Advanced controls. Sprite sheets, animation sheets, character sheets, tiles, portraits, and UI elements remain on Classic during the preview.
+
+After Fix, the pipeline status reports whether Robust was used, fell back to Classic, was retained with a warning, or was unavailable for the asset type. Reason codes appear when a Guarded or Warn decision needs review. Manual native dimensions always override automatic strategy selection.
+
+See [Robust Preview](./robust-preview.md) for the full eligibility, sizing, safety, and automation contract.
 
 # Grid
 
 Auto candidate detects likely pseudo-pixel block size, phase, and native output dimensions. Target width and height can guide the candidate, while detected scale and phase fields are read-only unless manual mode is selected.
+
+Classic / Robust selection lives in Pixel Pipeline rather than the Advanced Grid group because it chooses the reconstruction strategy as a whole. The Grid group exposes candidate evidence and manual scale/phase controls for the selected strategy.
 
 Candidate cards show the top grid interpretations with a canvas crop preview, native output size, source block scale, confidence, and score rows. Edge means repeated boundary energy at that scale. Run means repeated same-color spans that look like source pixels. Size means whether the resulting native dimensions are plausible for game assets.
 
