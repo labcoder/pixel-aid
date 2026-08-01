@@ -73,6 +73,15 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Build workspace
+        run: npm run build
+
+      - name: Check web bundle budget
+        run: npm run bundle:budget
+
+      - name: Check app shell size
+        run: npm run app-shell:check
+
   web:
     name: itch.io web release package
     runs-on: ubuntu-24.04
