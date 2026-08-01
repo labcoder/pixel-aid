@@ -1,6 +1,34 @@
 export const PIXELAID_APP_NAME = "PixelAid";
 export const PIXELAID_VERSION = "0.2.0";
 
+export {
+  ROBUST_EVIDENCE_CAMPAIGN_ID,
+  ROBUST_EVIDENCE_FROZEN_BASELINE,
+  ROBUST_EVIDENCE_SCHEMA_VERSION,
+  canonicalizeRobustEvidenceValue,
+  createRobustEvidenceCandidate,
+  createRobustEvidenceRecord,
+  createRobustEvidenceSettingsSnapshot,
+  sanitizeRobustEvidenceText,
+  stableStringifyRobustEvidenceValue,
+  validateRobustEvidenceRecord
+} from "./robustEvidence";
+export type {
+  CreateRobustEvidenceRecordInput,
+  RobustEvidenceCandidate,
+  RobustEvidenceCandidateSlot,
+  RobustEvidenceFailureClass,
+  RobustEvidenceFallbackRating,
+  RobustEvidenceGeometryRating,
+  RobustEvidenceHumanReview,
+  RobustEvidenceManualOverride,
+  RobustEvidencePreference,
+  RobustEvidenceRecord,
+  RobustEvidenceSeverity,
+  RobustEvidenceSharingPermission,
+  RobustEvidenceSurface
+} from "./robustEvidence";
+
 export type {
   AlphaMode,
   AlphaCleanupDiagnostics,
