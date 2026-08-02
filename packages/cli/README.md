@@ -52,6 +52,21 @@ For example, a reconstructed `90x113` subject can remain `90x113` inside a `128x
 
 Existing scripts can continue using `--output-size source|detected|exact` and `--target WIDTHxHEIGHT`. Those flags retain the legacy combined sizing contract; new workflows should prefer `--native-size` plus `--canvas` so reconstruction and packaging cannot be confused.
 
+For Phase 8 parity checks, `compare-robust` runs one frozen Classic/Robust Guarded pair and writes `classic.png`, `robust.png`, and a privacy-safe `evidence.json` record:
+
+```sh
+pixelaid compare-robust generated.png \
+  --out-dir ./phase8/generated \
+  --collection-id collection:first-party \
+  --sharing none \
+  --asset-type sprite \
+  --native-size auto \
+  --canvas native \
+  --json
+```
+
+This command records decoded-pixel hashes and comparison settings, but it does not collect a human verdict. Its record is marked `proceduralDryRun: true` and is excluded from Robust Preview promotion decisions. Use the web/desktop Blind A/B review for human preference evidence. No source pixels, source filename, prompt, or local path is stored in `evidence.json`.
+
 Palette strategies accepted by `--palette-strategy`/`--quantizer` are `medianCut`, `frequency`, `perceptual`, `wu`, `kmeans`, and `familyFirst` (`median-cut` remains a CLI alias for `medianCut`). `familyFirst` seats perceptual color families first, adds nested ramps as the color budget grows, and is the guided default for single sprites/icons.
 
 Local workspace usage:
@@ -169,6 +184,7 @@ pixelaid export panda-test-fixed-96.png \
 
 - `inspect`: image metadata, palette counts, alpha stats, grid candidates, sheet detection, and suggestions.
 - `report`: quality report for one or more assets.
+- `compare-robust`: local Classic/Robust candidate pair plus a procedural Phase 8 evidence record.
 - `suggest`: normalized fix settings without writing output.
 - `fix`: single-sprite cleanup and optional manifest output.
 - `fix-sheet`: sheet cleanup with detection or supplied frame metadata.

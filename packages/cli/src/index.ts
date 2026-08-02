@@ -4,6 +4,7 @@ import { performance } from "node:perf_hooks";
 import { strToU8, zipSync } from "fflate";
 import {
   automationError,
+  createRobustEvidenceDryRun,
   createDiagnosticReport,
   createQualityReport,
   exportEngineBundle,
@@ -23,7 +24,7 @@ import {
   type FixSpriteSheetRequest,
   type AutomationFixOptionsInput,
 } from "@pixelaid/automation";
-import type { AnimationTag, LineCleanupStrength, OutlineMode, PixelFixResult, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
+import type { AnimationTag, LineCleanupStrength, OutlineMode, PixelFixResult, RobustEvidenceSharingPermission, SheetSliceOptions, SpriteFrame } from "@pixelaid/shared";
 
 export type CliIo = {
   stdout: ((text: string) => void) | string[];
@@ -91,6 +92,7 @@ type CliDiagnosticMetadata = {
 const engineTargets = new Set<EngineExportTarget>(["godot", "unity", "phaser", "texturepacker", "tiled", "ldtk"]);
 const cliApp = { name: "PixelAid", version: "0.1.0", packageName: "pixelaid" };
 const supportedBatchImageExtensions = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+const evidenceSharingPermissions = new Set<RobustEvidenceSharingPermission>(["public", "private-debug", "metrics-only", "none"]);
 
 export async function runCli(argv: readonly string[], io: CliIo = defaultIo()): Promise<number> {
   const args = [...argv];
@@ -146,6 +148,8 @@ async function runParsedCommand(args: string[], context: CliContext): Promise<Cl
       return runSuggestCommand(command, args, context);
     case "report":
       return runReportCommand(command, args, context);
+    case "compare-robust":
+      return runCompareRobustCommand(command, args, context);
     case "fix":
       return runFixCommand(command, args, context);
     case "fix-sheet":
@@ -444,6 +448,43 @@ function emitAutomation<T>(
     human: formatAutomationHuman(command, result.warnings),
     diagnostics: { ...diagnostics, warnings: result.warnings },
   };
+}
+
+async function runCompareRobustCommand(command: string, args: string[], context: CliContext): Promise<CliCommandResult> {
+  const inputPath = readInput(args);
+  const outDir = takeRequiredValue(args, "--out-dir");
+  const collectionId = takeRequiredValue(args, "--collection-id");
+  const participantId = takeValue(args, "--participant-id");
+  const assignmentIndex = readOptionalNumberFlag(args, "--assignment-index");
+  const sharingValue = takeValue(args, "--sharing") ?? "none";
+  if (!evidenceSharingPermissions.has(sharingValue as RobustEvidenceSharingPermission)) {
+    throw new CliUsageError("--sharing must be public, private-debug, metrics-only, or none.");
+  }
+  if (assignmentIndex !== undefined && (!Number.isSafeInteger(assignmentIndex) || assignmentIndex < 0)) {
+    throw new CliUsageError("--assignment-index must be a non-negative integer.");
+  }
+  const overwrite = takeBooleanFlag(args, "--overwrite");
+  const options = parseFixOptions(args);
+  assertNoExtraArgs(args);
+  return emitAutomation(
+    command,
+    await createRobustEvidenceDryRun({
+      inputPath,
+      outDir,
+      collectionId,
+      ...(participantId ? { participantId } : {}),
+      ...(assignmentIndex !== undefined ? { assignmentIndex } : {}),
+      sharingPermission: sharingValue as RobustEvidenceSharingPermission,
+      surface: "cli",
+      options,
+      overwrite
+    }, createCliRuntime(command, context, { inputPath, outputPath: outDir })),
+    {
+      operation: "robust_evidence_dry_run",
+      options: { ...options, collectionId, sharingPermission: sharingValue, assignmentIndex, overwrite },
+      paths: { inputPath, outDir }
+    }
+  );
 }
 
 function formatAutomationHuman(command: string, warnings: readonly string[]): string {
@@ -1150,11 +1191,18 @@ function usageText(): string {
     "Commands:",
     "  pixelaid inspect <input.png|input.jpg|input.webp> --json",
     "  pixelaid report <input.png|input.jpg|input.webp> [more.png|more.jpg|more.webp] --json",
+    "  pixelaid compare-robust <input.png|input.jpg|input.webp> --out-dir <dir> --collection-id <opaque-id>",
     "  pixelaid suggest <input.png|input.jpg|input.webp> --json",
     "  pixelaid fix <input.png|input.jpg|input.webp> --out <fixed.png> --manifest <manifest.json> [--no-auto]",
     "  pixelaid fix-sheet <input.png|input.jpg|input.webp> --out-dir <dir> [--detect-sheet | --frames <frames.json>]",
     "  pixelaid palette <input.png|input.jpg|input.webp> --max-colors <n> --out <palette.hex|palette.json>",
     "  pixelaid export <input.png|input.jpg|input.webp> --out-dir <dir> --engine godot,unity,phaser,texturepacker,tiled,ldtk --bundle zip",
+    "",
+    "Robust evidence dry run:",
+    "  compare-robust writes Classic/Robust PNGs plus a procedural evidence.json record.",
+    "  Procedural records contain no human verdict and are excluded from promotion decisions.",
+    "  --collection-id <opaque-id> --sharing public|private-debug|metrics-only|none",
+    "  --participant-id <opaque-id> --assignment-index <n> --overwrite",
     "",
     "Palette options:",
     "  --max-colors <n|auto> (alias: --colors)",

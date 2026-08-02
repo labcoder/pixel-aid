@@ -57,6 +57,51 @@ async function withFixture<T>(run: (paths: { dir: string; input: string; frames:
 }
 
 describe("pixelaid CLI", () => {
+  it("writes a procedural Classic-versus-Robust evidence packet", async () => {
+    await withFixture(async ({ dir, input }) => {
+      const capture = createCapture();
+      const outDir = path.join(dir, "evidence");
+      const code = await runCli([
+        "compare-robust",
+        input,
+        "--out-dir",
+        outDir,
+        "--collection-id",
+        "collection:cli-test",
+        "--participant-id",
+        "participant:cli-test",
+        "--assignment-index",
+        "1",
+        "--asset-type",
+        "sprite",
+        "--native-size",
+        "auto",
+        "--canvas",
+        "native",
+        "--json"
+      ], capture);
+      const body = parseStdout(capture);
+
+      expect(code).toBe(0);
+      expect(body).toMatchObject({
+        ok: true,
+        command: "compare-robust",
+        result: {
+          record: {
+            proceduralDryRun: true,
+            app: { surface: "cli" },
+            comparison: { assignment: { candidateA: "robust", candidateB: "classic" } },
+            validation: { valid: true }
+          }
+        }
+      });
+      await expect(stat(path.join(outDir, "classic.png"))).resolves.toBeTruthy();
+      await expect(stat(path.join(outDir, "robust.png"))).resolves.toBeTruthy();
+      await expect(stat(path.join(outDir, "evidence.json"))).resolves.toBeTruthy();
+      expect(await readFile(path.join(outDir, "evidence.json"), "utf8")).not.toContain("input.png");
+    });
+  });
+
   it("prints inspect JSON", async () => {
     await withFixture(async ({ input }) => {
       const capture = createCapture();

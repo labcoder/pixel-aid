@@ -1,4 +1,9 @@
 export {
+  createRobustEvidenceDryRun,
+  type CreateRobustEvidenceDryRunRequest,
+  type RobustEvidenceDryRunResult,
+} from "./robustEvidence";
+export {
   createDiagnosticReport,
   sanitizeDiagnosticValue,
   type CreateDiagnosticReportInput,

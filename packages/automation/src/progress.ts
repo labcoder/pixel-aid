@@ -12,6 +12,7 @@ export type AutomationOperation =
   | "quality_report"
   | "fix_sprite"
   | "fix_sprite_sheet"
+  | "robust_evidence_dry_run"
   | "extract_palette"
   | "export_engine_bundle";
 
