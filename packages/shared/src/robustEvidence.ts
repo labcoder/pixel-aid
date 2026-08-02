@@ -271,12 +271,13 @@ export function validateRobustEvidenceRecord(value: unknown): { valid: boolean; 
 }
 
 export function sanitizeRobustEvidenceText(value: string, maxLength = 1_000): string {
-  return value
+  return stripControlCharacters(
+    value
     .replace(windowsPathPattern, "[redacted-path]")
     .replace(unixPathPattern, "[redacted-path]")
     .replace(emailPattern, "[redacted-email]")
     .replace(secretPattern, "[redacted-secret]")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/gu, "")
+  )
     .trim()
     .slice(0, maxLength);
 }
@@ -375,4 +376,13 @@ function containsForbiddenSettingsKey(value: unknown): boolean {
   return Object.entries(value).some(
     ([key, entry]) => forbiddenSettingsKeyPattern.test(key) || containsForbiddenSettingsKey(entry)
   );
+}
+
+function stripControlCharacters(value: string): string {
+  let output = "";
+  for (const character of value) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code === 9 || code === 10 || code === 13 || (code >= 32 && code !== 127)) output += character;
+  }
+  return output;
 }
