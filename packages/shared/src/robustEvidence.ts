@@ -52,13 +52,17 @@ export type RobustEvidenceCandidate = {
   classicCandidate?: GridSelectionCandidateSummary;
 };
 
-export type RobustEvidenceHumanReview = {
-  preference: RobustEvidencePreference;
+export type RobustEvidenceCandidateRating = {
   geometry: RobustEvidenceGeometryRating;
   severity: RobustEvidenceSeverity;
   manualOverride: RobustEvidenceManualOverride;
-  fallbackAppropriate: RobustEvidenceFallbackRating;
   failureClasses: RobustEvidenceFailureClass[];
+};
+
+export type RobustEvidenceHumanReview = {
+  preference: RobustEvidencePreference;
+  ratings: Record<RobustEvidenceCandidateSlot, RobustEvidenceCandidateRating>;
+  fallbackAppropriate: RobustEvidenceFallbackRating;
   notes?: string;
   completedAt: string;
 };
@@ -202,11 +206,11 @@ export function createRobustEvidenceRecord(input: CreateRobustEvidenceRecordInpu
     },
     review: {
       preference: input.review.preference,
-      geometry: input.review.geometry,
-      severity: input.review.severity,
-      manualOverride: input.review.manualOverride,
+      ratings: {
+        candidateA: cloneCandidateRating(input.review.ratings.candidateA),
+        candidateB: cloneCandidateRating(input.review.ratings.candidateB)
+      },
       fallbackAppropriate: input.review.fallbackAppropriate,
-      failureClasses: [...new Set(input.review.failureClasses)].sort(),
       ...(input.review.notes ? { notes: sanitizeRobustEvidenceText(input.review.notes, 1_000) } : {}),
       completedAt
     },
@@ -297,6 +301,15 @@ export function stableStringifyRobustEvidenceValue(value: unknown): string {
 
 function cloneCandidate(candidate: RobustEvidenceCandidate): RobustEvidenceCandidate {
   return canonicalizeRobustEvidenceValue(candidate) as RobustEvidenceCandidate;
+}
+
+function cloneCandidateRating(rating: RobustEvidenceCandidateRating): RobustEvidenceCandidateRating {
+  return {
+    geometry: rating.geometry,
+    severity: rating.severity,
+    manualOverride: rating.manualOverride,
+    failureClasses: [...new Set(rating.failureClasses)].sort()
+  };
 }
 
 function validateCandidate(value: unknown, requested: GridAutoStrategy, settingsSha256: unknown, errors: string[]): void {

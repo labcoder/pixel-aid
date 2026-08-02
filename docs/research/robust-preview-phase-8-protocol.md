@@ -31,10 +31,10 @@ Guarded fallback is not represented as a second visual result when its output is
 The required judgment is:
 
 - preference: candidate A, candidate B, tie, or both failed;
-- native geometry: pass, fail, or unsure;
-- severity: none, minor, major, or blocking;
-- manual override: not needed, helpful, or required; and
-- optional failure classes and notes.
+- native geometry for each candidate: pass, fail, or unsure;
+- severity for each candidate: none, minor, major, or blocking;
+- manual override for each candidate: not needed, helpful, or required; and
+- optional per-candidate failure classes and overall notes.
 
 After submission, the interface may reveal which candidate was Classic or Robust and show the requested/selected strategy and Guarded reason codes.
 

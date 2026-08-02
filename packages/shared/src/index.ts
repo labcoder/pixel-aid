@@ -16,6 +16,7 @@ export {
 export type {
   CreateRobustEvidenceRecordInput,
   RobustEvidenceCandidate,
+  RobustEvidenceCandidateRating,
   RobustEvidenceCandidateSlot,
   RobustEvidenceFailureClass,
   RobustEvidenceFallbackRating,

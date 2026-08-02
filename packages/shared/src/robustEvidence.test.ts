@@ -138,11 +138,11 @@ describe("Robust Preview evidence", () => {
       },
       review: {
         preference: "tie",
-        geometry: "pass",
-        severity: "none",
-        manualOverride: "not-needed",
+        ratings: {
+          candidateA: { geometry: "pass", severity: "none", manualOverride: "not-needed", failureClasses: [] },
+          candidateB: { geometry: "pass", severity: "none", manualOverride: "not-needed", failureClasses: [] }
+        },
         fallbackAppropriate: "yes",
-        failureClasses: [],
         notes: "Contact me at test@example.com; C:\\private\\hero.png; sk-test_abcdefghijklmnopqrstuvwxyz",
         completedAt: "2026-08-01T12:00:00.000Z"
       },
