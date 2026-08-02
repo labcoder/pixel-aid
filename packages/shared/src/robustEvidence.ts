@@ -5,7 +5,8 @@ import type {
   GridRobustSafety,
   GridSelectionCandidateSummary,
   GridSelectionReasonCode,
-  PixelFixResult
+  PixelFixResult,
+  RGBAImage
 } from "./types";
 
 export const ROBUST_EVIDENCE_CAMPAIGN_ID = "robust-preview-0.2.0-phase8-v1";
@@ -137,6 +138,53 @@ export function createRobustEvidenceSettingsSnapshot(options: FixOptions): Recor
   delete snapshot.sheet;
   delete snapshot.sheetFrames;
   return snapshot;
+}
+
+export function createRobustEvidenceFixOptions(
+  baseOptions: FixOptions,
+  strategy: GridAutoStrategy
+): FixOptions {
+  const automaticGrid = { ...baseOptions.grid };
+  delete automaticGrid.scale;
+  delete automaticGrid.scaleX;
+  delete automaticGrid.scaleY;
+  delete automaticGrid.phaseX;
+  delete automaticGrid.phaseY;
+  return {
+    ...baseOptions,
+    reconstruction: { sizeMode: "auto" },
+    grid: {
+      ...automaticGrid,
+      detect: "auto",
+      autoStrategy: strategy,
+      robustSafety: "guarded"
+    }
+  };
+}
+
+export function robustEvidenceSettingsMatch(classicOptions: FixOptions, robustOptions: FixOptions): boolean {
+  return (
+    stableStringifyRobustEvidenceValue(createRobustEvidenceSettingsSnapshot(classicOptions)) ===
+    stableStringifyRobustEvidenceValue(createRobustEvidenceSettingsSnapshot(robustOptions))
+  );
+}
+
+export function createRobustEvidenceAssignment(
+  index: number
+): Record<RobustEvidenceCandidateSlot, GridAutoStrategy> {
+  const robustFirst = Math.abs(Math.trunc(index)) % 2 === 1;
+  return robustFirst
+    ? { candidateA: "robust", candidateB: "classic" }
+    : { candidateA: "classic", candidateB: "robust" };
+}
+
+export function createRobustEvidenceImageHashBytes(image: RGBAImage): Uint8Array {
+  const bytes = new Uint8Array(8 + image.data.byteLength);
+  const dimensions = new DataView(bytes.buffer, 0, 8);
+  dimensions.setUint32(0, image.width, true);
+  dimensions.setUint32(4, image.height, true);
+  bytes.set(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength), 8);
+  return bytes;
 }
 
 export function createRobustEvidenceCandidate(

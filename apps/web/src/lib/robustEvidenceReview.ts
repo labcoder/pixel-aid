@@ -1,5 +1,9 @@
 import {
+  createRobustEvidenceAssignment,
+  createRobustEvidenceFixOptions,
+  createRobustEvidenceImageHashBytes,
   createRobustEvidenceSettingsSnapshot,
+  robustEvidenceSettingsMatch,
   stableStringifyRobustEvidenceValue,
   type FixOptions,
   type GridAutoStrategy,
@@ -17,31 +21,14 @@ export type RobustEvidenceBlindAssignment = {
 };
 
 export function createEvidenceFixOptions(baseOptions: FixOptions, strategy: GridAutoStrategy): FixOptions {
-  const automaticGrid = { ...baseOptions.grid };
-  delete automaticGrid.scale;
-  delete automaticGrid.scaleX;
-  delete automaticGrid.scaleY;
-  delete automaticGrid.phaseX;
-  delete automaticGrid.phaseY;
-  return {
-    ...baseOptions,
-    grid: {
-      ...automaticGrid,
-      detect: "auto",
-      autoStrategy: strategy,
-      ...(strategy === "robust" ? { robustSafety: "guarded" as const } : { robustSafety: "guarded" as const })
-    }
-  };
+  return createRobustEvidenceFixOptions(baseOptions, strategy);
 }
 
 export function createBlindAssignment(assignmentToken: string, index: number): RobustEvidenceBlindAssignment {
-  const robustFirst = Math.abs(Math.trunc(index)) % 2 === 1;
   return {
     assignmentToken,
     index: Math.max(0, Math.trunc(index)),
-    assignment: robustFirst
-      ? { candidateA: "robust", candidateB: "classic" }
-      : { candidateA: "classic", candidateB: "robust" }
+    assignment: createRobustEvidenceAssignment(index)
   };
 }
 
@@ -72,10 +59,7 @@ export function resolveBlindCandidate<T>(
 }
 
 export function comparisonSettingsMatch(classicOptions: FixOptions, robustOptions: FixOptions): boolean {
-  return (
-    stableStringifyRobustEvidenceValue(createRobustEvidenceSettingsSnapshot(classicOptions)) ===
-    stableStringifyRobustEvidenceValue(createRobustEvidenceSettingsSnapshot(robustOptions))
-  );
+  return robustEvidenceSettingsMatch(classicOptions, robustOptions);
 }
 
 export async function hashEvidenceSettings(options: FixOptions): Promise<string> {
@@ -84,12 +68,7 @@ export async function hashEvidenceSettings(options: FixOptions): Promise<string>
 }
 
 export async function hashEvidenceImage(image: RGBAImage): Promise<string> {
-  const bytes = new Uint8Array(8 + image.data.byteLength);
-  const dimensions = new DataView(bytes.buffer, 0, 8);
-  dimensions.setUint32(0, image.width, true);
-  dimensions.setUint32(4, image.height, true);
-  bytes.set(new Uint8Array(image.data.buffer, image.data.byteOffset, image.data.byteLength), 8);
-  return sha256Bytes(bytes);
+  return sha256Bytes(createRobustEvidenceImageHashBytes(image));
 }
 
 export async function sha256Bytes(bytes: Uint8Array): Promise<string> {

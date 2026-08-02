@@ -6,9 +6,13 @@ export {
   ROBUST_EVIDENCE_FROZEN_BASELINE,
   ROBUST_EVIDENCE_SCHEMA_VERSION,
   canonicalizeRobustEvidenceValue,
+  createRobustEvidenceAssignment,
   createRobustEvidenceCandidate,
+  createRobustEvidenceFixOptions,
+  createRobustEvidenceImageHashBytes,
   createRobustEvidenceRecord,
   createRobustEvidenceSettingsSnapshot,
+  robustEvidenceSettingsMatch,
   sanitizeRobustEvidenceText,
   stableStringifyRobustEvidenceValue,
   validateRobustEvidenceRecord

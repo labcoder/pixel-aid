@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
-import type { FixOptions, RGBAImage } from "@pixelaid/shared";
+import { createRobustEvidenceImageHashBytes, type FixOptions, type RGBAImage } from "@pixelaid/shared";
 import {
   comparisonSettingsMatch,
   createBlindAssignment,
@@ -60,7 +61,8 @@ describe("Robust evidence review helpers", () => {
 
   test("hashes decoded dimensions and RGBA bytes", async () => {
     const image: RGBAImage = { width: 1, height: 1, data: new Uint8ClampedArray([1, 2, 3, 255]) };
-    await expect(hashEvidenceImage(image)).resolves.toMatch(/^[a-f0-9]{64}$/u);
+    const canonicalNodeHash = createHash("sha256").update(createRobustEvidenceImageHashBytes(image)).digest("hex");
+    await expect(hashEvidenceImage(image)).resolves.toBe(canonicalNodeHash);
     await expect(hashEvidenceImage({ ...image, width: 2 })).resolves.not.toBe(await hashEvidenceImage(image));
   });
 });

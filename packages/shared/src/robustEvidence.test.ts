@@ -1,9 +1,13 @@
 import { describe, expect, test } from "vitest";
-import type { FixOptions, PixelFixResult } from "./types";
+import type { FixOptions, PixelFixResult, RGBAImage } from "./types";
 import {
+  createRobustEvidenceAssignment,
   createRobustEvidenceCandidate,
+  createRobustEvidenceFixOptions,
+  createRobustEvidenceImageHashBytes,
   createRobustEvidenceRecord,
   createRobustEvidenceSettingsSnapshot,
+  robustEvidenceSettingsMatch,
   sanitizeRobustEvidenceText,
   stableStringifyRobustEvidenceValue,
   validateRobustEvidenceRecord
@@ -96,6 +100,32 @@ describe("Robust Preview evidence", () => {
     const snapshot = createRobustEvidenceSettingsSnapshot(options);
     expect(snapshot.grid).toEqual({ cropToBounds: true, detect: "auto" });
     expect(stableStringifyRobustEvidenceValue({ b: 2, a: 1 })).toBe('{"a":1,"b":2}');
+  });
+
+  test("creates one frozen comparison pair with balanced assignments", () => {
+    const manual: FixOptions = {
+      ...options,
+      reconstruction: { sizeMode: "manual", width: 64, height: 64 },
+      grid: { detect: "manual", scaleX: 4, scaleY: 5, phaseX: 1, phaseY: 2 }
+    };
+    const classic = createRobustEvidenceFixOptions(manual, "classic");
+    const robust = createRobustEvidenceFixOptions(manual, "robust");
+
+    expect(classic.reconstruction).toEqual({ sizeMode: "auto" });
+    expect(classic.grid).toMatchObject({ detect: "auto", autoStrategy: "classic", robustSafety: "guarded" });
+    expect(classic.grid).not.toHaveProperty("scaleX");
+    expect(robustEvidenceSettingsMatch(classic, robust)).toBe(true);
+    expect(createRobustEvidenceAssignment(0)).toEqual({ candidateA: "classic", candidateB: "robust" });
+    expect(createRobustEvidenceAssignment(1)).toEqual({ candidateA: "robust", candidateB: "classic" });
+  });
+
+  test("prefixes decoded RGBA hash bytes with little-endian dimensions", () => {
+    const image: RGBAImage = { width: 2, height: 1, data: new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]) };
+    expect([...createRobustEvidenceImageHashBytes(image)]).toEqual([
+      2, 0, 0, 0,
+      1, 0, 0, 0,
+      1, 2, 3, 4, 5, 6, 7, 8
+    ]);
   });
 
   test("extracts Guarded fallback provenance without image bytes", () => {
