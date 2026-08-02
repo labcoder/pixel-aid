@@ -94,6 +94,7 @@ import {
   type EngineExportTarget
 } from "@pixelaid/exporters";
 import { AssetBrowserPanel } from "./components/AssetBrowserPanel";
+import { RobustEvidenceReviewModal } from "./components/RobustEvidenceReviewModal";
 import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
 import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
@@ -430,6 +431,12 @@ type PaletteModalState = {
   totalColors: number;
   truncated: boolean;
   kind?: "palette" | "outlineSource";
+};
+
+type RobustEvidenceReviewLaunch = {
+  assetId: string;
+  sourceImage: RGBAImage;
+  baseOptions: FixOptions;
 };
 
 type SourceAssetAnalysis = SourceAssetAnalysisResult;
@@ -1205,6 +1212,7 @@ export function App() {
   const [samplePickerOpen, setSamplePickerOpen] = useState(false);
   const [aboutDialogOpen, setAboutDialogOpen] = useState(false);
   const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  const [robustEvidenceReview, setRobustEvidenceReview] = useState<RobustEvidenceReviewLaunch | null>(null);
   const [telemetryConsent, setTelemetryConsent] = useState(initialSettings.telemetryConsent);
   const [palettesExpanded, setPalettesExpanded] = useState(false);
   const [paletteModal, setPaletteModal] = useState<PaletteModalState | null>(null);
@@ -4629,6 +4637,18 @@ export function App() {
     targetHeight,
     targetWidth
   ]);
+
+  const openRobustEvidenceReview = useCallback(() => {
+    if (!selectedAsset || isEditorBusy || !robustPreviewEligibility.eligible || nativeSizeMode !== "auto" || gridDetect !== "auto") {
+      return;
+    }
+    setRobustEvidenceReview({
+      assetId: selectedAsset.id,
+      sourceImage: selectedAsset.image,
+      baseOptions: buildFixOptions()
+    });
+    appendLog("Phase 8 blind comparison opened; Classic remains the default and no data is uploaded.");
+  }, [appendLog, buildFixOptions, gridDetect, isEditorBusy, nativeSizeMode, robustPreviewEligibility.eligible, selectedAsset]);
 
   const runFix = useCallback(async (fixTrigger: TelemetryFixTrigger = "top_toolbar") => {
     if (!selectedAsset || isEditorBusy) {
@@ -9202,6 +9222,24 @@ export function App() {
                   <code>{reconstructionStrategyStatus.reasonCodes.join(", ")}</code>
                 ) : null}
               </div>
+              <div className="evidence-review-entry">
+                <div>
+                  <strong>Help evaluate Robust Preview</strong>
+                  <span>Run a local blind A/B with identical cleanup and canvas settings.</span>
+                </div>
+                <button
+                  type="button"
+                  disabled={!robustPreviewEligibility.eligible || nativeSizeMode !== "auto" || gridDetect !== "auto" || isEditorBusy}
+                  title={
+                    nativeSizeMode !== "auto" || gridDetect !== "auto"
+                      ? "Blind evidence requires automatic native-size and grid detection."
+                      : robustPreviewEligibility.message
+                  }
+                  onClick={openRobustEvidenceReview}
+                >
+                  Blind A/B
+                </button>
+              </div>
               <SelectField
                 label="Native size"
                 value={nativeSizeMode}
@@ -10043,6 +10081,17 @@ export function App() {
           ) : null}
         </div>
       </footer>
+      ) : null}
+      {robustEvidenceReview ? (
+        <RobustEvidenceReviewModal
+          assetId={robustEvidenceReview.assetId}
+          sourceImage={robustEvidenceReview.sourceImage}
+          baseOptions={robustEvidenceReview.baseOptions}
+          surface={isDesktopRuntime() ? "desktop" : "web"}
+          platform={appMetadata.platform}
+          onClose={() => setRobustEvidenceReview(null)}
+          onLog={appendLog}
+        />
       ) : null}
       {paletteModal && paletteModalWindow ? (
         <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
