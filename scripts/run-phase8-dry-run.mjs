@@ -38,20 +38,24 @@ export async function runBundledPhase8DryRun(options = parsePhase8DryRunArgs()) 
     return undefined;
   }
   const bundleDir = await mkdtemp(path.join(tmpdir(), "pixelaid-phase8-runner-"));
-  const bundlePath = path.join(bundleDir, "runner.mjs");
+  const bundlePath = path.join(bundleDir, "runner.cjs");
   try {
     await build({
       entryPoints: [path.join(scriptDir, "phase8-dry-run-entry.ts")],
       outfile: bundlePath,
       bundle: true,
       platform: "node",
-      format: "esm",
+      format: "cjs",
       target: "node20",
       sourcemap: false,
       logLevel: "silent"
     });
     const runner = await import(`${pathToFileURL(bundlePath).href}?v=${Date.now()}`);
-    return await runner.runPhase8DryRun({ outputRoot: options.outputRoot, overwrite: options.overwrite });
+    const runPhase8DryRun = runner.runPhase8DryRun ?? runner.default?.runPhase8DryRun;
+    if (typeof runPhase8DryRun !== "function") {
+      throw new Error("The bundled Phase 8 runner did not export runPhase8DryRun().");
+    }
+    return await runPhase8DryRun({ outputRoot: options.outputRoot, overwrite: options.overwrite });
   } finally {
     await rm(bundleDir, { recursive: true, force: true });
   }
