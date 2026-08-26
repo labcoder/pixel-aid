@@ -84,6 +84,32 @@ describe("viewportRenderModel", () => {
     expect(model.layout.afterZoom).toBe(2);
   });
 
+  it("ignores a disposed fixed surface during a repeated Fix transition", () => {
+    const model = createViewportRenderModel({
+      viewport: { width: 400, height: 300 },
+      sourceSurface: surface(100, 80),
+      fixedSurface: surface(0, 0),
+      viewMode: "split",
+      zoom: 2,
+      showGrid: true,
+      overlaySurfaces: { sourceMask: null, fixedMask: null },
+      sourceFrames: [],
+      fixedFrames: [],
+      selectedFrameIndex: -1,
+      canEditSourceFrames: false,
+      showFrameMetadataOverlays: true,
+      pan: { x: 0, y: 0 },
+      splitRatio: 0.5
+    });
+
+    expect(model.kind).toBe("image");
+    if (model.kind !== "image") {
+      throw new Error("Expected source image model");
+    }
+    expect(model.fixedSurface).toBeNull();
+    expect(model.layout).toMatchObject({ kind: "single", activeRole: "source" });
+  });
+
   it("builds a side-by-side compare layout without replacing it with timeline", () => {
     const model = createViewportRenderModel({
       viewport: { width: 400, height: 240 },

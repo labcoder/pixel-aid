@@ -92,17 +92,19 @@ export function createViewportRenderModel(input: {
   pan: Point;
   splitRatio: number;
 }): ViewportRenderModel {
-  const sourceSurface = input.sourceSurface;
+  const sourceSurface = isDrawableSurface(input.sourceSurface) ? input.sourceSurface : null;
   if (!sourceSurface) {
     return {
       kind: "empty",
       viewport: input.viewport
     };
   }
+  const fixedSurface = isDrawableSurface(input.fixedSurface) ? input.fixedSurface : null;
 
   const layout = createViewportRenderLayout({
     ...input,
-    sourceSurface
+    sourceSurface,
+    fixedSurface
   });
   return {
     kind: "image",
@@ -112,7 +114,7 @@ export function createViewportRenderModel(input: {
     pan: input.pan,
     splitRatio: input.splitRatio,
     sourceSurface,
-    fixedSurface: input.fixedSurface,
+    fixedSurface,
     showGrid: input.showGrid,
     ...(input.fixedSourceRect ? { fixedSourceRect: input.fixedSourceRect } : {}),
     ...(input.diagnosticOverlay ? { diagnosticOverlay: input.diagnosticOverlay } : {}),
@@ -126,6 +128,10 @@ export function createViewportRenderModel(input: {
     },
     layout
   };
+}
+
+function isDrawableSurface(surface: ViewportRenderSurface | null): surface is ViewportRenderSurface {
+  return surface !== null && surface.width > 0 && surface.height > 0;
 }
 
 function createViewportRenderLayout(input: {
