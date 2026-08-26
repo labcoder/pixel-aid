@@ -122,6 +122,10 @@ node packages/mcp/dist/server.cjs
 
 The MCP server reads content-length-framed JSON-RPC messages from stdin and writes responses to stdout. It does not open a network port. See [packages/mcp/README.md](packages/mcp/README.md) for tool names, direct handler usage, and client configuration notes.
 
+## Use Browser Site Tools (WebMCP)
+
+The live web editor also registers page-scoped Site Tools in WebMCP-capable browsers. An agent can inspect the current client-only session, run Auto Suggest and Fix, switch input/output/compare views, adjust zoom and focus, configure export, and download the existing engine-ready bundle. This is separate from the stdio MCP server and needs no PixelAid backend or API key. Image generation remains external: Codex can generate a PNG and paste it into the editor through the browser clipboard before using the tools. See [docs/webmcp.md](docs/webmcp.md) for the contract and verified local walkthrough.
+
 ## Other Use Paths
 
 - **Local HTTP handlers:** `@pixelaid/http` contains an in-process HTTP-style handler layer over automation operations. It is useful for tests and future local service work, but it is not a standalone server yet. See [packages/http/README.md](packages/http/README.md).
@@ -193,6 +197,7 @@ npm run build -w @pixelaid/mcp
 - [docs/web-release.md](docs/web-release.md) covers browser release artifacts.
 - [docs/telemetry.md](docs/telemetry.md) covers opt-in anonymous telemetry.
 - [docs/automation.md](docs/automation.md) covers CLI and MCP-ready workflows.
+- [docs/webmcp.md](docs/webmcp.md) covers browser-native Site Tools and the local Codex demo.
 - [docs/fixtures.md](docs/fixtures.md) covers generated fixtures and benchmarks.
 - [docs/performance.md](docs/performance.md) tracks performance expectations.
 - [docs/licensing.md](docs/licensing.md) covers licensing and dependency review notes.

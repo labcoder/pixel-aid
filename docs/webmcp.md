@@ -106,7 +106,7 @@ Tool descriptions state their side effects. Only `get_editor_state` is marked re
 The local demo runs against `http://127.0.0.1:5173` in the ChatGPT desktop built-in browser:
 
 1. PixelAid's tools appear under Site Tools.
-2. A repository fixture can be pasted into the editor without a file-picker upload.
+2. A repository fixture can be imported through PixelAid's normal picker, and a Codex-generated PNG can be pasted from the browser clipboard without a new PixelAid import API.
 3. `get_editor_state` reports the imported asset.
 4. Auto Suggest completes and returns its recommendation.
 5. A supported fix setting can be changed and observed in the UI.
@@ -116,3 +116,32 @@ The local demo runs against `http://127.0.0.1:5173` in the ChatGPT desktop built
 9. The same flow succeeds with a PNG created by Codex image generation and pasted through the browser clipboard.
 
 Cloudflare deployment and DNS configuration are a separate, final phase and are not part of the local acceptance gate.
+
+## Reproduce the local demo
+
+Start the editor:
+
+```sh
+npm run dev
+```
+
+Open `http://127.0.0.1:5173` in the ChatGPT desktop built-in browser. Once the page reports that PixelAid Site Tools are ready, the workflow can be driven with natural-language requests such as:
+
+1. "Inspect the current PixelAid editor state."
+2. "Run Auto Suggest, set the native output to 96x96 with at most 24 colors, preserve alpha, and run Fix."
+3. "Switch to output view and zoom in 50% focused on the top."
+4. "Use compare mode at a 50% slider, then switch to side-by-side."
+5. "Configure a Godot export named `webmcp-lantern-courier-demo` and export it."
+
+The image reaches PixelAid through the same client-side interaction a person uses today: import, drag/drop, or clipboard paste. In the contest-style flow, Codex generates the raster outside PixelAid, writes that PNG to the browser clipboard, focuses the editor, and pastes it. PixelAid never receives an image-generation credential and no Site Tool accepts image bytes or paths.
+
+## Verified local run
+
+The workflow above was verified locally on August 25, 2026:
+
+- All nine page-scoped tools were discovered from the live PixelAid document.
+- The repository panda fixture was reconstructed from 1008x1059 to 64x64 with a 16-color palette and exported as a validated 10-file Godot bundle.
+- A Codex-generated transparent lantern-courier sprite was pasted from the browser clipboard as `clipboard.png`, reconstructed from 1254x1254 to 96x96 with a 23-color result, visually reviewed through output, slider, side-by-side, zoom, and named-focus commands, then exported as a validated 10-file Godot bundle.
+- The generated bundle contained the fixed PNG, manifest, GPL/HEX/JSON palettes, validation report, Godot importer recipe, helper script, and engine documentation.
+
+The local workflow requires no PixelAid backend, remote MCP server, API key, or Cloudflare resource. A WebMCP-capable browser/agent is required for Site Tool discovery; browsers without it continue to run the normal editor.
