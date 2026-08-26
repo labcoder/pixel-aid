@@ -12,7 +12,7 @@ PixelAid is under active development. The editor, core cleanup pipeline, worker 
 
 ## Robust Preview
 
-PixelAid 0.2.0 includes an opt-in **Robust Preview** reconstruction strategy for difficult pseudo-pixel sprites, icons, and full-canvas backgrounds. **Classic remains the default.** Robust estimates the true native grid; output-canvas size, framing, palette, alpha, background, outline, and cleanup remain separate controls. Guarded safety is enabled by default after Robust is selected and visibly falls back to Classic when geometry is not sufficiently supported.
+PixelAid 0.2.0 includes **Robust Preview** reconstruction for difficult pseudo-pixel sprites, icons, and full-canvas backgrounds. The web and desktop editors default eligible single-image work to Robust with Guarded safety, while Classic remains selectable and remains the compatibility default for automation callers that omit a strategy. Robust estimates the true native grid; output-canvas size, framing, palette, alpha, background, outline, and cleanup remain separate controls.
 
 See [the Robust Preview guide](docs/robust-preview.md) and [0.2.0 release notes](RELEASE_NOTES.md) for eligibility, safety policies, automation examples, and current limitations.
 

@@ -46,7 +46,7 @@ npm run typecheck
 - Keep reducers deterministic and easy to test.
 - Add commands when user intent needs to cross package boundaries. Keep UI-only details in `apps/web`.
 - Keep image algorithms in `@pixelaid/core` and worker execution in `@pixelaid/worker`.
-- Keep Classic as the omitted/default reconstruction strategy. Robust Preview and its safety policy are serializable editor settings, not hidden runtime state.
+- Keep the engine's editor defaults explicit and serializable: eligible new/reset editor settings request guarded Robust, while low-level/core callers retain their omitted Classic compatibility behavior.
 
 ## Verification
 

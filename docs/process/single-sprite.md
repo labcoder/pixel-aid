@@ -6,7 +6,7 @@ The important composition detail is that PixelAid does not simply downsample and
 
 ## Reconstruction strategy and output packaging
 
-Classic remains the default grid strategy. Eligible single sprites and icons can opt into Robust Preview; backgrounds are eligible only when the full native canvas is reconstructed instead of cropping to subject bounds. Robust changes automatic native-grid inference and reconstruction sampling only. It does not alter classification, background removal, alpha, outline, palette, downscale method, or cleanup choices.
+The web and desktop editors default eligible single sprites and icons to Robust Preview with Guarded safety; backgrounds are eligible only when the full native canvas is reconstructed instead of cropping to subject bounds. Classic remains selectable and is still the omitted compatibility default for low-level and automation callers. Robust changes automatic native-grid inference and reconstruction sampling only. It does not alter classification, background removal, alpha, outline, palette, downscale method, or cleanup choices.
 
 Guarded safety compares the Robust proposal with Classic and can return the Classic reconstruction with structured reason codes. Warn retains the Robust proposal with the same warning evidence; Raw exposes the frozen proposal for diagnosis. Manual grid or native-size values bypass automatic strategy selection.
 

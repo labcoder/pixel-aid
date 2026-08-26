@@ -89,7 +89,7 @@ The Pixel pipeline separates two decisions that were previously easy to confuse:
 1. **Reconstruction** resolves the true sprite and native grid.
 2. **Output canvas** packages that reconstruction into export bounds.
 
-Classic is the stable default reconstruction strategy. Robust Preview is an explicit alternative for eligible single sprites, icons, and full-canvas backgrounds. Guarded safety is on by default after Robust is selected; Warn and Raw are available only in Advanced controls. Sprite sheets, animation sheets, character sheets, tiles, portraits, and UI elements remain on Classic during the preview.
+Robust Preview with Guarded safety is the default reconstruction strategy for eligible single sprites, icons, and full-canvas backgrounds. Classic remains an explicit alternative and saved Classic preferences are preserved; Warn and Raw are available only in Advanced controls. Sprite sheets, animation sheets, character sheets, tiles, portraits, and UI elements remain on Classic during the preview.
 
 After Fix, the pipeline status reports whether Robust was used, fell back to Classic, was retained with a warning, or was unavailable for the asset type. Reason codes appear when a Guarded or Warn decision needs review. Manual native dimensions always override automatic strategy selection.
 

@@ -24,7 +24,7 @@ export function describeReconstructionStrategyStatus(input: {
     return {
       tone: "classic",
       title: "Classic selected",
-      detail: "Stable default reconstruction. Existing projects remain unchanged.",
+      detail: "Compatibility reconstruction selected. Saved Classic preferences remain unchanged.",
       reasonCodes: []
     };
   }

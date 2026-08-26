@@ -1,10 +1,10 @@
 # Robust Preview
 
-Robust Preview is PixelAid's opt-in native reconstruction strategy for difficult pseudo-pixel images. Classic remains the default. Robust changes how PixelAid estimates the true source-pixel grid; it does not choose the palette, remove a background, repair an outline, clean alpha fringes, or decide the exported canvas size.
+Robust Preview is PixelAid's native reconstruction strategy for difficult pseudo-pixel images. The web and desktop editors default eligible single-image work to Robust with Guarded safety. Classic remains selectable, saved Classic preferences remain intact, and automation callers that omit a strategy retain the Classic compatibility path. Robust changes how PixelAid estimates the true source-pixel grid; it does not choose the palette, remove a background, repair an outline, clean alpha fringes, or decide the exported canvas size.
 
 ## When to use it
 
-Try Robust Preview when an AI-generated sprite, icon, or full-canvas background has blurred block boundaries, uneven apparent pixels, ambiguous native dimensions, or different horizontal and vertical evidence. Leave Classic selected for already-correct pixel art or when you want the established reconstruction path.
+Robust Preview is a strong starting point when an AI-generated sprite, icon, or full-canvas background has blurred block boundaries, uneven apparent pixels, ambiguous native dimensions, or different horizontal and vertical evidence. Select Classic for already-correct pixel art or when you want the established reconstruction path.
 
 Phase 7 eligibility is intentionally narrow:
 
@@ -43,7 +43,7 @@ The editor keeps Warn and Raw inside Advanced controls. Automation uses `guarded
 
 After Fix, the Pixel pipeline reports one of these outcomes:
 
-- **Classic selected**: the stable default was requested.
+- **Classic selected**: the compatibility reconstruction was requested.
 - **Robust Preview used**: Guarded accepted the Robust geometry.
 - **Robust requested -> Classic used**: Guarded rejected the proposal and returned the Classic result.
 - **Robust used with warning**: Warn retained geometry that Guarded would question.
@@ -71,4 +71,4 @@ MCP and HTTP-style requests use `options.gridStrategy: "robust"` and `options.ro
 
 Include the PixelAid version, asset type, requested native-size mode, output-canvas settings, requested and used strategies, Guarded reason codes, and a sanitized Diagnostics export. Do not share private source assets without permission. A reduced or synthetic reproduction is preferred.
 
-Robust Preview remains opt-in until the Phase 8 evidence campaign measures real-world preference, geometry accuracy, fallback frequency, performance, and cross-surface output parity. The frozen methodology and promotion gates are defined in [the Phase 8 evidence protocol](./research/robust-preview-phase-8-protocol.md).
+The web/desktop default promotion does not change the frozen detector or automation compatibility defaults. The evidence methodology and safety gates remain documented in [the Phase 8 evidence protocol](./research/robust-preview-phase-8-protocol.md).

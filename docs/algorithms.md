@@ -33,18 +33,18 @@ When a meaningful background crop is found, candidates include a grid-aligned `s
 
 Candidate diagnostics expose edge, run, size, scale, and divisibility scores; a crop-used flag; source coverage; a low/medium/high label; and short notes. The editor uses these diagnostics to explain confidence without parsing prose.
 
-### Opt-in robust grid detection
+### Robust grid detection
 
 The product-facing Phase 7 availability, safety, and default contract is frozen in [Robust Preview Phase 7 release contract](research/robust-preview-phase-7.md).
 
 Automatic grid detection has two strategies:
 
-- `classic` is the default and preserves the existing product behavior.
-- `robust` is an explicit reconstruction-only strategy for eligible single-image `sprite` and `icon` inputs, plus explicitly full-canvas `background` inputs.
+- `classic` preserves the established reconstruction behavior and remains the omitted compatibility default for low-level and automation callers.
+- `robust` is the web/desktop default reconstruction strategy for eligible single-image `sprite` and `icon` inputs, plus explicitly full-canvas `background` inputs.
 
 Callers can request robust candidates directly with `detectGridCandidates(image, { strategy: "robust" })`. Eligible `fixImage` calls can select the same path with `grid: { detect: "auto", autoStrategy: "robust" }`. Backgrounds additionally require `cropToBounds: false`; sheet, tile, portrait, and UI workflows remain on Classic. Manual grids and runtime-supplied grid candidates remain authoritative.
 
-Product surfaces can add `grid.robustSafety: "guarded" | "warn" | "off"` without changing the frozen detector. `guarded` compares the Robust and Classic proposals. It falls back when a severe aspect change has weak support, and also catches moderate anisotropy when Robust is materially less confident than a well-supported isotropic Classic reference. A decisive independently proposed reconstruction margin can preserve legitimate non-square source pixels even when low-level run evidence is weak. `warn` keeps the same Robust proposal with structured reason codes, and `off` exposes the raw Step-1Q selection. Core callers that omit the safety field retain the raw behavior; the web and automation surfaces default to Guarded only after the user explicitly selects Robust.
+Product surfaces can add `grid.robustSafety: "guarded" | "warn" | "off"` without changing the frozen detector. `guarded` compares the Robust and Classic proposals. It falls back when a severe aspect change has weak support, and also catches moderate anisotropy when Robust is materially less confident than a well-supported isotropic Classic reference. A decisive independently proposed reconstruction margin can preserve legitimate non-square source pixels even when low-level run evidence is weak. `warn` keeps the same Robust proposal with structured reason codes, and `off` exposes the raw Step-1Q selection. Core callers that omit the safety field retain the raw behavior; the web/desktop default explicitly requests Robust with Guarded safety, while automation applies Guarded after an explicit Robust request.
 
 Pixel recovery and output packaging are separate stages. `reconstruction.sizeMode: "auto"` lets the selected detector determine the true native pixel-art dimensions; `"manual"` requires an explicit native width and height. This stage owns grid sampling, block downscaling, alpha/edge cleanup, palette remapping, and the reconstructed subject's placement in a native composition.
 

@@ -8,7 +8,7 @@ const eligible = {
 };
 
 describe("Robust Preview product status", () => {
-  test("keeps Classic framed as the stable default", () => {
+  test("keeps Classic available as the compatibility reconstruction", () => {
     expect(
       describeReconstructionStrategyStatus({
         requestedStrategy: "classic",
@@ -17,7 +17,8 @@ describe("Robust Preview product status", () => {
       })
     ).toMatchObject({
       tone: "classic",
-      title: "Classic selected"
+      title: "Classic selected",
+      detail: "Compatibility reconstruction selected. Saved Classic preferences remain unchanged."
     });
   });
 

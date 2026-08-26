@@ -4689,7 +4689,7 @@ export function App() {
       sourceImage: selectedAsset.image,
       baseOptions: buildFixOptions()
     });
-    appendLog("Phase 8 blind comparison opened; Classic remains the default and no data is uploaded.");
+    appendLog("Phase 8 blind comparison opened; the guarded Robust default can be compared with Classic and no data is uploaded.");
   }, [appendLog, buildFixOptions, gridDetect, isEditorBusy, nativeSizeMode, robustPreviewEligibility.eligible, selectedAsset]);
 
   const runFix = useCallback(async (fixTrigger: TelemetryFixTrigger = "top_toolbar") => {

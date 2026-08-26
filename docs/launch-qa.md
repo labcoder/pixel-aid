@@ -35,7 +35,7 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 | --- | --- | --- | --- |
 | Import | Toolbar import, drag/drop, paste, repeated imports, unsupported files, progress labels. | `demo-fake-grid-robot`, one user PNG, one non-image file. | Asset appears once, analysis status appears, unsupported file logs a recoverable error. |
 | Classification | Auto type detection plus manual asset-type override per imported asset. | Sprite, icon, animation sheet, tileset, background samples. | Asset type, support warnings, and mode update correctly without leaking settings across assets. |
-| Single-sprite fix | Classic default, opt-in Robust Guarded, auto/manual native size, independent canvas packaging, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, Hero Cat golden, `outline-repair-dual-tone`, `halo-transparent-edge`. | Classic remains default; Robust status is explicit; exact canvas survives fallback; output is native sized, palette-limited, transparent where expected, with no clipped outline. |
+| Single-sprite fix | Guarded Robust default, selectable Classic, auto/manual native size, independent canvas packaging, crop-to-bounds, adaptive/detail downscale, alpha cleanup, outline repair/add. | `demo-fake-grid-robot`, Hero Cat golden, `outline-repair-dual-tone`, `halo-transparent-edge`. | Robust status or Guarded fallback is explicit; Classic remains selectable; exact canvas survives fallback; output is native sized, palette-limited, transparent where expected, with no clipped outline. |
 | Sheet correction | Auto row/cell detection, manual add/remove/fill row fixes, frame drag/resize with undo. | `demo-palette-drift-walk`, `demo-uneven-labeled-sheet`, `drifted-effect-sheet`. | Detected row counts match expectations or are manually corrected; source/output timeline frames stay aligned. |
 | Palette | Auto/fixed/preset palettes, sheet lock, no dithering default, palette sidecar export. | Palette drift sample plus a high-color AI asset. | Palette count respects budget and animation does not shimmer from per-frame palette changes. |
 | Alpha and matte cleanup | Preserve, binary, flood fill, color key, decontaminated transparent RGB, and chroma-matte review. | Checkerboard matte icon, matte white sprite, and a source-sized sheet with colored matte artifacts. | Preview looks clean on checker/light/dark/grass-style backgrounds, and subject colors are not removed during matte cleanup. |
@@ -53,8 +53,8 @@ Record the commit SHA, operating system, Node/npm versions, whether desktop pack
 2. Load **Fake-grid robot sprite** from the Samples panel.
 3. Confirm recommended settings populate the inspector.
 4. Run Fix and compare Input/Output.
-5. Select Robust Preview, rerun Fix, and confirm the status reports Robust used or an explicit Guarded fallback without changing the requested output canvas.
-6. Return to Classic, export the bundle, and inspect the manifest.
+5. Confirm the default status reports Robust used or an explicit Guarded fallback without changing the requested output canvas.
+6. Select Classic, rerun Fix, export the bundle, and inspect the manifest.
 7. Load **Palette drift walk cycle** and confirm Robust is not offered for the sheet workflow.
 8. Run Fix, open Timeline, compare input/output playback for the row.
 9. Load **Uneven labeled animation sheet**.
@@ -90,7 +90,7 @@ Do not ask beta users to share proprietary prompts or private source assets by d
 | Web bundle budget can grow as editor surfaces expand. | Build is valid only when `npm run bundle:budget` passes after the production web build. Initial entry/preload JavaScript and all deferred JavaScript are measured separately so lazy docs and worker code do not masquerade as startup cost. | The release gate enforces 700 kB largest-chunk, 230 kB initial-gzip, and 390 kB all-JavaScript budgets. |
 | Real-world golden corpus is still small. | First-party fixtures cover known failure modes; beta assets should expand regression coverage with permission. | Beta fixture expansion milestone. |
 | Subject-safe matte cleanup needs broader real-world coverage. | Current cleanup removes outside-connected matte artifacts while preserving supported foreground colors from the same hue family, but beta assets should expand the regression corpus. | Beta fixture expansion milestone. |
-| Robust reconstruction is a Preview. | Classic remains the default. Robust is limited to eligible single images, uses Guarded fallback, and must not be presented as sheet support. | Phase 8 evidence campaign. |
+| Robust reconstruction is a Preview. | The web/desktop default is limited to eligible single images and uses Guarded fallback; unsupported workflows stay on Classic. | Continue the evidence campaign and retain the Classic override. |
 
 ## Privacy Rules
 
