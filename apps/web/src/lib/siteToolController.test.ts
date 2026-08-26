@@ -70,6 +70,72 @@ describe("PixelAid Site Tool controller", () => {
     });
   });
 
+  test("applies optional voice-friendly settings before running Fix", async () => {
+    const events: string[] = [];
+    const adapter = createAdapter();
+    const refreshedAdapter = createAdapter();
+    let currentAdapter = adapter;
+    adapter.updateFixSettings = vi.fn(async (settings) => {
+      events.push("settings");
+      currentAdapter = refreshedAdapter;
+      return success({ applied: settings });
+    });
+    refreshedAdapter.runFix = vi.fn(async () => {
+      events.push("fix");
+      return success({ width: 128, height: 128, paletteCount: 8 });
+    });
+    const execute = createPixelAidSiteToolExecutor(() => currentAdapter);
+
+    await expect(
+      execute("fix_with_settings", { size: 128, maxColors: 8, gridStrategy: "robust" })
+    ).resolves.toEqual({
+      ok: true,
+      tool: "fix_with_settings",
+      result: {
+        appliedSettings: {
+          targetWidth: 128,
+          targetHeight: 128,
+          maxColors: 8,
+          gridStrategy: "robust"
+        },
+        outputCanvasMatched: true,
+        width: 128,
+        height: 128,
+        paletteCount: 8
+      },
+      warnings: []
+    });
+    expect(adapter.updateFixSettings).toHaveBeenCalledWith(
+      {
+        targetWidth: 128,
+        targetHeight: 128,
+        maxColors: 8,
+        gridStrategy: "robust"
+      },
+      { syncOutputCanvas: true }
+    );
+    expect(adapter.runFix).not.toHaveBeenCalled();
+    expect(refreshedAdapter.runFix).toHaveBeenCalledOnce();
+    expect(events).toEqual(["settings", "fix"]);
+  });
+
+  test("runs with current settings when omitted and rejects ambiguous dimensions", async () => {
+    const adapter = createAdapter();
+    const execute = createPixelAidSiteToolExecutor(() => adapter);
+
+    await expect(execute("fix_with_settings", {})).resolves.toMatchObject({
+      ok: true,
+      result: { appliedSettings: {}, outputCanvasMatched: false, width: 32, height: 32 }
+    });
+    expect(adapter.updateFixSettings).not.toHaveBeenCalled();
+    expect(adapter.runFix).toHaveBeenCalledOnce();
+
+    await expect(execute("fix_with_settings", { size: 128, targetWidth: 96 })).resolves.toMatchObject({
+      ok: false,
+      error: { code: "invalid_input", message: "size cannot be combined with targetWidth or targetHeight." }
+    });
+  });
+
   test("rejects ambiguous visual commands", async () => {
     const execute = createPixelAidSiteToolExecutor(() => createAdapter());
 

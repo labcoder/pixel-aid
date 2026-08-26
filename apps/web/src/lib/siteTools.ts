@@ -4,6 +4,7 @@ export const pixelAidSiteToolNames = [
   "run_auto_suggest",
   "update_fix_settings",
   "run_fix",
+  "fix_with_settings",
   "set_view_mode",
   "adjust_viewport",
   "configure_export",
@@ -71,6 +72,29 @@ const viewFocusValues = [
   "bottom_right"
 ] as const;
 
+const fixSettingsProperties = {
+  assetType: {
+    type: "string",
+    enum: ["sprite", "spriteSheet", "animationSheet", "characterSheet", "tileset", "tilemap", "portrait", "icon", "iconSet", "uiElement", "background"]
+  },
+  targetWidth: { type: "integer", minimum: 1, maximum: 4096 },
+  targetHeight: { type: "integer", minimum: 1, maximum: 4096 },
+  maxColors: { type: "integer", minimum: 2, maximum: 256 },
+  gridStrategy: { type: "string", enum: ["classic", "robust"] },
+  robustSafety: { type: "string", enum: ["guarded", "warn", "off"] },
+  gridDetect: { type: "string", enum: ["auto", "manual"] },
+  gridScaleX: { type: "number", minimum: 0.01, maximum: 4096 },
+  gridScaleY: { type: "number", minimum: 0.01, maximum: 4096 },
+  gridPhaseX: { type: "number", minimum: -4096, maximum: 4096 },
+  gridPhaseY: { type: "number", minimum: -4096, maximum: 4096 },
+  downscale: { type: "string", enum: ["dominant", "detailPreserving", "median", "adaptive", "averageThenPalette"] },
+  alpha: { type: "string", enum: ["preserve", "binary", "backgroundFloodFill", "colorKey"] },
+  removeOrphans: { type: "boolean" },
+  jaggyCleanup: { type: "boolean" },
+  preserveSinglePixelDetails: { type: "boolean" },
+  removeHalos: { type: "boolean" }
+} satisfies Record<string, unknown>;
+
 export const pixelAidSiteTools: PixelAidSiteToolDefinition[] = [
   {
     name: "get_editor_state",
@@ -110,28 +134,7 @@ export const pixelAidSiteTools: PixelAidSiteToolDefinition[] = [
           type: "object",
           additionalProperties: false,
           minProperties: 1,
-          properties: {
-            assetType: {
-              type: "string",
-              enum: ["sprite", "spriteSheet", "animationSheet", "characterSheet", "tileset", "tilemap", "portrait", "icon", "iconSet", "uiElement", "background"]
-            },
-            targetWidth: { type: "integer", minimum: 1, maximum: 4096 },
-            targetHeight: { type: "integer", minimum: 1, maximum: 4096 },
-            maxColors: { type: "integer", minimum: 2, maximum: 256 },
-            gridStrategy: { type: "string", enum: ["classic", "robust"] },
-            robustSafety: { type: "string", enum: ["guarded", "warn", "off"] },
-            gridDetect: { type: "string", enum: ["auto", "manual"] },
-            gridScaleX: { type: "number", minimum: 0.01, maximum: 4096 },
-            gridScaleY: { type: "number", minimum: 0.01, maximum: 4096 },
-            gridPhaseX: { type: "number", minimum: -4096, maximum: 4096 },
-            gridPhaseY: { type: "number", minimum: -4096, maximum: 4096 },
-            downscale: { type: "string", enum: ["dominant", "detailPreserving", "median", "adaptive", "averageThenPalette"] },
-            alpha: { type: "string", enum: ["preserve", "binary", "backgroundFloodFill", "colorKey"] },
-            removeOrphans: { type: "boolean" },
-            jaggyCleanup: { type: "boolean" },
-            preserveSinglePixelDetails: { type: "boolean" },
-            removeHalos: { type: "boolean" }
-          }
+          properties: fixSettingsProperties
         }
       },
       ["settings"]
@@ -143,6 +146,21 @@ export const pixelAidSiteTools: PixelAidSiteToolDefinition[] = [
     description:
       "Run PixelAid's existing worker-backed Fix action for the selected asset and wait until the fixed result is committed to the live editor.",
     inputSchema: emptyInputSchema
+  },
+  {
+    name: "fix_with_settings",
+    title: "Fix in PixelAid with optional settings",
+    description:
+      "Optionally update PixelAid's current fix settings and then run the normal worker-backed Fix in one ordered operation. Use size for a square native and final output, or targetWidth and targetHeight for independent dimensions; dimensions also synchronize the final output canvas, while omitted settings keep their current values.",
+    inputSchema: objectSchema({
+      size: {
+        type: "integer",
+        minimum: 1,
+        maximum: 4096,
+        description: "Square native and final output shorthand. Cannot be combined with targetWidth or targetHeight."
+      },
+      ...fixSettingsProperties
+    })
   },
   {
     name: "set_view_mode",

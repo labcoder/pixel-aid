@@ -7413,7 +7413,7 @@ export function App() {
         warnings: suggestion.categoryWarnings.map((warning) => warning.message)
       };
     },
-    updateFixSettings: async (settings: SiteToolFixSettingsPatch) => {
+    updateFixSettings: async (settings: SiteToolFixSettingsPatch, options) => {
       if (!selectedAsset) {
         throw new PixelAidSiteToolError("no_asset", "Import or paste an image before changing fix settings.");
       }
@@ -7432,6 +7432,14 @@ export function App() {
         setTargetHeight(settings.targetHeight);
         setNativeSizeMode("manual");
       }
+      if (options?.syncOutputCanvas && (settings.targetWidth !== undefined || settings.targetHeight !== undefined)) {
+        setOutputPackaging((current) => ({
+          ...current,
+          canvasMode: "exact",
+          width: settings.targetWidth ?? targetWidth,
+          height: settings.targetHeight ?? targetHeight
+        }));
+      }
       if (settings.maxColors !== undefined) setPaletteBudget(settings.maxColors);
       if (settings.gridStrategy !== undefined) setGridAutoStrategy(settings.gridStrategy);
       if (settings.robustSafety !== undefined) setRobustSafety(settings.robustSafety);
@@ -7447,6 +7455,7 @@ export function App() {
       if (settings.preserveSinglePixelDetails !== undefined) setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
       if (settings.removeHalos !== undefined) setRemoveHalos(settings.removeHalos);
 
+      await waitForNextPaint();
       appendLog(`Site Tool updated ${Object.keys(settings).join(", ")}`);
       return { value: { applied: settings } };
     },

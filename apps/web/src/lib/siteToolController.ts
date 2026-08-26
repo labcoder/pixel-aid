@@ -22,6 +22,10 @@ export type SiteToolFixSettingsPatch = {
   removeHalos?: boolean;
 };
 
+export type SiteToolFixSettingsUpdateOptions = {
+  syncOutputCanvas?: boolean;
+};
+
 export type SiteToolViewModeInput = {
   mode: "input" | "output" | "compare" | "timeline";
   compareLayout?: "slider" | "side_by_side";
@@ -61,7 +65,10 @@ export type PixelAidSiteToolAdapter = {
   getEditorState: () => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
   selectAsset: (assetId: string) => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
   runAutoSuggest: () => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
-  updateFixSettings: (settings: SiteToolFixSettingsPatch) => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
+  updateFixSettings: (
+    settings: SiteToolFixSettingsPatch,
+    options?: SiteToolFixSettingsUpdateOptions
+  ) => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
   runFix: () => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
   setViewMode: (input: SiteToolViewModeInput) => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
   adjustViewport: (input: SiteToolViewportInput) => PixelAidSiteToolActionResult | Promise<PixelAidSiteToolActionResult>;
@@ -130,8 +137,9 @@ const exportTargets: NonNullable<SiteToolExportInput["targets"]> = ["godot", "un
 export function createPixelAidSiteToolExecutor(getAdapter: () => PixelAidSiteToolAdapter): PixelAidSiteToolExecutor {
   return async (toolName, input) => {
     try {
-      const adapter = getAdapter();
-      const actionResult = await executeTool(adapter, toolName, input);
+      const actionResult = toolName === "fix_with_settings"
+        ? await executeFixWithSettings(getAdapter, input)
+        : await executeTool(getAdapter(), toolName, input);
       return {
         ok: true,
         tool: toolName,
@@ -141,6 +149,26 @@ export function createPixelAidSiteToolExecutor(getAdapter: () => PixelAidSiteToo
     } catch (error) {
       return toErrorResult(toolName, error);
     }
+  };
+}
+
+async function executeFixWithSettings(
+  getAdapter: () => PixelAidSiteToolAdapter,
+  input: Record<string, unknown>
+): Promise<PixelAidSiteToolActionResult> {
+  const { settings, syncOutputCanvas } = parseFixWithSettings(input);
+  const updateResult = Object.keys(settings).length > 0
+    ? await getAdapter().updateFixSettings(settings, { syncOutputCanvas })
+    : undefined;
+  const fixResult = await getAdapter().runFix();
+
+  return {
+    value: {
+      appliedSettings: settings,
+      outputCanvasMatched: syncOutputCanvas,
+      ...fixResult.value
+    },
+    warnings: [...(updateResult?.warnings ?? []), ...(fixResult.warnings ?? [])]
   };
 }
 
@@ -165,6 +193,8 @@ async function executeTool(
     case "run_fix":
       requireOnlyKeys(input, []);
       return adapter.runFix();
+    case "fix_with_settings":
+      throw new PixelAidSiteToolError("operation_failed", "fix_with_settings must run through the ordered executor path.");
     case "set_view_mode":
       return adapter.setViewMode(parseViewMode(input));
     case "adjust_viewport":
@@ -179,8 +209,37 @@ async function executeTool(
 
 function parseFixSettings(value: unknown): SiteToolFixSettingsPatch {
   const settings = requireObject(value, "settings");
+  return parseFixSettingsRecord(settings, false);
+}
+
+function parseFixWithSettings(input: Record<string, unknown>): {
+  settings: SiteToolFixSettingsPatch;
+  syncOutputCanvas: boolean;
+} {
+  requireOnlyKeys(input, ["size", ...fixSettingKeys]);
+  const settings = { ...input };
+  delete settings.size;
+
+  if ("size" in input) {
+    if ("targetWidth" in input || "targetHeight" in input) {
+      throw new PixelAidSiteToolError("invalid_input", "size cannot be combined with targetWidth or targetHeight.");
+    }
+    const square: { size?: number } = {};
+    assignNumber(input, square, "size", { min: 1, max: 4096, integer: true });
+    settings.targetWidth = square.size;
+    settings.targetHeight = square.size;
+  }
+
+  return {
+    settings: parseFixSettingsRecord(settings, true),
+    syncOutputCanvas:
+      "size" in input || "targetWidth" in input || "targetHeight" in input
+  };
+}
+
+function parseFixSettingsRecord(settings: Record<string, unknown>, allowEmpty: boolean): SiteToolFixSettingsPatch {
   requireOnlyKeys(settings, [...fixSettingKeys]);
-  if (Object.keys(settings).length === 0) {
+  if (!allowEmpty && Object.keys(settings).length === 0) {
     throw new PixelAidSiteToolError("invalid_input", "settings must contain at least one supported field.");
   }
 

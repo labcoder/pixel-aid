@@ -21,6 +21,13 @@ describe("PixelAid Site Tools", () => {
 
     expect(pixelAidSiteTools.find((tool) => tool.name === "get_editor_state")?.annotations).toEqual({ readOnlyHint: true });
     expect(pixelAidSiteTools.filter((tool) => tool.annotations?.readOnlyHint)).toHaveLength(1);
+    expect(pixelAidSiteTools.find((tool) => tool.name === "fix_with_settings")?.inputSchema.properties).toMatchObject({
+      size: { type: "integer", minimum: 1, maximum: 4096 },
+      targetWidth: { type: "integer", minimum: 1, maximum: 4096 },
+      targetHeight: { type: "integer", minimum: 1, maximum: 4096 },
+      maxColors: { type: "integer", minimum: 2, maximum: 256 },
+      gridStrategy: { type: "string", enum: ["classic", "robust"] }
+    });
   });
 
   test("routes registered tool calls to the executor and scopes them to an abort signal", async () => {
