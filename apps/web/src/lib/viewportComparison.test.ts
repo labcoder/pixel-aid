@@ -74,6 +74,40 @@ describe("viewport comparison", () => {
     ).toEqual({ x: 0, y: 0, w: 1254, h: 1254 });
   });
 
+  test("compares an exact canvas matching the native composition against the full source canvas", () => {
+    expect(
+      getFixedComparisonSourceRect({
+        mode: "single",
+        sourceImage: source,
+        fixedImage: source,
+        grid: {
+          ...grid,
+          sourceRect: { x: 233, y: 11, w: 788, h: 1230 }
+        },
+        reconstruction: {
+          nativeCanvas: { width: 1254, height: 1254 },
+          reconstructedImage: { width: 788, height: 1230 },
+          compositionPlacement: { x: 233, y: 11, w: 788, h: 1230 },
+          contentBounds: { x: 0, y: 0, w: 788, h: 1230 },
+          contentBoundsSource: "alpha",
+          requestedStrategy: "robust",
+          usedStrategy: "robust"
+        },
+        packaging: {
+          canvasMode: "exact",
+          framing: "preserveComposition",
+          scaleMode: "native",
+          anchor: "center",
+          canvas: { width: 1254, height: 1254 },
+          placement: { x: 233, y: 11, w: 788, h: 1230 },
+          appliedScale: 1,
+          trimOffset: { x: 0, y: 0 },
+          warnings: []
+        }
+      })
+    ).toEqual({ x: 0, y: 0, w: 1254, h: 1254 });
+  });
+
   test("does not use source crop footprints for sheet modes", () => {
     expect(
       getFixedComparisonSourceRect({

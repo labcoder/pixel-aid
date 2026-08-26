@@ -2,6 +2,7 @@ import type {
   AssetMode,
   GridCandidate,
   PixelPackagingMetadata,
+  PixelReconstructionMetadata,
   Rect,
   RGBAImage
 } from "@pixelaid/shared";
@@ -11,22 +12,30 @@ export function getFixedComparisonSourceRect({
   sourceImage,
   fixedImage,
   grid,
-  packaging
+  packaging,
+  reconstruction
 }: {
   mode: AssetMode;
   sourceImage?: RGBAImage | null;
   fixedImage: RGBAImage | null;
   grid: GridCandidate | undefined;
   packaging?: PixelPackagingMetadata | undefined;
+  reconstruction?: PixelReconstructionMetadata | undefined;
 }): Rect | undefined {
   if (!fixedImage || !grid || mode !== "single") {
     return undefined;
   }
 
+  const exactCanvasMatchesNativeComposition =
+    packaging?.canvasMode === "exact" &&
+    packaging.anchor !== "custom" &&
+    reconstruction !== undefined &&
+    packaging.canvas.width === Math.round(reconstruction.nativeCanvas.width * packaging.appliedScale) &&
+    packaging.canvas.height === Math.round(reconstruction.nativeCanvas.height * packaging.appliedScale);
   if (
     sourceImage &&
-    packaging?.canvasMode === "native" &&
-    packaging.framing === "preserveComposition"
+    packaging?.framing === "preserveComposition" &&
+    (packaging.canvasMode === "native" || exactCanvasMatchesNativeComposition)
   ) {
     return { x: 0, y: 0, w: sourceImage.width, h: sourceImage.height };
   }

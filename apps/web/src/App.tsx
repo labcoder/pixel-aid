@@ -2840,9 +2840,10 @@ export function App() {
         sourceImage: selectedAsset?.image ?? null,
         fixedImage: fixResult?.image ?? null,
         grid: fixResult?.grid,
-        packaging: fixResult?.packaging
+        packaging: fixResult?.packaging,
+        reconstruction: fixResult?.reconstruction
       }),
-    [fixResult?.grid, fixResult?.image, fixResult?.packaging, mode, selectedAsset?.image]
+    [fixResult?.grid, fixResult?.image, fixResult?.packaging, fixResult?.reconstruction, mode, selectedAsset?.image]
   );
   const canvasViewMode = getCanvasViewMode(viewMode, fixResult !== null, canvasCompareMode);
   const viewportNativeReadout = useMemo(
