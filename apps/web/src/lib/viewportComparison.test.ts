@@ -19,6 +19,12 @@ const fixed: RGBAImage = {
   data: new Uint8ClampedArray(64 * 80 * 4)
 };
 
+const source: RGBAImage = {
+  width: 1254,
+  height: 1254,
+  data: new Uint8ClampedArray(1254 * 1254 * 4)
+};
+
 describe("viewport comparison", () => {
   test("uses explicit crop metadata when the fixed output was cropped", () => {
     expect(
@@ -41,6 +47,31 @@ describe("viewport comparison", () => {
         grid
       })
     ).toEqual({ x: 2, y: 4, w: 512, h: 640 });
+  });
+
+  test("compares a native-canvas preserved composition against the full source canvas", () => {
+    expect(
+      getFixedComparisonSourceRect({
+        mode: "single",
+        sourceImage: source,
+        fixedImage: source,
+        grid: {
+          ...grid,
+          sourceRect: { x: 233, y: 11, w: 788, h: 1230 }
+        },
+        packaging: {
+          canvasMode: "native",
+          framing: "preserveComposition",
+          scaleMode: "native",
+          anchor: "center",
+          canvas: { width: 1254, height: 1254 },
+          placement: { x: 233, y: 11, w: 788, h: 1230 },
+          appliedScale: 1,
+          trimOffset: { x: 0, y: 0 },
+          warnings: []
+        }
+      })
+    ).toEqual({ x: 0, y: 0, w: 1254, h: 1254 });
   });
 
   test("does not use source crop footprints for sheet modes", () => {
