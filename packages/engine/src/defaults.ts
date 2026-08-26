@@ -105,7 +105,7 @@ const defaultFixSettings: EngineDefaultFixSettings = {
   palettePreset: "pixelaid-arcade-8",
   customPaletteText: "",
   gridDetect: "auto",
-  gridAutoStrategy: "classic",
+  gridAutoStrategy: "robust",
   robustSafety: "guarded",
   gridScaleX: 8,
   gridScaleY: 8,

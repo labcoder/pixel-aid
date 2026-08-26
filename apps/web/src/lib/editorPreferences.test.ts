@@ -180,7 +180,7 @@ describe("editor preferences", () => {
     expect(invalid.settings.protectSalientColors).toBe(true);
   });
 
-  test("defaults to Classic two-stage sizing and round-trips opt-in controls", () => {
+  test("defaults to guarded Robust reconstruction and round-trips explicit strategy controls", () => {
     const defaults = createDefaultEditorPreferences();
     const normalized = normalizeEditorPreferences({
       settings: {
@@ -213,6 +213,11 @@ describe("editor preferences", () => {
         robustSafety: "always"
       }
     });
+    const explicitClassic = normalizeEditorPreferences({
+      settings: {
+        gridAutoStrategy: "classic"
+      }
+    });
 
     expect(defaults.settings).toMatchObject({
       outputSizeMode: "exact",
@@ -225,7 +230,7 @@ describe("editor preferences", () => {
         scale: "native",
         anchor: "center"
       },
-      gridAutoStrategy: "classic",
+      gridAutoStrategy: "robust",
       robustSafety: "guarded"
     });
     expect(normalized.settings).toMatchObject({
@@ -252,9 +257,10 @@ describe("editor preferences", () => {
         scale: "native",
         anchor: "center"
       }),
-      gridAutoStrategy: "classic",
+      gridAutoStrategy: "robust",
       robustSafety: "guarded"
     });
+    expect(explicitClassic.settings.gridAutoStrategy).toBe("classic");
   });
 
   test("defaults telemetry consent off and preserves explicit opt-in", () => {

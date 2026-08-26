@@ -24,7 +24,7 @@ describe("engine default settings", () => {
       paletteMode: "auto",
       paletteStrategy: "medianCut",
       gridDetect: "auto",
-      gridAutoStrategy: "classic",
+      gridAutoStrategy: "robust",
       robustSafety: "guarded",
       gridScaleX: 8,
       gridScaleY: 8,

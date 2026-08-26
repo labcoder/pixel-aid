@@ -543,7 +543,13 @@ function presetSettingsSetting(value: Record<string, unknown>): Partial<EditorSe
   }
   if (typeof value.maxColors === "number") settings.maxColors = integerSetting(value.maxColors, 16, 1, 512);
   if (typeof value.gridDetect === "string") settings.gridDetect = unionSetting(value.gridDetect, ["auto", "manual"], "auto");
-  if (typeof value.gridAutoStrategy === "string") settings.gridAutoStrategy = unionSetting(value.gridAutoStrategy, ["classic", "robust"], "classic");
+  if (typeof value.gridAutoStrategy === "string") {
+    settings.gridAutoStrategy = unionSetting(
+      value.gridAutoStrategy,
+      ["classic", "robust"],
+      defaultEditorPreferenceSettings.gridAutoStrategy
+    );
+  }
   if (typeof value.robustSafety === "string") settings.robustSafety = unionSetting(value.robustSafety, ["guarded", "warn", "off"], "guarded");
   if (typeof value.gridScaleX === "number") settings.gridScaleX = numberSetting(value.gridScaleX, 8, 0.01, 1024);
   if (typeof value.gridScaleY === "number") settings.gridScaleY = numberSetting(value.gridScaleY, 8, 0.01, 1024);

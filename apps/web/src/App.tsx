@@ -2182,7 +2182,7 @@ export function App() {
     setPalettePreset(settings.palettePreset);
     setCustomPaletteText(settings.customPaletteText);
     setGridDetect(settings.gridDetect);
-    setGridAutoStrategy(settings.gridAutoStrategy ?? "classic");
+    setGridAutoStrategy(settings.gridAutoStrategy ?? defaultEditorPreferenceSettings.gridAutoStrategy);
     setRobustSafety(settings.robustSafety ?? "guarded");
     setGridScaleX(settings.gridScaleX);
     setGridScaleY(settings.gridScaleY);
