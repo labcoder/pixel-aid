@@ -113,7 +113,7 @@ export const pixelAidSiteTools: PixelAidSiteToolDefinition[] = [
           properties: {
             assetType: {
               type: "string",
-              enum: ["sprite", "sprite-sheet", "animation", "character", "tileset", "tilemap", "portrait", "icon", "ui", "background"]
+              enum: ["sprite", "spriteSheet", "animationSheet", "characterSheet", "tileset", "tilemap", "portrait", "icon", "iconSet", "uiElement", "background"]
             },
             targetWidth: { type: "integer", minimum: 1, maximum: 4096 },
             targetHeight: { type: "integer", minimum: 1, maximum: 4096 },

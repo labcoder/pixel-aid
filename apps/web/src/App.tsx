@@ -4652,7 +4652,7 @@ export function App() {
 
   const runFix = useCallback(async (fixTrigger: TelemetryFixTrigger = "top_toolbar") => {
     if (!selectedAsset || isEditorBusy) {
-      return;
+      return null;
     }
 
     const frameCount = sheetMode ? sheetFrames.length : 1;
@@ -4733,7 +4733,7 @@ export function App() {
         })
       );
 
-      void job.promise
+      return job.promise
         .then((result) => {
           editorPerformanceMonitorRef.current.mark("worker result received", `${result.image.width}x${result.image.height}`, perfOperationId);
           editorPerformanceMonitorRef.current.recordMemoryCheckpoint(
@@ -4766,6 +4766,7 @@ export function App() {
               qualityProfile
             })
           );
+          return result;
         })
         .catch((error) => {
           editorPerformanceMonitorRef.current.endOperation(perfOperationId, "fix failed");
@@ -4778,6 +4779,7 @@ export function App() {
             targetWidth: effectiveTargetWidth,
             targetHeight: effectiveTargetHeight
           });
+          return null;
         })
         .finally(() => {
           if (activeJobRef.current?.requestId === job.requestId) {
@@ -4801,6 +4803,7 @@ export function App() {
       publishEditorPerformanceSnapshot();
       setFixOperation((current) => clearBusyOperation(current, operation.id));
       setFixProgress(null);
+      return null;
     }
   }, [
     appendLog,
@@ -4902,7 +4905,7 @@ export function App() {
 
   const autoSuggest = useCallback(async () => {
     if (!selectedAsset || isEditorBusy) {
-      return;
+      return null;
     }
 
     const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("auto-suggest", `Auto suggest ${selectedAsset.name}`);
@@ -4963,12 +4966,14 @@ export function App() {
           durationMs: autoSuggestDurationMs
         })
       );
+      return suggestion;
     } catch (error) {
       recordOperationError("analysis", error, "Select the asset again or re-import it, then rerun Auto Suggest.", {
         asset: selectedAsset.name,
         width: selectedAsset.image.width,
         height: selectedAsset.image.height
       });
+      return null;
     } finally {
       editorPerformanceMonitorRef.current.endOperation(perfOperationId);
       publishEditorPerformanceSnapshot();
@@ -6987,9 +6992,9 @@ export function App() {
     storeAssetSession
   ]);
 
-  const exportFixedAsset = useCallback(() => {
+  const exportFixedAsset = useCallback(async () => {
     if (!selectedAsset || !fixResult) {
-      return;
+      return null;
     }
 
     const perfOperationId = editorPerformanceMonitorRef.current.beginOperation("export", `Export ${selectedAsset.name}`);
@@ -7059,7 +7064,7 @@ export function App() {
           )
         : { files: [], warnings: [] };
 
-    void (async () => {
+    return (async () => {
       const frameSequence = sheetMode && exportFrames.length > 0 ? createFrameSequenceImages({ image: exportResult.image, frames: exportFrames }) : [];
       const framePngFiles: AssetBundleFile[] = [];
 
@@ -7156,6 +7161,18 @@ export function App() {
           durationMs: performance.now() - exportStartedAt
         })
       );
+      return {
+        filename: bundleName,
+        savedPath: exportPath,
+        byteLength: bundle.byteLength,
+        fileCount: bundleFiles.length,
+        targets: [...engineExportTargets],
+        validation: {
+          ok: validation.ok,
+          warningCount: validation.summary.warningCount,
+          errorCount: validation.summary.errorCount
+        }
+      };
     })().catch((error) => {
       editorPerformanceMonitorRef.current.endOperation(perfOperationId, "export failed");
       publishEditorPerformanceSnapshot();
@@ -7164,6 +7181,7 @@ export function App() {
         bundleName,
         targets: engineExportTargets
       });
+      return null;
     });
   }, [
     appendLog,
@@ -10438,8 +10456,8 @@ function GuidedFixPanel({
   busy: boolean;
   canFix: boolean;
   advancedOpen: boolean;
-  onAutoSuggest: () => void | Promise<void>;
-  onRunFix: () => void | Promise<void>;
+  onAutoSuggest: () => void | Promise<unknown>;
+  onRunFix: () => void | Promise<unknown>;
   onToggleAdvanced: () => void;
 }) {
   const panelState = getGuidedFixPanelState({ selected, advancedOpen });
