@@ -1,10 +1,16 @@
 import type {
+  AssetMode,
+  AssetType,
   GridAutoStrategy,
   GridRobustSafety,
   GridSelectionDiagnostics,
+  OutputSizeMode,
   PixelReconstructionMetadata
 } from "@pixelaid/shared";
-import type { RobustInferenceEligibility } from "@pixelaid/core";
+import {
+  evaluateRobustInferenceEligibility,
+  type RobustInferenceEligibility
+} from "@pixelaid/core";
 
 export type ReconstructionStrategyStatus = {
   tone: "classic" | "preview" | "success" | "warning" | "fallback";
@@ -12,6 +18,20 @@ export type ReconstructionStrategyStatus = {
   detail: string;
   reasonCodes: readonly string[];
 };
+
+export function resolvePreferredReconstructionStrategy(input: {
+  preferredStrategy: GridAutoStrategy;
+  mode: AssetMode;
+  assetType: AssetType;
+  cropToBounds?: boolean;
+  outputSizeMode?: OutputSizeMode;
+}): GridAutoStrategy {
+  if (input.preferredStrategy === "classic") {
+    return "classic";
+  }
+
+  return evaluateRobustInferenceEligibility(input).eligible ? "robust" : "classic";
+}
 
 export function describeReconstructionStrategyStatus(input: {
   requestedStrategy: GridAutoStrategy;

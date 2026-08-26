@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest";
 
-import { describeReconstructionStrategyStatus, robustSafetyLabel } from "./robustPreview";
+import {
+  describeReconstructionStrategyStatus,
+  resolvePreferredReconstructionStrategy,
+  robustSafetyLabel
+} from "./robustPreview";
 
 const eligible = {
   eligible: true,
@@ -8,6 +12,32 @@ const eligible = {
 };
 
 describe("Robust Preview product status", () => {
+  test("keeps the preferred Robust default for eligible suggestions only", () => {
+    expect(
+      resolvePreferredReconstructionStrategy({
+        preferredStrategy: "robust",
+        mode: "single",
+        assetType: "sprite",
+        cropToBounds: true
+      })
+    ).toBe("robust");
+    expect(
+      resolvePreferredReconstructionStrategy({
+        preferredStrategy: "robust",
+        mode: "spriteSheet",
+        assetType: "animationSheet"
+      })
+    ).toBe("classic");
+    expect(
+      resolvePreferredReconstructionStrategy({
+        preferredStrategy: "classic",
+        mode: "single",
+        assetType: "sprite",
+        cropToBounds: true
+      })
+    ).toBe("classic");
+  });
+
   test("keeps Classic available as the compatibility reconstruction", () => {
     expect(
       describeReconstructionStrategyStatus({

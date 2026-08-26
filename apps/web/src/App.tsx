@@ -113,6 +113,7 @@ import { startGridDetectionJob, type AnalysisJob } from "./lib/analysisWorkerCli
 import { startEngineQualityAnalysisJob, startEngineSourceAnalysisJob } from "./lib/engineAnalysisJobAdapter";
 import {
   describeReconstructionStrategyStatus,
+  resolvePreferredReconstructionStrategy,
   robustSafetyLabel
 } from "./lib/robustPreview";
 import {
@@ -3861,7 +3862,14 @@ export function App() {
     setGridPhaseX(suggestion.gridPhaseX);
     setGridPhaseY(suggestion.gridPhaseY);
     setGridDetect(suggestion.gridDetect);
-    setGridAutoStrategy("classic");
+    setGridAutoStrategy(
+      resolvePreferredReconstructionStrategy({
+        preferredStrategy: defaultEditorPreferenceSettings.gridAutoStrategy,
+        mode: resolvedMode,
+        assetType: resolvedAssetType,
+        cropToBounds: resolvedMode === "single"
+      })
+    );
     setRobustSafety("guarded");
     setCropToBounds(resolvedMode === "single");
     setLocalCorrection(resolvedMode === "single" && suggestion.localCorrection);
