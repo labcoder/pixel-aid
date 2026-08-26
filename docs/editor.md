@@ -76,7 +76,9 @@ These simple controls update the same settings shown in the advanced groups, so 
 
 Native W and Native H define the true reconstructed pixel canvas when Native size is set manually. They can be edited with number fields and sliders. When aspect ratio is locked, editing one dimension updates the other. Auto native size lets the selected Classic or Robust strategy infer these dimensions.
 
-Output canvas is a separate packaging stage. Reconstructed content uses the fixed content bounds, Native composition preserves the inferred source canvas, and Exact canvas uses explicit Canvas W/H. Framing controls whether PixelAid preserves proportional source padding, packs the subject, or fits it to the canvas. Pixel scale controls native pixels, largest integer fit, or explicit resampling; Anchor controls placement. Background preservation or removal changes pixels, not this geometry.
+Output canvas is a separate packaging stage with three user-facing intents. **Keep composition** matches the native canvas and preserves source placement, **Trim to subject** exports tight reconstructed bounds, and **Custom canvas** exposes explicit Canvas W/H, framing, pixel scale, and anchor controls. A readout predicts the final dimensions before Fix. Background preservation or removal changes pixels, not the selected canvas geometry.
+
+The inspector ends with **More controls** and one contextual **Run Fix** action. More controls expands palette, cleanup, grid tuning, and export details above Run Fix, so the action always applies every setting that precedes it. Auto Suggest remains near the guided recommendation because it seeds settings rather than producing the final asset.
 
 In sprite sheet and tile sheet processing modes, the inspector hides single-sprite Target W and Target H controls. The output sheet size is shown as read-only Derived W and Derived H. Manual sheets derive that size from Frame W, Frame H, Rows, Columns, Margin, and Spacing. Detected animation sheets derive it from the detected row clips and their per-animation cell sizes.
 
