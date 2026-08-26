@@ -1,16 +1,34 @@
-import type { AssetMode, GridCandidate, Rect, RGBAImage } from "@pixelaid/shared";
+import type {
+  AssetMode,
+  GridCandidate,
+  PixelPackagingMetadata,
+  Rect,
+  RGBAImage
+} from "@pixelaid/shared";
 
 export function getFixedComparisonSourceRect({
   mode,
+  sourceImage,
   fixedImage,
-  grid
+  grid,
+  packaging
 }: {
   mode: AssetMode;
+  sourceImage?: RGBAImage | null;
   fixedImage: RGBAImage | null;
   grid: GridCandidate | undefined;
+  packaging?: PixelPackagingMetadata | undefined;
 }): Rect | undefined {
   if (!fixedImage || !grid || mode !== "single") {
     return undefined;
+  }
+
+  if (
+    sourceImage &&
+    packaging?.canvasMode === "native" &&
+    packaging.framing === "preserveComposition"
+  ) {
+    return { x: 0, y: 0, w: sourceImage.width, h: sourceImage.height };
   }
 
   if (grid.sourceRect) {

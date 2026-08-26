@@ -2836,10 +2836,12 @@ export function App() {
     () =>
       getFixedComparisonSourceRect({
         mode,
+        sourceImage: selectedAsset?.image ?? null,
         fixedImage: fixResult?.image ?? null,
-        grid: fixResult?.grid
+        grid: fixResult?.grid,
+        packaging: fixResult?.packaging
       }),
-    [fixResult?.grid, fixResult?.image, mode]
+    [fixResult?.grid, fixResult?.image, fixResult?.packaging, mode, selectedAsset?.image]
   );
   const canvasViewMode = getCanvasViewMode(viewMode, fixResult !== null, canvasCompareMode);
   const viewportNativeReadout = useMemo(
