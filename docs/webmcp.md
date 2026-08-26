@@ -157,7 +157,8 @@ The expected tool sequence behind that script is:
 
 ```json
 [
-  { "tool": "fix_with_settings", "input": { "gridStrategy": "robust" } },
+  { "tool": "get_editor_state", "input": {} },
+  { "tool": "fix_with_settings", "input": { "size": 1254, "gridStrategy": "robust" } },
   { "tool": "set_view_mode", "input": { "mode": "compare", "compareLayout": "slider", "compareSplitPercent": 50 } },
   { "tool": "fix_with_settings", "input": { "size": 128 } },
   { "tool": "fix_with_settings", "input": { "size": 256 } },
@@ -169,6 +170,8 @@ The expected tool sequence behind that script is:
 ]
 ```
 
+The first `size` value comes from the selected asset's current `targetWidth`/`targetHeight` in `get_editor_state`; `1254` is the lantern-courier demo value, not a hard-coded product default. Repeating it deliberately synchronizes a stale custom output canvas before the first Fix while preserving the user's current native dimensions.
+
 When the host provides voice dictation or voice chat, these can be spoken as ordinary prompts; PixelAid receives the same Site Tool calls regardless of how the prompt text was entered. The exact microphone interaction still belongs in the manual acceptance pass for the host build used in the demo.
 
 The image reaches PixelAid through the same client-side interaction a person uses today: import, drag/drop, or clipboard paste. In the contest-style flow, Codex generates the raster outside PixelAid, writes that PNG to the browser clipboard, focuses the editor, and pastes it. PixelAid never receives an image-generation credential and no Site Tool accepts image bytes or paths.
@@ -177,9 +180,11 @@ The image reaches PixelAid through the same client-side interaction a person use
 
 The workflow above was verified locally on August 25, 2026:
 
-- All nine page-scoped tools were discovered from the live PixelAid document.
+- All ten page-scoped tools were discovered from the live PixelAid document.
 - The repository panda fixture was reconstructed from 1008x1059 to 64x64 with a 16-color palette and exported as a validated 10-file Godot bundle.
 - A Codex-generated transparent lantern-courier sprite was pasted from the browser clipboard as `clipboard.png`, reconstructed from 1254x1254 to 96x96 with a 23-color result, visually reviewed through output, slider, side-by-side, zoom, and named-focus commands, then exported as a validated 10-file Godot bundle.
 - The generated bundle contained the fixed PNG, manifest, GPL/HEX/JSON palettes, validation report, Godot importer recipe, helper script, and engine documentation.
+- The voice-demo iteration was rerun with `fix_with_settings`: the same 1254x1254 source produced synchronized 128x128 and 256x256 outputs, switched cleanly from 24 colors to 8 and back to 24, survived consecutive Fix calls without losing Site Tools, and exported a validated 13-file Godot/Unity bundle with zero validation warnings or errors.
+- The native-size 1254x1254 Robust result was visually verified in the 50% slider: input and output now share the same canvas footprint instead of remapping the packaged output through the smaller internal reconstruction crop.
 
 The local workflow requires no PixelAid backend, remote MCP server, API key, or Cloudflare resource. A WebMCP-capable browser/agent is required for Site Tool discovery; browsers without it continue to run the normal editor.
