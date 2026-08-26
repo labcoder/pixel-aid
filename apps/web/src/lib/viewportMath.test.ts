@@ -5,6 +5,7 @@ import {
   getAutoViewportZoom,
   getComparisonSize,
   getImageDrawRect,
+  getViewportFocusPan,
   getWheelZoom,
   zoomAtPoint
 } from "./viewportMath";
@@ -30,6 +31,12 @@ describe("viewport math", () => {
     });
 
     expect(nextPan).toEqual({ x: -25, y: 0 });
+  });
+
+  test("focuses named image regions without involving React state", () => {
+    expect(getViewportFocusPan({ width: 100, height: 80 }, 2, "center")).toEqual({ x: 0, y: 0 });
+    expect(getViewportFocusPan({ width: 100, height: 80 }, 2, "top")).toEqual({ x: 0, y: 48 });
+    expect(getViewportFocusPan({ width: 100, height: 80 }, 2, "bottom_right")).toEqual({ x: -60, y: -48 });
   });
 
   test("chooses ruler ticks that remain readable at different zoom levels", () => {

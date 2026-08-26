@@ -1,6 +1,6 @@
 import type { RGBAImage } from "@pixelaid/shared";
 import type { PointerEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { FramePreviewPlacement } from "../lib/frameNormalization";
 import { tickPlayback, type PlaybackDirection, type PlaybackStepDirection } from "../lib/playbackModel";
 import { getTimelineViewportLayout, type TimelineViewportCompareMode, type TimelineViewportPane } from "../lib/timelineViewportLayout";
@@ -31,13 +31,18 @@ export type TimelineViewportCanvasProps = {
   onPreviewRender?: () => void;
 };
 
+export type TimelineViewportCanvasHandle = {
+  getCompareSplitPercent: () => number;
+  setCompareSplitPercent: (percent: number) => number;
+};
+
 type LivePlaybackState = {
   frameIndex: number;
   accumulatorMs: number;
   playDirection: PlaybackStepDirection;
 };
 
-export function TimelineViewportCanvas({
+export const TimelineViewportCanvas = forwardRef<TimelineViewportCanvasHandle, TimelineViewportCanvasProps>(function TimelineViewportCanvas({
   inputImage,
   outputImage,
   inputSurface = null,
@@ -57,12 +62,25 @@ export function TimelineViewportCanvas({
   onFrameCommit,
   onPlaybackStop,
   onPreviewRender
-}: TimelineViewportCanvasProps) {
+}, forwardedRef) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const liveStateRef = useRef<LivePlaybackState>({ frameIndex: 0, accumulatorMs: 0, playDirection });
   const splitDragRef = useRef<{ pointerId: number } | null>(null);
   const splitRatioRef = useRef(0.5);
   const [renderKey, setRenderKey] = useState(0);
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      getCompareSplitPercent: () => Math.round(splitRatioRef.current * 10000) / 100,
+      setCompareSplitPercent: (percent) => {
+        splitRatioRef.current = Math.max(0.05, Math.min(0.95, percent / 100));
+        setRenderKey((key) => key + 1);
+        return Math.round(splitRatioRef.current * 10000) / 100;
+      }
+    }),
+    []
+  );
   const ownedInputCanvas = useMemo(() => (!inputSurface && inputImage ? imageToCanvas(inputImage) : null), [inputImage, inputSurface]);
   const ownedOutputCanvas = useMemo(() => (!outputSurface && outputImage ? imageToCanvas(outputImage) : null), [outputImage, outputSurface]);
   const inputCanvas = inputSurface ?? ownedInputCanvas;
@@ -227,7 +245,7 @@ export function TimelineViewportCanvas({
       />
     </div>
   );
-}
+});
 
 function drawCanvas({
   canvas,

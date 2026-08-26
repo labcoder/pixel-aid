@@ -8,6 +8,17 @@ export type Point = {
   y: number;
 };
 
+export type ViewportFocus =
+  | "center"
+  | "top"
+  | "bottom"
+  | "left"
+  | "right"
+  | "top_left"
+  | "top_right"
+  | "bottom_left"
+  | "bottom_right";
+
 export type Rect = Point & Size;
 
 export type SourceRect = {
@@ -32,6 +43,14 @@ export function getImageDrawRect(viewport: Size, image: Size, zoom: number, pan:
     y: Math.floor((viewport.height - height) / 2 + pan.y),
     width,
     height
+  };
+}
+
+export function getViewportFocusPan(image: Size, zoom: number, focus: ViewportFocus): Point {
+  const point = viewportFocusPoints[focus];
+  return {
+    x: Math.round((0.5 - point.x) * image.width * zoom),
+    y: Math.round((0.5 - point.y) * image.height * zoom)
   };
 }
 
@@ -187,3 +206,15 @@ function fitZoom(viewport: Size, image: Size, padding: number): number {
 
   return Math.min(viewport.width / image.width, viewport.height / image.height) * padding;
 }
+
+const viewportFocusPoints: Record<ViewportFocus, Point> = {
+  center: { x: 0.5, y: 0.5 },
+  top: { x: 0.5, y: 0.2 },
+  bottom: { x: 0.5, y: 0.8 },
+  left: { x: 0.2, y: 0.5 },
+  right: { x: 0.8, y: 0.5 },
+  top_left: { x: 0.2, y: 0.2 },
+  top_right: { x: 0.8, y: 0.2 },
+  bottom_left: { x: 0.2, y: 0.8 },
+  bottom_right: { x: 0.8, y: 0.8 }
+};

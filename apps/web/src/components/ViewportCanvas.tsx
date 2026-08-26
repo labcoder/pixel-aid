@@ -1,14 +1,17 @@
 import type { Rect as FrameRect, RGBAImage, SpriteFrame } from "@pixelaid/shared";
 import { Grid2X2 } from "lucide-react";
 import type { PointerEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   chooseRulerTickStep,
+  clampZoom,
   getAlignedComparisonRects,
   getAutoViewportZoom,
   getImageDrawRect,
+  getViewportFocusPan,
   getWheelZoom,
-  zoomAtPoint
+  zoomAtPoint,
+  type ViewportFocus
 } from "../lib/viewportMath";
 import { getFrameOverlayGeometry } from "../lib/frameOverlay";
 import { findFrameAtSourcePoint, findFrameResizeHandleAtSourcePoint } from "../lib/frameEditing";
@@ -46,7 +49,25 @@ export type ViewportCanvasProps = {
   onPreviewRender?: () => void;
 };
 
-export function ViewportCanvas({
+export type ViewportCanvasHandle = {
+  applyCamera: (command: {
+    zoom?: number;
+    focus?: ViewportFocus;
+    compareSplitPercent?: number;
+    reset?: boolean;
+  }) => {
+    zoom: number;
+    pan: Point;
+    compareSplitPercent: number;
+  };
+  getCameraState: () => {
+    zoom: number;
+    pan: Point;
+    compareSplitPercent: number;
+  };
+};
+
+export const ViewportCanvas = forwardRef<ViewportCanvasHandle, ViewportCanvasProps>(function ViewportCanvas({
   sourceImage,
   fixedImage,
   sourceSurface = null,
@@ -68,7 +89,7 @@ export function ViewportCanvas({
   onSourceFrameEditStart,
   onSourceFrameEditCommit,
   onPreviewRender
-}: ViewportCanvasProps) {
+}, forwardedRef) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const panRef = useRef<Point>({ x: 0, y: 0 });
   const dragRef = useRef<{ pointerId: number; x: number; y: number; pan: Point } | null>(null);
@@ -181,6 +202,66 @@ export function ViewportCanvas({
     panRef.current = { x: 0, y: 0 };
     invalidate();
   }, [invalidate]);
+
+  const getCameraState = useCallback(
+    (cameraZoom = zoom) => ({
+      zoom: cameraZoom,
+      pan: { ...panRef.current },
+      compareSplitPercent: Math.round(splitRatioRef.current * 10000) / 100
+    }),
+    [zoom]
+  );
+
+  const applyCamera = useCallback(
+    (command: Parameters<ViewportCanvasHandle["applyCamera"]>[0]) => {
+      const canvas = canvasRef.current;
+      const activeImage = viewMode === "after" && fixedImage ? fixedImage : sourceImage;
+      let nextZoom = zoom;
+
+      if (command.reset && canvas && sourceImage) {
+        const rect = canvas.getBoundingClientRect();
+        nextZoom = getAutoViewportZoom({
+          viewport: { width: rect.width, height: rect.height },
+          source: { width: sourceImage.width, height: sourceImage.height },
+          fixed: fixedImage ? { width: fixedImage.width, height: fixedImage.height } : null,
+          fixedSourceRect,
+          viewMode
+        });
+        panRef.current = { x: 0, y: 0 };
+        splitRatioRef.current = 0.5;
+      } else {
+        nextZoom = command.zoom === undefined ? zoom : clampZoom(command.zoom);
+        if (activeImage && command.focus) {
+          panRef.current = getViewportFocusPan({ width: activeImage.width, height: activeImage.height }, nextZoom, command.focus);
+        } else if (nextZoom !== zoom && zoom > 0) {
+          const zoomRatio = nextZoom / zoom;
+          panRef.current = {
+            x: Math.round(panRef.current.x * zoomRatio),
+            y: Math.round(panRef.current.y * zoomRatio)
+          };
+        }
+        if (command.compareSplitPercent !== undefined) {
+          splitRatioRef.current = Math.max(0.05, Math.min(0.95, command.compareSplitPercent / 100));
+        }
+      }
+
+      if (nextZoom !== zoom) {
+        onZoomChange(nextZoom);
+      }
+      invalidate();
+      return getCameraState(nextZoom);
+    },
+    [fixedImage, fixedSourceRect, getCameraState, invalidate, onZoomChange, sourceImage, viewMode, zoom]
+  );
+
+  useImperativeHandle(
+    forwardedRef,
+    () => ({
+      applyCamera,
+      getCameraState
+    }),
+    [applyCamera, getCameraState]
+  );
 
   useEffect(() => {
     resetPan();
@@ -497,7 +578,7 @@ export function ViewportCanvas({
       ) : null}
     </div>
   );
-}
+});
 
 function getSourcePointFromViewport({
   viewport,

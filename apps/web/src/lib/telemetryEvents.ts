@@ -23,7 +23,7 @@ export type TelemetryImportKind = "image" | "pixelaid_document" | "sample";
 
 export type TelemetryControlMode = "guided" | "advanced";
 
-export type TelemetryFixTrigger = "guided_panel" | "top_toolbar" | "keyboard_shortcut";
+export type TelemetryFixTrigger = "guided_panel" | "top_toolbar" | "keyboard_shortcut" | "site_tool";
 
 export type TelemetryErrorKind =
   | "cancelled"

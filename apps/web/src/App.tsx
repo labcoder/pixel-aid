@@ -68,6 +68,7 @@ import {
   assetTypeToMode,
   getAssetTypeDefinition,
   getQualityProfileDefinition,
+  PIXELAID_APP_NAME,
   PIXELAID_VERSION,
   qualityProfileDefinitions
 } from "@pixelaid/shared";
@@ -97,9 +98,9 @@ import { AssetBrowserPanel } from "./components/AssetBrowserPanel";
 import { RobustEvidenceReviewModal } from "./components/RobustEvidenceReviewModal";
 import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
-import { TimelineViewportCanvas } from "./components/TimelineViewportCanvas";
+import { TimelineViewportCanvas, type TimelineViewportCanvasHandle } from "./components/TimelineViewportCanvas";
 import { TileRepeatPreviewCanvas } from "./components/TileRepeatPreviewCanvas";
-import { ViewportCanvas } from "./components/ViewportCanvas";
+import { ViewportCanvas, type ViewportCanvasHandle } from "./components/ViewportCanvas";
 import {
   ALL_ANIMATIONS,
   getAnimationFrameIndexes,
@@ -420,8 +421,19 @@ import { formatSceneDiagnosticsSummary, formatTilesetDiagnosticsSummary } from "
 import type { TimelineViewportCompareMode } from "./lib/timelineViewportLayout";
 import { getFixedComparisonSourceRect } from "./lib/viewportComparison";
 import { getViewportModeLabel, getViewportModeTitle } from "./lib/viewportLabels";
+import { clampZoom } from "./lib/viewportMath";
 import { coerceEditorViewMode, getCanvasViewMode, getEditorViewModes, getPostFixViewMode, type EditorViewMode } from "./lib/viewportModes";
 import { getViewportNativeReadout } from "./lib/viewportReadout";
+import {
+  createPixelAidSiteToolExecutor,
+  PixelAidSiteToolError,
+  type PixelAidSiteToolAdapter,
+  type SiteToolExportInput,
+  type SiteToolFixSettingsPatch,
+  type SiteToolViewModeInput,
+  type SiteToolViewportInput
+} from "./lib/siteToolController";
+import { registerPixelAidSiteTools, type PixelAidSiteToolExecutor, type SiteToolsDocumentLike } from "./lib/siteTools";
 
 type AppMenuId = "file" | "view" | "export";
 
@@ -1060,6 +1072,18 @@ const inspectorGroupMeta: Record<InspectorGroupId, { title: string; docsId: stri
 
 export function App() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const viewportCanvasRef = useRef<ViewportCanvasHandle | null>(null);
+  const timelineViewportCanvasRef = useRef<TimelineViewportCanvasHandle | null>(null);
+  const siteToolAdapterRef = useRef<PixelAidSiteToolAdapter | null>(null);
+  const siteToolExecutorRef = useRef<PixelAidSiteToolExecutor | null>(null);
+  if (siteToolExecutorRef.current === null) {
+    siteToolExecutorRef.current = createPixelAidSiteToolExecutor(() => {
+      if (!siteToolAdapterRef.current) {
+        throw new PixelAidSiteToolError("editor_unavailable", "PixelAid's editor is not ready yet.");
+      }
+      return siteToolAdapterRef.current;
+    });
+  }
   const initialPreferencesRef = useRef(loadEditorPreferences());
   const initialPreferences = initialPreferencesRef.current;
   const initialSettings = initialPreferences.settings;
@@ -7212,6 +7236,374 @@ export function App() {
     tilemapOffsetY
   ]);
 
+  siteToolAdapterRef.current = {
+    getEditorState: () => {
+      const camera = viewportCanvasRef.current?.getCameraState() ?? null;
+      const warnings = Array.from(
+        new Set([
+          ...assetTypeWarnings.map((warning) => warning.message),
+          ...paletteWarningMessages,
+          ...detectedSheetWarnings,
+          ...(qualityReport?.findings.slice(0, 8).map((finding) => finding.detail) ?? []),
+          ...(lastOperationError ? [lastOperationError.message] : [])
+        ])
+      );
+      const presentationMode = viewMode === "before" ? "input" : viewMode === "after" ? "output" : viewMode === "split" ? "compare" : "timeline";
+
+      return {
+        value: {
+          app: { name: PIXELAID_APP_NAME, version: PIXELAID_VERSION, clientOnly: true },
+          assets: assets.map((asset) => ({
+            id: asset.id,
+            name: asset.name,
+            width: asset.image.width,
+            height: asset.image.height,
+            assetType: asset.assetType,
+            assetTypeSource: asset.assetTypeSource
+          })),
+          selectedAsset: selectedAsset
+            ? {
+                id: selectedAsset.id,
+                name: selectedAsset.name,
+                width: selectedAsset.image.width,
+                height: selectedAsset.image.height,
+                assetType,
+                assetTypeSource,
+                categoryConfidence
+              }
+            : null,
+          busy: {
+            active: visibleBusyOperation !== null,
+            blocking: isEditorBusy,
+            analyzing: isAnalyzing,
+            status: busyStatus
+          },
+          fixSettings: {
+            mode,
+            targetWidth,
+            targetHeight,
+            maxColors: maxColorsAuto ? "auto" : maxColors,
+            gridStrategy: gridAutoStrategy,
+            robustSafety,
+            gridDetect,
+            gridScaleX,
+            gridScaleY,
+            gridPhaseX,
+            gridPhaseY,
+            downscale,
+            alpha,
+            cleanup: {
+              removeOrphans,
+              jaggyCleanup,
+              preserveSinglePixelDetails,
+              removeHalos
+            }
+          },
+          recommendation: {
+            reason: suggestionReason,
+            confidence: recommendationConfidence,
+            qualitySummary: qualityReport?.summary ?? null
+          },
+          fixedResult: fixResult
+            ? {
+                width: fixResult.image.width,
+                height: fixResult.image.height,
+                paletteCount: fixResult.palette.length,
+                palette: fixResult.palette,
+                durationMs: fixResult.metrics.durationMs,
+                grid: {
+                  outputWidth: fixResult.grid.outputWidth,
+                  outputHeight: fixResult.grid.outputHeight,
+                  scaleX: fixResult.grid.scaleX,
+                  scaleY: fixResult.grid.scaleY,
+                  confidence: fixResult.grid.confidence,
+                  reason: fixResult.grid.reason
+                }
+              }
+            : null,
+          viewport: {
+            mode: presentationMode,
+            compareLayout: canvasCompareMode === "split" ? "slider" : "side_by_side",
+            compareSplitPercent:
+              camera?.compareSplitPercent ?? timelineViewportCanvasRef.current?.getCompareSplitPercent() ?? 50,
+            zoomPercent: Math.round(zoom * 10000) / 100,
+            camera,
+            timelineSourceMode: timelineViewportSourceMode
+          },
+          export: {
+            bundleName: exportBundleNameResolution.filename,
+            targets: [...engineExportTargets],
+            normalizeTimelineFrames,
+            validation: lastExportValidation
+          }
+        },
+        warnings
+      };
+    },
+    selectAsset: async (assetId) => {
+      const nextAsset = assets.find((asset) => asset.id === assetId);
+      if (!nextAsset) {
+        throw new PixelAidSiteToolError("asset_not_found", `No imported PixelAid asset has ID "${assetId}".`);
+      }
+      if (isEditorBusy) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is busy.");
+      }
+      if (selectedAsset?.id !== assetId) {
+        await performAssetSwitch(
+          assetId,
+          selectedAsset ? { outgoingSession: captureCurrentAssetSession(selectedAsset) } : undefined
+        );
+      }
+      appendLog(`Site Tool selected ${nextAsset.name}`);
+      return {
+        value: {
+          selectedAsset: {
+            id: nextAsset.id,
+            name: nextAsset.name,
+            width: nextAsset.image.width,
+            height: nextAsset.image.height,
+            assetType: nextAsset.assetType
+          }
+        }
+      };
+    },
+    runAutoSuggest: async () => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before running Auto Suggest.");
+      }
+      if (isEditorBusy || isAnalyzing) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is already analyzing or processing an asset.");
+      }
+      const suggestion = await autoSuggest();
+      if (!suggestion) {
+        throw new PixelAidSiteToolError("operation_failed", "PixelAid could not complete Auto Suggest. Review the editor error and try again.");
+      }
+      appendLog("Site Tool completed Auto Suggest");
+      return {
+        value: {
+          assetType: suggestion.assetType,
+          mode: suggestion.mode,
+          targetWidth: suggestion.targetWidth,
+          targetHeight: suggestion.targetHeight,
+          maxColors: suggestion.maxColors,
+          gridScaleX: suggestion.gridScaleX,
+          gridScaleY: suggestion.gridScaleY,
+          confidence: suggestion.confidence,
+          categoryConfidence: suggestion.categoryConfidence,
+          reason: suggestion.reason
+        },
+        warnings: suggestion.categoryWarnings.map((warning) => warning.message)
+      };
+    },
+    updateFixSettings: async (settings: SiteToolFixSettingsPatch) => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before changing fix settings.");
+      }
+      if (isEditorBusy || isAnalyzing) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is already analyzing or processing an asset.");
+      }
+
+      if (settings.assetType !== undefined && settings.assetType !== assetType) {
+        await changeAssetType(settings.assetType);
+      }
+      if (settings.targetWidth !== undefined) {
+        setTargetWidth(settings.targetWidth);
+        setNativeSizeMode("manual");
+      }
+      if (settings.targetHeight !== undefined) {
+        setTargetHeight(settings.targetHeight);
+        setNativeSizeMode("manual");
+      }
+      if (settings.maxColors !== undefined) setPaletteBudget(settings.maxColors);
+      if (settings.gridStrategy !== undefined) setGridAutoStrategy(settings.gridStrategy);
+      if (settings.robustSafety !== undefined) setRobustSafety(settings.robustSafety);
+      if (settings.gridDetect !== undefined) setGridDetect(settings.gridDetect);
+      if (settings.gridScaleX !== undefined) setGridScaleX(settings.gridScaleX);
+      if (settings.gridScaleY !== undefined) setGridScaleY(settings.gridScaleY);
+      if (settings.gridPhaseX !== undefined) setGridPhaseX(settings.gridPhaseX);
+      if (settings.gridPhaseY !== undefined) setGridPhaseY(settings.gridPhaseY);
+      if (settings.downscale !== undefined) setDownscale(settings.downscale);
+      if (settings.alpha !== undefined) setAlpha(settings.alpha);
+      if (settings.removeOrphans !== undefined) setRemoveOrphans(settings.removeOrphans);
+      if (settings.jaggyCleanup !== undefined) setJaggyCleanup(settings.jaggyCleanup);
+      if (settings.preserveSinglePixelDetails !== undefined) setPreserveSinglePixelDetails(settings.preserveSinglePixelDetails);
+      if (settings.removeHalos !== undefined) setRemoveHalos(settings.removeHalos);
+
+      appendLog(`Site Tool updated ${Object.keys(settings).join(", ")}`);
+      return { value: { applied: settings } };
+    },
+    runFix: async () => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before running Fix.");
+      }
+      if (isEditorBusy) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is already processing an asset.");
+      }
+      const result = await runFix("site_tool");
+      if (!result) {
+        throw new PixelAidSiteToolError("operation_failed", "PixelAid could not complete Fix. Review the editor error and try again.");
+      }
+      appendLog("Site Tool completed Fix");
+      return {
+        value: {
+          width: result.image.width,
+          height: result.image.height,
+          paletteCount: result.palette.length,
+          palette: result.palette,
+          durationMs: result.metrics.durationMs,
+          grid: {
+            outputWidth: result.grid.outputWidth,
+            outputHeight: result.grid.outputHeight,
+            scaleX: result.grid.scaleX,
+            scaleY: result.grid.scaleY,
+            confidence: result.grid.confidence,
+            reason: result.grid.reason
+          }
+        }
+      };
+    },
+    setViewMode: async (input: SiteToolViewModeInput) => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before changing the view.");
+      }
+      if ((input.mode === "output" || input.mode === "compare") && !fixResult) {
+        throw new PixelAidSiteToolError("no_output", "Run Fix before switching to output or compare view.");
+      }
+      if (input.mode === "timeline" && (!sheetMode || !timelineState.enabled)) {
+        throw new PixelAidSiteToolError("timeline_unavailable", "Timeline view requires a detected or configured sheet workflow.");
+      }
+
+      if (input.mode === "compare" && input.compareLayout) {
+        setCanvasCompareMode(input.compareLayout === "slider" ? "split" : "sideBySide");
+        setTimelineViewportCompareMode(input.compareLayout === "slider" ? "split" : "sideBySide");
+      }
+      setViewMode(input.mode === "input" ? "before" : input.mode === "output" ? "after" : input.mode === "compare" ? "split" : "timeline");
+      await waitForNextPaint();
+
+      let appliedSplitPercent = input.compareSplitPercent;
+      if (input.mode === "compare" && input.compareSplitPercent !== undefined) {
+        if (timelineViewportCanvasRef.current) {
+          appliedSplitPercent = timelineViewportCanvasRef.current.setCompareSplitPercent(input.compareSplitPercent);
+        } else if (viewportCanvasRef.current) {
+          appliedSplitPercent = viewportCanvasRef.current.applyCamera({ compareSplitPercent: input.compareSplitPercent }).compareSplitPercent;
+        }
+      }
+
+      const compareLayout = input.compareLayout ?? (canvasCompareMode === "split" ? "slider" : "side_by_side");
+      appendLog(`Site Tool switched to ${input.mode} view${input.mode === "compare" ? ` (${compareLayout})` : ""}`);
+      return {
+        value: {
+          mode: input.mode,
+          ...(input.mode === "compare"
+            ? {
+                compareLayout,
+                compareSplitPercent:
+                  appliedSplitPercent ?? viewportCanvasRef.current?.getCameraState().compareSplitPercent ?? timelineViewportCanvasRef.current?.getCompareSplitPercent() ?? 50
+              }
+            : {})
+        }
+      };
+    },
+    adjustViewport: async (input: SiteToolViewportInput) => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before adjusting the viewport.");
+      }
+      if (viewMode === "timeline" || frameCompareViewportConfig) {
+        throw new PixelAidSiteToolError("viewport_unavailable", "Zoom and named focus currently apply to the main input, output, or full-sheet canvas, not the timeline frame canvas.");
+      }
+      await waitForNextPaint();
+      const viewport = viewportCanvasRef.current;
+      if (!viewport) {
+        throw new PixelAidSiteToolError("viewport_unavailable", "The main PixelAid viewport is not currently available.");
+      }
+
+      const nextZoom =
+        input.zoomPercent !== undefined
+          ? clampZoom(input.zoomPercent / 100)
+          : input.zoomChangePercent !== undefined
+            ? clampZoom(zoom * (1 + input.zoomChangePercent / 100))
+            : zoom;
+      const camera = viewport.applyCamera({
+        ...(input.reset ? { reset: true } : { zoom: nextZoom, ...(input.focus ? { focus: input.focus } : {}) })
+      });
+      appendLog(
+        input.reset
+          ? "Site Tool reset the viewport camera"
+          : `Site Tool set viewport zoom to ${(camera.zoom * 100).toFixed(0)}%${input.focus ? ` focused on ${input.focus.replaceAll("_", " ")}` : ""}`
+      );
+      return {
+        value: {
+          zoomPercent: Math.round(camera.zoom * 10000) / 100,
+          focus: input.reset ? "center" : input.focus ?? null,
+          pan: camera.pan,
+          compareSplitPercent: camera.compareSplitPercent
+        }
+      };
+    },
+    configureExport: (input: SiteToolExportInput) => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before configuring export.");
+      }
+      if (isEditorBusy) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is already processing an asset.");
+      }
+      if (input.bundleName !== undefined) setExportBundleName(input.bundleName);
+      if (input.targets !== undefined) setEngineExportTargets([...input.targets]);
+      if (input.normalizeTimelineFrames !== undefined) setNormalizeTimelineFrames(input.normalizeTimelineFrames);
+      appendLog(`Site Tool configured export${input.targets ? ` for ${input.targets.join(", ")}` : ""}`);
+      return {
+        value: {
+          bundleName: input.bundleName ?? exportBundleNameResolution.filename,
+          targets: input.targets ?? [...engineExportTargets],
+          normalizeTimelineFrames: input.normalizeTimelineFrames ?? normalizeTimelineFrames
+        }
+      };
+    },
+    exportBundle: async () => {
+      if (!selectedAsset) {
+        throw new PixelAidSiteToolError("no_asset", "Import or paste an image before exporting.");
+      }
+      if (!fixResult) {
+        throw new PixelAidSiteToolError("no_output", "Run Fix before exporting a bundle.");
+      }
+      if (isEditorBusy) {
+        throw new PixelAidSiteToolError("editor_busy", busyStatus || "PixelAid is already processing an asset.");
+      }
+      const result = await exportFixedAsset();
+      if (!result) {
+        throw new PixelAidSiteToolError("operation_failed", "PixelAid could not export the current bundle. Review the editor error and try again.");
+      }
+      appendLog(`Site Tool exported ${result.filename}`);
+      return { value: result };
+    }
+  };
+
+  useEffect(() => {
+    const executor = siteToolExecutorRef.current;
+    if (!executor) {
+      return undefined;
+    }
+    const registration = registerPixelAidSiteTools({
+      document: typeof document === "undefined" ? undefined : (document as SiteToolsDocumentLike),
+      execute: executor
+    });
+    let disposed = false;
+    if (registration.supported) {
+      void registration.ready.then(
+        () => {
+          if (!disposed) appendLog("PixelAid Site Tools ready");
+        },
+        (error) => {
+          if (!disposed) appendLog(`PixelAid Site Tools unavailable: ${error instanceof Error ? error.message : "registration failed"}`);
+        }
+      );
+    }
+    return () => {
+      disposed = true;
+      registration.dispose();
+    };
+  }, [appendLog]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const action = getEditorShortcutAction({
@@ -9009,6 +9401,7 @@ export function App() {
               ) : null}
             </div>
             <TimelineViewportCanvas
+              ref={timelineViewportCanvasRef}
               inputImage={selectedPreviewImage}
               outputImage={fixedPreviewImage}
               inputSurface={selectedSourceSurface}
@@ -9087,6 +9480,7 @@ export function App() {
           </div>
         ) : frameCompareViewportConfig ? (
           <TimelineViewportCanvas
+            ref={timelineViewportCanvasRef}
             inputImage={selectedPreviewImage}
             outputImage={fixedPreviewImage}
             inputSurface={selectedSourceSurface}
@@ -9108,6 +9502,7 @@ export function App() {
           />
         ) : (
           <ViewportCanvas
+            ref={viewportCanvasRef}
             sourceImage={selectedPreviewImage}
             fixedImage={fixedPreviewImage}
             sourceSurface={selectedSourceSurface}
