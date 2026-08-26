@@ -216,7 +216,7 @@ export const ViewportCanvas = forwardRef<ViewportCanvasHandle, ViewportCanvasPro
     (command: Parameters<ViewportCanvasHandle["applyCamera"]>[0]) => {
       const canvas = canvasRef.current;
       const activeImage = viewMode === "after" && fixedImage ? fixedImage : sourceImage;
-      let nextZoom = zoom;
+      let nextZoom: number;
 
       if (command.reset && canvas && sourceImage) {
         const rect = canvas.getBoundingClientRect();
