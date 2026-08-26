@@ -95,6 +95,8 @@ import {
   type EngineExportTarget
 } from "@pixelaid/exporters";
 import { AssetBrowserPanel } from "./components/AssetBrowserPanel";
+import { InspectorWorkflowFooter } from "./components/InspectorWorkflowFooter";
+import { OutputCanvasChoicePicker } from "./components/OutputCanvasChoicePicker";
 import { RobustEvidenceReviewModal } from "./components/RobustEvidenceReviewModal";
 import { SpriteSandboxCanvas } from "./components/SpriteSandboxCanvas";
 import { SpritePlayerControls } from "./components/SpritePlayerControls";
@@ -306,6 +308,7 @@ import {
   type OutlineSourceMode
 } from "./lib/outlineControls";
 import { createNormalizedSheetExport } from "./lib/normalizedSheetExport";
+import { applyOutputCanvasChoice, getOutputCanvasChoice, getOutputCanvasPrediction } from "./lib/outputCanvas";
 import { createPreviewSurfaceCache } from "./lib/previewSurfaceCache";
 import { formatPaletteText, normalizePaletteBudget, normalizePaletteHex, paletteBudgets, parsePaletteText, summarizePaletteWarnings } from "./lib/paletteControls";
 import { waitForNextPaint, waitForPaints } from "./lib/paintScheduling";
@@ -3251,6 +3254,19 @@ export function App() {
       sheetMode,
       sheetRows
     ]
+  );
+  const outputCanvasChoice = getOutputCanvasChoice(outputPackaging);
+  const outputCanvasPrediction = useMemo(
+    () =>
+      getOutputCanvasPrediction({
+        packaging: outputPackaging,
+        nativeSizeMode,
+        targetWidth,
+        targetHeight,
+        detectedWidth: gridCandidates[0]?.outputWidth,
+        detectedHeight: gridCandidates[0]?.outputHeight
+      }),
+    [gridCandidates, nativeSizeMode, outputPackaging, targetHeight, targetWidth]
   );
 
   useEffect(() => {
@@ -9571,11 +9587,8 @@ export function App() {
             ) : null
           }
           busy={isEditorBusy}
-          canFix={selectedAsset !== null && !isEditorBusy}
           advancedOpen={showAdvancedControls}
           onAutoSuggest={autoSuggest}
-          onRunFix={() => runFix("guided_panel")}
-          onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
         />
         {selectedAsset && mode === "single" ? (
           <section className="pixel-pipeline-panel" aria-label="Pixel reconstruction and output canvas">
@@ -9701,30 +9714,21 @@ export function App() {
             <div className="pixel-pipeline-stage">
               <div className="pixel-pipeline-stage-title">
                 <strong>2 {"\u00b7"} Output canvas</strong>
-                <small>Bounds, padding, scale, and anchor</small>
+                <small>Choose what the final canvas should preserve</small>
               </div>
-              <SelectField
-                label="Canvas"
-                value={outputPackaging.canvasMode}
-                options={[
-                  ["content", "Reconstructed content"],
-                  ["native", "Native composition"],
-                  ["exact", "Exact canvas"]
-                ]}
-                onChange={(value) =>
-                  setOutputPackaging((current) => {
-                    const canvasMode = value as OutputPackagingOptions["canvasMode"];
-                    return {
-                      ...current,
-                      canvasMode,
-                      ...(canvasMode === "exact" && current.canvasMode !== "exact"
-                        ? { width: targetWidth, height: targetHeight }
-                        : {})
-                    };
-                  })
+              <OutputCanvasChoicePicker
+                value={outputCanvasChoice}
+                prediction={outputCanvasPrediction}
+                onChange={(choice) =>
+                  setOutputPackaging((current) =>
+                    applyOutputCanvasChoice(current, choice, {
+                      width: targetWidth,
+                      height: targetHeight
+                    })
+                  )
                 }
               />
-              {outputPackaging.canvasMode === "exact" ? (
+              {outputCanvasChoice === "custom" ? (
                 <>
                   <DimensionField
                     label="Canvas W"
@@ -9744,25 +9748,21 @@ export function App() {
                       setOutputPackaging((current) => ({ ...current, height: Math.max(1, Math.round(value)) }))
                     }
                   />
-                </>
-              ) : null}
-              <SelectField
-                label="Framing"
-                value={outputPackaging.framing}
-                options={[
-                  ["preserveComposition", "Preserve source composition"],
-                  ["packSubject", "Pack subject"],
-                  ["fitSubject", "Fit subject"]
-                ]}
-                onChange={(value) =>
-                  setOutputPackaging((current) => ({
-                    ...current,
-                    framing: value as OutputPackagingOptions["framing"]
-                  }))
-                }
-              />
-              {outputPackaging.canvasMode !== "content" ? (
-                <>
+                  <SelectField
+                    label="Framing"
+                    value={outputPackaging.framing}
+                    options={[
+                      ["preserveComposition", "Preserve source composition"],
+                      ["packSubject", "Pack subject"],
+                      ["fitSubject", "Fit subject"]
+                    ]}
+                    onChange={(value) =>
+                      setOutputPackaging((current) => ({
+                        ...current,
+                        framing: value as OutputPackagingOptions["framing"]
+                      }))
+                    }
+                  />
                   <SelectField
                     label="Pixel scale"
                     value={outputPackaging.scale}
@@ -9815,7 +9815,7 @@ export function App() {
                 </>
               ) : null}
               <p className="field-note">
-                Background preserve/remove changes pixels, not this canvas geometry. Native pixels never stretch unless you choose resampling.
+                Background cleanup changes pixels, not the chosen canvas. Native pixels never stretch unless Custom canvas uses resampling.
               </p>
               {fixResult?.reconstruction && fixResult.packaging ? (
                 <ReadonlyField
@@ -9827,8 +9827,14 @@ export function App() {
             </div>
           </section>
         ) : null}
-        {showAdvancedControls ? (
-          visibleInspectorGroups.map((group, index) => (
+        <InspectorWorkflowFooter
+          selected={selectedAsset !== null}
+          busy={isEditorBusy}
+          advancedOpen={showAdvancedControls}
+          onToggleAdvanced={() => setShowAdvancedControls((current) => !current)}
+          onRunFix={() => runFix("guided_panel")}
+        >
+          {visibleInspectorGroups.map((group, index) => (
             <InspectorGroup
               key={group}
               title={inspectorGroupMeta[group].title}
@@ -9843,13 +9849,8 @@ export function App() {
             >
               {inspectorGroupContent[group]}
             </InspectorGroup>
-          ))
-        ) : (
-          <div className="advanced-collapsed-note">
-            <SlidersHorizontal size={14} />
-            <span>Advanced controls are collapsed.</span>
-          </div>
-        )}
+          ))}
+        </InspectorWorkflowFooter>
       </aside>
 
       {showBottomPanel ? (
@@ -10838,22 +10839,16 @@ function GuidedFixPanel({
   reason,
   simpleControls,
   busy,
-  canFix,
   advancedOpen,
-  onAutoSuggest,
-  onRunFix,
-  onToggleAdvanced
+  onAutoSuggest
 }: {
   selected: boolean;
   summary: GuidedFixSummary;
   reason: string;
   simpleControls?: ReactNode;
   busy: boolean;
-  canFix: boolean;
   advancedOpen: boolean;
   onAutoSuggest: () => void | Promise<unknown>;
-  onRunFix: () => void | Promise<unknown>;
-  onToggleAdvanced: () => void;
 }) {
   const panelState = getGuidedFixPanelState({ selected, advancedOpen });
 
@@ -10885,18 +10880,10 @@ function GuidedFixPanel({
           <small>{summary.metrics.slice(0, 3).join(" / ")}</small>
         </div>
       )}
-      <div className="guided-actions">
+      <div className="guided-actions guided-quick-actions">
         <button type="button" className="guided-primary" disabled={!selected || busy} onClick={onAutoSuggest}>
           <Sparkles size={14} />
           Auto Suggest
-        </button>
-        <button type="button" className="guided-fix-action" disabled={!canFix} onClick={onRunFix}>
-          <WandSparkles size={14} />
-          Fix
-        </button>
-        <button type="button" className={advancedOpen ? "active" : ""} disabled={!selected} onClick={onToggleAdvanced}>
-          <SlidersHorizontal size={14} />
-          {panelState.advancedLabel}
         </button>
       </div>
     </section>
