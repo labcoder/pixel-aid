@@ -25,6 +25,7 @@
     "web:package": "node scripts/package-web-artifacts.mjs",
     "web:package:itch": "node scripts/package-web-artifacts.mjs itch",
     "web:package:standalone": "node scripts/package-web-artifacts.mjs standalone",
+    "web:deploy:cloudflare": "npm run build -w @pixelaid/web && npx wrangler@4.126.0 pages deploy apps/web/dist --project-name=pixelaid",
     "phase8:package": "node scripts/package-phase8-beta-kit.mjs",
     "phase8:dry-run": "node scripts/run-phase8-dry-run.mjs",
     "brand:sync": "node scripts/sync-brand-assets.mjs",
