@@ -66,6 +66,19 @@ Applies a narrow, validated patch to the selected asset's current settings. The 
 
 Runs PixelAid's existing worker-backed Fix action and resolves after the fixed image has been committed to the editor. Returns output dimensions, palette count, duration, grid summary, and warnings.
 
+### `fix_with_settings`
+
+Optionally applies a validated settings patch and runs Fix as one ordered operation. This is the preferred tool for short conversational or voice-driven iterations because PixelAid waits for the updated React state before starting the worker job.
+
+- `size` is a square shorthand: `128` sets the native reconstruction and final output canvas to 128x128.
+- `targetWidth` and `targetHeight` support non-square dimensions and also synchronize the final output canvas.
+- `maxColors` accepts 2 through 256.
+- `gridStrategy` accepts `classic` or `robust`.
+- All fields are optional. Calling the tool with no fields reruns Fix with the current settings.
+- `size` cannot be combined with `targetWidth` or `targetHeight`.
+
+The remaining validated fix settings from `update_fix_settings` are also accepted, so the agent can keep a single atomic call when changing reconstruction safety, grid controls, downscaling, alpha handling, or conservative cleanup.
+
 ### `set_view_mode`
 
 Changes only visual presentation. Inputs:
@@ -110,9 +123,9 @@ The local demo runs against `http://127.0.0.1:5173` in the ChatGPT desktop built
 3. `get_editor_state` reports the imported asset.
 4. Auto Suggest completes and returns its recommendation.
 5. A supported fix setting can be changed and observed in the UI.
-6. Fix completes and returns output metrics.
+6. `fix_with_settings` can atomically run 128x128, 256x256, 8-color, and 24-color iterations and return the committed output metrics.
 7. Input, output, slider compare, side-by-side compare, zoom, and focus changes are visible and reported accurately.
-8. A Godot export downloads as a ZIP whose manifest, PNG, validation report, and engine helper files can be inspected locally.
+8. A combined Godot and Unity export downloads as a ZIP whose manifest, PNG, validation report, and engine helper files can be inspected locally.
 9. The same flow succeeds with a PNG created by Codex image generation and pasted through the browser clipboard.
 
 Cloudflare deployment and DNS configuration are a separate, final phase and are not part of the local acceptance gate.
@@ -128,10 +141,35 @@ npm run dev
 Open `http://127.0.0.1:5173` in the ChatGPT desktop built-in browser. Once the page reports that PixelAid Site Tools are ready, the workflow can be driven with natural-language requests such as:
 
 1. "Inspect the current PixelAid editor state."
-2. "Run Auto Suggest, set the native output to 96x96 with at most 24 colors, preserve alpha, and run Fix."
+2. "Run Auto Suggest, then fix the sprite with Robust reconstruction while keeping its current size and colors."
 3. "Switch to output view and zoom in 50% focused on the top."
 4. "Use compare mode at a 50% slider, then switch to side-by-side."
-5. "Configure a Godot export named `webmcp-lantern-courier-demo` and export it."
+5. "Fix it at 128 by 128."
+6. "That is too small. Fix it again at 256 by 256."
+7. "Limit the palette to 8 colors and fix it again."
+8. "Raise the palette limit to 24 colors and fix it again."
+9. "Show me the final output."
+10. "Configure exports for both Godot and Unity named `webmcp-lantern-courier-demo`, then export the bundle."
+
+For deterministic tool selection, say “128 by 128” or “square size 128” and say “8 colors” rather than using “8-bit” as a palette count. Each `fix_with_settings` call returns the applied settings plus the resulting dimensions and palette count, so the agent can confirm every spoken adjustment before continuing.
+
+The expected tool sequence behind that script is:
+
+```json
+[
+  { "tool": "fix_with_settings", "input": { "gridStrategy": "robust" } },
+  { "tool": "set_view_mode", "input": { "mode": "compare", "compareLayout": "slider", "compareSplitPercent": 50 } },
+  { "tool": "fix_with_settings", "input": { "size": 128 } },
+  { "tool": "fix_with_settings", "input": { "size": 256 } },
+  { "tool": "fix_with_settings", "input": { "maxColors": 8 } },
+  { "tool": "fix_with_settings", "input": { "maxColors": 24 } },
+  { "tool": "set_view_mode", "input": { "mode": "output" } },
+  { "tool": "configure_export", "input": { "bundleName": "webmcp-lantern-courier-demo", "targets": ["godot", "unity"] } },
+  { "tool": "export_bundle", "input": {} }
+]
+```
+
+When the host provides voice dictation or voice chat, these can be spoken as ordinary prompts; PixelAid receives the same Site Tool calls regardless of how the prompt text was entered. The exact microphone interaction still belongs in the manual acceptance pass for the host build used in the demo.
 
 The image reaches PixelAid through the same client-side interaction a person uses today: import, drag/drop, or clipboard paste. In the contest-style flow, Codex generates the raster outside PixelAid, writes that PNG to the browser clipboard, focuses the editor, and pastes it. PixelAid never receives an image-generation credential and no Site Tool accepts image bytes or paths.
 
