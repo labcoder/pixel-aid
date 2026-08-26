@@ -220,8 +220,8 @@ describe("output-size policies", () => {
     });
     expect(removed.reconstruction).toMatchObject({
       nativeCanvas: { width: 8, height: 6 },
-      reconstructedImage: { width: 8, height: 6 },
-      compositionPlacement: { x: 0, y: 0, w: 8, h: 6 }
+      reconstructedImage: { width: 6, height: 4 },
+      compositionPlacement: { x: 1, y: 1, w: 6, h: 4 }
     });
     expect(preserved.packaging).toMatchObject({
       canvas: { width: 8, height: 6 },
@@ -229,7 +229,7 @@ describe("output-size policies", () => {
     });
     expect(removed.packaging).toMatchObject({
       canvas: { width: 8, height: 6 },
-      placement: { x: 0, y: 0, w: 8, h: 6 }
+      placement: { x: 1, y: 1, w: 6, h: 4 }
     });
     expect(alphaAt(preserved.image, 0, 0)).toBe(255);
     expect(alphaAt(removed.image, 0, 0)).toBe(0);
@@ -277,17 +277,17 @@ describe("output-size policies", () => {
     );
 
     expect(result.image).toMatchObject({ width: 8, height: 6 });
-    expect(result.grid).toMatchObject({ outputWidth: 8, outputHeight: 6 });
-    expect(result.grid.sourceRect).toBeUndefined();
+    expect(result.grid).toMatchObject({ outputWidth: 6, outputHeight: 4 });
+    expect(result.grid.sourceRect).toEqual(detectedSubject.sourceRect);
     expect(result.reconstruction).toMatchObject({
       nativeCanvas: { width: 8, height: 6 },
-      reconstructedImage: { width: 8, height: 6 },
-      compositionPlacement: { x: 0, y: 0, w: 8, h: 6 }
+      reconstructedImage: { width: 6, height: 4 },
+      compositionPlacement: { x: 1, y: 1, w: 6, h: 4 }
     });
     expect(result.packaging).toMatchObject({
-      canvasMode: "content",
+      canvasMode: "native",
       canvas: { width: 8, height: 6 },
-      placement: { x: 0, y: 0, w: 8, h: 6 }
+      placement: { x: 1, y: 1, w: 6, h: 4 }
     });
     expect(alphaAt(result.image, 0, 0)).toBe(0);
   });

@@ -26,15 +26,16 @@ export function packagePixelArt(
     compositionPlacement: { x: 0, y: 0, w: image.width, h: image.height }
   }
 ): PackagePixelArtResult {
+  const effectiveOptions = normalizePackagingOptions(options);
   const normalizedBounds = clampRect(contentBounds, image.width, image.height);
-  const sourceRect = options.framing === "preserveComposition"
+  const sourceRect = effectiveOptions.framing === "preserveComposition"
     ? { x: 0, y: 0, w: image.width, h: image.height }
     : normalizedBounds;
-  const referenceSize = options.framing === "preserveComposition"
+  const referenceSize = effectiveOptions.framing === "preserveComposition"
     ? context.nativeCanvas
     : { width: sourceRect.w, height: sourceRect.h };
-  const canvas = resolveCanvasSize(sourceRect, context, options);
-  const appliedScale = resolveScale(referenceSize, canvas, options);
+  const canvas = resolveCanvasSize(sourceRect, context, effectiveOptions);
+  const appliedScale = resolveScale(referenceSize, canvas, effectiveOptions);
   const referencePlacementSize = {
     width: Math.max(1, Math.round(referenceSize.width * appliedScale)),
     height: Math.max(1, Math.round(referenceSize.height * appliedScale))
@@ -55,11 +56,11 @@ export function packagePixelArt(
   const referencePosition = resolveAnchorPosition(
     canvas,
     referencePlacementSize,
-    options.anchor,
-    options.offsetX ?? 0,
-    options.offsetY ?? 0
+    effectiveOptions.anchor,
+    effectiveOptions.offsetX ?? 0,
+    effectiveOptions.offsetY ?? 0
   );
-  const position = options.framing === "preserveComposition"
+  const position = effectiveOptions.framing === "preserveComposition"
     ? {
         x: referencePosition.x + Math.round(context.compositionPlacement.x * appliedScale),
         y: referencePosition.y + Math.round(context.compositionPlacement.y * appliedScale)
@@ -74,7 +75,7 @@ export function packagePixelArt(
   });
 
   const warnings: string[] = [];
-  if (options.scale === "resample" && appliedScale !== 1) {
+  if (effectiveOptions.scale === "resample" && appliedScale !== 1) {
     warnings.push(
       `Content was resampled by ${formatScale(appliedScale)}x; native pixel geometry changed.`
     );
@@ -83,10 +84,10 @@ export function packagePixelArt(
   return {
     image: output,
     metadata: {
-      canvasMode: options.canvasMode,
-      framing: options.framing,
-      scaleMode: options.scale,
-      anchor: options.anchor,
+      canvasMode: effectiveOptions.canvasMode,
+      framing: effectiveOptions.framing,
+      scaleMode: effectiveOptions.scale,
+      anchor: effectiveOptions.anchor,
       canvas,
       placement: {
         x: position.x,
@@ -99,6 +100,13 @@ export function packagePixelArt(
       warnings
     }
   };
+}
+
+function normalizePackagingOptions(options: OutputPackagingOptions): OutputPackagingOptions {
+  if (options.canvasMode === "content" && options.framing === "preserveComposition") {
+    return { ...options, canvasMode: "native" };
+  }
+  return options;
 }
 
 function resolveCanvasSize(

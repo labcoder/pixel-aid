@@ -2199,7 +2199,7 @@ function createFullCompositionReconstructionGrid(
 }
 
 function shouldPreserveFullComposition(options: FixOptions): boolean {
-  return options.packaging?.framing === "preserveComposition";
+  return options.alpha === "preserve" && options.packaging?.framing === "preserveComposition";
 }
 
 function resolveManualNativeSize(options: FixOptions): { width: number; height: number } {
