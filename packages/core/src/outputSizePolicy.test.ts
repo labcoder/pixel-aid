@@ -220,8 +220,8 @@ describe("output-size policies", () => {
     });
     expect(removed.reconstruction).toMatchObject({
       nativeCanvas: { width: 8, height: 6 },
-      reconstructedImage: { width: 6, height: 4 },
-      compositionPlacement: { x: 1, y: 1, w: 6, h: 4 }
+      reconstructedImage: { width: 8, height: 6 },
+      compositionPlacement: { x: 0, y: 0, w: 8, h: 6 }
     });
     expect(preserved.packaging).toMatchObject({
       canvas: { width: 8, height: 6 },
@@ -229,10 +229,67 @@ describe("output-size policies", () => {
     });
     expect(removed.packaging).toMatchObject({
       canvas: { width: 8, height: 6 },
-      placement: { x: 1, y: 1, w: 6, h: 4 }
+      placement: { x: 0, y: 0, w: 8, h: 6 }
     });
     expect(alphaAt(preserved.image, 0, 0)).toBe(255);
     expect(alphaAt(removed.image, 0, 0)).toBe(0);
+  });
+
+  test("preserved composition keeps the manual native canvas when background cleanup removes the matte", () => {
+    const source = createMatteSubjectImage();
+    const detectedSubject: GridCandidate = {
+      outputWidth: 6,
+      outputHeight: 4,
+      scaleX: 3,
+      scaleY: 3,
+      phaseX: 0,
+      phaseY: 0,
+      sourceRect: { x: 3, y: 3, w: 18, h: 12 },
+      confidence: 0.96,
+      reason: "Robust-style foreground crop"
+    };
+
+    const result = fixImage(
+      source,
+      options({
+        assetType: "sprite",
+        reconstruction: { sizeMode: "manual", width: 8, height: 6 },
+        packaging: {
+          canvasMode: "content",
+          framing: "preserveComposition",
+          scale: "native",
+          anchor: "center"
+        },
+        grid: {
+          detect: "auto",
+          autoStrategy: "robust",
+          robustSafety: "guarded",
+          cropToBounds: true
+        },
+        alpha: "backgroundFloodFill",
+        alphaSettings: {
+          backgroundDetection: "classic",
+          tolerance: 0,
+          decontaminateRgb: true
+        }
+      }),
+      { gridCandidates: [detectedSubject] }
+    );
+
+    expect(result.image).toMatchObject({ width: 8, height: 6 });
+    expect(result.grid).toMatchObject({ outputWidth: 8, outputHeight: 6 });
+    expect(result.grid.sourceRect).toBeUndefined();
+    expect(result.reconstruction).toMatchObject({
+      nativeCanvas: { width: 8, height: 6 },
+      reconstructedImage: { width: 8, height: 6 },
+      compositionPlacement: { x: 0, y: 0, w: 8, h: 6 }
+    });
+    expect(result.packaging).toMatchObject({
+      canvasMode: "content",
+      canvas: { width: 8, height: 6 },
+      placement: { x: 0, y: 0, w: 8, h: 6 }
+    });
+    expect(alphaAt(result.image, 0, 0)).toBe(0);
   });
 
   test("exact rejects an incomplete target", () => {
